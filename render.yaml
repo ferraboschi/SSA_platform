@@ -1,0 +1,45 @@
+# Render Blueprint — deploys the SSA platform as a Node web service.
+#
+# Setup: in Render → New → Blueprint → connect this repo. Render reads this
+# file and pre-fills build/start commands. Then enter the secret env vars
+# (marked `sync: false`) in the Render dashboard — their values are NOT
+# committed here for security.
+
+services:
+  - type: web
+    name: ssa-platform
+    runtime: node
+    plan: free            # upgrade to "starter" later to avoid cold starts
+    region: frankfurt     # closest to Italy
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: EMBEDDINGS_MODEL
+        value: text-embedding-3-small
+      - key: USE_SEED
+        value: "false"
+      - key: APP_BASE_URL
+        value: https://platform.sakesommelierassociation.it
+      # ---- Secrets: enter values in the Render dashboard ----
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SHOPIFY_STORE_DOMAIN
+        sync: false
+      - key: SHOPIFY_CLIENT_ID
+        sync: false
+      - key: SHOPIFY_CLIENT_SECRET
+        sync: false
+      - key: SHOPIFY_ADMIN_TOKEN
+        sync: false
+      - key: DROPBOX_ACCESS_TOKEN
+        sync: false
+      - key: EMBEDDINGS_API_KEY
+        sync: false
