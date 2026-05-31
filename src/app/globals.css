@@ -1,0 +1,41 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+@import "../styles/components.css";
+
+/* ---- Design-system fixes (see _reference/specs/components-css-inventory.md) ---- */
+
+/* Text-color utility used across pages but missing from components.css */
+.text-mute { color: var(--text-mute); }
+
+/* Disabled buttons */
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Minimal structural modal layer (components.css only ships the animations) */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 37, 64, 0.32);
+  backdrop-filter: blur(2px);
+  animation: modalFade 0.16s ease;
+}
+.modal-dialog {
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-5);
+  box-shadow: var(--sh-4);
+  animation: modalPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}

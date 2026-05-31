@@ -1,0 +1,106 @@
+// Integration configuration — env-driven, read lazily, never throws at import.
+//
+// Each integration reads its credentials here. Absent credentials mean the
+// integration runs in "stub" mode (no-op / mock) rather than failing, so the
+// app boots and is fully navigable before any external service is wired up.
+
+function env(key: string): string | undefined {
+  const v = process.env[key];
+  return v && v.length > 0 ? v : undefined;
+}
+
+export const shopifyConfig = {
+  get storeDomain() {
+    return env("SHOPIFY_STORE_DOMAIN");
+  },
+  get adminToken() {
+    return env("SHOPIFY_ADMIN_TOKEN");
+  },
+  get storefrontToken() {
+    return env("SHOPIFY_STOREFRONT_TOKEN");
+  },
+  get isConfigured() {
+    return Boolean(this.storeDomain && this.adminToken);
+  },
+};
+
+export const airtableConfig = {
+  get apiKey() {
+    return env("AIRTABLE_API_KEY");
+  },
+  get baseId() {
+    return env("AIRTABLE_BASE_ID");
+  },
+  get isConfigured() {
+    return Boolean(this.apiKey && this.baseId);
+  },
+};
+
+export const dropboxConfig = {
+  get accessToken() {
+    return env("DROPBOX_ACCESS_TOKEN");
+  },
+  get appKey() {
+    return env("DROPBOX_APP_KEY");
+  },
+  get appSecret() {
+    return env("DROPBOX_APP_SECRET");
+  },
+  get refreshToken() {
+    return env("DROPBOX_REFRESH_TOKEN");
+  },
+  get rootPath() {
+    return env("DROPBOX_ROOT_PATH") ?? "/SSA";
+  },
+  get isConfigured() {
+    return Boolean(this.accessToken || this.refreshToken);
+  },
+};
+
+export const appConfig = {
+  /** Absolute origin used to build links in outbound email. */
+  get baseUrl() {
+    return env("APP_BASE_URL") ?? "http://localhost:3210";
+  },
+  /**
+   * When `true` the in-memory DataSource loads the demo seed (prototype-ported
+   * fake data). Set `USE_SEED=false` to wipe — the app then runs against a
+   * real backend (Supabase) when configured, or empty in-memory otherwise.
+   * Default `true` in dev so a fresh checkout has navigable data.
+   */
+  get useSeed() {
+    const v = env("USE_SEED");
+    if (v === undefined) return true;
+    return v.toLowerCase() !== "false" && v !== "0";
+  },
+};
+
+export const resendConfig = {
+  get apiKey() {
+    return env("RESEND_API_KEY");
+  },
+  get from() {
+    return env("RESEND_FROM") ?? "SSA <no-reply@sakesommelierassociation.it>";
+  },
+  get replyTo() {
+    return env("RESEND_REPLY_TO");
+  },
+  get isConfigured() {
+    return Boolean(this.apiKey);
+  },
+};
+
+export const supabaseConfig = {
+  get url() {
+    return env("NEXT_PUBLIC_SUPABASE_URL");
+  },
+  get anonKey() {
+    return env("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  },
+  get serviceRoleKey() {
+    return env("SUPABASE_SERVICE_ROLE_KEY");
+  },
+  get isConfigured() {
+    return Boolean(this.url && this.anonKey);
+  },
+};

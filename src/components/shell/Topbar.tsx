@@ -1,0 +1,67 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import { Crumbs, Icon, type Crumb } from "@/components/ui";
+import { NAV_ITEMS, type NavGroup } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
+import type { Notification } from "@/lib/domain";
+import type { SearchIndex } from "@/lib/shell";
+import { GlobalSearch } from "./GlobalSearch";
+import { NotificationsBell } from "./NotificationsBell";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+
+interface TopbarProps {
+  nav: NavGroup[];
+  searchIndex: SearchIndex;
+  notifications: Notification[];
+}
+
+export function Topbar({ nav, searchIndex, notifications }: TopbarProps) {
+  const t = useT();
+  const pathname = usePathname();
+  const crumbs = buildCrumbs(pathname, t);
+
+  return (
+    <header className="topbar">
+      {crumbs.length > 0 && <Crumbs items={crumbs} />}
+      <div style={{ flex: 1 }}></div>
+
+      <GlobalSearch index={searchIndex} nav={nav} />
+
+      <div className="topbar-right">
+        <span className="tb-status">
+          <span className="dot"></span>Shopify
+        </span>
+        <span className="tb-status">
+          <span className="dot"></span>Airtable
+        </span>
+        <LanguageSwitcher />
+        <NotificationsBell notifications={notifications} />
+        <button className="btn btn-icon btn-ghost" title={t.common.search}>
+          <Icon name="refresh" size={15} />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+type T = ReturnType<typeof useT>;
+
+function buildCrumbs(pathname: string, t: T): Crumb[] {
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length === 0) return [];
+
+  const items = t.nav.items as Record<string, string>;
+  const rootHref = "/" + segments[0];
+  const rootItem = NAV_ITEMS.find((it) => it.href === rootHref);
+  const rootLabel = rootItem ? items[rootItem.id] : segments[0];
+
+  if (segments.length === 1) {
+    return [{ label: rootLabel }];
+  }
+
+  return [
+    { label: rootLabel, href: rootHref },
+    { label: decodeURIComponent(segments[segments.length - 1]) },
+  ];
+}

@@ -1,0 +1,959 @@
+"use client";
+
+import { useRef, useState, useTransition } from "react";
+import { Badge, Icon, type IconName } from "@/components/ui";
+import { useT, format } from "@/lib/i18n";
+import { saveTemplateAction, deleteTemplateAction } from "@/lib/data/template-actions";
+import {
+  COURSE_TYPES,
+  type CourseTypeKey,
+  type MaterialDay,
+  type MaterialExtra,
+  type MaterialTemplate,
+  type Sake,
+} from "@/lib/domain";
+
+const SAKE_NAME_BANK = [
+  "Niwa no Uguisu", "Ginga Shizuku", "Yuki no Bosha", "Hakutsuru Sayuri", "Born Gold",
+  "Hakkaisan Tokubetsu", "Tedorigawa Yamahai", "Kikusui Funaguchi", "Tengumai Yamahai",
+  "Kamoizumi Shusen", "Dewazakura Oka", "Kubota Manju",
+];
+const SAKE_TYPE_BANK = ["Junmai Daiginjo", "Junmai Ginjo", "Junmai", "Honjozo", "Daiginjo", "Nigori", "Kimoto", "Yamahai"];
+const SAKE_KURA_BANK = ["Asahi Shuzo", "Dassai", "Tatenokawa", "Born Brewery", "Hakkaisan", "Tedorigawa", "Kikusui", "Kamoizumi"];
+
+function tmSeed(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function tmTypeTone(type: CourseTypeKey): "oro" | "azzurro" {
+  return COURSE_TYPES[type].color === "oro" ? "oro" : "azzurro";
+}
+
+function tmDeepClone(t: MaterialTemplate): MaterialTemplate {
+  return {
+    ...t,
+    materiali: { ...t.materiali, extra: (t.materiali.extra || []).map((c) => ({ ...c })) },
+    days: t.days.map((d) => ({ ...d, sakes: d.sakes.map((s) => ({ ...s })) })),
+  };
+}
+
+function tmTemplateStats(t: MaterialTemplate) {
+  const totalSakes = t.days.reduce((s, d) => s + d.sakes.length, 0);
+  const sakeCost = t.days.reduce((s, d) => s + d.sakes.reduce((ss, sk) => ss + sk.cost * sk.qty, 0), 0);
+  return { totalSakes, sakeCost };
+}
+
+function dayUnit(n: number, t: { dayOne: string; dayMany: string }) {
+  return n === 1 ? t.dayOne : t.dayMany;
+}
+function dayUnitFem(n: number, t: { dayOneFem: string; dayManyFem: string }) {
+  return n === 1 ? t.dayOneFem : t.dayManyFem;
+}
+
+function Stat3({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div>
+      <div className="num" style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em" }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 10.5, color: "var(--text-4)", marginTop: 1 }}>{label}</div>
+    </div>
+  );
+}
+
+function LibraryCard({
+  template: t,
+  onOpen,
+  onDuplicate,
+  onDelete,
+}: {
+  template: MaterialTemplate;
+  onOpen: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const tm = useT().templateMateriali;
+  const c = tm.card;
+  const { totalSakes, sakeCost } = tmTemplateStats(t);
+  const materialiPerStudent = (t.materiali.diplomaPerStudent || 0) + (t.materiali.libroPerStudent || 0);
+
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: 16, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
+          <Badge tone={tmTypeTone(t.type)}>{COURSE_TYPES[t.type].label}</Badge>
+          <span className="mono" style={{ fontSize: 10.5, color: "var(--text-4)" }}>
+            {t.days.length} {dayUnit(t.days.length, tm)}
+          </span>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{t.name}</div>
+        {t.description && <div style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.45 }}>{t.description}</div>}
+
+        <div style={{ display: "flex", gap: 16, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-2)" }}>
+          <Stat3 value={t.days.length} label={dayUnit(t.days.length, tm)} />
+          <Stat3 value={totalSakes} label={c.sake} />
+          <Stat3 value={`${sakeCost.toLocaleString("it-IT")}€`} label={c.sakeCost} />
+        </div>
+
+        <div style={{ marginTop: 12, fontSize: 11.5, color: "var(--text-3)", display: "flex", flexDirection: "column", gap: 3 }}>
+          <span>
+            <Icon name="graduation" size={11} className="text-4" /> {c.lblEducator}{" "}
+            <strong className="num">{t.materiali.educatorPerDay}€</strong>
+            {c.unitPerDay} · {c.lblMateriali} <strong className="num">{materialiPerStudent}€</strong>
+            {c.unitPerStudent}
+          </span>
+          <span className="text-4" style={{ fontSize: 10.5 }}>
+            {format(c.lastUse, { last: t.lastUsed, uses: t.uses, by: t.createdBy })}
+          </span>
+        </div>
+      </div>
+      <div style={{ padding: "10px 16px", borderTop: "1px solid var(--border-2)", background: "var(--surface-2)", display: "flex", gap: 6 }}>
+        <button className="btn btn-sm btn-primary" style={{ flex: 1 }} onClick={onOpen}>
+          <Icon name="edit" size={11} />
+          {c.openEdit}
+        </button>
+        <button className="btn btn-sm btn-icon" title={c.duplicate} onClick={onDuplicate}>
+          <Icon name="copy" size={12} />
+        </button>
+        <button className="btn btn-sm btn-icon" title={c.delete} onClick={onDelete}>
+          <Icon name="trash" size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TemplateLibrary({
+  templates,
+  filter,
+  setFilter,
+  onOpen,
+  onCreate,
+  onDuplicate,
+  onDelete,
+}: {
+  templates: MaterialTemplate[];
+  filter: CourseTypeKey | "";
+  setFilter: (f: CourseTypeKey | "") => void;
+  onOpen: (id: string) => void;
+  onCreate: () => void;
+  onDuplicate: (t: MaterialTemplate) => void;
+  onDelete: (t: MaterialTemplate) => void;
+}) {
+  const lib = useT().templateMateriali.library;
+  const list = filter ? templates.filter((t) => t.type === filter) : templates;
+  const types = Object.keys(COURSE_TYPES) as CourseTypeKey[];
+
+  return (
+    <>
+      <div className="page-header">
+        <div className="page-title-block">
+          <div className="eyebrow">{lib.eyebrow}</div>
+          <h1 className="page-title">{lib.title}</h1>
+          <p className="page-sub">{lib.sub}</p>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-primary" onClick={onCreate}>
+            <Icon name="plus" size={13} />
+            {lib.newTemplate}
+          </button>
+        </div>
+      </div>
+
+      <div
+        className="card"
+        style={{
+          marginBottom: 24,
+          padding: "14px 20px",
+          background: "linear-gradient(180deg, var(--indigo-50), var(--surface))",
+          border: "1px solid var(--indigo-100)",
+          boxShadow: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 18,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="sparkle" size={14} className="text-2" />
+          <span className="eyebrow">{lib.hwTitle}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: "var(--text-2)", flexWrap: "wrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name="calendar" size={13} className="text-3" />
+            {lib.hwStep1Pre}
+            <strong>{lib.hwStep1Strong}</strong>
+          </span>
+          <Icon name="arrow" size={12} className="text-4" />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name="grid" size={13} className="text-3" />
+            {lib.hwStep2Pre}
+            <strong>{lib.hwStep2Strong}</strong>
+          </span>
+          <Icon name="arrow" size={12} className="text-4" />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name="book" size={13} className="text-3" />
+            {lib.hwStep3Pre}
+            <strong>{lib.hwStep3Strong}</strong>
+            {lib.hwStep3Post}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <span className="eyebrow">{lib.filterByType}</span>
+        <button className={`pill ${!filter ? "on" : ""}`} onClick={() => setFilter("")}>
+          {lib.all}
+        </button>
+        {types.map((ty) => (
+          <button key={ty} className={`pill ${filter === ty ? "on" : ""}`} onClick={() => setFilter(filter === ty ? "" : ty)}>
+            {COURSE_TYPES[ty].label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+        {list.map((t) => (
+          <LibraryCard
+            key={t.id}
+            template={t}
+            onOpen={() => onOpen(t.id)}
+            onDuplicate={() => onDuplicate(t)}
+            onDelete={() => onDelete(t)}
+          />
+        ))}
+        {list.length === 0 && (
+          <div className="card card-pad" style={{ gridColumn: "1 / -1", textAlign: "center", color: "var(--text-3)", padding: 40 }}>
+            {lib.emptyType}
+            <button className="link" onClick={onCreate}>
+              {lib.createFirst}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function SummaryLine({ label, value, last }: { label: string; value: string; last?: boolean }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        padding: "5px 0",
+        borderBottom: last ? "none" : "1px dashed var(--border-2)",
+      }}
+    >
+      <span style={{ fontSize: 12, color: "var(--text-3)" }}>{label}</span>
+      <span className="num" style={{ fontSize: 13, fontWeight: 600 }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function MaterialeRow({
+  icon,
+  label,
+  hint,
+  value,
+  onChange,
+  last,
+}: {
+  icon: IconName;
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (v: number) => void;
+  last?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: last ? "none" : "1px solid var(--border-2)" }}>
+      <div style={{ width: 30, height: 30, borderRadius: 6, background: "var(--surface-2)", color: "var(--text-3)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <Icon name={icon} size={15} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500 }}>{label}</div>
+        <div style={{ fontSize: 10.5, color: "var(--text-4)" }}>{hint}</div>
+      </div>
+      <div style={{ position: "relative", width: 96 }}>
+        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-4)", fontSize: 12, pointerEvents: "none" }}>€</span>
+        <input
+          type="number"
+          className="input"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value) || 0)}
+          style={{ paddingLeft: 20, height: 30, fontSize: 13, fontFamily: "var(--font-mono)", textAlign: "right", fontWeight: 600 }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ExtraCostRow({
+  cost: c,
+  last,
+  onChange,
+  onRemove,
+}: {
+  cost: MaterialExtra;
+  last?: boolean;
+  onChange: (patch: Partial<MaterialExtra>) => void;
+  onRemove: () => void;
+}) {
+  const ed = useT().templateMateriali.editor;
+  const pers: { key: MaterialExtra["per"]; label: string }[] = [
+    { key: "iscritto", label: ed.perIscritto },
+    { key: "corso", label: ed.perCorso },
+  ];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: last ? "none" : "1px solid var(--border-2)" }}>
+      <div style={{ width: 30, height: 30, borderRadius: 6, background: "var(--indigo-50)", color: "var(--indigo-600)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <Icon name="tag" size={14} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <input
+          className="input"
+          value={c.label}
+          onChange={(e) => onChange({ label: e.target.value })}
+          placeholder={ed.costNamePlaceholder}
+          style={{ height: 28, fontSize: 13, fontWeight: 500, marginBottom: 5 }}
+        />
+        <div style={{ display: "inline-flex", gap: 4 }}>
+          {pers.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => onChange({ per: p.key })}
+              className={`pill ${c.per === p.key ? "on" : ""}`}
+              style={{ fontSize: 10, padding: "2px 8px" }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ position: "relative", width: 84 }}>
+        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-4)", fontSize: 12, pointerEvents: "none" }}>€</span>
+        <input
+          type="number"
+          className="input"
+          value={c.value}
+          onChange={(e) => onChange({ value: Number(e.target.value) || 0 })}
+          style={{ paddingLeft: 20, height: 30, fontSize: 13, fontFamily: "var(--font-mono)", textAlign: "right", fontWeight: 600 }}
+        />
+      </div>
+      <button className="btn btn-icon btn-sm btn-ghost" title={ed.addCost} onClick={onRemove}>
+        <Icon name="trash" size={12} />
+      </button>
+    </div>
+  );
+}
+
+function SakeField({
+  label,
+  value,
+  onChange,
+  type,
+  mono,
+}: {
+  label: string;
+  value: string | number;
+  onChange: (v: string) => void;
+  type?: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <div style={{ fontSize: 10.5, color: "var(--text-3)", fontWeight: 500, marginBottom: 3 }}>{label}</div>
+      <input
+        className="input"
+        type={type || "text"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ height: 30, fontSize: 12.5, fontFamily: mono ? "var(--font-mono)" : undefined }}
+      />
+    </div>
+  );
+}
+
+function TemplateSakeRow({
+  sake: s,
+  isLast,
+  isOver,
+  onUpdate,
+  onRemove,
+  onDragStartRow,
+  onDragEnterRow,
+  onDropRow,
+  onDragEndRow,
+}: {
+  sake: Sake;
+  isLast: boolean;
+  isOver: boolean;
+  onUpdate: (patch: Partial<Sake>) => void;
+  onRemove: () => void;
+  onDragStartRow: () => void;
+  onDragEnterRow: () => void;
+  onDropRow: () => void;
+  onDragEndRow: () => void;
+}) {
+  const sk = useT().templateMateriali.sake;
+  const [open, setOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  return (
+    <div
+      onDragOver={(e) => e.preventDefault()}
+      onDragEnter={onDragEnterRow}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropRow();
+      }}
+      style={{
+        borderBottom: isLast ? "none" : "1px solid var(--border-2)",
+        borderTop: isOver ? "2px solid var(--indigo)" : "2px solid transparent",
+        opacity: dragging ? 0.4 : 1,
+        background: isOver ? "var(--indigo-50)" : "transparent",
+        transition: "background var(--dur-fast)",
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "22px 40px 1fr auto auto auto", gap: 10, alignItems: "center", padding: "10px 16px" }}>
+        <div
+          draggable
+          onDragStart={(e) => {
+            setDragging(true);
+            onDragStartRow();
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          onDragEnd={() => {
+            setDragging(false);
+            onDragEndRow();
+          }}
+          title={sk.dragTitle}
+          style={{ cursor: "grab", color: "var(--text-mute)", display: "grid", placeItems: "center", width: 22, height: 28, borderRadius: 4 }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.setProperty("background", "var(--surface-2)");
+            e.currentTarget.style.setProperty("color", "var(--text-3)");
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.setProperty("background", "transparent");
+            e.currentTarget.style.setProperty("color", "var(--text-mute)");
+          }}
+        >
+          <Icon name="grip" size={14} />
+        </div>
+        <div className="ph-img" style={{ width: 40, height: 50, borderRadius: 3, fontSize: 9 }}>
+          {s.code}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+          <div className="mono" style={{ fontSize: 10.5, color: "var(--text-4)" }}>
+            {s.code} · {s.size}ML
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
+            {s.type} · {s.sakagura}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", minWidth: 50 }}>
+          <div className="num" style={{ fontSize: 13, fontWeight: 600 }}>
+            {s.cost}€
+          </div>
+          <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 2 }}>×{s.qty}</div>
+        </div>
+        <button
+          className="btn btn-icon btn-sm btn-ghost"
+          title={sk.editSake}
+          onClick={() => setOpen((o) => !o)}
+          style={{ color: open ? "var(--indigo)" : undefined, background: open ? "var(--indigo-50)" : undefined }}
+        >
+          <Icon name="edit" size={12} />
+        </button>
+        <button className="btn btn-icon btn-sm btn-ghost" title={sk.removeSake} onClick={onRemove}>
+          <Icon name="trash" size={12} />
+        </button>
+      </div>
+
+      {open && (
+        <div style={{ padding: "0 16px 14px 16px", animation: "expandIn 160ms var(--ease-out)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
+            <SakeField label={sk.fldNome} value={s.name} onChange={(v) => onUpdate({ name: v })} />
+            <SakeField label={sk.fldCodice} value={s.code} mono onChange={(v) => onUpdate({ code: v })} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <SakeField label={sk.fldTipo} value={s.type} onChange={(v) => onUpdate({ type: v })} />
+            <SakeField label={sk.fldSakagura} value={s.sakagura} onChange={(v) => onUpdate({ sakagura: v })} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <SakeField label={sk.fldFormato} value={s.size} type="number" onChange={(v) => onUpdate({ size: Number(v) || 0 })} />
+            <SakeField label={sk.fldCosto} value={s.cost} type="number" onChange={(v) => onUpdate({ cost: Number(v) || 0 })} />
+            <SakeField label={sk.fldQuantita} value={s.qty} type="number" onChange={(v) => onUpdate({ qty: Number(v) || 1 })} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DayCard({
+  day: d,
+  canRemove,
+  onRename,
+  onRemoveDay,
+  onAddSake,
+  onUpdateSake,
+  onRemoveSake,
+  onReorderSake,
+}: {
+  day: MaterialDay;
+  canRemove: boolean;
+  onRename: (name: string) => void;
+  onRemoveDay: () => void;
+  onAddSake: () => void;
+  onUpdateSake: (si: number, patch: Partial<Sake>) => void;
+  onRemoveSake: (si: number) => void;
+  onReorderSake: (from: number, to: number) => void;
+}) {
+  const tm = useT().templateMateriali;
+  const dy = tm.day;
+  const [editingName, setEditingName] = useState(false);
+  const dragIndex = useRef<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const cost = d.sakes.reduce((s, sk) => s + sk.cost * sk.qty, 0);
+
+  return (
+    <div className="card">
+      <div className="card-head" style={{ alignItems: "center" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span className="eyebrow">{format(dy.giorno, { n: d.day })}</span>
+          {editingName ? (
+            <input
+              className="input"
+              autoFocus
+              value={d.name}
+              onChange={(e) => onRename(e.target.value)}
+              onBlur={() => setEditingName(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setEditingName(false);
+              }}
+              style={{ marginTop: 4, height: 30, fontSize: 15, fontWeight: 600 }}
+            />
+          ) : (
+            <div
+              className="h3"
+              style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+              onClick={() => setEditingName(true)}
+            >
+              {d.name}
+              <Icon name="edit" size={12} className="text-4" />
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="mono" style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+            {d.sakes.length} {tm.card.sake} · {cost.toLocaleString("it-IT")} €
+          </span>
+          {canRemove && (
+            <button className="btn btn-icon btn-sm btn-ghost" title={dy.removeDay} onClick={onRemoveDay}>
+              <Icon name="trash" size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div>
+        {d.sakes.map((s, si) => (
+          <TemplateSakeRow
+            key={si}
+            sake={s}
+            isLast={si === d.sakes.length - 1}
+            isOver={overIdx === si}
+            onUpdate={(patch) => onUpdateSake(si, patch)}
+            onRemove={() => onRemoveSake(si)}
+            onDragStartRow={() => {
+              dragIndex.current = si;
+            }}
+            onDragEnterRow={() => {
+              if (dragIndex.current !== null && dragIndex.current !== si) setOverIdx(si);
+            }}
+            onDropRow={() => {
+              if (dragIndex.current !== null) onReorderSake(dragIndex.current, si);
+              dragIndex.current = null;
+              setOverIdx(null);
+            }}
+            onDragEndRow={() => {
+              dragIndex.current = null;
+              setOverIdx(null);
+            }}
+          />
+        ))}
+        {d.sakes.length === 0 && (
+          <div style={{ padding: "18px 16px", textAlign: "center", color: "var(--text-4)", fontSize: 12 }}>{dy.noSake}</div>
+        )}
+      </div>
+
+      <div style={{ padding: "8px 16px", borderTop: "1px solid var(--border-2)", background: "var(--surface-2)" }}>
+        <button className="btn btn-sm" style={{ width: "100%" }} onClick={onAddSake}>
+          <Icon name="plus" size={12} />
+          {dy.addSake}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TemplateEditor({
+  template: t,
+  onChange,
+  onBack,
+  onFlash,
+}: {
+  template: MaterialTemplate;
+  onChange: (next: MaterialTemplate) => void;
+  onBack: () => void;
+  onFlash: (msg: string) => void;
+}) {
+  const tm = useT().templateMateriali;
+  const ed = tm.editor;
+  const { totalSakes, sakeCost } = tmTemplateStats(t);
+
+  const setField = (patch: Partial<MaterialTemplate>) => onChange({ ...t, ...patch });
+  const setDays = (days: MaterialDay[]) => onChange({ ...t, days });
+
+  const addDay = () => {
+    const n = t.days.length + 1;
+    setDays([...t.days, { day: n, name: format(tm.newDayName, { n }), sakes: [] }]);
+  };
+  const removeDay = (idx: number) => {
+    if (t.days.length === 1) {
+      onFlash(tm.toast.mustHaveOneDay);
+      return;
+    }
+    const days = t.days.filter((_, i) => i !== idx).map((d, i) => ({ ...d, day: i + 1 }));
+    setDays(days);
+  };
+  const renameDay = (idx: number, name: string) => setDays(t.days.map((d, i) => (i === idx ? { ...d, name } : d)));
+
+  const addSake = (idx: number) => {
+    const k = tmSeed(t.id + idx + t.days[idx].sakes.length);
+    const sake: Sake = {
+      code: `SAK${(k % 900) + 100}`,
+      name: SAKE_NAME_BANK[k % SAKE_NAME_BANK.length],
+      type: SAKE_TYPE_BANK[k % SAKE_TYPE_BANK.length],
+      sakagura: SAKE_KURA_BANK[k % SAKE_KURA_BANK.length],
+      size: 720,
+      cost: 35,
+      qty: 1,
+      note: "",
+    };
+    setDays(t.days.map((d, i) => (i === idx ? { ...d, sakes: [...d.sakes, sake] } : d)));
+  };
+  const updateSake = (idx: number, si: number, patch: Partial<Sake>) =>
+    setDays(t.days.map((d, i) => (i === idx ? { ...d, sakes: d.sakes.map((s, j) => (j === si ? { ...s, ...patch } : s)) } : d)));
+  const removeSake = (idx: number, si: number) =>
+    setDays(t.days.map((d, i) => (i === idx ? { ...d, sakes: d.sakes.filter((_, j) => j !== si) } : d)));
+
+  const setMateriali = (patch: Partial<MaterialTemplate["materiali"]>) =>
+    onChange({ ...t, materiali: { ...t.materiali, ...patch } });
+
+  const extra = t.materiali.extra || [];
+  const setExtra = (next: MaterialExtra[]) => onChange({ ...t, materiali: { ...t.materiali, extra: next } });
+  const addExtraCost = () =>
+    setExtra([...extra, { id: "x-" + Date.now(), label: ed.newCostLabel, value: 0, per: "iscritto" }]);
+  const updateExtraCost = (id: string, patch: Partial<MaterialExtra>) =>
+    setExtra(extra.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const removeExtraCost = (id: string) => setExtra(extra.filter((c) => c.id !== id));
+
+  const extraPerStudent = extra.filter((c) => c.per === "iscritto").reduce((s, c) => s + (c.value || 0), 0);
+  const extraPerCourse = extra.filter((c) => c.per === "corso").reduce((s, c) => s + (c.value || 0), 0);
+  const materialiPerStudent =
+    (t.materiali.diplomaPerStudent || 0) + (t.materiali.libroPerStudent || 0) + extraPerStudent;
+
+  const reorderSake = (idx: number, from: number, to: number) =>
+    setDays(
+      t.days.map((d, i) => {
+        if (i !== idx) return d;
+        if (to < 0 || to >= d.sakes.length || from === to) return d;
+        const sakes = [...d.sakes];
+        const [moved] = sakes.splice(from, 1);
+        sakes.splice(to, 0, moved);
+        return { ...d, sakes };
+      }),
+    );
+
+  const educatorTotal = t.materiali.educatorPerDay * t.days.length;
+
+  return (
+    <>
+      <button className="btn btn-sm btn-ghost" style={{ marginBottom: 14 }} onClick={onBack}>
+        <Icon name="arrow-l" size={12} />
+        {ed.backAll}
+      </button>
+
+      <div className="card card-pad" style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>
+              {ed.templateWord}
+            </div>
+            <input
+              className="input"
+              value={t.name}
+              onChange={(e) => setField({ name: e.target.value })}
+              style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.01em", height: 44, padding: "0 10px", marginLeft: -10, marginBottom: 10 }}
+            />
+            <textarea
+              className="textarea"
+              rows={2}
+              placeholder={ed.descPlaceholder}
+              value={t.description}
+              onChange={(e) => setField({ description: e.target.value })}
+              style={{ fontSize: 12.5 }}
+            />
+          </div>
+          <div style={{ width: 200 }}>
+            <div className="field" style={{ marginBottom: 12 }}>
+              <div className="field-label">{ed.courseType}</div>
+              <select className="select" value={t.type} onChange={(e) => setField({ type: e.target.value as CourseTypeKey })}>
+                {(Object.keys(COURSE_TYPES) as CourseTypeKey[]).map((k) => (
+                  <option key={k} value={k}>
+                    {COURSE_TYPES[k].label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="card" style={{ padding: "10px 14px", boxShadow: "none", border: "1px solid var(--indigo-100)", background: "var(--indigo-50)" }}>
+              <div style={{ fontSize: 11, color: "var(--indigo-600)", fontWeight: 600, letterSpacing: "var(--ls-caps)", textTransform: "uppercase" }}>
+                {ed.durationLabel}
+              </div>
+              <div className="num" style={{ fontSize: 26, fontWeight: 600, color: "var(--indigo-600)", lineHeight: 1.1 }}>
+                {t.days.length} {dayUnit(t.days.length, tm)}
+              </div>
+              <div style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 2 }}>
+                {format(ed.durationNote, { n: t.days.length, unit: dayUnitFem(t.days.length, tm) })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 20, alignItems: "start" }}>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8 }}>
+            <div>
+              <div className="eyebrow">{ed.daysAndSake}</div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 3 }}>
+                {t.days.length} {dayUnit(t.days.length, tm)} · {totalSakes} {tm.card.sake} · {ed.summaryCost}{" "}
+                <strong className="num">{sakeCost.toLocaleString("it-IT")} €</strong>
+              </div>
+            </div>
+            <button className="btn btn-sm btn-primary" onClick={addDay}>
+              <Icon name="plus" size={12} />
+              {ed.addDay}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {t.days.map((d, idx) => (
+              <DayCard
+                key={idx}
+                day={d}
+                canRemove={t.days.length > 1}
+                onRename={(name) => renameDay(idx, name)}
+                onRemoveDay={() => removeDay(idx)}
+                onAddSake={() => addSake(idx)}
+                onUpdateSake={(si, patch) => updateSake(idx, si, patch)}
+                onRemoveSake={(si) => removeSake(idx, si)}
+                onReorderSake={(from, to) => reorderSake(idx, from, to)}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 12 }}>
+            {ed.materialiTitle}
+          </div>
+          <div className="card card-pad">
+            <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 14, lineHeight: 1.5 }}>{ed.materialiIntro}</div>
+            <MaterialeRow
+              icon="graduation"
+              label={ed.matEducator}
+              hint={format(ed.matEducatorHint, {
+                days: t.days.length,
+                unit: dayUnit(t.days.length, tm),
+                total: educatorTotal.toLocaleString("it-IT"),
+              })}
+              value={t.materiali.educatorPerDay}
+              onChange={(v) => setMateriali({ educatorPerDay: v })}
+            />
+            <MaterialeRow
+              icon="tag"
+              label={ed.matDiplomi}
+              hint={ed.perStudentHint}
+              value={t.materiali.diplomaPerStudent}
+              onChange={(v) => setMateriali({ diplomaPerStudent: v })}
+            />
+            <MaterialeRow
+              icon="book"
+              label={ed.matLibri}
+              hint={ed.perStudentHint}
+              value={t.materiali.libroPerStudent}
+              last={extra.length === 0}
+              onChange={(v) => setMateriali({ libroPerStudent: v })}
+            />
+            {extra.map((c, i) => (
+              <ExtraCostRow
+                key={c.id}
+                cost={c}
+                last={i === extra.length - 1}
+                onChange={(patch) => updateExtraCost(c.id, patch)}
+                onRemove={() => removeExtraCost(c.id)}
+              />
+            ))}
+            <button className="btn btn-sm" style={{ width: "100%", marginTop: 14 }} onClick={addExtraCost}>
+              <Icon name="plus" size={12} />
+              {ed.addCost}
+            </button>
+          </div>
+
+          <div className="card card-pad" style={{ marginTop: 12, background: "var(--surface-2)", boxShadow: "none", border: "1px solid var(--border-2)" }}>
+            <div className="eyebrow" style={{ marginBottom: 10 }}>
+              {ed.summaryTitle}
+            </div>
+            <SummaryLine label={ed.sumGiornate} value={`${t.days.length}`} />
+            <SummaryLine label={ed.sumSakeTot} value={`${totalSakes}`} />
+            <SummaryLine label={ed.sumCostoSake} value={`${sakeCost.toLocaleString("it-IT")} €`} />
+            <SummaryLine label={ed.sumEducator} value={`${educatorTotal.toLocaleString("it-IT")} €`} />
+            <SummaryLine
+              label={ed.sumMatPerStudent}
+              value={`${materialiPerStudent.toLocaleString("it-IT")} €`}
+              last={extraPerCourse === 0}
+            />
+            {extraPerCourse > 0 && (
+              <SummaryLine label={ed.sumOtherPerCourse} value={`${extraPerCourse.toLocaleString("it-IT")} €`} last />
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export function TemplateMateriali({
+  initialTemplates,
+  authorName,
+}: {
+  initialTemplates: MaterialTemplate[];
+  authorName: string;
+}) {
+  const tm = useT().templateMateriali;
+  const [templates, setTemplates] = useState<MaterialTemplate[]>(() => initialTemplates.map(tmDeepClone));
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<CourseTypeKey | "">("");
+  const [toast, setToast] = useState<string | null>(null);
+  const [, startSave] = useTransition();
+
+  const flash = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2600);
+  };
+
+  const persist = (t: MaterialTemplate) => startSave(() => void saveTemplateAction(t));
+
+  const open = openId ? templates.find((t) => t.id === openId) ?? null : null;
+
+  const updateTemplate = (id: string, next: MaterialTemplate) => {
+    setTemplates((arr) => arr.map((t) => (t.id === id ? next : t)));
+    persist(next);
+  };
+  const addTemplate = () => {
+    const id = "mtpl-" + Date.now();
+    const t: MaterialTemplate = {
+      id,
+      name: tm.newTemplateName,
+      type: "certificato",
+      days: [{ day: 1, name: format(tm.newDayName, { n: 1 }), sakes: [] }],
+      materiali: { educatorPerDay: 200, diplomaPerStudent: 0, libroPerStudent: 0, extra: [] },
+      description: "",
+      lastUsed: "—",
+      uses: 0,
+      createdBy: authorName,
+    };
+    setTemplates((arr) => [t, ...arr]);
+    setOpenId(id);
+    persist(t);
+  };
+  const duplicateTemplate = (t: MaterialTemplate) => {
+    const id = "mtpl-" + Date.now();
+    const copy: MaterialTemplate = {
+      ...tmDeepClone(t),
+      id,
+      name: t.name + tm.duplicateSuffix,
+      lastUsed: "—",
+      uses: 0,
+      createdBy: authorName,
+    };
+    setTemplates((arr) => [copy, ...arr]);
+    persist(copy);
+    flash(format(tm.toast.duplicated, { name: copy.name }));
+  };
+  const deleteTemplate = (t: MaterialTemplate) => {
+    if (!confirm(format(tm.confirmDelete, { name: t.name }))) return;
+    setTemplates((arr) => arr.filter((x) => x.id !== t.id));
+    if (openId === t.id) setOpenId(null);
+    startSave(() => void deleteTemplateAction(t.id));
+    flash(format(tm.toast.deleted, { name: t.name }));
+  };
+
+  return (
+    <div className="page">
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 28,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "var(--navy)",
+            color: "white",
+            padding: "10px 16px",
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 500,
+            boxShadow: "var(--sh-3)",
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <Icon name="check" size={13} />
+          {toast}
+        </div>
+      )}
+
+      {open ? (
+        <TemplateEditor
+          template={open}
+          onChange={(next) => updateTemplate(open.id, next)}
+          onBack={() => setOpenId(null)}
+          onFlash={flash}
+        />
+      ) : (
+        <TemplateLibrary
+          templates={templates}
+          filter={filter}
+          setFilter={setFilter}
+          onOpen={setOpenId}
+          onCreate={addTemplate}
+          onDuplicate={duplicateTemplate}
+          onDelete={deleteTemplate}
+        />
+      )}
+    </div>
+  );
+}
