@@ -550,7 +550,7 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
     days:material_template_days (
       id, day_no, name, position,
       sakes:material_template_sakes (
-        id, code, name, type, sakagura, size, cost_cents, qty, note, position
+        id, code, name, type, sakagura, size_ml, cost_cents, qty, note, position
       )
     ),
     extras:material_template_extras (
