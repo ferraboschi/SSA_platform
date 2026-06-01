@@ -21,6 +21,7 @@ export interface ArchivioCourse {
   revenue: number;
   lifecycle: CourseLifecycle;
   educatorName: string;
+  cancelled: boolean;
 }
 
 type GroupBy = "anno" | "citta" | "educator" | "tipo";
@@ -44,12 +45,18 @@ const CHART_H = 160;
 
 function YearStrip({
   courses,
+  cancelledCourses,
   selectedYear,
   onSelect,
+  cancelRate,
+  cancelCount,
 }: {
   courses: ArchivioCourse[];
+  cancelledCourses: ArchivioCourse[];
   selectedYear: string;
   onSelect: (y: string) => void;
+  cancelRate: number;
+  cancelCount: number;
 }) {
   const t = useT().archivio;
 
@@ -66,6 +73,15 @@ function YearStrip({
     const orderedTypes = TYPE_ORDER.filter((ty) => tSet.has(ty));
     return { byYear: yMap, byYearType: ytMap, types: orderedTypes };
   }, [courses]);
+
+  // Cancelled (planned but never held) per year — drawn as negative red bars.
+  const byYearCancelled = useMemo(() => {
+    const m = new Map<number, number>();
+    cancelledCourses.forEach((c) => m.set(c.year, (m.get(c.year) || 0) + 1));
+    return m;
+  }, [cancelledCourses]);
+  const maxCancelled = Math.max(1, ...Array.from(byYearCancelled.values()));
+  const CANC_H = 46;
 
   const ys = Array.from(byYear.keys()).sort((a, b) => a - b);
   if (!ys.length) return null;
@@ -284,6 +300,74 @@ function YearStrip({
         </div>
       </div>
 
+      {/* Negative strip: cancelled courses (planned but never held) per year. */}
+      {cancelledCourses.length > 0 && (
+        <>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 6,
+              fontSize: 11,
+              color: "var(--danger-fg)",
+              fontWeight: 600,
+            }}
+          >
+            <span
+              style={{ width: 10, height: 10, borderRadius: 2, background: "var(--danger)" }}
+            />
+            {t.cancelledWord ?? "Annullati"} · {t.cancelRateWord ?? "tasso"} {cancelRate}%
+            <span style={{ color: "var(--text-4)", fontWeight: 500 }}>
+              ({cancelCount} {t.cancelledWord?.toLowerCase() ?? "annullati"})
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "32px 1fr", gap: 12, marginTop: 4 }}>
+            <div />
+            <div
+              style={{
+                position: "relative",
+                height: CANC_H,
+                display: "grid",
+                gridTemplateColumns: `repeat(${range.length}, 1fr)`,
+                gap: 4,
+              }}
+            >
+              {range.map((y) => {
+                const cc = byYearCancelled.get(y) || 0;
+                const sel = String(y) === selectedYear;
+                return (
+                  <div
+                    key={y}
+                    style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}
+                  >
+                    {cc > 0 && (
+                      <>
+                        <div
+                          title={`${cc} ${t.cancelledWord?.toLowerCase() ?? "annullati"} ${y}`}
+                          style={{
+                            width: "100%",
+                            maxWidth: 56,
+                            height: (cc / maxCancelled) * 100 + "%",
+                            minHeight: 4,
+                            background: sel ? "var(--danger)" : "var(--danger-bg)",
+                            border: "1px solid var(--danger)",
+                            borderRadius: "0 0 3px 3px",
+                          }}
+                        />
+                        <span style={{ fontSize: 10, fontWeight: 600, color: "var(--danger-fg)", marginTop: 2 }}>
+                          {cc}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "32px 1fr", gap: 12, marginTop: 10 }}>
         <div />
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${range.length}, 1fr)`, gap: 4 }}>
@@ -427,10 +511,14 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
   const [filterType, setFilterType] = useState<CourseTypeKey | "">("");
   const [search, setSearch] = useState("");
 
+  // Held courses (the list/KPIs) vs cancelled (planned-but-never-held).
+  const held = useMemo(() => items.filter((c) => !c.cancelled), [items]);
+  const cancelledCourses = useMemo(() => items.filter((c) => c.cancelled), [items]);
+
   const years = Array.from(new Set(items.map((c) => c.year))).sort((a, b) => b - a);
 
   const filtered = useMemo(() => {
-    let l = items;
+    let l = held;
     if (year !== "tutti") l = l.filter((c) => c.year === Number(year));
     if (filterType) l = l.filter((c) => c.type === filterType);
     if (search) {
@@ -438,7 +526,17 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
       l = l.filter((c) => (c.shortTitle + " " + c.city + " " + c.educatorName).toLowerCase().includes(q));
     }
     return l;
-  }, [items, year, filterType, search]);
+  }, [held, year, filterType, search]);
+
+  // Cancellation KPI (respects the year filter).
+  const cancInYear =
+    year === "tutti"
+      ? cancelledCourses
+      : cancelledCourses.filter((c) => c.year === Number(year));
+  const heldInYear =
+    year === "tutti" ? held : held.filter((c) => c.year === Number(year));
+  const planned = heldInYear.length + cancInYear.length;
+  const cancelRate = planned ? Math.round((cancInYear.length / planned) * 100) : 0;
 
   const stats = {
     total: filtered.length,
@@ -477,7 +575,14 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
         <KPI anim label={t.kpiCities} value={stats.cities} sub={format(t.kpiCitiesSub, { n: citiesPossible })} />
       </div>
 
-      <YearStrip courses={items} selectedYear={year} onSelect={setYear} />
+      <YearStrip
+        courses={held}
+        cancelledCourses={cancelledCourses}
+        selectedYear={year}
+        onSelect={setYear}
+        cancelRate={cancelRate}
+        cancelCount={cancInYear.length}
+      />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
         <div style={{ position: "relative", flex: "0 1 280px" }}>

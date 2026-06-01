@@ -1174,6 +1174,8 @@ export const it = {
     title: "Archivio completo",
     sub: "Tutti i corsi della SSA, passati, in corso e futuri. Esplora per anno, città o educator.",
     exportArchive: "Esporta archivio",
+    cancelledWord: "Annullati",
+    cancelRateWord: "tasso cancellazione",
     kpiCorsi: "Corsi",
     kpiTotali: "totali",
     kpiInYear: "nel {year}",

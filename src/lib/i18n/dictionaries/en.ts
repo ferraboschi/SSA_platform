@@ -1172,6 +1172,8 @@ export const en: Dictionary = {
     title: "Full archive",
     sub: "Every SSA course — past, ongoing and upcoming. Explore by year, city or educator.",
     exportArchive: "Export archive",
+    cancelledWord: "Cancelled",
+    cancelRateWord: "cancellation rate",
     kpiCorsi: "Courses",
     kpiTotali: "total",
     kpiInYear: "in {year}",

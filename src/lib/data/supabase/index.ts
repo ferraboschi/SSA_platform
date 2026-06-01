@@ -356,7 +356,8 @@ function corsoRowToDomain(
     row.status && VALID_STATUS.includes(row.status as CourseStatus)
       ? (row.status as CourseStatus)
       : computeStatus(enrolled, minStud, row.lifecycle);
-  const nb = (row.notebook ?? {}) as Partial<Notebook>;
+  const nbRaw = (row.notebook ?? {}) as Record<string, unknown>;
+  const nb = nbRaw as Partial<Notebook>;
   return {
     id: String(row.id),
     handle: row.handle,
@@ -395,6 +396,8 @@ function corsoRowToDomain(
       tags: nb.tags ?? [],
       reasoning: nb.reasoning ?? "",
     },
+    cancelled: Boolean(nbRaw.cancelled),
+    cancelReason: (nbRaw.cancelReason as string | undefined) ?? null,
   };
 }
 

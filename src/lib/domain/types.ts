@@ -66,6 +66,9 @@ export interface Course {
   whatsappLink: string;
   shareLink: string;
   notebook: Notebook;
+  /** Planned but never held (a planning error). Excluded from "done" lists. */
+  cancelled?: boolean;
+  cancelReason?: string | null;
   exam?: Exam;
   examMeta?: ExamMeta;
   examResults2?: ExamResult[];

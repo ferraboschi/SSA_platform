@@ -23,6 +23,7 @@ export default async function Page() {
       revenue: c.revenue,
       lifecycle: c.lifecycle,
       educatorName: c.educator.name,
+      cancelled: c.cancelled ?? false,
     }));
 
   return <ArchivioClient items={items} citiesPossible={CITIES.length} />;

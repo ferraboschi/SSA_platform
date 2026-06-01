@@ -55,6 +55,8 @@ export interface ExamHubItem {
 }
 
 export function toExamHubItem(c: Course): ExamHubItem | null {
+  // Cancelled courses (planned but never held) never have an exam.
+  if (c.cancelled) return null;
   // Rich seed path: full examMeta available.
   if (c.exam && c.examMeta) {
     const meta = c.examMeta;
