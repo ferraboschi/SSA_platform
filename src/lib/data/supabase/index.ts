@@ -213,6 +213,7 @@ function educatorRowToDomain(row: EducatorRow): Educator {
     bio: row.bio ?? "",
     years: 0,
     lang: (row.languages ?? []) as Language[],
+    photo: row.photo_url ?? undefined,
   };
 }
 
@@ -398,18 +399,39 @@ function corsoRowToDomain(
 }
 
 // ── exam templates (question bank imported from Airtable) ────────────────────
+interface ExamTemplateQuestionJson {
+  prompt: string;
+  weight?: number;
+  choices: Array<{ text: string; correct: boolean }>;
+}
+interface ExamTemplateMiniTestJson {
+  day: number;
+  name?: string;
+  topic?: string;
+  duration?: number;
+  questions?: ExamTemplateQuestionJson[];
+}
 interface ExamTemplateRow {
   id: number;
   family: string;
   name: string;
   data: {
     source?: string;
-    questions?: Array<{
-      prompt: string;
-      weight?: number;
-      choices: Array<{ text: string; correct: boolean }>;
-    }>;
+    questions?: ExamTemplateQuestionJson[];
+    miniTests?: ExamTemplateMiniTestJson[];
   };
+}
+
+/** Default empty per-day tests when none are stored yet: Nihonshu=3, Shochu=2. */
+function defaultMiniTests(family: ExamFamily): ExamTemplateMiniTestJson[] {
+  const days = family === "shochu" ? 2 : 3;
+  return Array.from({ length: days }, (_, i) => ({
+    day: i + 1,
+    name: `Test day ${i + 1}`,
+    topic: "",
+    duration: 10,
+    questions: [],
+  }));
 }
 
 function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
@@ -417,27 +439,44 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
   // 'nihonshu'|'shochu' (nihonshu = the certified sake exam).
   const family: ExamFamily = row.family === "shochu" ? "shochu" : "nihonshu";
   const cats = family === "shochu" ? SHOCHU_CATS : NIHONSHU_CATS;
-  const raw = row.data?.questions ?? [];
-  const questions: ExamQuestion[] = raw.map((q, i) => {
-    const options = q.choices.map((c) => c.text);
-    const correct = q.choices
-      .map((c, idx) => (c.correct ? idx : -1))
-      .filter((x) => x >= 0);
-    const type: ExamQuestionType = correct.length > 1 ? "multi" : "single";
-    return {
-      id: `q-${row.id}-${i}`,
-      // No category data in the source bank; distribute round-robin so each
-      // category shows some questions. Admins can re-categorise later.
-      cat: cats[i % cats.length].id,
-      type,
-      important: false,
-      lang: "it",
-      text: q.prompt,
-      points: q.weight ?? 1,
-      options,
-      correct,
-    };
-  });
+  const mapQuestions = (
+    raw: ExamTemplateQuestionJson[],
+    keyPrefix: string,
+  ): ExamQuestion[] =>
+    raw.map((q, i) => {
+      const options = q.choices.map((c) => c.text);
+      const correct = q.choices
+        .map((c, idx) => (c.correct ? idx : -1))
+        .filter((x) => x >= 0);
+      const type: ExamQuestionType = correct.length > 1 ? "multi" : "single";
+      return {
+        id: `${keyPrefix}-${i}`,
+        // No category data in the source bank; distribute round-robin so each
+        // category shows some questions. Admins can re-categorise later.
+        cat: cats[i % cats.length].id,
+        type,
+        important: false,
+        lang: "it",
+        text: q.prompt,
+        points: q.weight ?? 1,
+        options,
+        correct,
+      };
+    });
+
+  const questions = mapQuestions(row.data?.questions ?? [], `q-${row.id}`);
+  const miniSource =
+    row.data?.miniTests && row.data.miniTests.length > 0
+      ? row.data.miniTests
+      : defaultMiniTests(family);
+  const miniTests = miniSource.map((m) => ({
+    day: m.day,
+    name: m.name ?? `Test day ${m.day}`,
+    topic: m.topic ?? "",
+    duration: m.duration ?? 10,
+    questions: mapQuestions(m.questions ?? [], `q-${row.id}-d${m.day}`),
+  }));
+
   return {
     family,
     label: row.name,
@@ -449,7 +488,7 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
       duration: 60,
       thresholds: { pass: EXAM_THRESHOLDS.pass, retrial: EXAM_THRESHOLDS.retrial },
     },
-    miniTests: [],
+    miniTests,
     feedback: { name: "Feedback", questions: [] },
   };
 }
@@ -975,40 +1014,89 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         ? (eduMap.get(row.educator_id) ?? placeholderEducator())
         : placeholderEducator();
 
-    // Students + revenue + exam outcomes from enrollments.
-    const { data: iscr } = await sb
+    // Students + revenue + exam outcomes from enrollments (with Shopify order /
+    // discount / payment / ticket fields, populated by the sync). Falls back to
+    // the base columns if the enrichment migration hasn't been applied yet, so
+    // the iscritti list never disappears.
+    const RICH_ISCR =
+      "corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,buyer_name,corsista:corsisti(full_name,email,phone,has_whatsapp)";
+    const BASE_ISCR =
+      "corsista_id,amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)";
+    const richRes = await sb
       .from("corsi_iscrizioni")
-      .select(
-        "amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)",
-      )
+      .select(RICH_ISCR)
       .eq("corso_id", row.id);
+    const iscr = richRes.error
+      ? (
+          await sb
+            .from("corsi_iscrizioni")
+            .select(BASE_ISCR)
+            .eq("corso_id", row.id)
+        ).data
+      : richRes.data;
     type IscrJoin = {
+      corsista_id: number;
       amount_cents: number;
       exam_result: "passed" | "retrial" | "failed" | null;
+      order_name: string | null;
+      order_date: string | null;
+      discount_code: string | null;
+      discount_cents: number | null;
+      financial_status: string | null;
+      line_item_id: number | null;
+      buyer_name: string | null;
       corsista:
         | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }
         | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }[]
         | null;
     };
-    const rows = (iscr ?? []) as IscrJoin[];
+    const rows = (iscr ?? []) as unknown as IscrJoin[];
+
+    // Duplicate detection ("doppio"): how many course tickets each person holds,
+    // from purchases matched on the course product title.
+    const ticketCount = new Map<number, number>();
+    const { data: pur } = await sb
+      .from("purchases")
+      .select("corsista_id")
+      .eq("cluster", "corso")
+      .eq("product_title", row.full_title);
+    for (const p of (pur ?? []) as { corsista_id: number }[]) {
+      ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + 1);
+    }
+
     let revenue = 0;
     const examResults = { passed: 0, retrial: 0, failed: 0 };
     const students: Student[] = rows.map((r) => {
       revenue += (r.amount_cents || 0) / 100;
       if (r.exam_result) examResults[r.exam_result]++;
       const c = Array.isArray(r.corsista) ? r.corsista[0] : r.corsista;
+      const paid = (r.amount_cents || 0) / 100;
+      const discountValue = (r.discount_cents || 0) / 100;
+      const gross = paid + discountValue;
+      const participant = c?.full_name ?? "—";
+      const buyer = r.buyer_name;
+      const mismatch = Boolean(
+        buyer && buyer.trim().toLowerCase() !== participant.trim().toLowerCase(),
+      );
+      const tickets = ticketCount.get(r.corsista_id) ?? 1;
       return {
-        name: c?.full_name ?? "—",
+        name: participant,
         email: c?.email ?? "",
         phone: c?.phone ?? "",
-        orderNumber: "",
-        orderDate: "",
-        amount: (r.amount_cents || 0) / 100,
-        grossAmount: (r.amount_cents || 0) / 100,
-        discountCode: null,
+        orderNumber: r.order_name ?? "",
+        orderDate: r.order_date ?? "",
+        amount: paid,
+        grossAmount: gross,
+        discountCode: r.discount_code,
+        discountValue,
+        paymentStatus: r.financial_status,
+        ticketCode: r.line_item_id != null ? String(r.line_item_id) : null,
+        buyerName: buyer,
+        isDuplicate: tickets > 1,
+        tickets,
         hasWhatsApp: c?.has_whatsapp ?? false,
-        nameMismatch: false,
-        registrationName: null,
+        nameMismatch: mismatch,
+        registrationName: mismatch ? buyer : null,
       };
     });
 

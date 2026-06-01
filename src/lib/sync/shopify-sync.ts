@@ -249,6 +249,11 @@ export async function runShopifySync(opts?: {
     const cust = o.customer;
     const buyerName =
       `${cust?.first_name || ""} ${cust?.last_name || ""}`.trim() || null;
+    // Order-level discount (first code). For multi-line orders the value is
+    // attributed to the order; good enough for display.
+    const disc = o.discount_codes?.[0];
+    const discountCode = disc?.code ?? null;
+    const discountCents = disc ? Math.round(parseFloat(disc.amount || "0") * 100) : 0;
 
     // Per-order idempotency: clear this order's prior purchase rows, re-insert.
     await sb
@@ -268,18 +273,24 @@ export async function runShopifySync(opts?: {
         corsista_id: corsistaId,
         source: "shopify",
         external_id: String(o.id),
+        order_name: o.name,
+        product_id: li.product_id,
+        line_item_id: li.id,
         product_title: li.title,
         cluster: cls.cluster,
         subtype: cls.subtype,
         delivery: cls.delivery,
         quantity: qty,
         amount_cents: amount,
+        discount_code: discountCode,
+        discount_cents: discountCents,
+        financial_status: o.financial_status,
         buyer_name: buyerName,
         ordered_at: o.created_at,
       });
       if (!pErr) purchasesUpserted++;
 
-      // Course ticket → enrollment.
+      // Course ticket → enrollment (mirror order/discount/payment fields).
       const corso = li.product_id ? corsoByProduct.get(li.product_id) : undefined;
       if (corso) {
         const { error: eErr } = await sb.from("corsi_iscrizioni").upsert(
@@ -288,6 +299,13 @@ export async function runShopifySync(opts?: {
             corsista_id: corsistaId,
             amount_cents: amount || corso.price,
             historical: false,
+            order_name: o.name,
+            order_date: o.created_at,
+            discount_code: discountCode,
+            discount_cents: discountCents,
+            financial_status: o.financial_status,
+            line_item_id: li.id,
+            buyer_name: buyerName,
           },
           { onConflict: "corso_id,corsista_id" },
         );

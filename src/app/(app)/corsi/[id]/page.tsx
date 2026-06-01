@@ -42,6 +42,15 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const marginOnRevenue = course.revenue ? Math.round((course.margin / course.revenue) * 100) : 0;
   const programSakeCount = course.program.reduce((s, p) => s + p.sakes.length, 0);
   const esame = course.exam ? toEsameData(course) : null;
+  // Exam links work off the family template (not course.exam, which the
+  // Supabase path doesn't populate), so surface them for every exam-bearing
+  // course type even when the rich exam summary isn't available.
+  const examFamily: "nihonshu" | "shochu" | null =
+    course.type === "certificato"
+      ? "nihonshu"
+      : course.type === "shochu"
+        ? "shochu"
+        : null;
   const templates = allTemplates.map(toTemplateData);
 
   return (
@@ -231,6 +240,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         programma={toProgrammaData(course)}
         templates={templates}
         esame={esame}
+        examFamily={examFamily}
       />
 
       {/* Danger zone */}

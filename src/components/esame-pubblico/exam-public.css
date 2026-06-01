@@ -1,0 +1,244 @@
+/* Public exam runner — self-contained, responsive, anti-copy.
+   Reachable without app login via a signed token link. */
+
+.exam-public-shell {
+  min-height: 100dvh;
+  background: var(--bg, #f4f5f7);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(12px, 4vw, 40px);
+  box-sizing: border-box;
+}
+
+.exam-public-card {
+  width: 100%;
+  max-width: 680px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 16px;
+  box-shadow: var(--sh-card, 0 1px 3px rgba(0, 0, 0, 0.08));
+  padding: clamp(18px, 4vw, 32px);
+  box-sizing: border-box;
+}
+
+/* Header — also anti-copy (user-select none) */
+.exam-public-head {
+  -webkit-user-select: none;
+  user-select: none;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+}
+.exam-public-head-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.exam-public-brand {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--indigo-600, #4f46e5);
+  font-size: 15px;
+}
+.exam-public-testbadge {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--warn-fg, #92591a);
+  background: var(--warn-bg, #fdf0d5);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.exam-public-langs {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.exam-public-lang {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--surface, #fff);
+  color: var(--text-2, #555);
+  cursor: pointer;
+}
+.exam-public-lang.active {
+  background: var(--indigo-600, #4f46e5);
+  color: #fff;
+  border-color: var(--indigo-600, #4f46e5);
+}
+.exam-public-course {
+  font-size: clamp(18px, 4vw, 22px);
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: var(--text, #111);
+}
+.exam-public-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2, #666);
+}
+
+/* Progress */
+.exam-public-progress {
+  height: 6px;
+  background: var(--track, #ececf1);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.exam-public-progress-bar {
+  height: 100%;
+  background: var(--indigo-600, #4f46e5);
+  transition: width 220ms ease;
+}
+.exam-public-counter {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-3, #888);
+  margin: 8px 0 16px;
+}
+
+/* Question — anti-copy */
+.exam-public-q {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.exam-public-q-text {
+  font-size: clamp(16px, 3.5vw, 18px);
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text, #111);
+  margin: 0 0 18px;
+}
+
+.exam-public-options {
+  display: grid;
+  gap: 10px;
+}
+.exam-public-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border, #e5e7eb);
+  border-radius: 11px;
+  background: var(--surface, #fff);
+  color: var(--text, #111);
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+.exam-public-opt:hover {
+  border-color: var(--indigo-400, #818cf8);
+}
+.exam-public-opt.selected {
+  border-color: var(--indigo-600, #4f46e5);
+  background: var(--indigo-50, #eef2ff);
+}
+.exam-public-opt-mark {
+  color: var(--indigo-600, #4f46e5);
+  font-size: 14px;
+}
+
+/* User-typed answers MUST allow normal input (no select-none here) */
+.exam-public-input,
+.exam-public-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  font-size: 16px; /* ≥16px avoids iOS zoom */
+  font-family: inherit;
+  color: var(--text, #111);
+  background: var(--surface, #fff);
+  resize: vertical;
+}
+.exam-public-input:focus,
+.exam-public-textarea:focus {
+  outline: none;
+  border-color: var(--indigo-600, #4f46e5);
+}
+
+/* Nav */
+.exam-public-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+}
+.exam-public-btn {
+  padding: 12px 22px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.exam-public-btn.ghost {
+  background: var(--surface, #fff);
+  border-color: var(--border, #e5e7eb);
+  color: var(--text-2, #555);
+}
+.exam-public-btn.ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.exam-public-btn.primary {
+  background: var(--indigo-600, #4f46e5);
+  color: #fff;
+  margin-left: auto;
+}
+
+/* Thanks + invalid */
+.exam-public-thanks {
+  text-align: center;
+  padding: 28px 8px 12px;
+}
+.exam-public-thanks-check {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: var(--success-bg, #e8f6ee);
+  color: var(--success-fg, #1a7f43);
+  font-size: 28px;
+  display: grid;
+  place-items: center;
+}
+.exam-public-thanks h2 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text, #111);
+}
+.exam-public-thanks p {
+  font-size: 14px;
+  color: var(--text-2, #666);
+  margin: 0;
+}
+.exam-public-invalid {
+  text-align: center;
+  padding: 36px 16px;
+}
+.exam-public-invalid-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+.exam-public-invalid h1 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+.exam-public-invalid p {
+  color: var(--text-2, #666);
+  font-size: 14px;
+  margin: 0;
+}

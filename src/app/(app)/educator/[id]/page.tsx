@@ -48,6 +48,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       id: educator.id,
       name: educator.name,
       initials: educator.initials,
+      photo: educator.photo,
       role: educator.role,
       city: educator.city,
       bio: educator.bio,

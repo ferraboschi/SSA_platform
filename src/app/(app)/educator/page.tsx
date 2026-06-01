@@ -31,6 +31,7 @@ export default async function Page() {
         id: e.id,
         name: e.name,
         initials: e.initials,
+        photo: e.photo,
         role: e.role,
         city: e.city,
         bio: e.bio,

@@ -8,6 +8,8 @@ export interface AvatarProps {
   initials?: string;
   size?: AvatarSize;
   tone?: AvatarTone;
+  /** Optional photo URL — rendered as an image, falling back to initials. */
+  src?: string;
 }
 
 const TONES: AvatarTone[] = ["indigo", "navy", "azzurro", "oro"];
@@ -26,7 +28,7 @@ const SIZE_CLASS: Record<AvatarSize, string> = {
   xl: "avatar-xl",
 };
 
-export function Avatar({ name, initials, size = "md", tone }: AvatarProps) {
+export function Avatar({ name, initials, size = "md", tone, src }: AvatarProps) {
   const ini =
     initials ||
     (name
@@ -40,6 +42,17 @@ export function Avatar({ name, initials, size = "md", tone }: AvatarProps) {
     .split("")
     .reduce((s, ch) => s + ch.charCodeAt(0), 0);
   const t = tone || TONES[hash % TONES.length];
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        className={`avatar ${SIZE_CLASS[size]}`}
+        src={src}
+        alt={name ?? ini}
+        style={{ objectFit: "cover" }}
+      />
+    );
+  }
   return (
     <span className={`avatar ${SIZE_CLASS[size]}`} style={TONE_MAP[t]}>
       {ini}

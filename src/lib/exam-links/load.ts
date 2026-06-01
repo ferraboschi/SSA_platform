@@ -1,0 +1,109 @@
+// Service-role loader for the PUBLIC exam runner. Server-only.
+//
+// The exam link is reachable without a login, so the cookie-bound (anon) client
+// is blocked by RLS. We use the service client to read just what the runner
+// needs: the course header + the selected test's questions. Correct answers are
+// NOT returned — only prompt + options.
+import "server-only";
+import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import type { ExamTestKey } from "./token";
+
+export interface PublicRunnerQuestion {
+  id: string;
+  type: string;
+  text: string;
+  options: string[];
+}
+export interface PublicRunnerData {
+  header: {
+    courseName: string;
+    place: string;
+    date: string;
+    educator: string;
+  };
+  questions: PublicRunnerQuestion[];
+}
+
+interface QJson {
+  prompt: string;
+  choices?: Array<{ text: string; correct: boolean }>;
+}
+interface MiniJson {
+  day: number;
+  questions?: QJson[];
+}
+
+function mapQuestions(raw: QJson[], prefix: string): PublicRunnerQuestion[] {
+  return raw.map((q, i) => {
+    const choices = q.choices ?? [];
+    const correctCount = choices.filter((c) => c.correct).length;
+    return {
+      id: `${prefix}-${i}`,
+      type: choices.length === 0 ? "open" : correctCount > 1 ? "multi" : "single",
+      text: q.prompt,
+      options: choices.map((c) => c.text),
+    };
+  });
+}
+
+export async function loadPublicExam(
+  courseId: string,
+  family: "nihonshu" | "shochu",
+  testKey: ExamTestKey,
+): Promise<PublicRunnerData | null> {
+  const sb = getSupabaseServiceClient();
+
+  const { data: corso } = await sb
+    .from("corsi")
+    .select("id, short_title, city, delivery_mode, month, year, educator_id")
+    .eq("id", Number(courseId))
+    .maybeSingle();
+  if (!corso) return null;
+
+  let educator = "";
+  if (corso.educator_id) {
+    const { data: edu } = await sb
+      .from("educators")
+      .select("full_name")
+      .eq("id", corso.educator_id)
+      .maybeSingle();
+    educator = edu?.full_name ?? "";
+  }
+
+  // DB exam_templates.family is 'certificato' | 'shochu'.
+  const dbFamily = family === "shochu" ? "shochu" : "certificato";
+  const { data: tpl } = await sb
+    .from("exam_templates")
+    .select("id, data")
+    .eq("family", dbFamily)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let questions: PublicRunnerQuestion[] = [];
+  if (tpl) {
+    const data = tpl.data as { questions?: QJson[]; miniTests?: MiniJson[] };
+    if (testKey === "final") {
+      questions = mapQuestions(data.questions ?? [], `q-${tpl.id}`);
+    } else if (testKey === "feedback") {
+      questions = [];
+    } else {
+      const m = /^day(\d+)$/.exec(testKey);
+      if (m) {
+        const day = Number(m[1]);
+        const mt = (data.miniTests ?? []).find((x) => x.day === day);
+        questions = mapQuestions(mt?.questions ?? [], `q-${tpl.id}-d${day}`);
+      }
+    }
+  }
+
+  return {
+    header: {
+      courseName: corso.short_title,
+      place: corso.delivery_mode === "online" ? "Online" : corso.city,
+      date: `${corso.month} ${corso.year}`,
+      educator,
+    },
+    questions,
+  };
+}

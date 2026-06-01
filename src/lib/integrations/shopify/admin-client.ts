@@ -22,10 +22,16 @@ export interface AdminProduct {
   variants: AdminProductVariant[];
 }
 export interface AdminLineItem {
+  id: number | null;
   product_id: number | null;
   title: string;
   price: string | null;
   quantity: number | null;
+}
+export interface AdminDiscountCode {
+  code: string;
+  amount: string;
+  type: string;
 }
 export interface AdminAddress {
   phone?: string | null;
@@ -40,11 +46,13 @@ export interface AdminCustomer {
 }
 export interface AdminOrder {
   id: number;
+  name: string | null;
   email: string | null;
   created_at: string;
   updated_at: string;
   financial_status: string | null;
   cancelled_at: string | null;
+  discount_codes: AdminDiscountCode[] | null;
   customer: AdminCustomer | null;
   line_items: AdminLineItem[];
 }
@@ -109,7 +117,7 @@ export async function listOrdersUpdatedSince(
 ): Promise<AdminOrder[]> {
   const out: AdminOrder[] = [];
   const fields =
-    "id,email,created_at,updated_at,customer,line_items,financial_status,cancelled_at";
+    "id,name,email,created_at,updated_at,customer,line_items,financial_status,cancelled_at,discount_codes";
   const since = sinceIso ? `&updated_at_min=${encodeURIComponent(sinceIso)}` : "";
   let path: string | null = `orders.json?status=any&limit=250&fields=${fields}${since}`;
   while (path) {

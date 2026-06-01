@@ -118,6 +118,18 @@ export interface Student {
   hasWhatsApp: boolean;
   nameMismatch: boolean;
   registrationName: string | null;
+  /** Discount value in euros (gross − paid), when a code applied. */
+  discountValue?: number;
+  /** Shopify payment status: 'paid' | 'pending' | 'partially_paid' | … */
+  paymentStatus?: string | null;
+  /** Shopify ticket / line-item id — unique transaction reference. */
+  ticketCode?: string | null;
+  /** Buyer name when it differs from the participant (B2B / paid-for-others). */
+  buyerName?: string | null;
+  /** True when this person has more than one ticket on the course (→ align participant). */
+  isDuplicate?: boolean;
+  /** Number of tickets this person holds for the course. */
+  tickets?: number;
 }
 
 export interface Corsista {
@@ -172,6 +184,8 @@ export interface Educator {
   bio: string;
   years: number;
   lang: Language[];
+  /** Optional avatar photo URL (educators.photo_url). */
+  photo?: string;
 }
 
 // ============ Exam ============

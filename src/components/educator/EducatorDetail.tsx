@@ -43,6 +43,7 @@ export interface EducatorDetailData {
     id: string;
     name: string;
     initials: string;
+    photo?: string;
     role: string;
     city: string;
     bio: string;
@@ -179,7 +180,7 @@ export function EducatorDetail({ data }: { data: EducatorDetailData }) {
             alignItems: "center",
           }}
         >
-          <Avatar name={e.name} initials={e.initials} size="xl" />
+          <Avatar name={e.name} initials={e.initials} src={e.photo} size="xl" />
           <div>
             <div className="eyebrow" style={{ marginBottom: 8 }}>
               {e.role} · {e.years} anni · {e.lang.join(" / ")}

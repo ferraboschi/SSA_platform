@@ -10,6 +10,7 @@ export interface EducatorListItem {
   id: string;
   name: string;
   initials: string;
+  photo?: string;
   role: string;
   city: string;
   bio: string;
@@ -116,7 +117,7 @@ export function EducatorList({
               ev.currentTarget.style.setProperty("box-shadow", "var(--sh-card)");
             }}
           >
-            <Avatar name={e.name} initials={e.initials} size="xl" />
+            <Avatar name={e.name} initials={e.initials} src={e.photo} size="xl" />
             <div>
               <div className="eyebrow" style={{ marginBottom: 6 }}>
                 {e.role} · {e.city}

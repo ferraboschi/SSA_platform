@@ -7,6 +7,7 @@ import { useT, format } from "@/lib/i18n";
 import { CourseStat } from "./CourseStat";
 import { IscrittiSection } from "./IscrittiSection";
 import { ProgrammaEconomiaSection } from "./ProgrammaEconomiaSection";
+import { ExamLinkPanel } from "./ExamLinkPanel";
 import type { EsameData, ProgrammaData, TemplateData } from "@/lib/corsi";
 import type { Student } from "@/lib/domain";
 
@@ -21,6 +22,7 @@ export function CourseSections({
   programma,
   templates,
   esame,
+  examFamily = null,
 }: {
   courseId: string;
   enrolled: number;
@@ -30,15 +32,19 @@ export function CourseSections({
   programma: ProgrammaData;
   templates: TemplateData[];
   esame: EsameData | null;
+  examFamily?: "nihonshu" | "shochu" | null;
 }) {
   const tr = useT();
   const t = tr.corsi.detail;
   const [section, setSection] = useState<SectionId>("iscritti");
 
+  const hasExam = Boolean(esame) || Boolean(examFamily);
   const tabs: { id: SectionId; label: string; n: number; accent?: boolean }[] = [
     { id: "iscritti", label: t.tabIscritti, n: enrolled },
     { id: "programma", label: t.tabProgramma, n: programSakeCount },
-    ...(esame ? [{ id: "esame" as const, label: t.tabEsame, n: esame.totalQuestions, accent: true }] : []),
+    ...(hasExam
+      ? [{ id: "esame" as const, label: t.tabEsame, n: esame?.totalQuestions ?? 0, accent: true }]
+      : []),
   ];
 
   return (
@@ -58,7 +64,12 @@ export function CourseSections({
 
       {section === "iscritti" && <IscrittiSection students={students} whatsappLink={whatsappLink} />}
       {section === "programma" && <ProgrammaEconomiaSection data={programma} templates={templates} />}
-      {section === "esame" && esame && <EsameTabSummary courseId={courseId} esame={esame} />}
+      {section === "esame" && (
+        <div style={{ display: "grid", gap: 18 }}>
+          {esame && <EsameTabSummary courseId={courseId} esame={esame} />}
+          {examFamily && <ExamLinkPanel courseId={courseId} family={examFamily} />}
+        </div>
+      )}
     </>
   );
 }
