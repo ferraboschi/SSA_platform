@@ -20,17 +20,26 @@ import "server-only";
 // migrate sections one by one.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DEFAULT_THRESHOLDS } from "@/lib/domain";
+import { COURSE_TYPES, DEFAULT_THRESHOLDS, STATUS_META } from "@/lib/domain";
 import type {
   Corsista,
   CorsistaEnrollment,
+  Course,
+  CourseCosts,
+  CourseLifecycle,
+  CourseStatus,
   CourseTypeKey,
   DashThresholds,
+  DeliveryMode,
   Educator,
   Language,
   MaterialTemplate,
+  Notebook,
   Notification,
+  ProgramDay,
   Purchase,
+  Sake,
+  Student,
   User,
 } from "@/lib/domain";
 import type {
@@ -245,6 +254,135 @@ function corsistaRowToDomain(
     historical: row.historical || undefined,
     purchases,
     reviewNote: row.review_note,
+  };
+}
+
+// ── corsi (courses) ──────────────────────────────────────────────────────────
+interface CorsoRow {
+  id: number;
+  external_id: string | null;
+  handle: string;
+  short_title: string;
+  full_title: string;
+  type: CourseTypeKey;
+  type_label: string;
+  delivery_mode: string;
+  city: string;
+  venue: string | null;
+  month: string;
+  year: number;
+  start_date: string | null;
+  price_cents: number;
+  capacity: number;
+  min_students: number;
+  lifecycle: CourseLifecycle;
+  status: string | null;
+  educator_id: number | null;
+  notebook: Record<string, unknown>;
+  costs: Record<string, unknown>;
+}
+
+const VALID_STATUS: CourseStatus[] = [
+  "in-traiettoria",
+  "monitor",
+  "rischio",
+  "critico",
+];
+
+function computeStatus(
+  enrolled: number,
+  minStud: number,
+  lifecycle: CourseLifecycle,
+): CourseStatus {
+  if (lifecycle === "passato" || lifecycle === "archiviato")
+    return enrolled >= minStud ? "in-traiettoria" : "critico";
+  const ratio = minStud > 0 ? enrolled / minStud : 1;
+  if (ratio >= 1) return "in-traiettoria";
+  if (ratio >= 0.66) return "monitor";
+  if (ratio >= 0.33) return "rischio";
+  return "critico";
+}
+
+function placeholderEducator(): Educator {
+  return {
+    id: "",
+    name: "—",
+    role: "Educator",
+    city: "",
+    initials: "—",
+    bio: "",
+    years: 0,
+    lang: [],
+  };
+}
+
+function corsoRowToDomain(
+  row: CorsoRow,
+  educator: Educator,
+  enrolled: number,
+  revenue: number,
+  students: Student[],
+  program: ProgramDay[],
+): Course {
+  const t = COURSE_TYPES[row.type] ?? COURSE_TYPES.certificato;
+  const price = row.price_cents ? row.price_cents / 100 : t.price;
+  const minStud = row.min_students || t.minStud;
+  const costsRaw = (row.costs ?? {}) as Partial<CourseCosts>;
+  const costs: CourseCosts = {
+    educator: 600,
+    gestione: 900,
+    diplomi: 460,
+    libri: 36,
+    location: row.city === "Milano" ? 0 : 250,
+    food: row.type === "certificato" ? 0 : 80,
+    adv: 0,
+    ...costsRaw,
+  };
+  const totalCost = Object.values(costs).reduce((s, n) => s + (n || 0), 0);
+  const rev = revenue || enrolled * price * 0.85;
+  const status: CourseStatus =
+    row.status && VALID_STATUS.includes(row.status as CourseStatus)
+      ? (row.status as CourseStatus)
+      : computeStatus(enrolled, minStud, row.lifecycle);
+  const nb = (row.notebook ?? {}) as Partial<Notebook>;
+  return {
+    id: String(row.id),
+    handle: row.handle,
+    type: row.type,
+    typeLabel: row.type_label || t.label,
+    typeShort: t.short,
+    typeColor: t.color,
+    title: row.full_title,
+    shortTitle: row.short_title,
+    city: row.city,
+    mode: row.delivery_mode === "online" ? "online" : "presenza",
+    month: row.month,
+    year: row.year,
+    day: row.start_date ? new Date(row.start_date).getUTCDate() : 1,
+    days: row.type === "certificato" ? 3 : 1,
+    educator,
+    capacity: row.capacity || 20,
+    enrolled,
+    minStudents: minStud,
+    price,
+    revenue: Math.round(rev),
+    costs,
+    totalCost,
+    margin: Math.round(rev - totalCost),
+    status,
+    statusLabel: STATUS_META[status].label,
+    statusTone: STATUS_META[status].tone,
+    lifecycle: row.lifecycle,
+    students,
+    program,
+    whatsappLink: "",
+    shareLink: "",
+    notebook: {
+      adminNotes: nb.adminNotes ?? [],
+      plannedAction: nb.plannedAction ?? null,
+      tags: nb.tags ?? [],
+      reasoning: nb.reasoning ?? "",
+    },
   };
 }
 
@@ -750,20 +888,189 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
   };
 
   // ─── stubs (return safe empty shape until live mapping lands) ──────────
+  // Numeric educator id → domain Educator (for joining onto courses).
+  let eduByNumId: Map<number, Educator> | null = null;
+  async function loadEducatorsMap() {
+    if (eduByNumId) return eduByNumId;
+    const { data } = await sb.from("educators").select("*");
+    const map = new Map<number, Educator>();
+    for (const e of (data ?? []) as EducatorRow[])
+      map.set(e.id, educatorRowToDomain(e));
+    eduByNumId = map;
+    return map;
+  }
+
+  async function buildFullCourse(row: CorsoRow): Promise<Course> {
+    const eduMap = await loadEducatorsMap();
+    const educator =
+      row.educator_id != null
+        ? (eduMap.get(row.educator_id) ?? placeholderEducator())
+        : placeholderEducator();
+
+    // Students + revenue + exam outcomes from enrollments.
+    const { data: iscr } = await sb
+      .from("corsi_iscrizioni")
+      .select(
+        "amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)",
+      )
+      .eq("corso_id", row.id);
+    type IscrJoin = {
+      amount_cents: number;
+      exam_result: "passed" | "retrial" | "failed" | null;
+      corsista:
+        | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }
+        | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }[]
+        | null;
+    };
+    const rows = (iscr ?? []) as IscrJoin[];
+    let revenue = 0;
+    const examResults = { passed: 0, retrial: 0, failed: 0 };
+    const students: Student[] = rows.map((r) => {
+      revenue += (r.amount_cents || 0) / 100;
+      if (r.exam_result) examResults[r.exam_result]++;
+      const c = Array.isArray(r.corsista) ? r.corsista[0] : r.corsista;
+      return {
+        name: c?.full_name ?? "—",
+        email: c?.email ?? "",
+        phone: c?.phone ?? "",
+        orderNumber: "",
+        orderDate: "",
+        amount: (r.amount_cents || 0) / 100,
+        grossAmount: (r.amount_cents || 0) / 100,
+        discountCode: null,
+        hasWhatsApp: c?.has_whatsapp ?? false,
+        nameMismatch: false,
+        registrationName: null,
+      };
+    });
+
+    // Program from days + sake.
+    const { data: giorni } = await sb
+      .from("corsi_giorni")
+      .select(
+        "day_no,name,sakes:corsi_sake(code,name,type,sakagura,size_ml,cost_cents,qty,note,position)",
+      )
+      .eq("corso_id", row.id)
+      .order("day_no");
+    type GiornoJoin = {
+      day_no: number;
+      name: string;
+      sakes?: Array<{
+        code: string | null;
+        name: string;
+        type: string | null;
+        sakagura: string | null;
+        size_ml: number | null;
+        cost_cents: number;
+        qty: number;
+        note: string | null;
+        position: number;
+      }>;
+    };
+    const program: ProgramDay[] = ((giorni ?? []) as GiornoJoin[]).map((g) => ({
+      day: g.day_no,
+      name: g.name,
+      sakes: (g.sakes ?? [])
+        .sort((a, b) => a.position - b.position)
+        .map<Sake>((s) => ({
+          code: s.code ?? "",
+          name: s.name,
+          type: s.type ?? "",
+          sakagura: s.sakagura ?? "",
+          size: s.size_ml ?? 0,
+          cost: s.cost_cents / 100,
+          qty: s.qty,
+          note: s.note ?? undefined,
+        })),
+    }));
+
+    const course = corsoRowToDomain(row, educator, students.length, revenue, students, program);
+    const totalExam = examResults.passed + examResults.retrial + examResults.failed;
+    if (totalExam > 0) course.examResults = examResults;
+    return course;
+  }
+
   const coursesRepo: CourseRepository = {
-    async list() {
-      return [];
+    async list(filter) {
+      let q = sb.from("corsi").select("*");
+      if (filter?.lifecycle) {
+        const lc = Array.isArray(filter.lifecycle) ? filter.lifecycle : [filter.lifecycle];
+        q = q.in("lifecycle", lc);
+      }
+      if (filter?.type) {
+        const ty = Array.isArray(filter.type) ? filter.type : [filter.type];
+        q = q.in("type", ty);
+      }
+      const { data, error } = await q
+        .order("year", { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+      const corsoRows = (data ?? []) as CorsoRow[];
+
+      // Aggregate enrolled + revenue per course (one pass over enrollments).
+      const { data: iscr } = await sb
+        .from("corsi_iscrizioni")
+        .select("corso_id,amount_cents")
+        .limit(5000);
+      const agg = new Map<number, { n: number; rev: number }>();
+      for (const i of (iscr ?? []) as { corso_id: number; amount_cents: number }[]) {
+        const a = agg.get(i.corso_id) ?? { n: 0, rev: 0 };
+        a.n++;
+        a.rev += (i.amount_cents || 0) / 100;
+        agg.set(i.corso_id, a);
+      }
+
+      const eduMap = await loadEducatorsMap();
+      let courses = corsoRows.map((r) => {
+        const a = agg.get(r.id) ?? { n: 0, rev: 0 };
+        const edu =
+          r.educator_id != null
+            ? (eduMap.get(r.educator_id) ?? placeholderEducator())
+            : placeholderEducator();
+        return corsoRowToDomain(r, edu, a.n, a.rev, [], []);
+      });
+
+      if (filter?.status) {
+        const st = Array.isArray(filter.status) ? filter.status : [filter.status];
+        courses = courses.filter((c) => st.includes(c.status));
+      }
+      return courses;
     },
-    async getById() {
-      return null;
+
+    async getById(id) {
+      const { data, error } = await sb
+        .from("corsi")
+        .select("*")
+        .eq("id", Number(id))
+        .maybeSingle();
+      if (error) throw error;
+      return data ? buildFullCourse(data as CorsoRow) : null;
     },
-    async getByHandle() {
-      return null;
+
+    async getByHandle(handle) {
+      const { data, error } = await sb
+        .from("corsi")
+        .select("*")
+        .eq("handle", handle)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? buildFullCourse(data as CorsoRow) : null;
     },
-    async update() {
-      throw new Error(
-        "Supabase courseRepo.update is not yet implemented (Task #21 Shopify sync).",
-      );
+
+    async update(id, patch) {
+      const upd: Record<string, unknown> = {};
+      if (patch.lifecycle !== undefined) upd.lifecycle = patch.lifecycle;
+      if (patch.status !== undefined) upd.status = patch.status;
+      if (patch.notebook !== undefined) upd.notebook = patch.notebook;
+      if (patch.capacity !== undefined) upd.capacity = patch.capacity;
+      const { data, error } = await svc
+        .from("corsi")
+        .update(upd)
+        .eq("id", Number(id))
+        .select("*")
+        .single();
+      if (error) throw error;
+      return buildFullCourse(data as CorsoRow);
     },
   };
 
