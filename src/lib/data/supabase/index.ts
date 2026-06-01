@@ -1067,12 +1067,14 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
     let revenue = 0;
     const examResults = { passed: 0, retrial: 0, failed: 0 };
     const students: Student[] = rows.map((r) => {
-      revenue += (r.amount_cents || 0) / 100;
       if (r.exam_result) examResults[r.exam_result]++;
       const c = Array.isArray(r.corsista) ? r.corsista[0] : r.corsista;
-      const paid = (r.amount_cents || 0) / 100;
+      // amount_cents is the gross line price; discount_cents is the discount
+      // value. Net paid = gross − discount (clamped at 0 for 100%-off codes).
+      const gross = (r.amount_cents || 0) / 100;
       const discountValue = (r.discount_cents || 0) / 100;
-      const gross = paid + discountValue;
+      const paid = Math.max(gross - discountValue, 0);
+      revenue += paid;
       const participant = c?.full_name ?? "—";
       const buyer = r.buyer_name;
       const mismatch = Boolean(
