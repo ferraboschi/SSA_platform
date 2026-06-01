@@ -7,6 +7,8 @@ export interface RunnerQuestion {
   type: string;
   text: string;
   options: string[];
+  /** Correct option indices — present only in validate mode. */
+  correct?: number[];
 }
 export interface RunnerHeader {
   courseName: string;
@@ -129,12 +131,14 @@ export function ExamRunner({
   mode,
   forcedLang,
   collectRegistration,
+  reveal,
   header,
   questions,
 }: {
-  mode: "exam" | "test";
+  mode: "exam" | "test" | "validate";
   forcedLang?: string;
   collectRegistration?: boolean;
+  reveal?: boolean;
   header: RunnerHeader;
   questions: RunnerQuestion[];
 }) {
@@ -176,6 +180,11 @@ export function ExamRunner({
       <div className="exam-public-head-top">
         <span className="exam-public-brand">SSA</span>
         {mode === "test" && <span className="exam-public-testbadge">{t.test}</span>}
+        {mode === "validate" && (
+          <span className="exam-public-testbadge" style={{ background: "#e8f6ee", color: "#1a7f43" }}>
+            VALIDAZIONE
+          </span>
+        )}
         {langPicked && (
           <span className="exam-public-clock" aria-label="timer">
             ⏱ {fmtClock(elapsed)}
@@ -302,6 +311,7 @@ export function ExamRunner({
                 value={answers[step.q.id]}
                 onChange={(v) => setAnswer(step.q.id, v)}
                 answerLabel={t.yourAnswer}
+                reveal={reveal}
               />
             </>
           )}
@@ -428,11 +438,13 @@ function QuestionInput({
   value,
   onChange,
   answerLabel,
+  reveal,
 }: {
   q: RunnerQuestion;
   value: string[] | string | undefined;
   onChange: (v: string[] | string) => void;
   answerLabel: string;
+  reveal?: boolean;
 }): ReactNode {
   const multi = q.type === "multi";
   const optionTypes = ["single", "multi", "truefalse", "image"];
@@ -440,6 +452,7 @@ function QuestionInput({
     () => (Array.isArray(value) ? value : value ? [value] : []),
     [value],
   );
+  const correctSet = new Set(q.correct ?? []);
 
   if (optionTypes.includes(q.type) && q.options.length > 0) {
     const toggle = (opt: string) => {
@@ -455,19 +468,27 @@ function QuestionInput({
     };
     return (
       <div className="exam-public-options">
-        {q.options.map((opt, i) => (
-          <button
-            key={i}
-            type="button"
-            className={`exam-public-opt ${selected.includes(opt) ? "selected" : ""}`}
-            onClick={() => toggle(opt)}
-          >
-            <span className="exam-public-opt-mark" aria-hidden>
-              {selected.includes(opt) ? "●" : "○"}
-            </span>
-            <span>{opt}</span>
-          </button>
-        ))}
+        {q.options.map((opt, i) => {
+          const isCorrect = reveal && correctSet.has(i);
+          return (
+            <button
+              key={i}
+              type="button"
+              className={`exam-public-opt ${selected.includes(opt) ? "selected" : ""} ${isCorrect ? "correct" : ""}`}
+              onClick={() => toggle(opt)}
+            >
+              <span className="exam-public-opt-mark" aria-hidden>
+                {selected.includes(opt) ? "●" : "○"}
+              </span>
+              <span>{opt}</span>
+              {isCorrect && (
+                <span style={{ marginLeft: "auto", color: "#1a7f43", fontWeight: 700 }}>
+                  ✓ corretta
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
     );
   }

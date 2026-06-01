@@ -188,6 +188,10 @@
   border-color: var(--indigo-600, #4f46e5);
   background: var(--indigo-50, #eef2ff);
 }
+.exam-public-opt.correct {
+  border-color: #1a7f43;
+  background: #e8f6ee;
+}
 .exam-public-opt-mark {
   color: var(--indigo-600, #4f46e5);
   font-size: 14px;

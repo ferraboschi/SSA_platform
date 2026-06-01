@@ -53,21 +53,24 @@ export default async function Page({
   if (!corso) return <Invalid reason="Corso non trovato." />;
 
   const family = corso.type === "shochu" ? "shochu" : "nihonshu";
-  const data = await loadPublicExam(res.payload.c, family, res.payload.t);
+  const validate = res.payload.m === "validate";
+  const data = await loadPublicExam(res.payload.c, family, res.payload.t, validate);
   if (!data) return <Invalid reason="Corso non trovato." />;
 
-  const testLabel =
+  const baseLabel =
     res.payload.t === "final"
       ? "Esame finale"
       : res.payload.t === "feedback"
         ? "Feedback"
         : `Test ${res.payload.t.replace("day", "giorno ")}`;
+  const testLabel = validate ? `${baseLabel} · VALIDAZIONE` : baseLabel;
 
   return (
     <ExamRunner
       mode={res.payload.m}
       forcedLang={res.payload.l}
-      collectRegistration={res.payload.t === "final"}
+      collectRegistration={res.payload.t === "final" && !validate}
+      reveal={validate}
       header={{
         courseName: data.header.courseName,
         testLabel,

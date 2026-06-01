@@ -13,6 +13,8 @@ export interface PublicRunnerQuestion {
   type: string;
   text: string;
   options: string[];
+  /** Correct option indices — only populated in "validate" mode. */
+  correct?: number[];
 }
 export interface PublicRunnerData {
   header: {
@@ -33,15 +35,23 @@ interface MiniJson {
   questions?: QJson[];
 }
 
-function mapQuestions(raw: QJson[], prefix: string): PublicRunnerQuestion[] {
+function mapQuestions(
+  raw: QJson[],
+  prefix: string,
+  includeAnswers: boolean,
+): PublicRunnerQuestion[] {
   return raw.map((q, i) => {
     const choices = q.choices ?? [];
     const correctCount = choices.filter((c) => c.correct).length;
+    const correct = choices
+      .map((c, idx) => (c.correct ? idx : -1))
+      .filter((x) => x >= 0);
     return {
       id: `${prefix}-${i}`,
       type: choices.length === 0 ? "open" : correctCount > 1 ? "multi" : "single",
       text: q.prompt,
       options: choices.map((c) => c.text),
+      ...(includeAnswers ? { correct } : {}),
     };
   });
 }
@@ -50,6 +60,7 @@ export async function loadPublicExam(
   courseId: string,
   family: "nihonshu" | "shochu",
   testKey: ExamTestKey,
+  includeAnswers = false,
 ): Promise<PublicRunnerData | null> {
   const sb = getSupabaseServiceClient();
 
@@ -84,7 +95,7 @@ export async function loadPublicExam(
   if (tpl) {
     const data = tpl.data as { questions?: QJson[]; miniTests?: MiniJson[] };
     if (testKey === "final") {
-      questions = mapQuestions(data.questions ?? [], `q-${tpl.id}`);
+      questions = mapQuestions(data.questions ?? [], `q-${tpl.id}`, includeAnswers);
     } else if (testKey === "feedback") {
       questions = [];
     } else {
@@ -92,7 +103,11 @@ export async function loadPublicExam(
       if (m) {
         const day = Number(m[1]);
         const mt = (data.miniTests ?? []).find((x) => x.day === day);
-        questions = mapQuestions(mt?.questions ?? [], `q-${tpl.id}-d${day}`);
+        questions = mapQuestions(
+          mt?.questions ?? [],
+          `q-${tpl.id}-d${day}`,
+          includeAnswers,
+        );
       }
     }
   }

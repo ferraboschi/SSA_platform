@@ -50,8 +50,14 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   // Exam links work off the family template (not course.exam, which the
   // Supabase path doesn't populate), so surface them for every exam-bearing
   // course type even when the rich exam summary isn't available.
-  const examFamily: "nihonshu" | "shochu" | null =
-    course.type === "certificato"
+  // An exam exists only for a CONFIRMED certificato/shochu course (published or
+  // past) — not for drafts (bozza), archived, or cancelled ones.
+  const examConfirmed =
+    (course.lifecycle === "pubblicato" || course.lifecycle === "passato") &&
+    !course.cancelled;
+  const examFamily: "nihonshu" | "shochu" | null = !examConfirmed
+    ? null
+    : course.type === "certificato"
       ? "nihonshu"
       : course.type === "shochu"
         ? "shochu"

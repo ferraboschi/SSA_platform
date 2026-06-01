@@ -82,6 +82,60 @@ export function ExamLinkPanel({
         Ogni link è <strong>temporaneo</strong> (scade) e specifico del test.
       </div>
 
+      {/* Meta-exam / validation link: full final exam, reveals correct answers. */}
+      <div
+        className="card card-pad"
+        style={{
+          marginBottom: 16,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+          border: "1px solid var(--success-fg, #1a7f43)",
+          background: "var(--success-bg, #e8f6ee)",
+          boxShadow: "none",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 220, fontSize: 13, color: "var(--text-2)" }}>
+          <strong>Valida esame</strong> — prova completa dell&apos;esame finale con lo
+          stato attuale delle domande, mostrando le <strong>risposte corrette</strong>.
+          Per testare software e qualità dell&apos;esame.
+        </div>
+        {!links[slot("final", "validate")] ? (
+          <button
+            className="btn btn-sm"
+            onClick={() => generate("final", "validate")}
+            disabled={busy === slot("final", "validate")}
+          >
+            <Icon name="check" size={12} />
+            {busy === slot("final", "validate") ? "…" : "Genera link validazione"}
+          </button>
+        ) : (
+          <div style={{ display: "grid", gap: 4, minWidth: 240 }}>
+            <input
+              readOnly
+              value={links[slot("final", "validate")].url}
+              onFocus={(e) => e.currentTarget.select()}
+              style={{
+                fontSize: 11,
+                padding: "5px 7px",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                width: "100%",
+                fontFamily: "monospace",
+              }}
+            />
+            <button
+              className="btn btn-xs btn-ghost"
+              onClick={() => copy(slot("final", "validate"), links[slot("final", "validate")].url)}
+            >
+              <Icon name="copy" size={11} />
+              {links[slot("final", "validate")].copied ? "Copiato!" : "Copia"}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="table-wrap">
         <table className="table">
           <thead>

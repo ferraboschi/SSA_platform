@@ -84,9 +84,11 @@ export function toExamHubItem(c: Course): ExamHubItem | null {
     };
   }
 
-  // Live (Supabase) path: every certificato/shochu course HAS an exam.
-  // Introductory (and other) course types never appear here.
+  // Live (Supabase) path: an exam exists only for a CONFIRMED certificato/shochu
+  // course — i.e. published (upcoming) or already past. Drafts (bozza) and
+  // archived courses are not real yet, so they never get an exam.
   if (!EXAM_COURSE_TYPES.includes(c.type)) return null;
+  if (c.lifecycle !== "pubblicato" && c.lifecycle !== "passato") return null;
   const r = c.examResults ?? { passed: 0, retrial: 0, failed: 0 };
   const resultsTotal = r.passed + r.retrial + r.failed;
   // "Fatto" when results are recorded, or the course is already in the past;

@@ -9,7 +9,9 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export type ExamTestKey = "final" | "feedback" | `day${number}`;
-export type ExamLinkMode = "exam" | "test";
+// "exam" = real student session; "test" = preview; "validate" = full run-through
+// that reveals correct answers (to validate the exam content + the software).
+export type ExamLinkMode = "exam" | "test" | "validate";
 
 export interface ExamTokenPayload {
   /** Course id the exam belongs to. */
@@ -83,4 +85,5 @@ export function verifyExamToken(token: string): VerifyResult {
 export const EXAM_LINK_TTL_HOURS: Record<ExamLinkMode, number> = {
   exam: 12,
   test: 72,
+  validate: 72,
 };
