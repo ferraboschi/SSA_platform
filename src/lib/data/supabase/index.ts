@@ -20,7 +20,14 @@ import "server-only";
 // migrate sections one by one.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { COURSE_TYPES, DEFAULT_THRESHOLDS, STATUS_META } from "@/lib/domain";
+import {
+  COURSE_TYPES,
+  DEFAULT_THRESHOLDS,
+  EXAM_THRESHOLDS,
+  NIHONSHU_CATS,
+  SHOCHU_CATS,
+  STATUS_META,
+} from "@/lib/domain";
 import type {
   Corsista,
   CorsistaEnrollment,
@@ -32,6 +39,10 @@ import type {
   DashThresholds,
   DeliveryMode,
   Educator,
+  ExamFamily,
+  ExamQuestion,
+  ExamQuestionType,
+  ExamTemplate,
   Language,
   MaterialTemplate,
   Notebook,
@@ -383,6 +394,63 @@ function corsoRowToDomain(
       tags: nb.tags ?? [],
       reasoning: nb.reasoning ?? "",
     },
+  };
+}
+
+// ── exam templates (question bank imported from Airtable) ────────────────────
+interface ExamTemplateRow {
+  id: number;
+  family: string;
+  name: string;
+  data: {
+    source?: string;
+    questions?: Array<{
+      prompt: string;
+      weight?: number;
+      choices: Array<{ text: string; correct: boolean }>;
+    }>;
+  };
+}
+
+function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
+  // DB exam_templates.family is 'certificato'|'shochu'; domain ExamFamily is
+  // 'nihonshu'|'shochu' (nihonshu = the certified sake exam).
+  const family: ExamFamily = row.family === "shochu" ? "shochu" : "nihonshu";
+  const cats = family === "shochu" ? SHOCHU_CATS : NIHONSHU_CATS;
+  const raw = row.data?.questions ?? [];
+  const questions: ExamQuestion[] = raw.map((q, i) => {
+    const options = q.choices.map((c) => c.text);
+    const correct = q.choices
+      .map((c, idx) => (c.correct ? idx : -1))
+      .filter((x) => x >= 0);
+    const type: ExamQuestionType = correct.length > 1 ? "multi" : "single";
+    return {
+      id: `q-${row.id}-${i}`,
+      // No category data in the source bank; distribute round-robin so each
+      // category shows some questions. Admins can re-categorise later.
+      cat: cats[i % cats.length].id,
+      type,
+      important: false,
+      lang: "it",
+      text: q.prompt,
+      points: q.weight ?? 1,
+      options,
+      correct,
+    };
+  });
+  return {
+    family,
+    label: row.name,
+    finalExam: {
+      name: row.name,
+      cats,
+      questions,
+      totalQuestions: questions.length,
+      duration: 60,
+      thresholds: { pass: EXAM_THRESHOLDS.pass, retrial: EXAM_THRESHOLDS.retrial },
+    },
+    miniTests: [],
+    feedback: { name: "Feedback", questions: [] },
   };
 }
 
@@ -1088,10 +1156,23 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
 
   const examTemplatesRepo: ExamTemplateRepository = {
     async list() {
-      return [];
+      const { data, error } = await sb
+        .from("exam_templates")
+        .select("id,family,name,data")
+        .order("id");
+      if (error) throw error;
+      return (data as ExamTemplateRow[]).map(examTemplateRowToDomain);
     },
-    async getByFamily() {
-      return null;
+    async getByFamily(family) {
+      const { data, error } = await sb
+        .from("exam_templates")
+        .select("id,family,name,data")
+        .eq("family", family)
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? examTemplateRowToDomain(data as ExamTemplateRow) : null;
     },
   };
 
