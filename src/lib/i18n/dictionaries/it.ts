@@ -1119,6 +1119,8 @@ export const it = {
       showingMore: "Mostro {shown} di {n} · ",
       loadMore: "carica altri",
       loadAll: "mostra tutti",
+      seCluster: "Sake Experience ({n})",
+      seClusterTip: "Contatti solo Sake Experience (eventi) — esclusi di default dalla lista corsi",
     },
     profile: {
       notFound: "Non trovato.",

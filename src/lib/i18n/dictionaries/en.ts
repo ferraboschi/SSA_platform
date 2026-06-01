@@ -1117,6 +1117,8 @@ export const en: Dictionary = {
       showingMore: "Showing {shown} of {n} · ",
       loadMore: "load more",
       loadAll: "show all",
+      seCluster: "Sake Experience ({n})",
+      seClusterTip: "Sake-Experience-only (event) contacts — excluded from the course list by default",
     },
     profile: {
       notFound: "Not found.",

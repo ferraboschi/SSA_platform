@@ -122,6 +122,7 @@ interface CorsistaRow {
   review_note: string | null;
   merged_into?: number | null;
   diploma_numbers?: string[] | null;
+  cluster?: string | null;
 }
 
 interface PurchaseRow {
@@ -269,6 +270,7 @@ function corsistaRowToDomain(
     purchases,
     reviewNote: row.review_note,
     diplomaNumbers: row.diploma_numbers ?? [],
+    cluster: row.cluster ?? null,
   };
 }
 

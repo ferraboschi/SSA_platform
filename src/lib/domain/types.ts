@@ -152,6 +152,8 @@ export interface Corsista {
   reviewNote?: string | null;
   /** Certification (diploma) numbers, incl. those merged in from duplicate records. */
   diplomaNumbers?: string[];
+  /** Off-platform cluster marker, e.g. "sake_experience" (event-only contacts). */
+  cluster?: string | null;
 }
 
 /** A single Shopify purchase line, clustered. */

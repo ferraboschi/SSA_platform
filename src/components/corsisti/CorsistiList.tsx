@@ -22,9 +22,17 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
   const [source, setSource] = useState<Source>("tutti");
   const [examFilter, setExamFilter] = useState<ExamResultStatus | "">("");
   const [visible, setVisible] = useState(60);
+  const [showSE, setShowSE] = useState(false);
+
+  const seCount = useMemo(
+    () => items.filter((s) => s.cluster === "sake_experience").length,
+    [items],
+  );
 
   const list = useMemo(() => {
     let l = items.slice();
+    // Sake-Experience-only contacts are a separate cluster — hidden by default.
+    if (!showSE) l = l.filter((s) => s.cluster !== "sake_experience");
     if (source === "attuali") l = l.filter((s) => !s.historical);
     if (source === "storici") l = l.filter((s) => s.historical);
     if (source === "ripartecipanti") l = l.filter((s) => s.isReturning);
@@ -34,7 +42,7 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
     }
     if (examFilter) l = l.filter((s) => s.courses.some((c) => c.examResult === examFilter));
     return l.sort((a, b) => b.totalSpent - a.totalSpent);
-  }, [items, search, source, examFilter]);
+  }, [items, search, source, examFilter, showSE]);
 
   const segments: [Source, string][] = [
     ["tutti", t.segAll],
@@ -103,6 +111,16 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
           <option value="retrial">{t.examRetrial}</option>
           <option value="failed">{t.examFailed}</option>
         </select>
+        {seCount > 0 && (
+          <button
+            className={`btn btn-sm ${showSE ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setShowSE((v) => !v)}
+            title={t.seClusterTip}
+          >
+            {showSE ? "✓ " : "+ "}
+            {format(t.seCluster, { n: seCount })}
+          </button>
+        )}
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 500 }}>
           {format(t.count, { n: list.length })}
