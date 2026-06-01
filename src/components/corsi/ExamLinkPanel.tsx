@@ -8,17 +8,21 @@ import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
 interface TestDef {
   key: ExamTestKey;
   label: string;
+  important?: boolean;
+  optional?: boolean;
 }
 
+// Order: Test day 1..N → Feedback → ESAME (last, the most important).
 function testsForFamily(family: "nihonshu" | "shochu"): TestDef[] {
   const days = family === "shochu" ? 2 : 3;
   return [
-    { key: "final", label: "Esame finale" },
     ...Array.from({ length: days }, (_, i) => ({
       key: `day${i + 1}` as ExamTestKey,
       label: `Test giorno ${i + 1}`,
+      optional: true,
     })),
-    { key: "feedback", label: "Feedback" },
+    { key: "feedback", label: "Feedback", optional: true },
+    { key: "final", label: "Esame finale", important: true },
   ];
 }
 
@@ -89,8 +93,38 @@ export function ExamLinkPanel({
           </thead>
           <tbody>
             {tests.map((tst) => (
-              <tr key={tst.key}>
-                <td style={{ fontWeight: 600 }}>{tst.label}</td>
+              <tr
+                key={tst.key}
+                style={
+                  tst.important
+                    ? { background: "var(--indigo-50)", borderTop: "2px solid var(--indigo)" }
+                    : undefined
+                }
+              >
+                <td style={{ fontWeight: tst.important ? 800 : 600 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {tst.important && <Icon name="exam" size={14} />}
+                    {tst.label}
+                    {tst.important && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: "var(--indigo)",
+                          background: "var(--indigo-100)",
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          letterSpacing: "0.03em",
+                        }}
+                      >
+                        OBBLIGATORIO
+                      </span>
+                    )}
+                    {tst.optional && (
+                      <span style={{ fontSize: 10.5, color: "var(--text-4)" }}>facoltativo</span>
+                    )}
+                  </span>
+                </td>
                 {(["exam", "test"] as ExamLinkMode[]).map((mode) => {
                   const id = slot(tst.key, mode);
                   const st = links[id];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 export interface RunnerQuestion {
   id: string;
@@ -18,47 +18,89 @@ export interface RunnerHeader {
 
 type Lang = "it" | "en" | "ja";
 const LANGS: Lang[] = ["it", "en", "ja"];
-const LANG_LABEL: Record<Lang, string> = { it: "IT", en: "EN", ja: "日本語" };
+const LANG_LABEL: Record<Lang, string> = { it: "Italiano", en: "English", ja: "日本語" };
 
 const CHROME: Record<Lang, Record<string, string>> = {
   it: {
     test: "MODALITÀ TEST",
     educator: "Educator",
+    chooseLang: "Scegli la lingua dell'esame",
     question: "Domanda",
     of: "di",
     back: "Indietro",
     next: "Avanti",
     finish: "Termina",
+    start: "Inizia",
     empty: "Questo test non contiene ancora domande.",
     thanksTitle: "Grazie, hai terminato.",
     thanksBody: "Le tue risposte sono state registrate. Puoi chiudere questa pagina.",
     yourAnswer: "La tua risposta",
+    pendingTitle: "Domande in sospeso",
+    pendingBody: "Hai {n} domande senza risposta. Vuoi rivederle prima di terminare?",
+    review: "Rivedi le domande saltate",
+    finishAnyway: "Termina comunque",
+    regName: "Nome e cognome",
+    regGender: "Sesso alla nascita",
+    regNationality: "Nazionalità",
+    regEmail: "Email",
+    regPhone: "Telefono",
+    regAddress: "Indirizzo di spedizione del materiale",
+    male: "Maschile",
+    female: "Femminile",
   },
   en: {
     test: "TEST MODE",
     educator: "Educator",
+    chooseLang: "Choose the exam language",
     question: "Question",
     of: "of",
     back: "Back",
     next: "Next",
     finish: "Finish",
+    start: "Start",
     empty: "This test has no questions yet.",
     thanksTitle: "Thank you, you're done.",
     thanksBody: "Your answers have been recorded. You can close this page.",
     yourAnswer: "Your answer",
+    pendingTitle: "Pending questions",
+    pendingBody: "You have {n} unanswered questions. Review them before finishing?",
+    review: "Review skipped questions",
+    finishAnyway: "Finish anyway",
+    regName: "Full name",
+    regGender: "Sex at birth",
+    regNationality: "Nationality",
+    regEmail: "Email",
+    regPhone: "Phone",
+    regAddress: "Shipping address for materials",
+    male: "Male",
+    female: "Female",
   },
   ja: {
     test: "テストモード",
     educator: "講師",
+    chooseLang: "試験の言語を選択",
     question: "問題",
     of: "/",
     back: "戻る",
     next: "次へ",
     finish: "終了",
+    start: "開始",
     empty: "このテストにはまだ問題がありません。",
     thanksTitle: "お疲れさまでした。終了です。",
     thanksBody: "回答が記録されました。このページを閉じてかまいません。",
     yourAnswer: "あなたの回答",
+    pendingTitle: "未回答の問題",
+    pendingBody: "未回答の問題が{n}件あります。終了前に確認しますか？",
+    review: "スキップした問題を確認",
+    finishAnyway: "このまま終了",
+    regName: "氏名",
+    regGender: "出生時の性別",
+    regNationality: "国籍",
+    regEmail: "メール",
+    regPhone: "電話番号",
+    regAddress: "教材の配送先住所",
+    male: "男性",
+    female: "女性",
   },
 };
 
@@ -66,53 +108,78 @@ const CHROME: Record<Lang, Record<string, string>> = {
 const noCopy = {
   onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
   onCut: (e: React.ClipboardEvent) => e.preventDefault(),
-  onPaste: (e: React.ClipboardEvent) => e.preventDefault(),
   onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
   onDragStart: (e: React.DragEvent) => e.preventDefault(),
 };
 
+type RegField = "name" | "gender" | "nationality" | "email" | "phone" | "address";
+const REG_ORDER: RegField[] = ["name", "gender", "nationality", "email", "phone", "address"];
+
+type Step =
+  | { kind: "reg"; field: RegField }
+  | { kind: "q"; q: RunnerQuestion };
+
+function fmtClock(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 export function ExamRunner({
   mode,
   forcedLang,
+  collectRegistration,
   header,
   questions,
 }: {
   mode: "exam" | "test";
   forcedLang?: string;
+  collectRegistration?: boolean;
   header: RunnerHeader;
   questions: RunnerQuestion[];
 }) {
-  const initialLang = (LANGS.includes(forcedLang as Lang) ? forcedLang : "it") as Lang;
-  const [lang, setLang] = useState<Lang>(initialLang);
+  // Language is the FIRST step (a gate), unless forced by the link.
+  const forced = LANGS.includes(forcedLang as Lang) ? (forcedLang as Lang) : null;
+  const [lang, setLang] = useState<Lang>(forced ?? "it");
+  const [langPicked, setLangPicked] = useState<boolean>(Boolean(forced));
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[] | string>>({});
   const [done, setDone] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<string[] | null>(null);
+  const [elapsed, setElapsed] = useState(0);
   const t = CHROME[lang];
 
-  const total = questions.length;
-  const q = questions[idx];
+  // Clock — ticks once the language is chosen.
+  useEffect(() => {
+    if (!langPicked || done) return;
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [langPicked, done]);
 
-  const setAnswer = (val: string[] | string) =>
-    setAnswers((a) => ({ ...a, [q.id]: val }));
+  // Flatten the flow: registration fields (final exam only) + graded questions.
+  const steps = useMemo<Step[]>(() => {
+    const reg: Step[] = collectRegistration
+      ? REG_ORDER.map((field) => ({ kind: "reg", field }) as Step)
+      : [];
+    return [...reg, ...questions.map((q) => ({ kind: "q", q }) as Step)];
+  }, [collectRegistration, questions]);
 
-  const header_ = (
+  const total = steps.length;
+  const step = steps[idx];
+
+  const setAnswer = (key: string, val: string[] | string) =>
+    setAnswers((a) => ({ ...a, [key]: val }));
+
+  // ── Header (course + timer) ──────────────────────────────────────────────
+  const headerBar = (
     <header className="exam-public-head" {...noCopy}>
       <div className="exam-public-head-top">
         <span className="exam-public-brand">SSA</span>
         {mode === "test" && <span className="exam-public-testbadge">{t.test}</span>}
-        {!forcedLang && (
-          <div className="exam-public-langs">
-            {LANGS.map((l) => (
-              <button
-                key={l}
-                className={`exam-public-lang ${l === lang ? "active" : ""}`}
-                onClick={() => setLang(l)}
-                type="button"
-              >
-                {LANG_LABEL[l]}
-              </button>
-            ))}
-          </div>
+        {langPicked && (
+          <span className="exam-public-clock" aria-label="timer">
+            ⏱ {fmtClock(elapsed)}
+          </span>
         )}
       </div>
       <h1 className="exam-public-course">{header.courseName}</h1>
@@ -134,11 +201,51 @@ export function ExamRunner({
     </header>
   );
 
+  // ── Step 0: language gate ────────────────────────────────────────────────
+  if (!langPicked) {
+    return (
+      <div className="exam-public-shell">
+        <div className="exam-public-card">
+          {headerBar}
+          <div className="exam-public-q" {...noCopy}>
+            <p className="exam-public-q-text">{CHROME[lang].chooseLang}</p>
+            <div className="exam-public-options">
+              {LANGS.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  className={`exam-public-opt ${l === lang ? "selected" : ""}`}
+                  onClick={() => setLang(l)}
+                >
+                  <span className="exam-public-opt-mark" aria-hidden>
+                    {l === lang ? "●" : "○"}
+                  </span>
+                  <span>{LANG_LABEL[l]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="exam-public-nav">
+            <span />
+            <button
+              type="button"
+              className="exam-public-btn primary"
+              onClick={() => setLangPicked(true)}
+            >
+              {CHROME[lang].start}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Done / empty ─────────────────────────────────────────────────────────
   if (done || total === 0) {
     return (
       <div className="exam-public-shell">
         <div className="exam-public-card">
-          {header_}
+          {headerBar}
           <div className="exam-public-thanks">
             <div className="exam-public-thanks-check">✓</div>
             <h2>{t.thanksTitle}</h2>
@@ -150,28 +257,54 @@ export function ExamRunner({
   }
 
   const pct = Math.round(((idx + 1) / total) * 100);
-  const current = answers[q.id];
+
+  // Skipped GRADED questions (registration is optional, not "skipped").
+  const skippedQ = steps
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.kind === "q")
+    .filter(({ s }) => {
+      const q = (s as { q: RunnerQuestion }).q;
+      const a = answers[q.id];
+      return a === undefined || (Array.isArray(a) ? a.length === 0 : a === "");
+    })
+    .map(({ i }) => String(i));
+
+  const goFinish = () => {
+    if (skippedQ.length > 0) setPendingPrompt(skippedQ);
+    else setDone(true);
+  };
 
   return (
     <div className="exam-public-shell">
       <div className="exam-public-card">
-        {header_}
+        {headerBar}
 
         <div className="exam-public-progress" aria-hidden>
           <div className="exam-public-progress-bar" style={{ width: `${pct}%` }} />
         </div>
         <div className="exam-public-counter">
-          {t.question} {idx + 1} {t.of} {total}
+          {t.question} {idx + 1} {t.of} {total} · {idx + 1}/{total}
         </div>
 
         <div className="exam-public-q" {...noCopy}>
-          <p className="exam-public-q-text">{q.text}</p>
-          <QuestionInput
-            q={q}
-            value={current}
-            onChange={setAnswer}
-            answerLabel={t.yourAnswer}
-          />
+          {step.kind === "reg" ? (
+            <RegInput
+              field={step.field}
+              t={t}
+              value={answers["reg:" + step.field]}
+              onChange={(v) => setAnswer("reg:" + step.field, v)}
+            />
+          ) : (
+            <>
+              <p className="exam-public-q-text">{step.q.text}</p>
+              <QuestionInput
+                q={step.q}
+                value={answers[step.q.id]}
+                onChange={(v) => setAnswer(step.q.id, v)}
+                answerLabel={t.yourAnswer}
+              />
+            </>
+          )}
         </div>
 
         <div className="exam-public-nav">
@@ -192,17 +325,101 @@ export function ExamRunner({
               {t.next}
             </button>
           ) : (
-            <button
-              type="button"
-              className="exam-public-btn primary"
-              onClick={() => setDone(true)}
-            >
+            <button type="button" className="exam-public-btn primary" onClick={goFinish}>
               {t.finish}
             </button>
           )}
         </div>
       </div>
+
+      {/* Skipped-question review prompt */}
+      {pendingPrompt && (
+        <div className="exam-public-modal-backdrop">
+          <div className="exam-public-modal">
+            <h3>{t.pendingTitle}</h3>
+            <p>{t.pendingBody.replace("{n}", String(pendingPrompt.length))}</p>
+            <div className="exam-public-modal-actions">
+              <button
+                className="exam-public-btn ghost"
+                onClick={() => {
+                  setPendingPrompt(null);
+                  setDone(true);
+                }}
+              >
+                {t.finishAnyway}
+              </button>
+              <button
+                className="exam-public-btn primary"
+                onClick={() => {
+                  setIdx(Number(pendingPrompt[0]));
+                  setPendingPrompt(null);
+                }}
+              >
+                {t.review}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function RegInput({
+  field,
+  t,
+  value,
+  onChange,
+}: {
+  field: RegField;
+  t: Record<string, string>;
+  value: string[] | string | undefined;
+  onChange: (v: string) => void;
+}): ReactNode {
+  const labels: Record<RegField, string> = {
+    name: t.regName,
+    gender: t.regGender,
+    nationality: t.regNationality,
+    email: t.regEmail,
+    phone: t.regPhone,
+    address: t.regAddress,
+  };
+  const val = typeof value === "string" ? value : "";
+  return (
+    <>
+      <p className="exam-public-q-text">{labels[field]}</p>
+      {field === "gender" ? (
+        <div className="exam-public-options">
+          {[t.male, t.female].map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              className={`exam-public-opt ${val === opt ? "selected" : ""}`}
+              onClick={() => onChange(opt)}
+            >
+              <span className="exam-public-opt-mark" aria-hidden>
+                {val === opt ? "●" : "○"}
+              </span>
+              <span>{opt}</span>
+            </button>
+          ))}
+        </div>
+      ) : field === "address" ? (
+        <textarea
+          className="exam-public-textarea"
+          value={val}
+          onChange={(e) => onChange(e.target.value)}
+          rows={3}
+        />
+      ) : (
+        <input
+          className="exam-public-input"
+          type={field === "email" ? "email" : field === "phone" ? "tel" : "text"}
+          value={val}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </>
   );
 }
 
@@ -266,7 +483,6 @@ function QuestionInput({
     );
   }
 
-  // open / match / order / rating fallback → free text
   return (
     <textarea
       className="exam-public-textarea"

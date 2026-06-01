@@ -67,6 +67,7 @@ export default async function Page({
     <ExamRunner
       mode={res.payload.m}
       forcedLang={res.payload.l}
+      collectRegistration={res.payload.t === "final"}
       header={{
         courseName: data.header.courseName,
         testLabel,

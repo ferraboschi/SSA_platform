@@ -56,6 +56,51 @@
   display: flex;
   gap: 4px;
 }
+.exam-public-clock {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--indigo-600, #4f46e5);
+  background: var(--indigo-50, #eef2ff);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+/* Skipped-question review modal */
+.exam-public-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 50;
+}
+.exam-public-modal {
+  background: var(--surface, #fff);
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+.exam-public-modal h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+.exam-public-modal p {
+  margin: 0 0 18px;
+  font-size: 14px;
+  color: var(--text-2, #555);
+}
+.exam-public-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
 .exam-public-lang {
   font-size: 12px;
   font-weight: 600;
