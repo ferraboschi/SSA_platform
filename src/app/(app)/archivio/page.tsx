@@ -10,6 +10,7 @@ export default async function Page() {
     .filter((c) => c.lifecycle !== "bozza" && c.lifecycle !== "archiviato")
     .map((c) => ({
       id: c.id,
+      handle: c.handle,
       type: c.type,
       typeColor: c.typeColor,
       typeShort: c.typeShort,

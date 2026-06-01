@@ -15,9 +15,14 @@ import { CourseSections } from "@/components/corsi/CourseSections";
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ds = await getDataSource();
+  // The segment is a readable handle (e.g. "cert-vercelli-giugno-2026"); older
+  // numeric-id links still resolve as a fallback.
+  const courseP = /^\d+$/.test(id)
+    ? ds.courses.getById(id)
+    : ds.courses.getByHandle(id);
   const [{ locale, t }, course, allTemplates] = await Promise.all([
     getTranslations(),
-    ds.courses.getById(id),
+    courseP,
     ds.materialTemplates.list(),
   ]);
 

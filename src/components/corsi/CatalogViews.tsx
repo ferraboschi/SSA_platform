@@ -113,7 +113,7 @@ function CourseRow({ course: c, last }: { course: CourseListItem; last: boolean 
         transition: "background var(--dur-fast)",
         cursor: "pointer",
       }}
-      onClick={() => router.push(`/corsi/${c.id}`)}
+      onClick={() => router.push(`/corsi/${c.handle}`)}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
@@ -246,7 +246,7 @@ function CourseCard({ course: c }: { course: CourseListItem }) {
 
   return (
     <Link
-      href={`/corsi/${c.id}`}
+      href={`/corsi/${c.handle}`}
       className="card"
       style={{ overflow: "hidden", display: "block" }}
     >
@@ -456,7 +456,7 @@ function CourseTableRow({ course: c }: { course: CourseListItem }) {
   const tr = useT();
   const t = tr.corsi.catalog;
   return (
-    <tr className="clickable" onClick={() => router.push(`/corsi/${c.id}`)}>
+    <tr className="clickable" onClick={() => router.push(`/corsi/${c.handle}`)}>
       <td className="num" style={{ whiteSpace: "nowrap" }}>
         <strong>{c.day}</strong>{" "}
         <span className="text-3">
@@ -507,7 +507,7 @@ function CourseTableRow({ course: c }: { course: CourseListItem }) {
         {c.margin.toLocaleString(locale)} €
       </td>
       <td onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
-        <Link className="btn btn-icon btn-sm btn-ghost" href={`/corsi/${c.id}`} title={t.openDetail}>
+        <Link className="btn btn-icon btn-sm btn-ghost" href={`/corsi/${c.handle}`} title={t.openDetail}>
           <Icon name="arrow" size={13} />
         </Link>
       </td>

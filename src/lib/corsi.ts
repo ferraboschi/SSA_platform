@@ -59,6 +59,7 @@ export type SortDir = "asc" | "desc";
 
 export interface CourseListItem {
   id: string;
+  handle: string;
   type: CourseTypeKey;
   typeLabel: string;
   typeShort: string;
@@ -86,6 +87,7 @@ export interface CourseListItem {
 export function toCourseListItem(c: Course): CourseListItem {
   return {
     id: c.id,
+    handle: c.handle,
     type: c.type,
     typeLabel: c.typeLabel,
     typeShort: c.typeShort,

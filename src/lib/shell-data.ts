@@ -30,24 +30,30 @@ async function fetchShellData(): Promise<ShellData> {
   if (!isSupabaseConfigured()) return EMPTY;
   const svc = getSupabaseServiceClient();
 
-  const [coursesRes, corsistiRes, educatorsRes, countsRes] = await Promise.all([
-    svc
-      .from("corsi")
-      .select("id,short_title,full_title,type,city,month,year,day:start_date,lifecycle,educator_id")
-      .limit(2000),
-    // Light search rows only (no enrollment join) — fast + smaller payload.
-    svc.from("corsisti").select("email,full_name,city").limit(5000),
-    svc.from("educators").select("id,external_id,full_name,city,bio").eq("active", true),
-    Promise.all([
-      svc.from("corsisti").select("*", { count: "exact", head: true }),
-      svc.from("educators").select("*", { count: "exact", head: true }).eq("active", true),
-      svc.from("material_templates").select("*", { count: "exact", head: true }),
-      svc.from("corsi").select("*", { count: "exact", head: true }).eq("lifecycle", "pubblicato"),
-    ]),
-  ]);
+  const [coursesRes, corsistiRes, educatorsRes, iscrizioniRes, countsRes] =
+    await Promise.all([
+      svc
+        .from("corsi")
+        .select(
+          "id,handle,short_title,full_title,type,city,month,year,day:start_date,lifecycle,educator_id",
+        )
+        .limit(2000),
+      // Light search rows only (no enrollment join) — fast + smaller payload.
+      svc.from("corsisti").select("email,full_name,city").limit(5000),
+      svc.from("educators").select("id,external_id,full_name,city,bio").eq("active", true),
+      // Enrollment counts per course (light: just the FK column).
+      svc.from("corsi_iscrizioni").select("corso_id").limit(20000),
+      Promise.all([
+        svc.from("corsisti").select("*", { count: "exact", head: true }),
+        svc.from("educators").select("*", { count: "exact", head: true }).eq("active", true),
+        svc.from("material_templates").select("*", { count: "exact", head: true }),
+        svc.from("corsi").select("*", { count: "exact", head: true }).eq("lifecycle", "pubblicato"),
+      ]),
+    ]);
 
   type CourseRow = {
     id: number;
+    handle: string;
     short_title: string;
     full_title: string;
     type: CourseTypeKey;
@@ -58,6 +64,12 @@ async function fetchShellData(): Promise<ShellData> {
     lifecycle: string;
     educator_id: number | null;
   };
+
+  // corso_id → enrolled count
+  const enrolledByCourse = new Map<number, number>();
+  for (const r of (iscrizioniRes.data ?? []) as { corso_id: number }[]) {
+    enrolledByCourse.set(r.corso_id, (enrolledByCourse.get(r.corso_id) ?? 0) + 1);
+  }
   type EduRow = {
     id: number;
     external_id: string | null;
@@ -82,7 +94,7 @@ async function fetchShellData(): Promise<ShellData> {
       title: c.short_title,
       sub: `${c.month} ${c.year} · ${c.city}${c.educator_id ? ` · ${eduName.get(c.educator_id) ?? ""}` : ""}`,
       icon: "book",
-      href: `/corsi/${c.id}`,
+      href: `/corsi/${c.handle}`,
       badge: COURSE_TYPE_SHORT_LABEL[c.type] ?? "",
       badgeTone: (c.type === "introduttivo" ? "oro" : "azzurro") as "oro" | "azzurro",
       haystack: [c.short_title, c.full_title, c.city, `${c.month} ${c.year}`]
@@ -109,12 +121,15 @@ async function fetchShellData(): Promise<ShellData> {
 
   const sidebarCourses: SidebarCourse[] = courses
     .filter((c) => c.lifecycle === "pubblicato")
-    .map((c) => ({
-      id: String(c.id),
-      label: `${COURSE_TYPE_SHORT_LABEL[c.type]} · ${c.city}`,
-      href: `/corsi/${c.id}`,
-      meta: `${c.month} ${c.year}`,
-    }));
+    .map((c) => {
+      const n = enrolledByCourse.get(c.id) ?? 0;
+      return {
+        id: String(c.id),
+        label: `${COURSE_TYPE_SHORT_LABEL[c.type]} · ${c.city} (${n})`,
+        href: `/corsi/${c.handle}`,
+        meta: `${c.month} ${c.year}`,
+      };
+    });
 
   const [cCount, eCount, tCount, pubCount] = countsRes;
   const counts: Record<string, number> = {

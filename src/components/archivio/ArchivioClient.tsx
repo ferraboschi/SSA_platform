@@ -8,6 +8,7 @@ import { COURSE_TYPES, type CourseLifecycle, type CourseTypeColor, type CourseTy
 
 export interface ArchivioCourse {
   id: string;
+  handle: string;
   type: CourseTypeKey;
   typeColor: CourseTypeColor;
   typeShort: string;
@@ -366,7 +367,7 @@ function ArchivioGroups({ courses, groupBy }: { courses: ArchivioCourse[]; group
               {sorted.map((c) => (
                 <Link
                   key={c.id}
-                  href={`/corsi/${c.id}`}
+                  href={`/corsi/${c.handle}`}
                   className="card"
                   style={{ padding: 14, transition: "transform var(--dur-fast), box-shadow var(--dur-fast)" }}
                   onMouseEnter={(e) => {
