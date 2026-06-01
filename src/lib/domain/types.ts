@@ -150,6 +150,8 @@ export interface Corsista {
   purchases?: Purchase[];
   /** Reconciliation flag: set when the Shopify buyer name differs (B2B or shared email). */
   reviewNote?: string | null;
+  /** Certification (diploma) numbers, incl. those merged in from duplicate records. */
+  diplomaNumbers?: string[];
 }
 
 /** A single Shopify purchase line, clustered. */

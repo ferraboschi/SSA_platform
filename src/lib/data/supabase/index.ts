@@ -120,6 +120,8 @@ interface CorsistaRow {
   first_seen_at: string | null;
   historical: boolean;
   review_note: string | null;
+  merged_into?: number | null;
+  diploma_numbers?: string[] | null;
 }
 
 interface PurchaseRow {
@@ -266,6 +268,7 @@ function corsistaRowToDomain(
     historical: row.historical || undefined,
     purchases,
     reviewNote: row.review_note,
+    diplomaNumbers: row.diploma_numbers ?? [],
   };
 }
 
@@ -794,9 +797,9 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         enrollByCorsista.set(i.corsista_id, list);
       }
 
-      return (corsistiData as CorsistaRow[]).map((c) =>
-        corsistaRowToDomain(c, enrollByCorsista.get(c.id) ?? []),
-      );
+      return (corsistiData as CorsistaRow[])
+        .filter((c) => !c.merged_into) // hide records folded into another
+        .map((c) => corsistaRowToDomain(c, enrollByCorsista.get(c.id) ?? []));
     },
 
     async getByEmail(email) {

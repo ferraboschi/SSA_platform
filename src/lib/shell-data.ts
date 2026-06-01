@@ -101,7 +101,9 @@ async function fetchShellData(): Promise<ShellData> {
         .join(" ")
         .toLowerCase(),
     })),
-    corsisti: corsisti.map((s) => ({
+    corsisti: corsisti
+      .filter((s) => !s.email.endsWith("@ssa.placeholder"))
+      .map((s) => ({
       id: s.email,
       title: s.full_name,
       sub: `${s.email} · ${s.city ?? ""}`,
