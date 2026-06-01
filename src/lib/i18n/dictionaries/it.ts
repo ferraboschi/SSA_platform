@@ -23,6 +23,7 @@ export const it = {
       "template-materiali": "Template materiali",
       archivio: "Archivio",
       corsisti: "Corsisti",
+      anomalie: "Anomalie",
       educator: "Educator",
       account: "Account",
       "design-system": "Design system",
@@ -1125,8 +1126,27 @@ export const it = {
       passed: "Promosso",
       retrial: "Recupero",
       failed: "Bocciato",
+      purchasesTitle: "Acquisti ({n})",
+      purchaseColProduct: "Prodotto",
+      purchaseColType: "Tipo",
+      purchaseColBuyer: "Acquirente",
     },
   },
+
+  anomalie: {
+    title: "Anomalie da rivedere",
+    subtitle:
+      "Persone in cui il nome dell'acquirente Shopify differisce dal corsista — può essere un'azienda che acquista per un dipendente (B2B, normale) oppure due persone diverse con la stessa email (da correggere).",
+    count: "{n} anomalie da verificare",
+    empty: "Nessuna anomalia. Tutto riconciliato. 🎉",
+    colPerson: "Corsista",
+    colNote: "Anomalia",
+    colActions: "Azioni",
+    openProfile: "Profilo",
+    markOk: "OK (risolvi)",
+    notConfigured: "Supabase non configurato.",
+  },
+
   archivio: {
     eyebrow: "Repository",
     title: "Archivio completo",

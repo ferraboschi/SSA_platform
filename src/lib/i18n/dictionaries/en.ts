@@ -21,6 +21,7 @@ export const en: Dictionary = {
       "template-materiali": "Material templates",
       archivio: "Archive",
       corsisti: "Students",
+      anomalie: "Anomalies",
       educator: "Educators",
       account: "Account",
       "design-system": "Design system",
@@ -1123,8 +1124,27 @@ export const en: Dictionary = {
       passed: "Passed",
       retrial: "Retrial",
       failed: "Failed",
+      purchasesTitle: "Purchases ({n})",
+      purchaseColProduct: "Product",
+      purchaseColType: "Type",
+      purchaseColBuyer: "Buyer",
     },
   },
+
+  anomalie: {
+    title: "Anomalies to review",
+    subtitle:
+      "People where the Shopify buyer name differs from the student — it can be a company buying for an employee (B2B, normal) or two different people sharing the same email (needs fixing).",
+    count: "{n} anomalies to review",
+    empty: "No anomalies. All reconciled. 🎉",
+    colPerson: "Student",
+    colNote: "Anomaly",
+    colActions: "Actions",
+    openProfile: "Profile",
+    markOk: "OK (resolve)",
+    notConfigured: "Supabase not configured.",
+  },
+
   archivio: {
     eyebrow: "Repository",
     title: "Full archive",

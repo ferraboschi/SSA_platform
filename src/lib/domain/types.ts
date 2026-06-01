@@ -131,6 +131,21 @@ export interface Corsista {
   totalSpent: number;
   isReturning: boolean;
   historical?: boolean;
+  /** Shopify purchases grouped under this person (course/event/book/merch). */
+  purchases?: Purchase[];
+  /** Reconciliation flag: set when the Shopify buyer name differs (B2B or shared email). */
+  reviewNote?: string | null;
+}
+
+/** A single Shopify purchase line, clustered. */
+export interface Purchase {
+  cluster: string; // 'corso' | 'evento' | 'libro' | 'merchandise'
+  subtype: string | null; // for 'corso': certificato | introduttivo | shochu
+  delivery: string | null; // 'online' | 'presenza'
+  productTitle: string;
+  amount: number;
+  buyerName: string | null;
+  orderedAt: string | null;
 }
 
 export interface CorsistaEnrollment {

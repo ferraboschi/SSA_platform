@@ -40,6 +40,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "template-materiali", icon: "copy", href: "/template-materiali", group: "catalogo" },
   { id: "archivio", icon: "archive", href: "/archivio", group: "catalogo" },
   { id: "corsisti", icon: "users", href: "/corsisti", group: "persone" },
+  { id: "anomalie", icon: "warn", href: "/anomalie", group: "persone" },
   { id: "educator", icon: "graduation", href: "/educator", group: "persone" },
   { id: "account", icon: "user", href: "/account", group: "sistema" },
   { id: "design-system", icon: "tag", href: "/design-system", group: "sistema" },

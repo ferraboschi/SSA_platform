@@ -30,6 +30,7 @@ import type {
   Language,
   MaterialTemplate,
   Notification,
+  Purchase,
   User,
 } from "@/lib/domain";
 import type {
@@ -98,6 +99,17 @@ interface CorsistaRow {
   city: string | null;
   first_seen_at: string | null;
   historical: boolean;
+  review_note: string | null;
+}
+
+interface PurchaseRow {
+  cluster: string | null;
+  subtype: string | null;
+  delivery: string | null;
+  product_title: string | null;
+  amount_cents: number;
+  buyer_name: string | null;
+  ordered_at: string | null;
 }
 
 interface CorsoEmbedded {
@@ -201,11 +213,25 @@ function iscrizioneToEnrollment(row: IscrizioneRow): CorsistaEnrollment | null {
   };
 }
 
+function purchaseRowToDomain(row: PurchaseRow): Purchase {
+  return {
+    cluster: row.cluster ?? "altro",
+    subtype: row.subtype,
+    delivery: row.delivery,
+    productTitle: row.product_title ?? "",
+    amount: row.amount_cents / 100,
+    buyerName: row.buyer_name,
+    orderedAt: row.ordered_at,
+  };
+}
+
 function corsistaRowToDomain(
   row: CorsistaRow,
   enrollments: CorsistaEnrollment[],
+  purchases: Purchase[] = [],
 ): Corsista {
-  const totalSpent = enrollments.reduce((s, e) => s + e.amount, 0);
+  const enrollSpent = enrollments.reduce((s, e) => s + e.amount, 0);
+  const purchSpent = purchases.reduce((s, p) => s + p.amount, 0);
   return {
     email: row.email,
     name: row.full_name,
@@ -214,9 +240,11 @@ function corsistaRowToDomain(
     city: row.city ?? "",
     firstSeen: row.first_seen_at ?? "",
     courses: enrollments,
-    totalSpent,
+    totalSpent: enrollSpent + purchSpent,
     isReturning: enrollments.length > 1,
     historical: row.historical || undefined,
+    purchases,
+    reviewNote: row.review_note,
   };
 }
 
@@ -540,7 +568,15 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       const enrolls = ((iscr ?? []) as IscrizioneRow[])
         .map(iscrizioneToEnrollment)
         .filter((x): x is CorsistaEnrollment => x !== null);
-      return corsistaRowToDomain(row, enrolls);
+
+      const { data: purch } = await sb
+        .from("purchases")
+        .select("cluster,subtype,delivery,product_title,amount_cents,buyer_name,ordered_at")
+        .eq("corsista_id", row.id)
+        .order("ordered_at", { ascending: false });
+      const purchases = ((purch ?? []) as PurchaseRow[]).map(purchaseRowToDomain);
+
+      return corsistaRowToDomain(row, enrolls, purchases);
     },
   };
 

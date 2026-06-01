@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format, type Dictionary } from "@/lib/i18n";
-import { COURSE_TYPES, type Corsista, type CorsistaEnrollment } from "@/lib/domain";
+import { COURSE_TYPES, type Corsista, type CorsistaEnrollment, type Purchase } from "@/lib/domain";
 
 const MONTH_ORDER = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
@@ -120,6 +120,25 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
 
   return (
     <div className="page">
+      {s.reviewNote && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            background: "var(--warning-bg)",
+            color: "var(--warning-fg)",
+            border: "1px solid var(--warning)",
+            borderRadius: 10,
+            fontSize: 12.5,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <Icon name="warn" size={14} />
+          {s.reviewNote}
+        </div>
+      )}
       <section className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 24, padding: "28px 32px", alignItems: "center" }}>
           <Avatar name={s.name} size="xl" tone={s.historical ? "navy" : undefined} />
@@ -225,6 +244,69 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
           </table>
         </div>
       </section>
+
+      {s.purchases && s.purchases.length > 0 && (
+        <PurchasesSection purchases={s.purchases} t={t} />
+      )}
     </div>
+  );
+}
+
+const CLUSTER_TONE: Record<string, "azzurro" | "oro" | "indigo" | "neutral"> = {
+  corso: "azzurro",
+  evento: "indigo",
+  libro: "oro",
+  merchandise: "neutral",
+};
+
+function PurchasesSection({ purchases, t }: { purchases: Purchase[]; t: ProfileT }) {
+  const counts = purchases.reduce<Record<string, number>>((acc, p) => {
+    acc[p.cluster] = (acc[p.cluster] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <section style={{ marginTop: 28 }}>
+      <h3 className="eyebrow" style={{ marginBottom: 12 }}>
+        {format(t.purchasesTitle, { n: purchases.length })}
+      </h3>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        {Object.entries(counts).map(([cluster, n]) => (
+          <Badge key={cluster} tone={CLUSTER_TONE[cluster] ?? "neutral"}>
+            {cluster.toUpperCase()} · {n}
+          </Badge>
+        ))}
+      </div>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t.colData}</th>
+              <th>{t.purchaseColProduct}</th>
+              <th>{t.purchaseColType}</th>
+              <th>{t.purchaseColBuyer}</th>
+              <th style={{ textAlign: "right" }}>{t.colImporto}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchases.map((p, i) => (
+              <tr key={i}>
+                <td className="num" style={{ whiteSpace: "nowrap" }}>
+                  {p.orderedAt ? p.orderedAt.slice(0, 10) : "—"}
+                </td>
+                <td>{p.productTitle}</td>
+                <td>
+                  <Badge tone={CLUSTER_TONE[p.cluster] ?? "neutral"}>{p.cluster}</Badge>
+                  {p.subtype && <span className="text-3" style={{ marginLeft: 6, fontSize: 11 }}>{p.subtype}</span>}
+                  {p.delivery && <span className="text-4" style={{ marginLeft: 6, fontSize: 11 }}>· {p.delivery}</span>}
+                </td>
+                <td className="text-3">{p.buyerName ?? "—"}</td>
+                <td className="num" style={{ textAlign: "right" }}>{p.amount}€</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
