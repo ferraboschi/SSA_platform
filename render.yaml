@@ -15,6 +15,8 @@ services:
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
     startCommand: pnpm start
     healthCheckPath: /login
+    domains:
+      - platform.sakesommelierassociation.it
     envVars:
       - key: NODE_VERSION
         value: 22.11.0
@@ -24,6 +26,9 @@ services:
         value: "false"
       - key: APP_BASE_URL
         value: https://platform.sakesommelierassociation.it
+      # Shared secret guarding /api/sync/shopify (cron uses the same value).
+      - key: SYNC_SECRET
+        sync: false
       # ---- Secrets: enter values in the Render dashboard ----
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
@@ -42,4 +47,24 @@ services:
       - key: DROPBOX_ACCESS_TOKEN
         sync: false
       - key: EMBEDDINGS_API_KEY
+        sync: false
+
+  # Continuous Shopify → platform sync. Hits the web service's sync endpoint
+  # every 10 minutes; the endpoint pulls only orders changed since the last run,
+  # so each tick is cheap. The top-bar refresh button triggers the same sync
+  # on demand. Set SYNC_SECRET to the SAME value as the web service.
+  - type: cron
+    name: ssa-shopify-sync
+    runtime: node
+    region: frankfurt
+    branch: main
+    schedule: "*/10 * * * *"
+    buildCommand: "echo no build needed"
+    startCommand: "node -e \"fetch(process.env.SYNC_ENDPOINT+'?token='+encodeURIComponent(process.env.SYNC_SECRET),{method:'POST'}).then(r=>r.text()).then(t=>console.log(t)).catch(e=>{console.error(e);process.exit(1)})\""
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: SYNC_ENDPOINT
+        value: https://ssa-platform.onrender.com/api/sync/shopify
+      - key: SYNC_SECRET
         sync: false

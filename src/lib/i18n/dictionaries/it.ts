@@ -49,6 +49,13 @@ export const it = {
     navigate: "naviga",
     underConstruction: "Modulo in costruzione",
   },
+  sync: {
+    refreshTitle: "Aggiorna da Shopify (acquisti, corsi, iscrizioni)",
+    syncing: "Sincronizzo…",
+    done: "Aggiornato",
+    noChanges: "Già aggiornato",
+    error: "Errore di sincronizzazione",
+  },
 
   topbar: {
     searchPlaceholder: "Cerca corsi, corsisti, educator…",

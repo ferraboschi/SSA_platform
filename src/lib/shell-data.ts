@@ -127,7 +127,11 @@ async function fetchShellData(): Promise<ShellData> {
   return { searchIndex, sidebarCourses, counts };
 }
 
+/** Cache tag — revalidate this to force-refresh shell data (e.g. after a sync). */
+export const SHELL_DATA_TAG = "shell-data";
+
 /** Cached for 60s — shared across users; refreshes in the background. */
 export const getShellData = unstable_cache(fetchShellData, ["shell-data-v1"], {
   revalidate: 60,
+  tags: [SHELL_DATA_TAG],
 });

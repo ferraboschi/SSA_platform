@@ -950,6 +950,29 @@ a.reminder-row:hover { background: var(--surface-2); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Continuous spin — used by the sync/refresh button while a sync runs */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.is-spinning { animation: spin 850ms linear infinite; transform-origin: 50% 50%; }
+
+/* Transient result chip shown next to the refresh button after a sync */
+.sync-result {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 7px;
+  box-shadow: var(--sh-card);
+  z-index: 40;
+  animation: tipIn 140ms var(--ease-out);
+}
+.sync-result.ok  { background: var(--success-bg, #e8f6ee); color: var(--success-fg, #1a7f43); }
+.sync-result.err { background: var(--danger-bg);  color: var(--danger-fg); }
+
 /* Status dot */
 .s-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .s-dot.success { background: var(--success); }

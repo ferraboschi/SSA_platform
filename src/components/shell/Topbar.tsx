@@ -9,6 +9,7 @@ import type { SearchIndex } from "@/lib/shell";
 import { GlobalSearch } from "./GlobalSearch";
 import { NotificationsBell } from "./NotificationsBell";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { RefreshButton } from "./RefreshButton";
 
 interface TopbarProps {
   nav: NavGroup[];
@@ -45,9 +46,7 @@ export function Topbar({ nav, searchIndex, notifications, onMenu }: TopbarProps)
         </span>
         <LanguageSwitcher />
         <NotificationsBell notifications={notifications} />
-        <button className="btn btn-icon btn-ghost" title={t.common.search}>
-          <Icon name="refresh" size={15} />
-        </button>
+        <RefreshButton />
       </div>
     </header>
   );

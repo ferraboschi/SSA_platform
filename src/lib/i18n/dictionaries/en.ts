@@ -47,6 +47,13 @@ export const en: Dictionary = {
     navigate: "navigate",
     underConstruction: "Module under construction",
   },
+  sync: {
+    refreshTitle: "Refresh from Shopify (purchases, courses, enrollments)",
+    syncing: "Syncing…",
+    done: "Updated",
+    noChanges: "Already up to date",
+    error: "Sync error",
+  },
 
   topbar: {
     searchPlaceholder: "Search courses, students, educators…",
