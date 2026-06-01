@@ -11,6 +11,7 @@ import type {
   ExamResult,
   ExamTemplate,
 } from "@/lib/domain";
+import { EXAM_COURSE_TYPES } from "@/lib/domain";
 
 // ===== Deterministic hash (ported verbatim from the prototype seed) =====
 
@@ -54,9 +55,42 @@ export interface ExamHubItem {
 }
 
 export function toExamHubItem(c: Course): ExamHubItem | null {
-  if (!c.exam || !c.examMeta) return null;
-  const meta = c.examMeta;
-  const results = c.examResults2 ?? [];
+  // Rich seed path: full examMeta available.
+  if (c.exam && c.examMeta) {
+    const meta = c.examMeta;
+    const results = c.examResults2 ?? [];
+    return {
+      id: c.id,
+      shortTitle: c.shortTitle,
+      city: c.city,
+      day: c.day,
+      month: c.month,
+      year: c.year,
+      enrolled: c.enrolled,
+      type: c.type,
+      done: meta.done,
+      live: meta.live,
+      examDayNo: meta.examDayNo,
+      examDateLabel: meta.examDateLabel,
+      miniDone: meta.miniTests.filter((m) => m.status === "completato").length,
+      miniTotal: meta.miniTests.length,
+      feedbackStatus: meta.feedback.status,
+      feedbackResponses: meta.feedback.responses,
+      feedbackTotal: meta.feedback.total,
+      passed: results.filter((r) => r.status === "passed").length,
+      resultsTotal: results.length,
+    };
+  }
+
+  // Live (Supabase) path: every certificato/shochu course HAS an exam.
+  // Introductory (and other) course types never appear here.
+  if (!EXAM_COURSE_TYPES.includes(c.type)) return null;
+  const r = c.examResults ?? { passed: 0, retrial: 0, failed: 0 };
+  const resultsTotal = r.passed + r.retrial + r.failed;
+  // "Fatto" when results are recorded, or the course is already in the past;
+  // otherwise the exam is still "da fare" (upcoming).
+  const done = resultsTotal > 0 || c.lifecycle === "passato";
+  const miniTotal = c.type === "shochu" ? 2 : 3;
   return {
     id: c.id,
     shortTitle: c.shortTitle,
@@ -66,17 +100,17 @@ export function toExamHubItem(c: Course): ExamHubItem | null {
     year: c.year,
     enrolled: c.enrolled,
     type: c.type,
-    done: meta.done,
-    live: meta.live,
-    examDayNo: meta.examDayNo,
-    examDateLabel: meta.examDateLabel,
-    miniDone: meta.miniTests.filter((m) => m.status === "completato").length,
-    miniTotal: meta.miniTests.length,
-    feedbackStatus: meta.feedback.status,
-    feedbackResponses: meta.feedback.responses,
-    feedbackTotal: meta.feedback.total,
-    passed: results.filter((r) => r.status === "passed").length,
-    resultsTotal: results.length,
+    done,
+    live: false,
+    examDayNo: c.days || 0,
+    examDateLabel: `${c.month} ${c.year}`,
+    miniDone: 0,
+    miniTotal,
+    feedbackStatus: "pronto",
+    feedbackResponses: 0,
+    feedbackTotal: c.enrolled,
+    passed: r.passed,
+    resultsTotal,
   };
 }
 

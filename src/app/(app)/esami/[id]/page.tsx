@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getTranslations } from "@/lib/i18n/server";
 import { getDataSource } from "@/lib/data";
 import {
@@ -15,7 +16,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const [{ t }, course] = await Promise.all([getTranslations(), ds.courses.getById(id)]);
   const td = t.esami.detail;
 
-  if (!course || !course.exam || !course.examMeta) {
+  if (!course) {
     return (
       <div className="page">
         <div className="card card-pad-lg">
@@ -26,6 +27,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
     );
+  }
+
+  // Live (Supabase) path: the rich exam object isn't populated. Send the user to
+  // the course's Esame tab, which has the working exam links + info.
+  if (!course.exam || !course.examMeta) {
+    redirect(`/corsi/${course.handle}?tab=esame`);
   }
 
   const exam = course.exam;

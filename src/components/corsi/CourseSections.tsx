@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { CourseStat } from "./CourseStat";
@@ -36,9 +37,16 @@ export function CourseSections({
 }) {
   const tr = useT();
   const t = tr.corsi.detail;
-  const [section, setSection] = useState<SectionId>("iscritti");
-
   const hasExam = Boolean(esame) || Boolean(examFamily);
+  const requestedTab = useSearchParams().get("tab");
+  const initialSection: SectionId =
+    requestedTab === "esame" && hasExam
+      ? "esame"
+      : requestedTab === "programma"
+        ? "programma"
+        : "iscritti";
+  const [section, setSection] = useState<SectionId>(initialSection);
+
   const tabs: { id: SectionId; label: string; n: number; accent?: boolean }[] = [
     { id: "iscritti", label: t.tabIscritti, n: enrolled },
     { id: "programma", label: t.tabProgramma, n: programSakeCount },
