@@ -1114,8 +1114,9 @@ export const en: Dictionary = {
       historyCourses: "courses · since {year}",
       historyLast: "last: {title} ({month} {year})",
       whatsapp: "WA",
-      showingMore: "Showing 60 of {n} · ",
+      showingMore: "Showing {shown} of {n} · ",
       loadMore: "load more",
+      loadAll: "show all",
     },
     profile: {
       notFound: "Not found.",

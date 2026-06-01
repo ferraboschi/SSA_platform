@@ -21,6 +21,7 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<Source>("tutti");
   const [examFilter, setExamFilter] = useState<ExamResultStatus | "">("");
+  const [visible, setVisible] = useState(60);
 
   const list = useMemo(() => {
     let l = items.slice();
@@ -121,7 +122,7 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
             </tr>
           </thead>
           <tbody>
-            {list.slice(0, 60).map((s) => {
+            {list.slice(0, visible).map((s) => {
               const lastCourse = s.courses[s.courses.length - 1];
               const certificate = s.courses.some((c) => c.examResult === "passed");
               const retrial = s.courses.some((c) => c.examResult === "retrial");
@@ -233,10 +234,20 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
           </tbody>
         </table>
       </div>
-      {list.length > 60 && (
+      {list.length > visible && (
         <div style={{ padding: 14, textAlign: "center", color: "var(--text-4)", fontSize: 12 }}>
-          {format(t.showingMore, { n: list.length })}
-          <button className="link">{t.loadMore}</button>
+          {format(t.showingMore, { shown: Math.min(visible, list.length), n: list.length })}{" "}
+          <button className="link" onClick={() => setVisible((v) => v + 200)}>
+            {t.loadMore}
+          </button>
+          {list.length - visible > 200 && (
+            <>
+              {" · "}
+              <button className="link" onClick={() => setVisible(list.length)}>
+                {t.loadAll ?? "mostra tutti"}
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

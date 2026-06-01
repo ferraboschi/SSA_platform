@@ -1116,8 +1116,9 @@ export const it = {
       historyCourses: "corsi · dal {year}",
       historyLast: "ultimo: {title} ({month} {year})",
       whatsapp: "WA",
-      showingMore: "Mostro 60 di {n} · ",
+      showingMore: "Mostro {shown} di {n} · ",
       loadMore: "carica altri",
+      loadAll: "mostra tutti",
     },
     profile: {
       notFound: "Non trovato.",
