@@ -1,33 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { signInAction, signUpAction } from "@/lib/auth/supabase-actions";
-
-type Mode = "signin" | "signup";
+import { signInAction } from "@/lib/auth/supabase-actions";
 
 export function LoginForm({ next }: { next: string }) {
-  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const submit = () => {
     setError(null);
-    setInfo(null);
     startTransition(async () => {
-      const result =
-        mode === "signin"
-          ? await signInAction(email, password, next)
-          : await signUpAction(email, password, firstName, lastName);
-      if (!result.ok) {
-        setError(result.error ?? "Errore sconosciuto.");
-      } else if (result.error) {
-        setInfo(result.error);
-      }
+      const result = await signInAction(email, password, next);
+      if (!result.ok) setError(result.error ?? "Errore di accesso.");
     });
   };
 
@@ -35,22 +21,15 @@ export function LoginForm({ next }: { next: string }) {
     <div
       style={{
         width: "100%",
-        maxWidth: 420,
+        maxWidth: 400,
         background: "var(--surface)",
         border: "1px solid var(--border)",
         borderRadius: 14,
         boxShadow: "var(--sh-card)",
-        padding: 32,
+        padding: "32px clamp(20px, 6vw, 32px)",
       }}
     >
-      <h1
-        style={{
-          fontSize: 22,
-          fontWeight: 600,
-          marginBottom: 4,
-          textAlign: "center",
-        }}
-      >
+      <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, textAlign: "center" }}>
         SSA Platform
       </h1>
       <p
@@ -61,44 +40,8 @@ export function LoginForm({ next }: { next: string }) {
           marginBottom: 24,
         }}
       >
-        {mode === "signin" ? "Accedi al tuo account" : "Crea un nuovo account"}
+        Accedi al tuo account
       </p>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          background: "var(--surface-2)",
-          borderRadius: 8,
-          padding: 3,
-          marginBottom: 20,
-          fontSize: 12.5,
-        }}
-      >
-        {(["signin", "signup"] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => {
-              setMode(m);
-              setError(null);
-              setInfo(null);
-            }}
-            style={{
-              padding: "8px 0",
-              border: "none",
-              borderRadius: 6,
-              background: mode === m ? "var(--surface)" : "transparent",
-              fontWeight: mode === m ? 600 : 500,
-              color: mode === m ? "var(--text)" : "var(--text-2)",
-              cursor: "pointer",
-              boxShadow: mode === m ? "var(--sh-low)" : "none",
-            }}
-          >
-            {m === "signin" ? "Accedi" : "Registrati"}
-          </button>
-        ))}
-      </div>
 
       <form
         onSubmit={(e) => {
@@ -107,24 +50,6 @@ export function LoginForm({ next }: { next: string }) {
         }}
         style={{ display: "grid", gap: 12 }}
       >
-        {mode === "signup" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field
-              label="Nome"
-              value={firstName}
-              onChange={setFirstName}
-              autoComplete="given-name"
-              required
-            />
-            <Field
-              label="Cognome"
-              value={lastName}
-              onChange={setLastName}
-              autoComplete="family-name"
-              required
-            />
-          </div>
-        )}
         <Field
           label="Email"
           type="email"
@@ -138,7 +63,7 @@ export function LoginForm({ next }: { next: string }) {
           type="password"
           value={password}
           onChange={setPassword}
-          autoComplete={mode === "signin" ? "current-password" : "new-password"}
+          autoComplete="current-password"
           required
         />
         <button
@@ -146,7 +71,7 @@ export function LoginForm({ next }: { next: string }) {
           disabled={pending}
           style={{
             marginTop: 6,
-            padding: "10px 14px",
+            padding: "11px 14px",
             border: "none",
             borderRadius: 8,
             background: "var(--indigo-600)",
@@ -157,11 +82,7 @@ export function LoginForm({ next }: { next: string }) {
             opacity: pending ? 0.7 : 1,
           }}
         >
-          {pending
-            ? "Attendi…"
-            : mode === "signin"
-              ? "Accedi"
-              : "Crea account"}
+          {pending ? "Attendi…" : "Accedi"}
         </button>
         {error && (
           <div
@@ -176,20 +97,20 @@ export function LoginForm({ next }: { next: string }) {
             {error}
           </div>
         )}
-        {info && (
-          <div
-            style={{
-              background: "var(--indigo-50)",
-              color: "var(--indigo-700)",
-              padding: "9px 12px",
-              borderRadius: 7,
-              fontSize: 12.5,
-            }}
-          >
-            {info}
-          </div>
-        )}
       </form>
+
+      <p
+        style={{
+          fontSize: 11,
+          color: "var(--text-4)",
+          textAlign: "center",
+          marginTop: 20,
+          lineHeight: 1.5,
+        }}
+      >
+        Gli account sono creati dall&apos;amministratore. Per l&apos;accesso
+        contatta il referente SSA.
+      </p>
     </div>
   );
 }
@@ -221,13 +142,14 @@ function Field({
         autoComplete={autoComplete}
         required={required}
         style={{
-          padding: "9px 11px",
+          padding: "10px 11px",
           border: "1px solid var(--border)",
           borderRadius: 7,
-          fontSize: 13,
+          fontSize: 16,
           background: "var(--surface)",
           color: "var(--text)",
           outline: "none",
+          width: "100%",
         }}
       />
     </label>
