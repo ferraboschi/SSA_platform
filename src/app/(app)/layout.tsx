@@ -5,7 +5,7 @@ import { getSession, listUsers } from "@/lib/auth/session";
 import { I18nProvider } from "@/lib/i18n";
 import { getTranslations } from "@/lib/i18n/server";
 import { getDataSource } from "@/lib/data";
-import { appConfig, supabaseConfig } from "@/lib/integrations/config";
+import { appConfig, supabaseConfig, getConnectionStatus } from "@/lib/integrations/config";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { getShellData } from "@/lib/shell-data";
 import { Shell } from "@/components/shell/Shell";
@@ -46,6 +46,7 @@ export default async function AppLayout({
           sidebarCourses={shell.sidebarCourses}
           searchIndex={shell.searchIndex}
           notifications={notifications}
+          connections={getConnectionStatus()}
         >
           {children}
         </Shell>

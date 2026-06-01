@@ -24,6 +24,20 @@ export const shopifyConfig = {
   },
 };
 
+// Second Shopify store — "Sake Company" (supplier): exam sakes, template
+// products, thresholds. Separate credentials from the SSA storefront.
+export const sakeCompanyConfig = {
+  get storeDomain() {
+    return env("SAKECOMPANY_STORE_DOMAIN");
+  },
+  get adminToken() {
+    return env("SAKECOMPANY_ADMIN_TOKEN");
+  },
+  get isConfigured() {
+    return Boolean(this.storeDomain && this.adminToken);
+  },
+};
+
 export const airtableConfig = {
   get apiKey() {
     return env("AIRTABLE_API_KEY");
@@ -104,3 +118,21 @@ export const supabaseConfig = {
     return Boolean(this.url && this.anonKey);
   },
 };
+
+/** Serializable connection-status snapshot for the top-bar indicators. */
+export interface ConnectionStatus {
+  shopifySsa: boolean;
+  shopifySc: boolean;
+  airtable: boolean;
+  dropbox: boolean;
+}
+
+/** Read current integration config and report which are connected. Server-side. */
+export function getConnectionStatus(): ConnectionStatus {
+  return {
+    shopifySsa: shopifyConfig.isConfigured,
+    shopifySc: sakeCompanyConfig.isConfigured,
+    airtable: airtableConfig.isConfigured,
+    dropbox: dropboxConfig.isConfigured,
+  };
+}

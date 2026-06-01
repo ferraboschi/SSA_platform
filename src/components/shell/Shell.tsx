@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import type { NavGroup } from "@/lib/auth";
 import type { Notification, User } from "@/lib/domain";
 import type { SearchIndex, SidebarCourse } from "@/lib/shell";
+import type { ConnectionStatus } from "@/lib/integrations/config";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -14,6 +15,7 @@ interface ShellProps {
   sidebarCourses: SidebarCourse[];
   searchIndex: SearchIndex;
   notifications: Notification[];
+  connections: ConnectionStatus;
   children: ReactNode;
 }
 
@@ -24,6 +26,7 @@ export function Shell({
   sidebarCourses,
   searchIndex,
   notifications,
+  connections,
   children,
 }: ShellProps) {
   const [drawer, setDrawer] = useState(false);
@@ -50,6 +53,7 @@ export function Shell({
           nav={nav}
           searchIndex={searchIndex}
           notifications={notifications}
+          connections={connections}
           onMenu={() => setDrawer(true)}
         />
         {children}

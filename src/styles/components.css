@@ -393,6 +393,12 @@ a.reminder-row:hover { background: var(--surface-2); }
   font-weight: var(--fw-medium);
 }
 .tb-status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+.tb-status.tb-status-off { color: var(--text-4); opacity: 0.7; }
+/* On narrow screens, hide the labels and keep just the dots to save space. */
+@media (max-width: 1100px) {
+  .tb-status { padding: 0 7px; font-size: 0; gap: 0; }
+  .tb-status .dot { width: 7px; height: 7px; }
+}
 
 /* ====== Page ====== */
 .page {
