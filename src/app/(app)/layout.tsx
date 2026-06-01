@@ -7,7 +7,7 @@ import { getTranslations } from "@/lib/i18n/server";
 import { getDataSource } from "@/lib/data";
 import { appConfig, supabaseConfig } from "@/lib/integrations/config";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
-import { buildSearchIndex, buildSidebarCourses } from "@/lib/shell";
+import { getShellData } from "@/lib/shell-data";
 import { Shell } from "@/components/shell/Shell";
 
 export default async function AppLayout({
@@ -24,46 +24,27 @@ export default async function AppLayout({
   }
 
   const ds = await getDataSource();
-  const [
-    { locale, t },
-    session,
-    users,
-    courses,
-    corsisti,
-    educators,
-    templates,
-    notifications,
-  ] = await Promise.all([
+  // Shared catalog/search/counts are cached (see getShellData); only the
+  // per-user bits (session, users, notifications) are fetched each request.
+  const [{ locale, t }, session, users, shell, notifications] = await Promise.all([
     getTranslations(),
     getSession(),
     listUsers(),
-    ds.courses.list(),
-    ds.corsisti.list(),
-    ds.educators.list(),
-    ds.materialTemplates.list(),
+    getShellData(),
     ds.notifications.list(),
   ]);
 
   const nav = navForRole(session.role.key);
-  const sidebarCourses = buildSidebarCourses(courses);
-  const searchIndex = buildSearchIndex(courses, corsisti, educators);
-  const counts: Record<string, number> = {
-    corsi: courses.filter((c) => c.lifecycle === "pubblicato").length,
-    esami: courses.filter((c) => c.exam).length,
-    "template-materiali": templates.length,
-    corsisti: corsisti.length,
-    educator: educators.length,
-  };
 
   return (
     <I18nProvider locale={locale} dictionary={t}>
       <SessionProvider session={session}>
         <Shell
           nav={nav}
-          counts={counts}
+          counts={shell.counts}
           users={users}
-          sidebarCourses={sidebarCourses}
-          searchIndex={searchIndex}
+          sidebarCourses={shell.sidebarCourses}
+          searchIndex={shell.searchIndex}
           notifications={notifications}
         >
           {children}
