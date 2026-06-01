@@ -855,14 +855,19 @@ export function TemplateMateriali({
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<CourseTypeKey | "">("");
   const [toast, setToast] = useState<string | null>(null);
-  const [, startSave] = useTransition();
+  const [isSaving, startSave] = useTransition();
 
   const flash = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   };
 
-  const persist = (t: MaterialTemplate) => startSave(() => void saveTemplateAction(t));
+  // Templates auto-save on every change; flash a confirmation so it's visible.
+  const persist = (t: MaterialTemplate) =>
+    startSave(async () => {
+      await saveTemplateAction(t);
+      flash(tm.toast.saved);
+    });
 
   const open = openId ? templates.find((t) => t.id === openId) ?? null : null;
 
@@ -911,7 +916,7 @@ export function TemplateMateriali({
 
   return (
     <div className="page">
-      {toast && (
+      {(toast || isSaving) && (
         <div
           style={{
             position: "fixed",
@@ -931,8 +936,8 @@ export function TemplateMateriali({
             gap: 8,
           }}
         >
-          <Icon name="check" size={13} />
-          {toast}
+          <Icon name={isSaving ? "refresh" : "check"} size={13} className={isSaving ? "is-spinning" : undefined} />
+          {isSaving ? tm.toast.saving : toast}
         </div>
       )}
 
