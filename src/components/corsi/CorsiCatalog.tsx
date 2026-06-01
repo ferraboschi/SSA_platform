@@ -291,7 +291,7 @@ function StatusRuleLegend({ onClose }: { onClose: () => void }) {
           <Icon name="x" size={12} />
         </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div className="rgrid-4">
         {STATUS_RULE_KEYS.map((key, i) => {
           const tone = LEGEND_TONES[key];
           return (

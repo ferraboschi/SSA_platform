@@ -15,9 +15,11 @@ interface SidebarProps {
   counts: Record<string, number>;
   courses: SidebarCourse[];
   users: User[];
+  open?: boolean;
+  onNavigate?: () => void;
 }
 
-export function Sidebar({ nav, counts, courses, users }: SidebarProps) {
+export function Sidebar({ nav, counts, courses, users, open, onNavigate }: SidebarProps) {
   const t = useT();
   const pathname = usePathname();
   const [corsiOpen, setCorsiOpen] = useState(true);
@@ -26,8 +28,8 @@ export function Sidebar({ nav, counts, courses, users }: SidebarProps) {
     pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <aside className="sidebar">
-      <Link className="sb-brand" href="/dashboard">
+    <aside className={`sidebar ${open ? "open" : ""}`}>
+      <Link className="sb-brand" href="/dashboard" onClick={onNavigate}>
         <div className="sb-mark">
           <span>S</span>
         </div>
@@ -57,11 +59,10 @@ export function Sidebar({ nav, counts, courses, users }: SidebarProps) {
                 <Link
                   href={it.href}
                   className={`sb-link ${active ? "active" : ""}`}
-                  onClick={
-                    hasChildren
-                      ? () => setCorsiOpen((o) => (active ? !o : true))
-                      : undefined
-                  }
+                  onClick={() => {
+                    if (hasChildren) setCorsiOpen((o) => (active ? !o : true));
+                    onNavigate?.();
+                  }}
                 >
                   <Icon name={it.icon} size={15} />
                   <span>{itemLabel(t, it.id)}</span>

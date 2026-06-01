@@ -403,6 +403,46 @@ a.reminder-row:hover { background: var(--surface-2); }
 }
 .page-narrow { max-width: 1080px; }
 
+/* Hamburger (mobile only — hidden on desktop) */
+.topbar-menu-btn { display: none; }
+
+/* ====== Responsive / mobile ====== */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 272px;
+    max-width: 84vw;
+    z-index: 80;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: var(--sh-popover);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+    z-index: 70;
+    border: none;
+    cursor: pointer;
+  }
+  .topbar-menu-btn { display: inline-grid; place-items: center; }
+  .topbar-search-kbd { display: none; }
+  .page { padding-left: 16px; padding-right: 16px; }
+  /* Wide tables scroll horizontally instead of breaking the layout. */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table { min-width: 640px; }
+}
+
+@media (max-width: 600px) {
+  .topbar { gap: 8px; padding: 0 12px; }
+  .topbar-search { min-width: 0; }
+  .page { padding-top: 18px; }
+}
+
 .page-header {
   display: flex;
   align-items: flex-start;
@@ -707,6 +747,20 @@ a.reminder-row:hover { background: var(--surface-2); }
 .kpi-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
 .kpi-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .kpi-grid.cols-5 { grid-template-columns: repeat(5, 1fr); }
+
+/* Generic responsive grid utility (replaces inline repeat(N) where applied). */
+.rgrid-4 { display: grid; grid-template-columns: repeat(4, 1fr); }
+.rgrid-3 { display: grid; grid-template-columns: repeat(3, 1fr); }
+.rgrid-2 { display: grid; grid-template-columns: repeat(2, 1fr); }
+
+@media (max-width: 900px) {
+  .kpi-grid.cols-4, .kpi-grid.cols-5, .kpi-grid.cols-3,
+  .rgrid-4, .rgrid-3 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .kpi-grid.cols-3, .kpi-grid.cols-4, .kpi-grid.cols-5,
+  .rgrid-4, .rgrid-3, .rgrid-2 { grid-template-columns: 1fr; }
+}
 
 .kpi {
   background: var(--surface);

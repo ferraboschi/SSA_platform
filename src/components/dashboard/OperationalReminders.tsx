@@ -131,7 +131,7 @@ export function OperationalReminders({
         <DashThresholdsModal thresholds={thresholds} onClose={() => setShowThresholds(false)} />
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div className="rgrid-4">
         <ReminderColumn
           title={r.shipments}
           icon="download"

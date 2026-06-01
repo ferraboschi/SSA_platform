@@ -174,7 +174,7 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
             <button className="btn">{t.exportSheet}</button>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "1px solid var(--border)" }}>
+        <div className="rgrid-4" style={{ borderTop: "1px solid var(--border)" }}>
           <ProfStat label={t.statCorsi} value={s.courses.length} sub={format(t.statCorsiSub, { first: firstYear, last: lastYear })} />
           <ProfStat label={t.statEsami} value={examCount} sub={certificate ? t.statEsamiPassed : "—"} />
           <ProfStat label={t.statSpeso} value={s.totalSpent} unit="€" />

@@ -14,15 +14,23 @@ interface TopbarProps {
   nav: NavGroup[];
   searchIndex: SearchIndex;
   notifications: Notification[];
+  onMenu?: () => void;
 }
 
-export function Topbar({ nav, searchIndex, notifications }: TopbarProps) {
+export function Topbar({ nav, searchIndex, notifications, onMenu }: TopbarProps) {
   const t = useT();
   const pathname = usePathname();
   const crumbs = buildCrumbs(pathname, t);
 
   return (
     <header className="topbar">
+      <button
+        className="btn btn-icon btn-ghost topbar-menu-btn"
+        aria-label="Menu"
+        onClick={onMenu}
+      >
+        <Icon name="grid" size={16} />
+      </button>
       {crumbs.length > 0 && <Crumbs items={crumbs} />}
       <div style={{ flex: 1 }}></div>
 
