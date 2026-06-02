@@ -17,7 +17,12 @@ export async function GET(req: NextRequest) {
   const type = params.get("type") as EmailOtpType | null;
   const code = params.get("code");
   const origin = req.nextUrl.origin;
-  const ok = `${origin}/reset-password`;
+  // Where to land after a successful verify. Recovery/invite → set-password;
+  // signup confirmation → login. Only same-origin relative paths are honored.
+  const nextParam = params.get("next");
+  const dest =
+    nextParam && nextParam.startsWith("/") ? `${origin}${nextParam}` : `${origin}/reset-password`;
+  const ok = dest;
   const fail = `${origin}/reset-password?error_description=${encodeURIComponent("Link non valido o scaduto.")}`;
 
   try {
