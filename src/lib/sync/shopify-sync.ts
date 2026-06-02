@@ -109,7 +109,10 @@ async function syncCourses(
   let upserted = 0;
   for (const p of products) {
     if ((p.product_type || "").toLowerCase() !== "ticket") continue;
-    if (p.status !== "active" && p.status !== "draft") continue;
+    // Only PUBLISHED (active) products become courses. Draft/archived Shopify
+    // products are not on the public site, so they must not appear as courses
+    // here (they'd be phantom "bozza" courses with no real presence).
+    if (p.status !== "active") continue;
     const parsed = parseCourseTitle(p.title);
     if (!parsed) continue;
     const key = parsed.year * 12 + (parsed.month - 1);
@@ -117,7 +120,7 @@ async function syncCourses(
     const variant = p.variants?.[0];
     const price = Math.round(parseFloat(variant?.price || "0") * 100) || 0;
     const capacity = Math.max(variant?.inventory_quantity ?? 0, 0);
-    const lifecycle = p.status === "active" ? "pubblicato" : "bozza";
+    const lifecycle = "pubblicato";
     const { error } = await sb.from("corsi").upsert(
       {
         external_id: String(p.id),

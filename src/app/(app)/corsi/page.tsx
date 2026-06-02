@@ -14,7 +14,9 @@ export default async function Page() {
     ds.educators.list(),
   ]);
 
-  const items = courses.map(toCourseListItem);
+  // Cancelled courses (incl. phantom drafts from unpublished Shopify products)
+  // belong in the Archivio, not the live catalog.
+  const items = courses.filter((c) => !c.cancelled).map(toCourseListItem);
 
   const cities = [...new Set(items.map((c) => c.city))].sort((a, b) =>
     a.localeCompare(b),

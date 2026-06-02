@@ -532,6 +532,13 @@ interface MaterialTemplateWithChildren extends MaterialTemplateRow {
   }>;
 }
 
+/** Coerce a display date string ("—", "12 Mar 2026", ISO) to ISO or null. */
+function toTimestampOrNull(s: string | null | undefined): string | null {
+  if (!s || s === "—") return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 function materialTemplateRowToDomain(
   row: MaterialTemplateWithChildren,
 ): MaterialTemplate {
@@ -903,7 +910,10 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
           adv: template.materiali.adv,
         },
         uses: template.uses,
-        last_used_at: template.lastUsed || null,
+        // `lastUsed` is a display string ("—", "12 Mar 2026"); the column is a
+        // timestamptz. Coerce to a valid ISO timestamp or null — otherwise
+        // Postgres rejects placeholders (error 22007) and the whole save fails.
+        last_used_at: toTimestampOrNull(template.lastUsed),
       };
 
       const upsertResult = numericId

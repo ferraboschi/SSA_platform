@@ -21,6 +21,11 @@ export interface SharedDay {
   name: string;
   sakes: SharedSake[];
 }
+export interface SharedStudent {
+  name: string;
+  email: string;
+  phone: string;
+}
 export interface SharedCourse {
   courseName: string;
   typeLabel: string;
@@ -30,6 +35,7 @@ export interface SharedCourse {
   hasExam: boolean;
   totalSakes: number;
   days: SharedDay[];
+  students: SharedStudent[];
 }
 
 export async function loadSharedCourse(
@@ -87,6 +93,28 @@ export async function loadSharedCourse(
       })),
   }));
 
+  // Enrolled students (name, email, phone) — the roster the educator needs.
+  const { data: iscr } = await sb
+    .from("corsi_iscrizioni")
+    .select("corsista:corsisti(full_name,email,phone)")
+    .eq("corso_id", corso.id);
+  type IscrJoin = { corsista: { full_name: string | null; email: string | null; phone: string | null } | null };
+  const seen = new Set<string>();
+  const students: SharedStudent[] = [];
+  for (const r of (iscr ?? []) as unknown as IscrJoin[]) {
+    const c = r.corsista;
+    if (!c) continue;
+    const key = (c.email || c.full_name || "").toLowerCase();
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    students.push({
+      name: c.full_name ?? "",
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+    });
+  }
+  students.sort((a, b) => a.name.localeCompare(b.name));
+
   const type = corso.type as CourseTypeKey;
   const totalSakes = days.reduce((n, d) => n + d.sakes.length, 0);
 
@@ -99,5 +127,6 @@ export async function loadSharedCourse(
     hasExam: EXAM_COURSE_TYPES.includes(type),
     totalSakes,
     days,
+    students,
   };
 }
