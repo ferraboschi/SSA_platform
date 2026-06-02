@@ -1271,6 +1271,11 @@ export const it = {
       sumEducator: "Educator",
       sumMatPerStudent: "Materiali / iscritto",
       sumOtherPerCourse: "Altri costi / corso",
+      simTitle: "Simulazione costi per iscritti",
+      simStudents: "N° iscritti",
+      simMateriali: "Materiali ({n} iscritti)",
+      simBottiglie: "Bottiglie ({per}/sake)",
+      simTotale: "Totale corso stimato",
     },
     day: {
       giorno: "Giorno {n}",

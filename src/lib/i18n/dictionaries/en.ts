@@ -1269,6 +1269,11 @@ export const en: Dictionary = {
       sumEducator: "Educator",
       sumMatPerStudent: "Materials / student",
       sumOtherPerCourse: "Other costs / course",
+      simTitle: "Cost simulation by enrollees",
+      simStudents: "Enrollees",
+      simMateriali: "Materials ({n} enrollees)",
+      simBottiglie: "Bottles ({per}/sake)",
+      simTotale: "Estimated course total",
     },
     day: {
       giorno: "Day {n}",

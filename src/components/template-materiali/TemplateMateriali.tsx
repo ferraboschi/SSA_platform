@@ -656,6 +656,9 @@ function TemplateEditor({
   const ed = tm.editor;
   const { totalSakes, sakeCost } = tmTemplateStats(t);
 
+  // Simulated enrollee count → drives the cost automatisms (materials per
+  // student, bottles = ceil(students / 15)).
+  const [simStudents, setSimStudents] = useState(15);
   // Live Sake Company catalog (by SKU) → shows real photo/stock on each sake row.
   const [catBySku, setCatBySku] = useState<Map<string, ScCatalogItem>>(new Map());
   useEffect(() => {
@@ -740,6 +743,17 @@ function TemplateEditor({
     );
 
   const educatorTotal = t.materiali.educatorPerDay * t.days.length;
+
+  // Cost automatisms driven by the simulated enrollee count.
+  const N = Math.max(0, simStudents);
+  const bottlesPerSku = Math.ceil(N / 15) || (N > 0 ? 1 : 0);
+  const totalBottles = totalSakes * bottlesPerSku;
+  const bottleCost = t.days.reduce(
+    (s, d) => s + d.sakes.reduce((ss, sk) => ss + bottlesPerSku * sk.cost, 0),
+    0,
+  );
+  const materialiCourse = materialiPerStudent * N + extraPerCourse;
+  const courseTotal = educatorTotal + materialiCourse + bottleCost;
 
   return (
     <>
@@ -892,6 +906,36 @@ function TemplateEditor({
             {extraPerCourse > 0 && (
               <SummaryLine label={ed.sumOtherPerCourse} value={`${extraPerCourse.toLocaleString("it-IT")} €`} last />
             )}
+          </div>
+
+          {/* Cost automatisms — scale with the simulated enrollee count. */}
+          <div
+            className="card card-pad"
+            style={{ marginTop: 12, border: "1px solid var(--indigo-100)", background: "var(--indigo-50)", boxShadow: "none" }}
+          >
+            <div className="eyebrow" style={{ marginBottom: 10 }}>
+              {ed.simTitle}
+            </div>
+            <div className="field" style={{ marginBottom: 10 }}>
+              <div className="field-label">{ed.simStudents}</div>
+              <input
+                type="number"
+                className="input"
+                min={0}
+                value={simStudents}
+                onChange={(e) => setSimStudents(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
+            <SummaryLine
+              label={format(ed.simMateriali, { n: N })}
+              value={`${(materialiPerStudent * N).toLocaleString("it-IT")} €`}
+            />
+            <SummaryLine label={ed.sumEducator} value={`${educatorTotal.toLocaleString("it-IT")} €`} />
+            <SummaryLine
+              label={format(ed.simBottiglie, { per: bottlesPerSku })}
+              value={`${totalBottles} (${bottleCost.toLocaleString("it-IT")} €)`}
+            />
+            <SummaryLine label={ed.simTotale} value={`${courseTotal.toLocaleString("it-IT")} €`} last />
           </div>
         </div>
       </div>
