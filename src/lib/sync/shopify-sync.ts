@@ -13,6 +13,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import {
   listAllProducts,
   listOrdersUpdatedSince,
+  getProductEducatorMetafield,
   type AdminOrder,
   type AdminProduct,
 } from "@/lib/integrations/shopify/admin-client";
@@ -110,11 +111,32 @@ async function syncCourses(
 
   // Which course external_ids already exist — so we never UPDATE staff-owned
   // columns (lifecycle / capacity / min_students) back to Shopify-derived values.
+  // Also track who already has an educator, so we only resolve it when missing
+  // (never overwrite a staff/manual assignment).
   const { data: existingRows } = await sb
     .from("corsi")
-    .select("external_id")
+    .select("external_id, educator_id")
     .not("external_id", "is", null);
   const known = new Set((existingRows ?? []).map((r) => String(r.external_id)));
+  const educatorByExt = new Map(
+    (existingRows ?? []).map((r) => [String(r.external_id), r.educator_id as number | null]),
+  );
+
+  // Educator resolver: the Shopify `custom.sake_educator` metafield holds the
+  // educator name (+ optional bio); match it to an educators row by name.
+  const normName = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+  const { data: eduRows } = await sb.from("educators").select("id, full_name");
+  const educators = (eduRows ?? [])
+    .map((e) => ({ id: e.id as number, n: normName(e.full_name as string) }))
+    .sort((a, b) => b.n.length - a.n.length); // longest name first
+  async function resolveEducatorId(productId: number | string): Promise<number | null> {
+    const val = await getProductEducatorMetafield(productId);
+    if (!val) return null;
+    const v = normName(val);
+    return educators.find((e) => e.n && v.includes(e.n))?.id ?? null;
+  }
 
   for (const p of products) {
     if ((p.product_type || "").toLowerCase() !== "ticket") continue;
@@ -153,15 +175,29 @@ async function syncCourses(
         .update(syncOwned)
         .eq("external_id", String(p.id));
       if (!error) upserted++;
+      // Backfill the educator only when it's still missing (never overwrite a
+      // manual assignment).
+      if (educatorByExt.get(String(p.id)) == null) {
+        const eid = await resolveEducatorId(p.id);
+        if (eid != null) {
+          await sb
+            .from("corsi")
+            .update({ educator_id: eid })
+            .eq("external_id", String(p.id))
+            .is("educator_id", null);
+        }
+      }
     } else {
       // New course: seed staff-owned columns once. inventory_quantity is the
       // REMAINING stock, used only as an initial capacity hint.
       const capacity = Math.max(variant?.inventory_quantity ?? 0, 0);
+      const educatorId = await resolveEducatorId(p.id);
       const { error } = await sb.from("corsi").insert({
         ...syncOwned,
         lifecycle: "pubblicato",
         capacity,
         min_students: 6,
+        educator_id: educatorId,
       });
       if (!error) upserted++;
     }

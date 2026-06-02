@@ -129,6 +129,9 @@ export const en: Dictionary = {
 
   dashboard: {
     updatedAgo: "Updated {n} min ago",
+    updatedNow: "Updated just now",
+    updatedAt: "Updated at {time}",
+    updatedNever: "Never synced",
     week: "Week {n}",
     greeting: "Good morning, {name}.",
     headlineHas: "You have",

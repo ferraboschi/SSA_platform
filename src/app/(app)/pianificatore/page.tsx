@@ -32,6 +32,7 @@ export default async function Page() {
 
   const realItems: PlannerItem[] = courses
     .filter((c) => winKeys.has(keyOf(c.year, monthIdx(c.month))))
+    .filter((c) => !c.cancelled) // cancelled / phantom-draft courses don't plan
     .filter((c) => c.lifecycle === "pubblicato" || c.lifecycle === "bozza")
     .map((c) =>
       normalizeReal({

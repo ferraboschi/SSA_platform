@@ -107,6 +107,26 @@ export async function listAllProducts(): Promise<AdminProduct[]> {
 }
 
 /**
+ * The `custom.sake_educator` metafield value for a product (the course's
+ * educator name, as shown on the website), or null. The value may carry a bio
+ * after the name — the caller resolves it against the educators table.
+ */
+export async function getProductEducatorMetafield(
+  productId: number | string,
+): Promise<string | null> {
+  try {
+    const { body } = await adminGet(`products/${productId}/metafields.json`);
+    const mfs =
+      (body as { metafields?: Array<{ namespace: string; key: string; value: string }> })
+        .metafields ?? [];
+    const m = mfs.find((x) => x.namespace === "custom" && x.key === "sake_educator");
+    return m?.value?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Orders updated since `sinceIso` (ISO timestamp). When omitted, pulls the
  * full order history. Cursor pages may only carry `limit` + `page_info`, so the
  * `updated_at_min` filter is applied on the first request only — Shopify keeps

@@ -131,6 +131,9 @@ export const it = {
 
   dashboard: {
     updatedAgo: "Aggiornato {n} min fa",
+    updatedNow: "Aggiornato ora",
+    updatedAt: "Aggiornato alle {time}",
+    updatedNever: "Mai sincronizzato",
     week: "Settimana {n}",
     greeting: "Buongiorno, {name}.",
     headlineHas: "Hai",

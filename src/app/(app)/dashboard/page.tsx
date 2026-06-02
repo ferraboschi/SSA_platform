@@ -4,6 +4,7 @@ import { getTranslations } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n/dictionary";
 import { getSession } from "@/lib/auth/session";
 import { getDataSource } from "@/lib/data";
+import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { buildDashboard, capitalize, DASH_TODAY, DASH_WEEK, monthLabel } from "@/lib/dashboard";
 import {
   MonthReportButton,
@@ -25,6 +26,35 @@ export default async function DashboardPage() {
     ]);
   const stockAlerts = await ds.settings.getStockAlerts();
 
+  // Real "last synced" timestamp — the refresh button re-runs the sync and
+  // router.refresh()es, so this re-renders with the fresh time on every sync.
+  let syncLabel = t.dashboard.updatedNever;
+  try {
+    const sbSync = await getSupabaseServerClient();
+    const { data: syncRow } = await sbSync
+      .from("sync_state")
+      .select("last_synced_at")
+      .eq("source", "shopify")
+      .maybeSingle();
+    const iso = (syncRow as { last_synced_at?: string } | null)?.last_synced_at;
+    if (iso) {
+      const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+      syncLabel =
+        mins < 1
+          ? t.dashboard.updatedNow
+          : mins < 60
+            ? format(t.dashboard.updatedAgo, { n: mins })
+            : format(t.dashboard.updatedAt, {
+                time: new Date(iso).toLocaleTimeString("it-IT", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+              });
+    }
+  } catch {
+    /* sync_state unavailable — keep the neutral fallback */
+  }
+
   const d = buildDashboard(courses, corsisti, educators, thresholds);
   const dt = t.dashboard;
   const me = session.user;
@@ -43,7 +73,7 @@ export default async function DashboardPage() {
       {/* Hero */}
       <section className="hero hero-mesh" style={{ padding: "32px 36px" }}>
         <div className="eyebrow" style={{ marginBottom: 12 }}>
-          {eyebrowDate} <span className="dot" /> {format(dt.updatedAgo, { n: 4 })}
+          {eyebrowDate} <span className="dot" /> {syncLabel}
         </div>
         <div
           style={{
