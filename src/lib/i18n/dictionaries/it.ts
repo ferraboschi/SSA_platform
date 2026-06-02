@@ -748,6 +748,11 @@ export const it = {
       markCorrectHint: "Tocca il cerchio per segnare la risposta corretta",
       emptySection: "Nessuna domanda. Aggiungine una qui sotto.",
       addQuestionShort: "Aggiungi",
+      preview: "Anteprima",
+      previewHint: "Apri la pagina come la vede lo studente (senza risposte).",
+      validate: "Valida",
+      validateHint: "Apri la pagina mostrando le risposte corrette (per QA).",
+      noPreviewCourse: "Nessun corso per l'anteprima",
     },
     qEditor: {
       punti: "{n} punti",

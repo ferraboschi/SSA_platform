@@ -14,11 +14,15 @@ import type {
 } from "@/lib/domain";
 import { QUESTION_EST_SEC, estimateSeconds, formatEstimate } from "@/lib/esami";
 import { saveExamTemplateAction } from "@/lib/esami/actions";
+import { createExamLink } from "@/lib/exam-links/actions";
+import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
 
 type Section = "esame" | "feedback" | `day${number}`;
 
 export interface ExamLibraryEditorProps {
   templates: Record<ExamFamily, ExamTemplate>;
+  /** Representative course id per family, to mint preview links. */
+  previewCourse?: Partial<Record<ExamFamily, string>>;
 }
 
 const cloneTpl = (t: ExamTemplate): ExamTemplate =>
@@ -58,10 +62,11 @@ function sectionQuestions(t: ExamTemplate, sec: Section): ExamQuestion[] {
   return t.miniTests[di]?.questions ?? [];
 }
 
-export function ExamLibraryEditor({ templates }: ExamLibraryEditorProps) {
+export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEditorProps) {
   const esami = useT().esami;
   const t = esami.editor;
   const router = useRouter();
+  const [previewing, setPreviewing] = useState<string | null>(null);
 
   const [drafts, setDrafts] = useState<Record<ExamFamily, ExamTemplate>>(() => {
     const out = {} as Record<ExamFamily, ExamTemplate>;
@@ -194,6 +199,22 @@ export function ExamLibraryEditor({ templates }: ExamLibraryEditorProps) {
 
   const activeQ = questions[active] ?? null;
 
+  // Preview links for the current section against a representative course.
+  const previewCourseId = previewCourse?.[fam];
+  const currentTestKey: ExamTestKey =
+    section === "esame"
+      ? "final"
+      : section === "feedback"
+        ? "feedback"
+        : (`day${miniDays[parseInt(section.slice(3), 10) || 0]?.day ?? 1}` as ExamTestKey);
+  const openPreview = async (mode: ExamLinkMode) => {
+    if (!previewCourseId) return;
+    setPreviewing(mode);
+    const res = await createExamLink({ courseId: previewCourseId, testKey: currentTestKey, mode });
+    setPreviewing(null);
+    if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
+  };
+
   return (
     <div className="page">
       <Link className="btn btn-sm btn-ghost" href="/esami" style={{ marginBottom: 14 }}>
@@ -317,7 +338,22 @@ export function ExamLibraryEditor({ templates }: ExamLibraryEditorProps) {
           <div style={{ fontSize: 17, fontWeight: 600 }}>{headerName}</div>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 3 }}>{headerMeta}</div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Preview links for the current section (open the real student/QA page). */}
+          {previewCourseId ? (
+            <span style={{ display: "inline-flex", gap: 6 }}>
+              <button className="btn btn-sm" onClick={() => openPreview("test")} disabled={previewing !== null} title={t.previewHint}>
+                <Icon name="monitor" size={12} />
+                {previewing === "test" ? "…" : t.preview}
+              </button>
+              <button className="btn btn-sm" onClick={() => openPreview("validate")} disabled={previewing !== null} title={t.validateHint}>
+                <Icon name="check" size={12} />
+                {previewing === "validate" ? "…" : t.validate}
+              </button>
+            </span>
+          ) : (
+            <span className="text-3" style={{ fontSize: 11 }}>{t.noPreviewCourse}</span>
+          )}
           {unlocked ? (
             <>
               <span style={{ fontSize: 12, color: saveErr ? "var(--danger-fg)" : dirty ? "var(--warning-fg)" : "var(--success-fg)", display: "inline-flex", alignItems: "center", gap: 5 }}>

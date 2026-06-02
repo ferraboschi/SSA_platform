@@ -746,6 +746,11 @@ export const en: Dictionary = {
       markCorrectHint: "Tap the circle to mark the correct answer",
       emptySection: "No questions yet. Add one below.",
       addQuestionShort: "Add",
+      preview: "Preview",
+      previewHint: "Open the page as the student sees it (no answers).",
+      validate: "Validate",
+      validateHint: "Open the page revealing the correct answers (for QA).",
+      noPreviewCourse: "No course for preview",
     },
     qEditor: {
       punti: "{n} points",
