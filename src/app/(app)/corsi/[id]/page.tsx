@@ -12,6 +12,7 @@ import {
 import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
 import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
+import { EducatorAssign } from "@/components/corsi/EducatorAssign";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,11 +22,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const courseP = /^\d+$/.test(id)
     ? ds.courses.getById(id)
     : ds.courses.getByHandle(id);
-  const [{ locale, t }, course, allTemplates] = await Promise.all([
+  const [{ locale, t }, course, allTemplates, allEducators] = await Promise.all([
     getTranslations(),
     courseP,
     ds.materialTemplates.list(),
+    ds.educators.list(),
   ]);
+  const educatorOptions = allEducators.map((e) => ({ id: e.id, name: e.name }));
 
   const td = t.corsi.detail;
 
@@ -117,13 +120,23 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               {course.city}
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Avatar name={course.educator.name} initials={course.educator.initials} size="sm" />
-              {course.educator.id ? (
-                <Link href={`/educator/${course.educator.id}`} className="link" style={{ fontWeight: 500 }}>
-                  {course.educator.name}
+              {course.educator.id && (
+                <Avatar name={course.educator.name} initials={course.educator.initials} size="sm" />
+              )}
+              <EducatorAssign
+                courseId={course.id}
+                currentId={course.educator.id}
+                educators={educatorOptions}
+              />
+              {course.educator.id && (
+                <Link
+                  href={`/educator/${course.educator.id}`}
+                  className="link"
+                  style={{ fontSize: 11 }}
+                  title="Apri scheda educator"
+                >
+                  ↗
                 </Link>
-              ) : (
-                <span style={{ fontWeight: 500 }}>{course.educator.name}</span>
               )}
             </span>
             {course.lifecycle === "pubblicato" && (
