@@ -12,6 +12,7 @@ import {
   type ScCatalogItem,
 } from "@/components/sake/SakeProductPicker";
 import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
+import { deleteTemplateAction } from "@/lib/data/template-actions";
 
 /** Bottles needed per SKU: one bottle covers ~15 students. */
 export function bottlesForStudents(enrolled: number): number {
@@ -742,7 +743,14 @@ export function ProgrammaEconomiaSection({
           courseType={data.type}
           onClose={() => setTemplateModal(false)}
           onApply={applyTemplate}
-          onDelete={(id) => setTemplates((ts) => ts.filter((x) => x.id !== id))}
+          onDelete={async (id) => {
+            setTemplates((ts) => ts.filter((x) => x.id !== id)); // optimistic
+            try {
+              await deleteTemplateAction(id);
+            } catch {
+              /* keep optimistic removal; a refresh will reconcile */
+            }
+          }}
         />
       )}
     </div>

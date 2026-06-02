@@ -181,6 +181,8 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
       q.correct = (q.correct as number[] | undefined) ?? [0];
     }
     if (type === "fill" && !q.correct) q.correct = ["risposta"];
+    if (type === "match" && !q.pairs) q.pairs = [{ l: "A", r: "1" }, { l: "B", r: "2" }];
+    if (type === "order" && !q.items) q.items = ["Primo", "Secondo", "Terzo"];
     setQuestions(questions.map((x, xi) => (xi === i ? q : x)));
   };
 

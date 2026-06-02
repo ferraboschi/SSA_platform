@@ -96,3 +96,18 @@ export async function updatePasswordAction(
   revalidatePath("/", "layout");
   redirect("/dashboard");
 }
+
+/** Change the signed-in user's own password from Account (no redirect). */
+export async function updateOwnPasswordAction(
+  password: string,
+): Promise<AuthActionResult> {
+  if (!password || password.length < 8) {
+    return { ok: false, error: "La password deve avere almeno 8 caratteri." };
+  }
+  const sb = await getSupabaseServerClient();
+  const { data: u } = await sb.auth.getUser();
+  if (!u.user) return { ok: false, error: "Sessione non valida. Rifai l'accesso." };
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}

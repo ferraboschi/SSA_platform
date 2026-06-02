@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { Avatar, Badge, Icon, type AvatarTone } from "@/components/ui";
 import { useSession } from "@/lib/auth";
 import { updateProfileAction } from "@/lib/auth/actions";
+import { updateOwnPasswordAction } from "@/lib/auth/supabase-actions";
 import { useT } from "@/lib/i18n";
 import { CITIES } from "@/lib/domain";
 import type { User } from "@/lib/domain";
@@ -95,9 +96,16 @@ export function AccountClient({ me, users }: { me: User; users: User[] }) {
       flash(t.passwordMismatch);
       return;
     }
-    setPw("");
-    setPw2("");
-    flash(t.passwordUpdated);
+    startSave(async () => {
+      const res = await updateOwnPasswordAction(pw);
+      if (res.ok) {
+        setPw("");
+        setPw2("");
+        flash(t.passwordUpdated);
+      } else {
+        flash(res.error || t.passwordMismatch);
+      }
+    });
   };
 
   const isAdmin = me.roleKey === "admin";

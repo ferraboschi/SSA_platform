@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth/session";
 import { getDataSource } from "@/lib/data";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { buildDashboard, capitalize, DASH_TODAY, DASH_WEEK, monthLabel } from "@/lib/dashboard";
+import { loadCourseEconomics } from "@/lib/economics";
 import {
   MonthReportButton,
   PipelineBar,
@@ -24,6 +25,12 @@ export default async function DashboardPage() {
       ds.settings.getThresholds(),
     ]);
   const stockAlerts = await ds.settings.getStockAlerts();
+
+  // Real "to invoice" count: held courses not yet marked invoiced (Conto economico).
+  const econ = await loadCourseEconomics();
+  const toInvoiceCount = courses.filter(
+    (c) => c.lifecycle === "passato" && !c.cancelled && !econ.get(c.id)?.invoiced,
+  ).length;
 
   // Real "last synced" timestamp — the refresh button re-runs the sync and
   // router.refresh()es, so this re-renders with the fresh time on every sync.
@@ -98,7 +105,7 @@ export default async function DashboardPage() {
                 {format(dt.headlineCourses, { n: kpis.atRiskCount })}
               </span>{" "}
               <span style={{ color: "var(--text-3)" }}>{dt.headlineMid}</span>{" "}
-              <span style={{ color: "var(--text)" }}>{format(dt.headlineInvoices, { n: 3 })}</span>{" "}
+              <span style={{ color: "var(--text)" }}>{format(dt.headlineInvoices, { n: toInvoiceCount })}</span>{" "}
               <span style={{ color: "var(--text-3)" }}>{dt.headlineEnd}</span>
             </h1>
             <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
