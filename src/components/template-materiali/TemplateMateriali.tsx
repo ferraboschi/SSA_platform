@@ -1,9 +1,15 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Badge, Icon, type IconName } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { saveTemplateAction, deleteTemplateAction } from "@/lib/data/template-actions";
+import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
+import {
+  SakeProductPicker,
+  StockBadge,
+  type ScCatalogItem,
+} from "@/components/sake/SakeProductPicker";
 import {
   COURSE_TYPES,
   type CourseTypeKey,
@@ -382,6 +388,7 @@ function SakeField({
 
 function TemplateSakeRow({
   sake: s,
+  catItem,
   isLast,
   isOver,
   onUpdate,
@@ -392,6 +399,7 @@ function TemplateSakeRow({
   onDragEndRow,
 }: {
   sake: Sake;
+  catItem?: ScCatalogItem;
   isLast: boolean;
   isOver: boolean;
   onUpdate: (patch: Partial<Sake>) => void;
@@ -446,16 +454,40 @@ function TemplateSakeRow({
         >
           <Icon name="grip" size={14} />
         </div>
-        <div className="ph-img" style={{ width: 40, height: 50, borderRadius: 3, fontSize: 9 }}>
-          {s.code}
-        </div>
+        {catItem?.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={catItem.image}
+            alt={s.name}
+            style={{ width: 40, height: 50, borderRadius: 3, objectFit: "cover" }}
+          />
+        ) : (
+          <div className="ph-img" style={{ width: 40, height: 50, borderRadius: 3, fontSize: 9 }}>
+            {s.code}
+          </div>
+        )}
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {s.name}
+            </span>
+            {catItem && <StockBadge stock={catItem.stock} />}
+          </div>
           <div className="mono" style={{ fontSize: 10.5, color: "var(--text-4)" }}>
             {s.code} · {s.size}ML
           </div>
-          <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
-            {s.type} · {s.sakagura}
+          <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
+            <span>{s.type ? `${s.type} · ` : ""}{s.sakagura}</span>
+            {catItem?.url && (
+              <a
+                href={catItem.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 2, color: "var(--indigo)", fontSize: 11 }}
+              >
+                <Icon name="external" size={10} /> prodotto
+              </a>
+            )}
           </div>
         </div>
         <div style={{ textAlign: "right", minWidth: 50 }}>
@@ -501,18 +533,20 @@ function TemplateSakeRow({
 function DayCard({
   day: d,
   canRemove,
+  catBySku,
   onRename,
   onRemoveDay,
-  onAddSake,
+  onPickSake,
   onUpdateSake,
   onRemoveSake,
   onReorderSake,
 }: {
   day: MaterialDay;
   canRemove: boolean;
+  catBySku: Map<string, ScCatalogItem>;
   onRename: (name: string) => void;
   onRemoveDay: () => void;
-  onAddSake: () => void;
+  onPickSake: (item: ScCatalogItem) => void;
   onUpdateSake: (si: number, patch: Partial<Sake>) => void;
   onRemoveSake: (si: number) => void;
   onReorderSake: (from: number, to: number) => void;
@@ -569,6 +603,7 @@ function DayCard({
           <TemplateSakeRow
             key={si}
             sake={s}
+            catItem={s.code ? catBySku.get(s.code) : undefined}
             isLast={si === d.sakes.length - 1}
             isOver={overIdx === si}
             onUpdate={(patch) => onUpdateSake(si, patch)}
@@ -595,11 +630,12 @@ function DayCard({
         )}
       </div>
 
-      <div style={{ padding: "8px 16px", borderTop: "1px solid var(--border-2)", background: "var(--surface-2)" }}>
-        <button className="btn btn-sm" style={{ width: "100%" }} onClick={onAddSake}>
-          <Icon name="plus" size={12} />
-          {dy.addSake}
-        </button>
+      <div style={{ padding: "10px 16px", borderTop: "1px solid var(--border-2)", background: "var(--surface-2)" }}>
+        <SakeProductPicker
+          onPick={onPickSake}
+          excludeSkus={d.sakes.map((s) => s.code)}
+          placeholder={dy.addSake}
+        />
       </div>
     </div>
   );
@@ -620,6 +656,21 @@ function TemplateEditor({
   const ed = tm.editor;
   const { totalSakes, sakeCost } = tmTemplateStats(t);
 
+  // Live Sake Company catalog (by SKU) → shows real photo/stock on each sake row.
+  const [catBySku, setCatBySku] = useState<Map<string, ScCatalogItem>>(new Map());
+  useEffect(() => {
+    let alive = true;
+    fetchSakeCatalog().then((c) => {
+      if (alive)
+        setCatBySku(
+          new Map(c.filter((i) => i.sku).map((i) => [i.sku as string, i])),
+        );
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const setField = (patch: Partial<MaterialTemplate>) => onChange({ ...t, ...patch });
   const setDays = (days: MaterialDay[]) => onChange({ ...t, days });
 
@@ -637,15 +688,19 @@ function TemplateEditor({
   };
   const renameDay = (idx: number, name: string) => setDays(t.days.map((d, i) => (i === idx ? { ...d, name } : d)));
 
-  const addSake = (idx: number) => {
-    const k = tmSeed(t.id + idx + t.days[idx].sakes.length);
+  // Add a sake by picking a real Sake Company product (code = its SKU, used to
+  // look up live stock/image). Price stays 0 — it comes from a future Airtable
+  // integration; qty is the base (multiplied per course enrollment elsewhere).
+  const pickSake = (idx: number, item: ScCatalogItem) => {
+    const sizeMatch = /(\d{3,4})\s?ml/i.exec(item.name);
+    if (item.sku && t.days[idx].sakes.some((s) => s.code === item.sku)) return; // no dup
     const sake: Sake = {
-      code: `SAK${(k % 900) + 100}`,
-      name: SAKE_NAME_BANK[k % SAKE_NAME_BANK.length],
-      type: SAKE_TYPE_BANK[k % SAKE_TYPE_BANK.length],
-      sakagura: SAKE_KURA_BANK[k % SAKE_KURA_BANK.length],
-      size: 720,
-      cost: 35,
+      code: item.sku ?? "",
+      name: item.productTitle,
+      type: item.variantTitle ?? "",
+      sakagura: item.vendor ?? "",
+      size: sizeMatch ? Number(sizeMatch[1]) : 0,
+      cost: 0,
       qty: 1,
       note: "",
     };
@@ -761,10 +816,11 @@ function TemplateEditor({
               <DayCard
                 key={idx}
                 day={d}
+                catBySku={catBySku}
                 canRemove={t.days.length > 1}
                 onRename={(name) => renameDay(idx, name)}
                 onRemoveDay={() => removeDay(idx)}
-                onAddSake={() => addSake(idx)}
+                onPickSake={(item) => pickSake(idx, item)}
                 onUpdateSake={(si, patch) => updateSake(idx, si, patch)}
                 onRemoveSake={(si) => removeSake(idx, si)}
                 onReorderSake={(from, to) => reorderSake(idx, from, to)}
