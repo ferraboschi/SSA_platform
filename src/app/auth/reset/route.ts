@@ -8,6 +8,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
+import { appConfig } from "@/lib/integrations/config";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,10 @@ export async function GET(req: NextRequest) {
   const tokenHash = params.get("token_hash");
   const type = params.get("type") as EmailOtpType | null;
   const code = params.get("code");
-  const origin = req.nextUrl.origin;
+  // Use the PUBLIC base URL, never req.nextUrl.origin — behind Render's proxy
+  // the request origin is the internal host (https://localhost:10000), which
+  // would redirect the user's browser to a dead localhost address.
+  const origin = appConfig.baseUrl.replace(/\/$/, "") || req.nextUrl.origin;
   // Where to land after a successful verify. Recovery/invite → set-password;
   // signup confirmation → login. Only same-origin relative paths are honored.
   const nextParam = params.get("next");
