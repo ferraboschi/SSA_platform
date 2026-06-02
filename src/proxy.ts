@@ -40,7 +40,13 @@ export async function proxy(request: NextRequest) {
 
   // Forces token refresh if the access token is near expiry. The result is
   // intentionally unused — we only care about the side-effect on cookies.
-  await supabase.auth.getUser();
+  // Must never throw: a transient Supabase error or a malformed/recovery cookie
+  // would otherwise 500 the page (e.g. the password-reset landing).
+  try {
+    await supabase.auth.getUser();
+  } catch {
+    /* ignore — auth state resolves per-route */
+  }
 
   return response;
 }
