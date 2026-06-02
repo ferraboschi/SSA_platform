@@ -1,11 +1,23 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import type { ProgrammaData, TemplateData } from "@/lib/corsi";
 import { COURSE_TYPES } from "@/lib/domain/constants";
 import type { CourseTypeKey, Sake } from "@/lib/domain";
+import {
+  StockBadge,
+  LOW_STOCK,
+  type ScCatalogItem,
+} from "@/components/sake/SakeProductPicker";
+import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
+
+/** Bottles needed per SKU: one bottle covers ~15 students. */
+export function bottlesForStudents(enrolled: number): number {
+  const n = Math.max(0, enrolled);
+  return Math.ceil(n / 15) || (n > 0 ? 1 : 0);
+}
 
 const TEMPLATE_TYPE_KEYS = (Object.keys(COURSE_TYPES) as CourseTypeKey[]).map((key) => ({
   key,
@@ -133,14 +145,81 @@ export function ProgrammaEconomiaSection({
     dragRef.current = null;
   };
 
-  const sakeCost = useMemo(
+  // Live Sake Company catalog (stock + cost), keyed by SKU. Drives the stock
+  // check and the bottle-based cost in the conto economico.
+  const [catBySku, setCatBySku] = useState<Map<string, ScCatalogItem>>(new Map());
+  useEffect(() => {
+    let alive = true;
+    fetchSakeCatalog()
+      .then((c) => {
+        if (!alive) return;
+        const m = new Map<string, ScCatalogItem>();
+        for (const it of c) if (it.sku) m.set(it.sku, it);
+        setCatBySku(m);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const enrolled = data.enrolled || 0;
+  const bottlesPerSku = bottlesForStudents(enrolled);
+
+  // Legacy line cost (stored cost × qty) — fallback before the catalog loads
+  // or when the course has no enrollees yet.
+  const legacySakeCost = useMemo(
     () => days.reduce((s, p) => s + p.sakes.reduce((ss, sk) => ss + sk.cost * sk.qty, 0), 0),
     [days],
   );
   const totalSakes = days.reduce((s, p) => s + p.sakes.length, 0);
 
+  // Real bottle cost: bottlesPerSku × live cost (fallback to stored cost) per SKU.
+  const liveBottleCost = useMemo(
+    () =>
+      days.reduce(
+        (s, p) =>
+          s +
+          p.sakes.reduce((ss, sk) => {
+            const live = (sk.code && catBySku.get(sk.code)?.cost) || sk.cost;
+            return ss + bottlesPerSku * live;
+          }, 0),
+        0,
+      ),
+    [days, catBySku, bottlesPerSku],
+  );
+
+  // Use the bottle-based cost when we actually know enrollees; else legacy.
+  const useBottles = enrolled > 0;
+  const sakeCost = useBottles ? liveBottleCost : legacySakeCost;
+
+  // Per-SKU stock check (each program SKU once; need = bottlesPerSku).
+  const stockCheck = useMemo(() => {
+    const seen = new Map<string, { sake: SakeState; need: number }>();
+    for (const d of days)
+      for (const sk of d.sakes)
+        if (sk.code && !seen.has(sk.code)) seen.set(sk.code, { sake: sk, need: bottlesPerSku });
+    const rows = [...seen.values()].map(({ sake, need }) => {
+      const item = catBySku.get(sake.code);
+      const stock = item?.stock ?? null;
+      const insufficient = stock != null && stock < need;
+      const low = stock != null && !insufficient && stock < LOW_STOCK;
+      return { sake, need, item, stock, insufficient, low };
+    });
+    return rows;
+  }, [days, catBySku, bottlesPerSku]);
+  const insufficientCount = stockCheck.filter((r) => r.insufficient).length;
+  const catalogReady = catBySku.size > 0;
+
   const autoLines: CostLine[] = [
-    { id: "sake", label: t.sakeProgram, value: sakeCost, source: format(t.sakeSource, { n: totalSakes }) },
+    {
+      id: "sake",
+      label: t.sakeProgram,
+      value: sakeCost,
+      source: useBottles
+        ? format(t.sakeBottles, { n: totalSakes, b: bottlesPerSku, s: enrolled })
+        : format(t.sakeSource, { n: totalSakes }),
+    },
   ];
 
   const [customLines, setCustomLines] = useState<CostLine[]>(() => [
@@ -398,6 +477,8 @@ export function ProgrammaEconomiaSection({
                       dayNo={sec.day}
                       isLast={i === sec.sakes.length - 1}
                       noteOpen={openNote === s.id}
+                      catItem={s.code ? catBySku.get(s.code) : undefined}
+                      need={bottlesPerSku}
                       onToggleNote={() => setOpenNote(openNote === s.id ? null : s.id)}
                       onUpdate={(p) => updateSake(sec.id, s.id, p)}
                       onRemove={() => removeSake(sec.id, s.id)}
@@ -565,6 +646,93 @@ export function ProgrammaEconomiaSection({
               </div>
             </div>
           </div>
+
+          {/* Sake Company live stock check */}
+          <div className="card" style={{ marginTop: 12, overflow: "hidden" }}>
+            <div
+              style={{
+                padding: "11px 16px",
+                borderBottom: "1px solid var(--border)",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background:
+                  insufficientCount > 0 ? "var(--danger-bg)" : "var(--surface-2)",
+              }}
+            >
+              <Icon
+                name={insufficientCount > 0 ? "warn" : "tag"}
+                size={13}
+                style={{
+                  color:
+                    insufficientCount > 0 ? "var(--danger-fg)" : "var(--text-3)",
+                }}
+              />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 12.5 }}>{t.stockTitle}</div>
+                <div style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 1 }}>
+                  {format(t.stockSub, { b: bottlesPerSku, s: enrolled })}
+                </div>
+              </div>
+              {insufficientCount > 0 && (
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: "var(--danger-fg)",
+                    background: "var(--surface)",
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    flexShrink: 0,
+                  }}
+                >
+                  {format(t.stockInsufficient, { n: insufficientCount })}
+                </span>
+              )}
+            </div>
+
+            {!catalogReady && (
+              <div style={{ padding: "12px 16px", fontSize: 11.5, color: "var(--text-4)", fontStyle: "italic" }}>
+                {t.stockNoCatalog}
+              </div>
+            )}
+            {catalogReady && stockCheck.length === 0 && (
+              <div style={{ padding: "12px 16px", fontSize: 11.5, color: "var(--text-4)", fontStyle: "italic" }}>
+                {t.stockAllOk}
+              </div>
+            )}
+            {catalogReady &&
+              stockCheck.map((r) => (
+                <div
+                  key={r.sake.code}
+                  style={{
+                    padding: "9px 16px",
+                    borderTop: "1px solid var(--border-2)",
+                    borderLeft: `3px solid ${
+                      r.insufficient ? "var(--danger)" : r.low ? "var(--warning)" : "transparent"
+                    }`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {r.item?.name ?? r.sake.name}
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, color: "var(--text-4)" }}>
+                      {r.sake.code} · {t.stockNeed} {r.need} {t.stockBottles}
+                      {r.insufficient && (
+                        <span style={{ color: "var(--danger-fg)", fontWeight: 600 }}>
+                          {" "}· {t.stockSubstitute}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <StockBadge stock={r.stock} />
+                </div>
+              ))}
+          </div>
         </div>
       </div>
 
@@ -586,6 +754,8 @@ function SakeRow({
   dayNo,
   isLast,
   noteOpen,
+  catItem,
+  need,
   onToggleNote,
   onUpdate,
   onRemove,
@@ -597,6 +767,8 @@ function SakeRow({
   dayNo: number;
   isLast: boolean;
   noteOpen: boolean;
+  catItem?: ScCatalogItem;
+  need?: number;
   onToggleNote: () => void;
   onUpdate: (patch: Partial<SakeState>) => void;
   onRemove: () => void;
@@ -609,6 +781,8 @@ function SakeRow({
   const [dragging, setDragging] = useState(false);
   const schedaUrl = `https://www.sakecompany.com/sake/${s.code.toLowerCase()}`;
   const hasNote = !!s.note && s.note.trim().length > 0;
+  const liveCost = catItem?.cost ?? s.cost;
+  const stock = catItem?.stock ?? null;
 
   return (
     <div
@@ -680,6 +854,22 @@ function SakeRow({
               <Icon name="external" size={9} />
               {t.sakeCompany}
             </a>
+            {catItem && <StockBadge stock={stock} />}
+            {catItem && need != null && stock != null && stock < need && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "var(--danger-fg)",
+                  background: "var(--danger-bg)",
+                  padding: "1px 6px",
+                  borderRadius: 999,
+                }}
+                title={t.stockSubstitute}
+              >
+                {t.stockKo}
+              </span>
+            )}
           </div>
           <div className="mono" style={{ fontSize: 10.5, color: "var(--text-4)" }}>
             {s.code} · {s.size}ML{dayNo ? ` · ${format(t.dayN, { n: dayNo })}` : ""}
@@ -691,9 +881,11 @@ function SakeRow({
 
         <div style={{ textAlign: "right", minWidth: 56 }}>
           <div className="num" style={{ fontSize: 13, fontWeight: 600 }}>
-            {s.cost}€
+            {liveCost}€
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 2 }}>×{s.qty}</div>
+          <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 2 }}>
+            ×{need != null && need > 0 ? need : s.qty}
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 2 }}>
