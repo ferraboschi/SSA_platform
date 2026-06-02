@@ -1,8 +1,10 @@
 import { getDataSource } from "@/lib/data";
+import { requireNavAccess } from "@/lib/auth/guard";
 import { COURSE_TYPES, type CourseTypeKey } from "@/lib/domain";
 import { EducatorList, type EducatorListItem } from "@/components/educator/EducatorList";
 
 export default async function Page() {
+  await requireNavAccess("educator");
   const ds = await getDataSource();
   const [educators, courses] = await Promise.all([
     ds.educators.list(),

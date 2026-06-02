@@ -725,15 +725,16 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         authUser = null;
       }
       if (!authUser) {
-        // No session yet — return a synthetic placeholder so SSR pages don't
-        // crash while we wire up auth (Task #18).
+        // No session — return a ZERO-CAPABILITY placeholder so SSR pages don't
+        // crash, but every role check denies it. (Pages are already redirected
+        // to /login by the (app) layout; server actions self-authorize on this.)
         return {
           id: "anonymous",
           first: "",
           last: "",
           name: "—",
-          role: "Manager",
-          roleKey: "manager",
+          role: "Ospite",
+          roleKey: "guest",
           email: "",
           phone: "",
           city: "",

@@ -63,6 +63,41 @@ export async function sendStockAlertEmail(
   });
 }
 
+export interface ReminderCourse {
+  id: string;
+  title: string;
+  city: string;
+  month: string;
+  year: number;
+  daysToStart: number;
+}
+
+/** Time-based logistics reminder (ship books / ship exam sakes) → operations. */
+export async function sendCourseReminderEmail(
+  kind: "books" | "exam-sakes",
+  course: ReminderCourse,
+): Promise<EmailSendResult> {
+  const what = kind === "books" ? "i libri del corso" : "i sake per l'esame";
+  const title = kind === "books" ? "📦 Spedire i libri" : "🍶 Spedire i sake d'esame";
+  const html = shell(
+    title,
+    `<p style="font-size:14px;line-height:1.5">Il corso inizia tra <strong>${course.daysToStart} giorni</strong>: è il momento di preparare e spedire <strong>${what}</strong>.</p>
+     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px">
+       <tr><td style="padding:5px 0;color:#6b7280">Corso</td><td style="padding:5px 0;text-align:right;font-weight:600">${course.title}</td></tr>
+       <tr><td style="padding:5px 0;color:#6b7280">Luogo / data</td><td style="padding:5px 0;text-align:right">${course.city} · ${course.month} ${course.year}</td></tr>
+     </table>`,
+    { href: loginLink(`/corsi/${course.id}`), label: "Apri il corso" },
+  );
+  return getEmailService().send({
+    // TESTING: route reminders to the admin until verified, then switch to
+    // operations (alertRecipients.stock = Camilla).
+    to: "lorenzo@ef-ti.com",
+    subject: `${title} — ${course.title} (tra ${course.daysToStart} gg)`,
+    html,
+    tag: `reminder-${kind}`,
+  });
+}
+
 export interface InvoiceCourse {
   id: string;
   title: string;

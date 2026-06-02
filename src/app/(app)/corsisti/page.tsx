@@ -1,7 +1,9 @@
 import { getDataSource } from "@/lib/data";
+import { requireNavAccess } from "@/lib/auth/guard";
 import { CorsistiList } from "@/components/corsisti/CorsistiList";
 
 export default async function Page() {
+  await requireNavAccess("corsisti");
   const ds = await getDataSource();
   const corsisti = await ds.corsisti.list();
 

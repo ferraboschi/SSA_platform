@@ -44,6 +44,8 @@ export const ROLE_CAPABILITIES: Record<RoleKey, Capability[]> = {
   ],
   social: ["courses:view", "communications:manage"],
   accountant: ["courses:view", "finance:view"],
+  // guest = unauthenticated placeholder → no capabilities at all.
+  guest: [],
 };
 
 export function roleCan(role: RoleKey, cap: Capability): boolean {
@@ -104,6 +106,26 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "design-system",
     ],
     priority: ["dashboard", "conto-economico", "corsi", "archivio"],
+  },
+  // guest sees nothing (unauthenticated placeholder).
+  guest: {
+    hidden: [
+      "dashboard",
+      "corsi",
+      "pianificatore",
+      "analisi",
+      "conto-economico",
+      "esami",
+      "esami-editor",
+      "template-materiali",
+      "archivio",
+      "corsisti",
+      "anomalie",
+      "educator",
+      "account",
+      "design-system",
+    ],
+    priority: [],
   },
 };
 

@@ -1,4 +1,5 @@
 import { getTranslations } from "@/lib/i18n/server";
+import { requireNavAccess } from "@/lib/auth/guard";
 import { supabaseConfig } from "@/lib/integrations/config";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { getReviewedEmailClusters } from "@/lib/data/anomalie-actions";
@@ -37,6 +38,7 @@ function normName(s: string | null): string {
 }
 
 export default async function Page() {
+  await requireNavAccess("anomalie");
   const { t } = await getTranslations();
 
   if (!supabaseConfig.isConfigured) {

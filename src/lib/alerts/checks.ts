@@ -8,7 +8,12 @@
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
-import { sendInvoiceNoticeEmail, sendStockAlertEmail, type StockAlertRow } from "./emails";
+import {
+  sendInvoiceNoticeEmail,
+  sendStockAlertEmail,
+  sendCourseReminderEmail,
+  type StockAlertRow,
+} from "./emails";
 import type { StockAlert } from "@/lib/domain";
 
 interface CourseRow {
@@ -18,11 +23,20 @@ interface CourseRow {
   city: string | null;
   month: string | null;
   year: number | null;
+  type: string | null;
   start_date: string | null;
   end_date: string | null;
   lifecycle: string | null;
   notebook: Record<string, unknown> | null;
 }
+
+const DAY_MS = 86_400_000;
+
+// Time-based logistics reminders fired N days before a course starts.
+const REMINDER_RULES: { key: string; offsetDays: number; examOnly: boolean }[] = [
+  { key: "books", offsetDays: 14, examOnly: false },
+  { key: "exam-sakes", offsetDays: 7, examOnly: true },
+];
 
 async function kvGet<T>(svc: ReturnType<typeof getSupabaseServiceClient>, key: string): Promise<T | null> {
   const { data } = await svc.from("settings_kv").select("value").eq("key", key).maybeSingle();
@@ -36,18 +50,19 @@ export interface AlertCheckResult {
   invoiceSent: number;
   invoiceSeeded: number;
   stockSent: number;
+  reminderSent: number;
 }
 
 export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
   const svc = getSupabaseServiceClient();
   const now = new Date(nowMs);
-  const out: AlertCheckResult = { invoiceSent: 0, invoiceSeeded: 0, stockSent: 0 };
+  const out: AlertCheckResult = { invoiceSent: 0, invoiceSeeded: 0, stockSent: 0, reminderSent: 0 };
 
   // ── Invoice notices → Luigi ──────────────────────────────────────────────
   try {
     const { data } = await svc
       .from("corsi")
-      .select("id, short_title, full_title, city, month, year, start_date, end_date, lifecycle, notebook")
+      .select("id, short_title, full_title, city, month, year, type, start_date, end_date, lifecycle, notebook")
       .not("start_date", "is", null);
     const courses = (data ?? []) as CourseRow[];
     const ended = courses.filter((c) => {
@@ -131,6 +146,51 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
     }
   } catch {
     /* catalog/settings unavailable — skip stock checks */
+  }
+
+  // ── Time-based logistics reminders → operations (Camilla) ────────────────
+  // Fire once per (course, rule) when the course is within the rule's window
+  // before its start (e.g. ship books 14 days out, exam sakes 7 days out).
+  try {
+    const { data } = await svc
+      .from("corsi")
+      .select("id, short_title, full_title, city, month, year, type, start_date, lifecycle, notebook")
+      .not("start_date", "is", null);
+    const courses = (data ?? []) as CourseRow[];
+    const sent = (await kvGet<Record<string, string>>(svc, "course_reminders_sent")) ?? {};
+    const day = now.toISOString().slice(0, 10);
+    for (const c of courses) {
+      if (!c.start_date) continue;
+      if (c.notebook && (c.notebook as { cancelled?: boolean }).cancelled) continue;
+      if (c.lifecycle === "bozza") continue;
+      const daysToStart = Math.ceil((new Date(c.start_date).getTime() - now.getTime()) / DAY_MS);
+      if (daysToStart < 0) continue; // already started/past
+      const isExam = c.type === "certificato" || c.type === "shochu";
+      for (const rule of REMINDER_RULES) {
+        if (rule.examOnly && !isExam) continue;
+        // Due when inside the window [0, offset]; fire once, then dedupe forever.
+        if (daysToStart > rule.offsetDays) continue;
+        const key = `${c.id}:${rule.key}`;
+        if (sent[key]) continue;
+        try {
+          await sendCourseReminderEmail(rule.key as "books" | "exam-sakes", {
+            id: String(c.id),
+            title: c.short_title ?? c.full_title ?? `Corso ${c.id}`,
+            city: c.city ?? "—",
+            month: c.month ?? "",
+            year: c.year ?? 0,
+            daysToStart,
+          });
+          sent[key] = day;
+          out.reminderSent++;
+        } catch {
+          /* email failure: retry next tick (key not marked) */
+        }
+      }
+    }
+    await kvSet(svc, "course_reminders_sent", sent);
+  } catch {
+    /* corsi/settings unavailable — skip reminders */
   }
 
   return out;

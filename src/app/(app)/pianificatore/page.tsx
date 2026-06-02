@@ -1,4 +1,5 @@
 import { getDataSource } from "@/lib/data";
+import { requireNavAccess } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import {
   buildWindow,
@@ -18,6 +19,7 @@ export interface PrevYearItem {
 }
 
 export default async function Page() {
+  await requireNavAccess("pianificatore");
   const ds = await getDataSource();
   const [courses, educators, corsisti, users, session] = await Promise.all([
     ds.courses.list(),

@@ -2,6 +2,7 @@
 
 import { getDataSource } from "@/lib/data";
 import { getSession } from "@/lib/auth/session";
+import { hasRole } from "@/lib/auth/guard";
 import { sendStockAlertEmail } from "@/lib/alerts/emails";
 import type { StockAlert } from "@/lib/domain";
 
@@ -9,6 +10,9 @@ import type { StockAlert } from "@/lib/domain";
 export async function saveStockAlertsAction(
   alerts: StockAlert[],
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!(await hasRole(["admin", "manager"]))) {
+    return { ok: false, error: "Non autorizzato." };
+  }
   try {
     const ds = await getDataSource();
     await ds.settings.setStockAlerts(alerts);

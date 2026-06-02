@@ -179,4 +179,5 @@ export const ROLE_META: Record<RoleKey, RoleMeta> = {
   manager: { key: "manager", label: "Manager SSA" },
   social: { key: "social", label: "Social & Campagne" },
   accountant: { key: "accountant", label: "Contabilità" },
+  guest: { key: "guest", label: "Ospite" },
 };

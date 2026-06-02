@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { assertRole } from "@/lib/auth/guard";
 
 /** Mark an anomaly as reviewed/OK by clearing the corsista's review_note. */
 export async function resolveAnomalyAction(corsistaId: number): Promise<void> {
+  await assertRole(["admin", "manager"]);
   const svc = getSupabaseServiceClient();
   const { error } = await svc
     .from("corsisti")
@@ -18,6 +20,7 @@ const EMAIL_CLUSTER_KEY = "reviewed_email_clusters";
 
 /** Dismiss a multi-email cluster (computed live) so it no longer shows. */
 export async function dismissEmailClusterAction(nameKey: string): Promise<void> {
+  await assertRole(["admin", "manager"]);
   const svc = getSupabaseServiceClient();
   const { data } = await svc
     .from("settings_kv")
