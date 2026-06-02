@@ -83,6 +83,7 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
     hidden: [
       "esami",
       "pianificatore",
+      "analisi",
       "template-materiali",
       "anomalie",
       "educator",

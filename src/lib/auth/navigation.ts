@@ -30,6 +30,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "dashboard", icon: "home", href: "/dashboard", group: "main" },
   { id: "corsi", icon: "book", href: "/corsi", group: "catalogo" },
   { id: "pianificatore", icon: "calendar", href: "/pianificatore", group: "catalogo" },
+  { id: "analisi", icon: "trending", href: "/analisi", group: "catalogo" },
   {
     id: "esami",
     icon: "exam",
