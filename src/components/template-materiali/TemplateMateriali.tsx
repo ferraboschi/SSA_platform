@@ -12,6 +12,8 @@ import {
 } from "@/components/sake/SakeProductPicker";
 import {
   COURSE_TYPES,
+  COST_RATES,
+  defaultMaterialCosts,
   type CourseTypeKey,
   type MaterialDay,
   type MaterialExtra,
@@ -262,6 +264,24 @@ function SummaryLine({ label, value, last }: { label: string; value: string; las
   );
 }
 
+function CostGroupLabel({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "var(--ls-caps)",
+        textTransform: "uppercase",
+        color: "var(--text-4)",
+        marginTop: 14,
+        marginBottom: 2,
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
 function MaterialeRow({
   icon,
   label,
@@ -269,6 +289,7 @@ function MaterialeRow({
   value,
   onChange,
   last,
+  suffix,
 }: {
   icon: IconName;
   label: string;
@@ -276,6 +297,7 @@ function MaterialeRow({
   value: number;
   onChange: (v: number) => void;
   last?: boolean;
+  suffix?: string;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: last ? "none" : "1px solid var(--border-2)" }}>
@@ -286,15 +308,18 @@ function MaterialeRow({
         <div style={{ fontSize: 13, fontWeight: 500 }}>{label}</div>
         <div style={{ fontSize: 10.5, color: "var(--text-4)" }}>{hint}</div>
       </div>
-      <div style={{ position: "relative", width: 96 }}>
-        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-4)", fontSize: 12, pointerEvents: "none" }}>€</span>
-        <input
-          type="number"
-          className="input"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value) || 0)}
-          style={{ paddingLeft: 20, height: 30, fontSize: 13, fontFamily: "var(--font-mono)", textAlign: "right", fontWeight: 600 }}
-        />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+        <div style={{ position: "relative", width: 96 }}>
+          <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-4)", fontSize: 12, pointerEvents: "none" }}>€</span>
+          <input
+            type="number"
+            className="input"
+            value={value}
+            onChange={(e) => onChange(Number(e.target.value) || 0)}
+            style={{ paddingLeft: 20, height: 30, fontSize: 13, fontFamily: "var(--font-mono)", textAlign: "right", fontWeight: 600 }}
+          />
+        </div>
+        {suffix && <span style={{ fontSize: 9.5, color: "var(--text-4)" }}>{suffix}</span>}
       </div>
     </div>
   );
@@ -677,6 +702,21 @@ function TemplateEditor({
   const setField = (patch: Partial<MaterialTemplate>) => onChange({ ...t, ...patch });
   const setDays = (days: MaterialDay[]) => onChange({ ...t, days });
 
+  // Changing the course type re-applies the type-based diploma/libro rates
+  // (115/9 certificato · 60/8 introduttivo), keeping everything else.
+  const setType = (type: CourseTypeKey) => {
+    const def = defaultMaterialCosts(type);
+    onChange({
+      ...t,
+      type,
+      materiali: {
+        ...t.materiali,
+        diplomaPerStudent: def.diplomaPerStudent,
+        libroPerStudent: def.libroPerStudent,
+      },
+    });
+  };
+
   const addDay = () => {
     const n = t.days.length + 1;
     setDays([...t.days, { day: n, name: format(tm.newDayName, { n }), sakes: [] }]);
@@ -730,6 +770,21 @@ function TemplateEditor({
   const materialiPerStudent =
     (t.materiali.diplomaPerStudent || 0) + (t.materiali.libroPerStudent || 0) + extraPerStudent;
 
+  // "Da imputare" per-course categories (location, food, cocktail, …).
+  const m = t.materiali;
+  const perCourseFixed =
+    (m.location || 0) + (m.foodPairing || 0) + (m.cocktailFee || 0) +
+    (m.accommodation || 0) + (m.transport || 0) + (m.adv || 0);
+  const perCourseTotal = perCourseFixed + extraPerCourse;
+  const PER_COURSE_FIELDS: { key: keyof MaterialTemplate["materiali"]; label: string }[] = [
+    { key: "location", label: ed.matLocation },
+    { key: "foodPairing", label: ed.matFood },
+    { key: "cocktailFee", label: ed.matCocktail },
+    { key: "accommodation", label: ed.matAccommodation },
+    { key: "transport", label: ed.matTransport },
+    { key: "adv", label: ed.matAdv },
+  ];
+
   const reorderSake = (idx: number, from: number, to: number) =>
     setDays(
       t.days.map((d, i) => {
@@ -743,6 +798,8 @@ function TemplateEditor({
     );
 
   const educatorTotal = t.materiali.educatorPerDay * t.days.length;
+  const gestioneTotal = (t.materiali.gestionePerDay || 0) * t.days.length;
+  const perDayTotal = educatorTotal + gestioneTotal;
 
   // Cost automatisms driven by the simulated enrollee count.
   const N = Math.max(0, simStudents);
@@ -757,8 +814,8 @@ function TemplateEditor({
       }, 0),
     0,
   );
-  const materialiCourse = materialiPerStudent * N + extraPerCourse;
-  const courseTotal = educatorTotal + materialiCourse + bottleCost;
+  const materialiCourse = materialiPerStudent * N + perCourseTotal;
+  const courseTotal = perDayTotal + materialiCourse + bottleCost;
 
   return (
     <>
@@ -791,7 +848,7 @@ function TemplateEditor({
           <div style={{ width: 200 }}>
             <div className="field" style={{ marginBottom: 12 }}>
               <div className="field-label">{ed.courseType}</div>
-              <select className="select" value={t.type} onChange={(e) => setField({ type: e.target.value as CourseTypeKey })}>
+              <select className="select" value={t.type} onChange={(e) => setType(e.target.value as CourseTypeKey)}>
                 {(Object.keys(COURSE_TYPES) as CourseTypeKey[]).map((k) => (
                   <option key={k} value={k}>
                     {COURSE_TYPES[k].label}
@@ -854,6 +911,9 @@ function TemplateEditor({
           </div>
           <div className="card card-pad">
             <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 14, lineHeight: 1.5 }}>{ed.materialiIntro}</div>
+
+            {/* Group 1 — per giornata (× giorni) */}
+            <CostGroupLabel text={format(ed.groupPerDay, { n: t.days.length, unit: dayUnit(t.days.length, tm) })} />
             <MaterialeRow
               icon="graduation"
               label={ed.matEducator}
@@ -863,23 +923,73 @@ function TemplateEditor({
                 total: educatorTotal.toLocaleString("it-IT"),
               })}
               value={t.materiali.educatorPerDay}
+              suffix={ed.perDaySuffix}
               onChange={(v) => setMateriali({ educatorPerDay: v })}
             />
             <MaterialeRow
+              icon="settings"
+              label={ed.matGestione}
+              hint={format(ed.matGestioneHint, {
+                days: t.days.length,
+                unit: dayUnit(t.days.length, tm),
+                total: gestioneTotal.toLocaleString("it-IT"),
+              })}
+              value={t.materiali.gestionePerDay}
+              suffix={ed.perDaySuffix}
+              last
+              onChange={(v) => setMateriali({ gestionePerDay: v })}
+            />
+
+            {/* Group 2 — per corsista (× iscritti), default by type */}
+            <CostGroupLabel text={ed.groupPerStudent} />
+            <MaterialeRow
               icon="tag"
               label={ed.matDiplomi}
-              hint={ed.perStudentHint}
+              hint={format(ed.diplomaHint, {
+                cert: COST_RATES.diploma.certificato,
+                intro: COST_RATES.diploma.introduttivo,
+              })}
               value={t.materiali.diplomaPerStudent}
+              suffix={ed.perStudentSuffix}
               onChange={(v) => setMateriali({ diplomaPerStudent: v })}
             />
             <MaterialeRow
               icon="book"
               label={ed.matLibri}
-              hint={ed.perStudentHint}
+              hint={format(ed.libroHint, {
+                cert: COST_RATES.libro.certificato,
+                intro: COST_RATES.libro.introduttivo,
+              })}
               value={t.materiali.libroPerStudent}
-              last={extra.length === 0}
+              suffix={ed.perStudentSuffix}
+              last
               onChange={(v) => setMateriali({ libroPerStudent: v })}
             />
+
+            {/* Group 3 — sake (automatico) */}
+            <CostGroupLabel text={ed.groupSake} />
+            <div style={{ fontSize: 11.5, color: "var(--text-3)", padding: "4px 2px 10px", lineHeight: 1.5 }}>
+              <Icon name="info" size={11} style={{ marginRight: 5, verticalAlign: "-1px" }} />
+              {ed.sakeAutoNote}
+            </div>
+
+            {/* Group 4 — da imputare per corso (default 0) */}
+            <CostGroupLabel text={ed.groupPerCourse} />
+            {PER_COURSE_FIELDS.map((f, i) => (
+              <MaterialeRow
+                key={f.key}
+                icon="tag"
+                label={f.label}
+                hint={ed.daImputareHint}
+                value={(t.materiali[f.key] as number) || 0}
+                suffix={ed.perCourseSuffix}
+                last={i === PER_COURSE_FIELDS.length - 1}
+                onChange={(v) => setMateriali({ [f.key]: v })}
+              />
+            ))}
+
+            {/* Voci extra libere (legacy / ad-hoc) */}
+            {extra.length > 0 && <CostGroupLabel text={ed.groupExtra} />}
             {extra.map((c, i) => (
               <ExtraCostRow
                 key={c.id}
@@ -903,13 +1013,14 @@ function TemplateEditor({
             <SummaryLine label={ed.sumSakeTot} value={`${totalSakes}`} />
             <SummaryLine label={ed.sumCostoSake} value={`${sakeCost.toLocaleString("it-IT")} €`} />
             <SummaryLine label={ed.sumEducator} value={`${educatorTotal.toLocaleString("it-IT")} €`} />
+            <SummaryLine label={ed.sumGestione} value={`${gestioneTotal.toLocaleString("it-IT")} €`} />
             <SummaryLine
               label={ed.sumMatPerStudent}
               value={`${materialiPerStudent.toLocaleString("it-IT")} €`}
-              last={extraPerCourse === 0}
+              last={perCourseTotal === 0}
             />
-            {extraPerCourse > 0 && (
-              <SummaryLine label={ed.sumOtherPerCourse} value={`${extraPerCourse.toLocaleString("it-IT")} €`} last />
+            {perCourseTotal > 0 && (
+              <SummaryLine label={ed.sumPerCourse} value={`${perCourseTotal.toLocaleString("it-IT")} €`} last />
             )}
           </div>
 
@@ -936,6 +1047,10 @@ function TemplateEditor({
               value={`${(materialiPerStudent * N).toLocaleString("it-IT")} €`}
             />
             <SummaryLine label={ed.sumEducator} value={`${educatorTotal.toLocaleString("it-IT")} €`} />
+            <SummaryLine label={ed.sumGestione} value={`${gestioneTotal.toLocaleString("it-IT")} €`} />
+            {perCourseTotal > 0 && (
+              <SummaryLine label={ed.sumPerCourse} value={`${perCourseTotal.toLocaleString("it-IT")} €`} />
+            )}
             <SummaryLine
               label={format(ed.simBottiglie, { per: bottlesPerSku })}
               value={`${totalBottles} (${bottleCost.toLocaleString("it-IT")} €)`}
@@ -987,7 +1102,7 @@ export function TemplateMateriali({
       name: tm.newTemplateName,
       type: "certificato",
       days: [{ day: 1, name: format(tm.newDayName, { n: 1 }), sakes: [] }],
-      materiali: { educatorPerDay: 200, diplomaPerStudent: 0, libroPerStudent: 0, extra: [] },
+      materiali: defaultMaterialCosts("certificato"),
       description: "",
       lastUsed: "—",
       uses: 0,

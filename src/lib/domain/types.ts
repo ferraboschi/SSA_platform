@@ -365,11 +365,33 @@ export interface MaterialDay {
 }
 
 export interface MaterialCosts {
-  educatorPerDay: number;
-  diplomaPerStudent: number;
-  libroPerStudent: number;
+  // Per giornata (× numero giorni)
+  educatorPerDay: number; // default 200 €/giorno
+  gestionePerDay: number; // gestione SSA, default 300 €/giorno
+  // Per corsista (× iscritti) — default per tipo corso
+  diplomaPerStudent: number; // 115 € certificato · 60 € introduttivo
+  libroPerStudent: number; // 9 € certificato · 8 € introduttivo
+  // Da imputare per corso (default 0, "da imputare")
+  location: number;
+  foodPairing: number;
+  cocktailFee: number;
+  accommodation: number;
+  transport: number;
+  adv: number;
+  // Voci extra libere (legacy / ad-hoc)
   extra?: MaterialExtra[];
 }
+
+/** Per-course cost categories the operator fills in later ("da imputare"). */
+export const PER_COURSE_COST_KEYS = [
+  "location",
+  "foodPairing",
+  "cocktailFee",
+  "accommodation",
+  "transport",
+  "adv",
+] as const;
+export type PerCourseCostKey = (typeof PER_COURSE_COST_KEYS)[number];
 
 export interface MaterialExtra {
   id: string;

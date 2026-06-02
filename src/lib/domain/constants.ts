@@ -8,6 +8,7 @@ import type {
   RoleKey,
   StatusTone,
 } from "./enums";
+import type { MaterialCosts } from "./types";
 
 export interface CourseTypeMeta {
   label: string;
@@ -86,6 +87,38 @@ export const DEFAULT_THRESHOLDS: DashThresholds = {
   bookMin: 30,
   sakeExamPct: 70,
 };
+
+// Fixed cost rates (euros). Educator + gestione are per day; diplomi + libri are
+// per student and depend on the course type. Everything else is "da imputare".
+export const COST_RATES = {
+  educatorPerDay: 200,
+  gestionePerDay: 300,
+  diploma: { certificato: 115, introduttivo: 60, default: 115 },
+  libro: { certificato: 9, introduttivo: 8, default: 9 },
+} as const;
+
+/** Sensible default material costs for a template of the given course type. */
+export function defaultMaterialCosts(type: CourseTypeKey): MaterialCosts {
+  const diploma =
+    COST_RATES.diploma[type as "certificato" | "introduttivo"] ??
+    COST_RATES.diploma.default;
+  const libro =
+    COST_RATES.libro[type as "certificato" | "introduttivo"] ??
+    COST_RATES.libro.default;
+  return {
+    educatorPerDay: COST_RATES.educatorPerDay,
+    gestionePerDay: COST_RATES.gestionePerDay,
+    diplomaPerStudent: diploma,
+    libroPerStudent: libro,
+    location: 0,
+    foodPairing: 0,
+    cocktailFee: 0,
+    accommodation: 0,
+    transport: 0,
+    adv: 0,
+    extra: [],
+  };
+}
 
 // Operator-defined low-stock watch: link one or more Sake Company SKUs and get a
 // dashboard alert when live stock drops below `min`. Persisted in settings_kv.

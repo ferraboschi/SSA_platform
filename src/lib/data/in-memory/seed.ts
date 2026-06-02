@@ -5,6 +5,7 @@
 import {
   CITIES,
   COURSE_TYPES,
+  defaultMaterialCosts,
   STATUS_META,
   NIHONSHU_CATS,
   SHOCHU_CATS,
@@ -723,11 +724,12 @@ function buildMaterialTemplates(): MaterialTemplate[] {
     dayCount: number,
     perDay: number,
     description: string,
-    materiali: MaterialCosts,
+    materialiPartial: Partial<MaterialCosts>,
     lastUsed: string,
     uses: number,
     createdBy: string
   ): MaterialTemplate => {
+    const materiali: MaterialCosts = { ...defaultMaterialCosts(type), ...materialiPartial };
     const days: MaterialDay[] = [];
     for (let d = 1; d <= dayCount; d++) {
       const sakes: Sake[] = [];

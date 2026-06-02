@@ -23,6 +23,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   COURSE_TYPES,
   DEFAULT_THRESHOLDS,
+  defaultMaterialCosts,
   EXAM_THRESHOLDS,
   NIHONSHU_CATS,
   SHOCHU_CATS,
@@ -44,6 +45,7 @@ import type {
   ExamQuestionType,
   ExamTemplate,
   Language,
+  MaterialCosts,
   MaterialTemplate,
   Notebook,
   Notification,
@@ -533,11 +535,8 @@ interface MaterialTemplateWithChildren extends MaterialTemplateRow {
 function materialTemplateRowToDomain(
   row: MaterialTemplateWithChildren,
 ): MaterialTemplate {
-  const costs = (row.costs ?? {}) as Partial<{
-    educatorPerDay: number;
-    diplomaPerStudent: number;
-    libroPerStudent: number;
-  }>;
+  const costs = (row.costs ?? {}) as Partial<MaterialCosts>;
+  const def = defaultMaterialCosts(row.type);
   return {
     id: row.external_id ?? `db-${row.id}`,
     name: row.name,
@@ -562,9 +561,16 @@ function materialTemplateRowToDomain(
           })),
       })),
     materiali: {
-      educatorPerDay: costs.educatorPerDay ?? 0,
-      diplomaPerStudent: costs.diplomaPerStudent ?? 0,
-      libroPerStudent: costs.libroPerStudent ?? 0,
+      educatorPerDay: costs.educatorPerDay ?? def.educatorPerDay,
+      gestionePerDay: costs.gestionePerDay ?? def.gestionePerDay,
+      diplomaPerStudent: costs.diplomaPerStudent ?? def.diplomaPerStudent,
+      libroPerStudent: costs.libroPerStudent ?? def.libroPerStudent,
+      location: costs.location ?? 0,
+      foodPairing: costs.foodPairing ?? 0,
+      cocktailFee: costs.cocktailFee ?? 0,
+      accommodation: costs.accommodation ?? 0,
+      transport: costs.transport ?? 0,
+      adv: costs.adv ?? 0,
       extra: (row.extras ?? []).map((x) => ({
         id: `ex-${x.id}`,
         label: x.label,
@@ -886,8 +892,15 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         description: template.description,
         costs: {
           educatorPerDay: template.materiali.educatorPerDay,
+          gestionePerDay: template.materiali.gestionePerDay,
           diplomaPerStudent: template.materiali.diplomaPerStudent,
           libroPerStudent: template.materiali.libroPerStudent,
+          location: template.materiali.location,
+          foodPairing: template.materiali.foodPairing,
+          cocktailFee: template.materiali.cocktailFee,
+          accommodation: template.materiali.accommodation,
+          transport: template.materiali.transport,
+          adv: template.materiali.adv,
         },
         uses: template.uses,
         last_used_at: template.lastUsed || null,
