@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { appConfig } from "@/lib/integrations/config";
+import { safeNext } from "./safe-next";
 
 export interface AuthActionResult {
   ok: boolean;
@@ -23,7 +24,7 @@ export async function signInAction(
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/", "layout");
-  redirect(next);
+  redirect(safeNext(next));
 }
 
 export async function signUpAction(

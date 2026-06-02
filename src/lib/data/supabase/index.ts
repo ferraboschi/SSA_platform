@@ -856,11 +856,19 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       if (error) throw error;
       if (!c) return null;
       const row = c as CorsistaRow;
-      const { data: iscr, error: e2 } = await sb
+      let res = await sb
         .from("corsi_iscrizioni")
         .select(enrollmentSelect)
         .eq("corsista_id", row.id);
-      if (e2) throw e2;
+      if (res.error) {
+        // pre-migration: retry without exam_score_pct
+        res = (await sb
+          .from("corsi_iscrizioni")
+          .select(enrollmentSelectBase)
+          .eq("corsista_id", row.id)) as typeof res;
+      }
+      if (res.error) throw res.error;
+      const iscr = res.data;
       const enrolls = ((iscr ?? []) as IscrizioneRow[])
         .map(iscrizioneToEnrollment)
         .filter((x): x is CorsistaEnrollment => x !== null);

@@ -14,7 +14,15 @@ export default async function Page({
   const rv = t.esami.reportView;
 
   const results = course?.examResults2 ?? [];
-  const result = results.find((r) => r.email === decodeURIComponent(email)) ?? results[0];
+  // Decode defensively (malformed % shouldn't 500) and match EXACTLY — no
+  // results[0] fallback, which would show another student's certificate + PII.
+  let decoded = email;
+  try {
+    decoded = decodeURIComponent(email);
+  } catch {
+    /* keep raw segment */
+  }
+  const result = results.find((r) => r.email === decoded);
 
   if (!course || !course.exam || !result) {
     return (

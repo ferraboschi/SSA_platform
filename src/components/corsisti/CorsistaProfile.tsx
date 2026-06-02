@@ -175,7 +175,7 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
           </div>
         </div>
         <div className="rgrid-4" style={{ borderTop: "1px solid var(--border)" }}>
-          <ProfStat label={t.statCorsi} value={s.courses.length} sub={format(t.statCorsiSub, { first: firstYear, last: lastYear })} />
+          <ProfStat label={t.statCorsi} value={s.courses.length} sub={s.courses.length ? format(t.statCorsiSub, { first: firstYear, last: lastYear }) : "—"} />
           <ProfStat label={t.statEsami} value={examCount} sub={certificate ? t.statEsamiPassed : "—"} />
           <ProfStat label={t.statSpeso} value={s.totalSpent} unit="€" />
           <ProfStat label={t.statStatus} value={status} last />
@@ -187,9 +187,11 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
           {t.journeyTitle}
         </h2>
         <p className="text-3" style={{ fontSize: 13, marginTop: 4, marginBottom: 18 }}>
-          {s.courses.length === 1
-            ? t.journeyOne
-            : format(t.journeyMany, { n: s.courses.length, years: lastYear - firstYear + 1 })}
+          {s.courses.length === 0
+            ? "—"
+            : s.courses.length === 1
+              ? t.journeyOne
+              : format(t.journeyMany, { n: s.courses.length, years: lastYear - firstYear + 1 })}
         </p>
         <JourneyTimeline courses={sorted} passedLabel={t.passed} />
       </section>
