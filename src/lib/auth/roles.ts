@@ -89,20 +89,21 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "educator",
       "design-system",
     ],
-    priority: ["dashboard", "corsisti", "corsi", "archivio"],
+    priority: ["dashboard", "conto-economico", "corsi", "corsisti", "archivio"],
   },
   // Luigi — bookkeeping: economics + history, no course/people management.
   accountant: {
     hidden: [
       "esami",
       "pianificatore",
+      "analisi",
       "template-materiali",
       "corsisti",
       "anomalie",
       "educator",
       "design-system",
     ],
-    priority: ["dashboard", "corsi", "archivio"],
+    priority: ["dashboard", "conto-economico", "corsi", "archivio"],
   },
 };
 
