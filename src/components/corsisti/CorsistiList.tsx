@@ -29,10 +29,25 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
     [items],
   );
 
+  // The KPIs must reflect the SAME set the table shows under the SE toggle —
+  // otherwise "Totale corsisti" overcounts the visible rows by the hidden
+  // Sake-Experience cluster (~834).
+  const base = useMemo(
+    () => (showSE ? items : items.filter((s) => s.cluster !== "sake_experience")),
+    [items, showSE],
+  );
+  const liveStats = useMemo(
+    () => ({
+      total: base.length,
+      returning: base.filter((s) => s.isReturning).length,
+      historical: base.filter((s) => s.historical).length,
+      passed: base.filter((s) => s.courses.some((c) => c.examResult === "passed")).length,
+    }),
+    [base],
+  );
+
   const list = useMemo(() => {
-    let l = items.slice();
-    // Sake-Experience-only contacts are a separate cluster — hidden by default.
-    if (!showSE) l = l.filter((s) => s.cluster !== "sake_experience");
+    let l = base.slice();
     if (source === "attuali") l = l.filter((s) => !s.historical);
     if (source === "storici") l = l.filter((s) => s.historical);
     if (source === "ripartecipanti") l = l.filter((s) => s.isReturning);
@@ -42,7 +57,7 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
     }
     if (examFilter) l = l.filter((s) => s.courses.some((c) => c.examResult === examFilter));
     return l.sort((a, b) => b.totalSpent - a.totalSpent);
-  }, [items, search, source, examFilter, showSE]);
+  }, [base, search, source, examFilter]);
 
   const segments: [Source, string][] = [
     ["tutti", t.segAll],
@@ -58,7 +73,7 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
           <div className="eyebrow">{t.eyebrow}</div>
           <h1 className="page-title">{t.title}</h1>
           <p className="page-sub">
-            {format(t.sub, { total: stats.total, returning: stats.returning, passed: stats.passed })}
+            {format(t.sub, { total: liveStats.total, returning: liveStats.returning, passed: liveStats.passed })}
           </p>
         </div>
         <div className="page-actions">
@@ -70,16 +85,16 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
       </div>
 
       <div className="kpi-grid cols-4" style={{ marginBottom: 24 }}>
-        <KPI anim label={t.kpiTotal} value={stats.total} sub={t.kpiTotalSub} />
-        <KPI anim label={t.kpiCurrent} value={stats.total - stats.historical} sub={t.kpiCurrentSub} />
+        <KPI anim label={t.kpiTotal} value={liveStats.total} sub={t.kpiTotalSub} />
+        <KPI anim label={t.kpiCurrent} value={liveStats.total - liveStats.historical} sub={t.kpiCurrentSub} />
         <KPI
           anim
           label={t.kpiReturning}
-          value={stats.returning}
-          sub={stats.total ? Math.round((stats.returning / stats.total) * 100) + "%" : "—"}
+          value={liveStats.returning}
+          sub={liveStats.total ? Math.round((liveStats.returning / liveStats.total) * 100) + "%" : "—"}
           accent="oro"
         />
-        <KPI anim label={t.kpiCertified} value={stats.passed} sub={t.kpiCertifiedSub} accent="green" />
+        <KPI anim label={t.kpiCertified} value={liveStats.passed} sub={t.kpiCertifiedSub} accent="green" />
       </div>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>

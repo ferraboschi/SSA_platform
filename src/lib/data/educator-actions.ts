@@ -8,6 +8,6 @@ export async function setQualificationsAction(
   id: string,
   types: CourseTypeKey[],
 ): Promise<void> {
-  (await getDataSource()).educators.setQualifications(id, types);
+  await (await getDataSource()).educators.setQualifications(id, types);
   revalidatePath("/", "layout");
 }

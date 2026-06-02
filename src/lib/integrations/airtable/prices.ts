@@ -12,7 +12,7 @@ const F_COST = "SC Network price from ITA stock";
 const F_TYPE = "Product Type";
 
 export interface ProductCost {
-  cost: number; // euros
+  cost: number | null; // euros; null when Airtable has no price for the SKU
   type: string | null;
 }
 
@@ -48,7 +48,7 @@ async function fetchAll(): Promise<Map<string, ProductCost>> {
       const code = String(r.fields[F_CODE] ?? "").trim();
       if (!code) continue;
       const rawCost = r.fields[F_COST];
-      const cost = typeof rawCost === "number" ? Math.round(rawCost * 100) / 100 : 0;
+      const cost = typeof rawCost === "number" ? Math.round(rawCost * 100) / 100 : null;
       const type = (r.fields[F_TYPE] as string | undefined) ?? null;
       out.set(code, { cost, type });
     }

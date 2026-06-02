@@ -79,6 +79,7 @@ export default async function Page({
         educator: data.header.educator,
       }}
       questions={data.questions}
+      token={token}
     />
   );
 }

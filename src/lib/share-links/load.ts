@@ -2,8 +2,11 @@
 //
 // The share link is reachable without a login, so the cookie-bound (anon)
 // client is blocked by RLS. We use the service client to read just what the
-// educator needs to prepare the course: header, program (days + sakes) and a
-// materials summary. Read-only — no costs, no student PII, no edit controls.
+// educator needs to prepare the course: header, program (days + sakes), a
+// materials summary AND the enrolled roster (name, email, phone — requested by
+// the operator). Read-only, no costs, no edit controls. The link carries the
+// student roster, so it is short-lived (see SHARE_LINK_TTL_HOURS) and must only
+// be shared with the course's educator.
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { COURSE_TYPES, EXAM_COURSE_TYPES } from "@/lib/domain";

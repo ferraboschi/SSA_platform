@@ -1369,6 +1369,7 @@ export const en: Dictionary = {
       mustHaveOneDay: "A template must have at least one day",
       duplicated: "Template duplicated: \"{name}\"",
       deleted: "Template \"{name}\" deleted",
+      deleteError: "Delete failed",
       saving: "Saving…",
       saved: "All saved ✓",
     },

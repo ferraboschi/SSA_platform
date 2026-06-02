@@ -7,6 +7,16 @@ import { NextRequest, NextResponse } from "next/server";
 const CLIENT_ID = process.env.SAKECOMPANY_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.SAKECOMPANY_CLIENT_SECRET ?? "";
 
+/** Escape attacker-controllable query values before embedding into HTML. */
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function page(title: string, color: string, body: string) {
   return new NextResponse(
     `<html><body style="font-family:system-ui;padding:32px;max-width:640px;margin:0 auto">
@@ -23,10 +33,10 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   if (error) {
-    return page("Errore OAuth Shopify", "red", `<p>${error}: ${searchParams.get("error_description") ?? ""}</p>`);
+    return page("Errore OAuth Shopify", "red", `<p>${esc(error)}: ${esc(searchParams.get("error_description") ?? "")}</p>`);
   }
   if (!code || !shop) {
-    return page("Parametri mancanti", "red", `<p>code: ${code ?? "mancante"} — shop: ${shop ?? "mancante"}</p>`);
+    return page("Parametri mancanti", "red", `<p>code: ${esc(code ?? "mancante")} — shop: ${esc(shop ?? "mancante")}</p>`);
   }
   if (!CLIENT_ID || !CLIENT_SECRET) {
     return page(
@@ -44,7 +54,7 @@ export async function GET(request: NextRequest) {
 
   if (!tokenRes.ok) {
     const b = await tokenRes.text();
-    return page("Errore durante lo scambio del token", "red", `<pre>${b}</pre>`);
+    return page("Errore durante lo scambio del token", "red", `<pre>${esc(b)}</pre>`);
   }
 
   const data = (await tokenRes.json()) as { access_token?: string; scope?: string };

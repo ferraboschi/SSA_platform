@@ -258,7 +258,7 @@ export function EducatorDetail({ data }: { data: EducatorDetailData }) {
                   {c.day} {c.month} {c.year} · {c.city}
                 </div>
                 <div className={`bar ${c.enrolled < c.minStudents ? "warning" : "azzurro"}`} style={{ marginTop: 12 }}>
-                  <i style={{ width: (c.enrolled / c.capacity) * 100 + "%" }} />
+                  <i style={{ width: (c.capacity ? (c.enrolled / c.capacity) * 100 : 0) + "%" }} />
                 </div>
                 <div
                   style={{

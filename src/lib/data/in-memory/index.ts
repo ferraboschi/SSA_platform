@@ -217,6 +217,7 @@ export function createInMemoryDataSource(
       return notifications.map((n) => ({
         ...n,
         email: n.email || operator.email,
+        dismissed: dismissedNotifs.has(n.id),
       }));
     },
   };

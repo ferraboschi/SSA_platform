@@ -336,7 +336,7 @@ export default async function DashboardPage() {
                           className={`bar ${c.enrolled < c.minStudents ? "warning" : "azzurro"}`}
                           style={{ flex: 1 }}
                         >
-                          <i style={{ width: `${(c.enrolled / c.capacity) * 100}%` }} />
+                          <i style={{ width: `${c.capacity ? (c.enrolled / c.capacity) * 100 : 0}%` }} />
                         </div>
                       </div>
                     </td>

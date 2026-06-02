@@ -39,7 +39,18 @@ export function AnomaliesClient({
 
   const resolve = (id: number) => {
     setResolved((prev) => new Set(prev).add(id));
-    startTransition(() => void resolveAnomalyAction(id));
+    startTransition(async () => {
+      try {
+        await resolveAnomalyAction(id);
+      } catch {
+        // roll back the optimistic removal so the row doesn't silently vanish
+        setResolved((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    });
   };
   const dismissCluster = (nameKey: string) => {
     setDismissedClusters((prev) => new Set(prev).add(nameKey));

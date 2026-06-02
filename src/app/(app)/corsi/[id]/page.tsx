@@ -118,9 +118,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <Avatar name={course.educator.name} initials={course.educator.initials} size="sm" />
-              <Link href={`/educator/${course.educator.id}`} className="link" style={{ fontWeight: 500 }}>
-                {course.educator.name}
-              </Link>
+              {course.educator.id ? (
+                <Link href={`/educator/${course.educator.id}`} className="link" style={{ fontWeight: 500 }}>
+                  {course.educator.name}
+                </Link>
+              ) : (
+                <span style={{ fontWeight: 500 }}>{course.educator.name}</span>
+              )}
             </span>
             {course.lifecycle === "pubblicato" && (
               <span

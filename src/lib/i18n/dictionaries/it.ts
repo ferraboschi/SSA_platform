@@ -1371,6 +1371,7 @@ export const it = {
       mustHaveOneDay: "Un template deve avere almeno un giorno",
       duplicated: "Template duplicato: \"{name}\"",
       deleted: "Template \"{name}\" eliminato",
+      deleteError: "Eliminazione non riuscita",
       saving: "Salvataggio…",
       saved: "Tutto salvato ✓",
     },

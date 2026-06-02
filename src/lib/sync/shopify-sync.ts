@@ -107,6 +107,15 @@ async function syncCourses(
   const now = new Date();
   const curKey = now.getFullYear() * 12 + now.getMonth(); // (year*12 + month0)
   let upserted = 0;
+
+  // Which course external_ids already exist — so we never UPDATE staff-owned
+  // columns (lifecycle / capacity / min_students) back to Shopify-derived values.
+  const { data: existingRows } = await sb
+    .from("corsi")
+    .select("external_id")
+    .not("external_id", "is", null);
+  const known = new Set((existingRows ?? []).map((r) => String(r.external_id)));
+
   for (const p of products) {
     if ((p.product_type || "").toLowerCase() !== "ticket") continue;
     // Only PUBLISHED (active) products become courses. Draft/archived Shopify
@@ -119,29 +128,43 @@ async function syncCourses(
     if (key < curKey) continue; // only future / current-month courses
     const variant = p.variants?.[0];
     const price = Math.round(parseFloat(variant?.price || "0") * 100) || 0;
-    const capacity = Math.max(variant?.inventory_quantity ?? 0, 0);
-    const lifecycle = "pubblicato";
-    const { error } = await sb.from("corsi").upsert(
-      {
-        external_id: String(p.id),
-        handle: slug(p.title).slice(0, 80),
-        short_title: p.title.slice(0, 80),
-        full_title: p.title,
-        type: parsed.type,
-        type_label: TYPE_LABEL[parsed.type] ?? parsed.type,
-        delivery_mode: parsed.delivery,
-        city: parsed.city || "—",
-        month: MONTHS_IT[parsed.month - 1],
-        year: parsed.year,
-        start_date: `${parsed.year}-${String(parsed.month).padStart(2, "0")}-01`,
-        price_cents: price,
+
+    // Sync-owned columns: refreshed from Shopify on every run.
+    const syncOwned = {
+      external_id: String(p.id),
+      handle: slug(p.title).slice(0, 80),
+      short_title: p.title.slice(0, 80),
+      full_title: p.title,
+      type: parsed.type,
+      type_label: TYPE_LABEL[parsed.type] ?? parsed.type,
+      delivery_mode: parsed.delivery,
+      city: parsed.city || "—",
+      month: MONTHS_IT[parsed.month - 1],
+      year: parsed.year,
+      start_date: `${parsed.year}-${String(parsed.month).padStart(2, "0")}-01`,
+      price_cents: price,
+    };
+
+    if (known.has(String(p.id))) {
+      // Existing course: update sync-owned fields only — DO NOT touch
+      // lifecycle / capacity / min_students (staff-managed).
+      const { error } = await sb
+        .from("corsi")
+        .update(syncOwned)
+        .eq("external_id", String(p.id));
+      if (!error) upserted++;
+    } else {
+      // New course: seed staff-owned columns once. inventory_quantity is the
+      // REMAINING stock, used only as an initial capacity hint.
+      const capacity = Math.max(variant?.inventory_quantity ?? 0, 0);
+      const { error } = await sb.from("corsi").insert({
+        ...syncOwned,
+        lifecycle: "pubblicato",
         capacity,
         min_students: 6,
-        lifecycle,
-      },
-      { onConflict: "external_id" },
-    );
-    if (!error) upserted++;
+      });
+      if (!error) upserted++;
+    }
   }
   // Reload the product_id → corso map (covers both new and pre-existing courses).
   const { data } = await sb

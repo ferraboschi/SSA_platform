@@ -2,8 +2,10 @@
 
 import { getSession } from "@/lib/auth/session";
 import { appConfig } from "@/lib/integrations/config";
+import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import {
   signExamToken,
+  verifyExamToken,
   EXAM_LINK_TTL_HOURS,
   type ExamTestKey,
   type ExamLinkMode,
@@ -49,4 +51,48 @@ export async function createExamLink(
     url: `${base}/esame/${token}`,
     expiresAt: new Date(exp * 1000).toISOString(),
   };
+}
+
+export interface SubmitExamInput {
+  answers: Record<string, string[] | string>;
+  lang?: string;
+  elapsed?: number;
+}
+
+/**
+ * Persist a public exam submission. The course / test / mode are derived from
+ * the verified token (never trusted from the client). Only `mode: "exam"` is
+ * written — test/validate are previews and must not create submissions.
+ */
+export async function submitExam(
+  token: string,
+  input: SubmitExamInput,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = verifyExamToken(token);
+  if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
+  const { c, t, m } = res.payload;
+  if (m !== "exam") return { ok: true }; // preview/validation: no write
+
+  // Split out the registration fields ("reg:<field>") from graded answers.
+  const registration: Record<string, string> = {};
+  const answers: Record<string, string[] | string> = {};
+  for (const [k, v] of Object.entries(input.answers ?? {})) {
+    if (k.startsWith("reg:")) registration[k.slice(4)] = Array.isArray(v) ? v.join(", ") : v;
+    else answers[k] = v;
+  }
+
+  const svc = getSupabaseServiceClient();
+  const corsoId = /^\d+$/.test(c) ? Number(c) : null;
+  const { error } = await svc.from("exam_submissions").insert({
+    corso_id: corsoId,
+    course_ref: c,
+    test_key: t,
+    mode: m,
+    lang: input.lang ?? null,
+    elapsed_seconds: input.elapsed ?? null,
+    answers,
+    registration: Object.keys(registration).length ? registration : null,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }

@@ -781,7 +781,8 @@ function SakeRow({
   const [dragging, setDragging] = useState(false);
   const schedaUrl = `https://www.sakecompany.com/sake/${s.code.toLowerCase()}`;
   const hasNote = !!s.note && s.note.trim().length > 0;
-  const liveCost = catItem?.cost ?? s.cost;
+  // `||` (not `??`): a null/0 catalog cost must fall back to the stored cost.
+  const liveCost = catItem?.cost || s.cost;
   const stock = catItem?.stock ?? null;
 
   return (

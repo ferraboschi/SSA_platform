@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { submitExam } from "@/lib/exam-links/actions";
 
 export interface RunnerQuestion {
   id: string;
@@ -36,6 +37,9 @@ const CHROME: Record<Lang, Record<string, string>> = {
     empty: "Questo test non contiene ancora domande.",
     thanksTitle: "Grazie, hai terminato.",
     thanksBody: "Le tue risposte sono state registrate. Puoi chiudere questa pagina.",
+    saveErrTitle: "Salvataggio non riuscito",
+    saveErrBody: "Le tue risposte NON sono state salvate. Controlla la connessione e riprova.",
+    retry: "Riprova",
     yourAnswer: "La tua risposta",
     pendingTitle: "Domande in sospeso",
     pendingBody: "Hai {n} domande senza risposta. Vuoi rivederle prima di terminare?",
@@ -63,6 +67,9 @@ const CHROME: Record<Lang, Record<string, string>> = {
     empty: "This test has no questions yet.",
     thanksTitle: "Thank you, you're done.",
     thanksBody: "Your answers have been recorded. You can close this page.",
+    saveErrTitle: "Saving failed",
+    saveErrBody: "Your answers were NOT saved. Check your connection and try again.",
+    retry: "Try again",
     yourAnswer: "Your answer",
     pendingTitle: "Pending questions",
     pendingBody: "You have {n} unanswered questions. Review them before finishing?",
@@ -90,6 +97,9 @@ const CHROME: Record<Lang, Record<string, string>> = {
     empty: "このテストにはまだ問題がありません。",
     thanksTitle: "お疲れさまでした。終了です。",
     thanksBody: "回答が記録されました。このページを閉じてかまいません。",
+    saveErrTitle: "保存に失敗しました",
+    saveErrBody: "回答は保存されていません。接続を確認して、もう一度お試しください。",
+    retry: "再試行",
     yourAnswer: "あなたの回答",
     pendingTitle: "未回答の問題",
     pendingBody: "未回答の問題が{n}件あります。終了前に確認しますか？",
@@ -134,6 +144,7 @@ export function ExamRunner({
   reveal,
   header,
   questions,
+  token,
 }: {
   mode: "exam" | "test" | "validate";
   forcedLang?: string;
@@ -141,6 +152,8 @@ export function ExamRunner({
   reveal?: boolean;
   header: RunnerHeader;
   questions: RunnerQuestion[];
+  /** Signed exam token — required to persist a real ("exam") submission. */
+  token?: string;
 }) {
   // Language is the FIRST step (a gate), unless forced by the link.
   const forced = LANGS.includes(forcedLang as Lang) ? (forcedLang as Lang) : null;
@@ -151,7 +164,29 @@ export function ExamRunner({
   const [done, setDone] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string[] | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
   const t = CHROME[lang];
+
+  // Persist a real exam submission, then show the thank-you screen. For
+  // test/validate (or a missing token) nothing is written — just finish.
+  const finish = async () => {
+    if (mode !== "exam" || !token) {
+      setDone(true);
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(false);
+    try {
+      const r = await submitExam(token, { answers, lang, elapsed });
+      if (r.ok) setDone(true);
+      else setSubmitError(true);
+    } catch {
+      setSubmitError(true);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Clock — ticks once the language is chosen.
   useEffect(() => {
@@ -249,6 +284,31 @@ export function ExamRunner({
     );
   }
 
+  // ── Save failed — answers NOT persisted; let the student retry ───────────
+  if (submitError) {
+    return (
+      <div className="exam-public-shell">
+        <div className="exam-public-card">
+          {headerBar}
+          <div className="exam-public-thanks">
+            <div className="exam-public-thanks-check" style={{ background: "#fde8e6", color: "#b42318" }}>!</div>
+            <h2>{t.saveErrTitle}</h2>
+            <p>{t.saveErrBody}</p>
+            <button
+              type="button"
+              className="exam-public-btn primary"
+              style={{ marginTop: 16 }}
+              onClick={() => void finish()}
+              disabled={submitting}
+            >
+              {submitting ? "…" : t.retry}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Done / empty ─────────────────────────────────────────────────────────
   if (done || total === 0) {
     return (
@@ -280,7 +340,7 @@ export function ExamRunner({
 
   const goFinish = () => {
     if (skippedQ.length > 0) setPendingPrompt(skippedQ);
-    else setDone(true);
+    else void finish();
   };
 
   return (
@@ -335,8 +395,13 @@ export function ExamRunner({
               {t.next}
             </button>
           ) : (
-            <button type="button" className="exam-public-btn primary" onClick={goFinish}>
-              {t.finish}
+            <button
+              type="button"
+              className="exam-public-btn primary"
+              onClick={goFinish}
+              disabled={submitting}
+            >
+              {submitting ? "…" : t.finish}
             </button>
           )}
         </div>
@@ -353,7 +418,7 @@ export function ExamRunner({
                 className="exam-public-btn ghost"
                 onClick={() => {
                   setPendingPrompt(null);
-                  setDone(true);
+                  void finish();
                 }}
               >
                 {t.finishAnyway}

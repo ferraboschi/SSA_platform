@@ -13,8 +13,10 @@ export interface ShareTokenPayload {
   e: number;
 }
 
-/** Default lifetime: educators keep the link for the run-up to the course. */
-export const SHARE_LINK_TTL_HOURS = 24 * 30; // 30 days
+/** Default lifetime: short, because the link exposes the student roster (name,
+ *  email, phone). Educators get it shortly before the course; 7 days bounds the
+ *  exposure window of a leaked link (revocation = TTL, no DB grant). */
+export const SHARE_LINK_TTL_HOURS = 24 * 7; // 7 days
 
 function secret(): string {
   return (

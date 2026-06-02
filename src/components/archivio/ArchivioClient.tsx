@@ -399,7 +399,7 @@ function ArchivioGroups({ courses, groupBy }: { courses: ArchivioCourse[]; group
       if (groupBy === "anno") key = c.year;
       else if (groupBy === "citta") key = c.city;
       else if (groupBy === "educator") key = c.educatorName;
-      else key = COURSE_TYPES[c.type].label;
+      else key = (COURSE_TYPES[c.type] ?? { label: c.type }).label;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(c);
     });

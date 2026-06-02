@@ -545,9 +545,9 @@ function TemplateSakeRow({
             <SakeField label={sk.fldSakagura} value={s.sakagura} onChange={(v) => onUpdate({ sakagura: v })} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            <SakeField label={sk.fldFormato} value={s.size} type="number" onChange={(v) => onUpdate({ size: Number(v) || 0 })} />
+            <SakeField label={sk.fldFormato} value={s.size} type="number" onChange={(v) => onUpdate({ size: Math.round(Number(v)) || 0 })} />
             <SakeField label={sk.fldCosto} value={s.cost} type="number" onChange={(v) => onUpdate({ cost: Number(v) || 0 })} />
-            <SakeField label={sk.fldQuantita} value={s.qty} type="number" onChange={(v) => onUpdate({ qty: Number(v) || 1 })} />
+            <SakeField label={sk.fldQuantita} value={s.qty} type="number" onChange={(v) => onUpdate({ qty: Math.max(1, Math.round(Number(v)) || 1) })} />
           </div>
         </div>
       )}
@@ -1128,10 +1128,18 @@ export function TemplateMateriali({
   };
   const deleteTemplate = (t: MaterialTemplate) => {
     if (!confirm(format(tm.confirmDelete, { name: t.name }))) return;
+    const prev = templates;
     setTemplates((arr) => arr.filter((x) => x.id !== t.id));
     if (openId === t.id) setOpenId(null);
-    startSave(() => void deleteTemplateAction(t.id));
-    flash(format(tm.toast.deleted, { name: t.name }));
+    startSave(async () => {
+      try {
+        await deleteTemplateAction(t.id);
+        flash(format(tm.toast.deleted, { name: t.name }));
+      } catch {
+        setTemplates(prev); // roll back so the UI matches the DB
+        flash(tm.toast.deleteError ?? "Eliminazione non riuscita");
+      }
+    });
   };
 
   return (

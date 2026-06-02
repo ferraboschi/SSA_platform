@@ -17,7 +17,12 @@ export const getSakeCatalog = unstable_cache(
       // Merge cost + type from the Airtable "Master product list" by SKU.
       return items.map((i) => {
         const c = i.sku ? costs.get(i.sku) : undefined;
-        return c ? { ...i, cost: c.cost, productType: c.type } : i;
+        if (!c) return i;
+        // Attach the type always; only override cost when Airtable has a price
+        // (a missing/null price must not clobber any stored supplier cost).
+        return c.cost != null
+          ? { ...i, cost: c.cost, productType: c.type }
+          : { ...i, productType: c.type };
       });
     } catch {
       return [];

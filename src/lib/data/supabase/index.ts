@@ -344,7 +344,10 @@ function corsoRowToDomain(
   students: Student[],
   program: ProgramDay[],
 ): Course {
-  const t = COURSE_TYPES[row.type] ?? COURSE_TYPES.certificato;
+  // Guard against an off-enum `type` slipping in from imports (would crash
+  // COURSE_TYPES[type].label consumers downstream).
+  const safeType = (row.type in COURSE_TYPES ? row.type : "certificato") as CourseTypeKey;
+  const t = COURSE_TYPES[safeType];
   const price = row.price_cents ? row.price_cents / 100 : t.price;
   const minStud = row.min_students || t.minStud;
   const costsRaw = (row.costs ?? {}) as Partial<CourseCosts>;
@@ -369,7 +372,7 @@ function corsoRowToDomain(
   return {
     id: String(row.id),
     handle: row.handle,
-    type: row.type,
+    type: safeType,
     typeLabel: row.type_label || t.label,
     typeShort: t.short,
     typeColor: t.color,
@@ -379,8 +382,12 @@ function corsoRowToDomain(
     mode: row.delivery_mode === "online" ? "online" : "presenza",
     month: row.month,
     year: row.year,
-    day: row.start_date ? new Date(row.start_date).getUTCDate() : 1,
-    days: row.type === "certificato" ? 3 : 1,
+    day: (() => {
+      if (!row.start_date) return 1;
+      const d = new Date(row.start_date);
+      return Number.isNaN(d.getTime()) ? 1 : d.getUTCDate();
+    })(),
+    days: safeType === "certificato" ? 3 : 1,
     educator,
     capacity: row.capacity || 20,
     enrolled,
@@ -532,11 +539,28 @@ interface MaterialTemplateWithChildren extends MaterialTemplateRow {
   }>;
 }
 
-/** Coerce a display date string ("—", "12 Mar 2026", ISO) to ISO or null. */
+/** Coerce a display date string ("—", "12 Mar 2026", ISO) to ISO or null.
+ *  Date-only strings are parsed as UTC midnight to avoid an off-by-one shift. */
 function toTimestampOrNull(s: string | null | undefined): string | null {
   if (!s || s === "—") return null;
-  const d = new Date(s);
+  const isoDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
+  const d = new Date(isoDateOnly ? `${s.trim()}T00:00:00Z` : s);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Render a timestamptz back to a friendly display string ("12 mar 2026"). */
+function formatLastUsed(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  })
+    .format(d)
+    .replace(".", "");
 }
 
 function materialTemplateRowToDomain(
@@ -585,7 +609,7 @@ function materialTemplateRowToDomain(
         per: x.per,
       })),
     },
-    lastUsed: row.last_used_at ?? "",
+    lastUsed: formatLastUsed(row.last_used_at),
     uses: row.uses,
     createdBy: row.created_by ?? "",
   };
@@ -962,9 +986,9 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
             name: s.name,
             type: s.type,
             sakagura: s.sakagura,
-            size_ml: s.size,
+            size_ml: Math.round(s.size) || 0,
             cost_cents: Math.round(s.cost * 100),
-            qty: s.qty,
+            qty: Math.max(1, Math.round(s.qty) || 1),
             note: s.note ?? null,
             position: j,
           }));
@@ -1245,13 +1269,18 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       // Aggregate enrolled + revenue per course (one pass over enrollments).
       const { data: iscr } = await sb
         .from("corsi_iscrizioni")
-        .select("corso_id,amount_cents")
+        .select("corso_id,amount_cents,discount_cents")
         .limit(5000);
       const agg = new Map<number, { n: number; rev: number }>();
-      for (const i of (iscr ?? []) as { corso_id: number; amount_cents: number }[]) {
+      for (const i of (iscr ?? []) as {
+        corso_id: number;
+        amount_cents: number;
+        discount_cents: number | null;
+      }[]) {
         const a = agg.get(i.corso_id) ?? { n: 0, rev: 0 };
         a.n++;
-        a.rev += (i.amount_cents || 0) / 100;
+        // Net paid = gross − discount (mirror buildFullCourse), never negative.
+        a.rev += Math.max((i.amount_cents || 0) - (i.discount_cents || 0), 0) / 100;
         agg.set(i.corso_id, a);
       }
 
@@ -1350,10 +1379,17 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
     async list(): Promise<Notification[]> {
       const courses = await coursesRepo.list();
       const quals = await loadQuals();
-      const isQualified = (educatorExternalId: string, type: CourseTypeKey) => {
-        const isDb = educatorExternalId.startsWith("db-");
-        const numId = isDb ? Number(educatorExternalId.slice(3)) : NaN;
-        if (!isDb) return false; // educators carry external_id mapping
+      // Resolve the educator's domain id (external_id slug OR "db-<n>") back to
+      // the numeric educators.id that quals is keyed by. Without this, every
+      // course taught by an external_id educator falsely fired educator-mismatch.
+      const eduMap = await loadEducatorsMap(); // Map<number, Educator>
+      const numIdByDomainId = new Map<string, number>();
+      for (const [numId, edu] of eduMap) numIdByDomainId.set(edu.id, numId);
+      const isQualified = (educatorDomainId: string, type: CourseTypeKey) => {
+        const numId = educatorDomainId.startsWith("db-")
+          ? Number(educatorDomainId.slice(3))
+          : numIdByDomainId.get(educatorDomainId);
+        if (numId == null || Number.isNaN(numId)) return false;
         return (quals.get(numId) ?? []).includes(type);
       };
       const current = await usersRepo.getCurrent();
