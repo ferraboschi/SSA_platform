@@ -100,3 +100,55 @@ export async function productCount(): Promise<number> {
   const { body } = await scGet("products/count.json");
   return (body as { count: number }).count;
 }
+
+/** A pickable catalog item — one per variant (the unit with its own SKU/stock). */
+export interface ScCatalogItem {
+  productId: number;
+  variantId: number;
+  /** Display name: product + variant (size) when relevant. */
+  name: string;
+  productTitle: string;
+  variantTitle: string | null;
+  vendor: string | null;
+  sku: string | null;
+  stock: number | null;
+  image: string | null;
+  /** Public product URL on the Sake Company store. */
+  url: string;
+  handle: string;
+}
+
+/** Full pickable catalog (all active products, flattened to variants). */
+export async function listCatalog(): Promise<ScCatalogItem[]> {
+  const domain = sakeCompanyConfig.storeDomain;
+  const out: ScCatalogItem[] = [];
+  const fields = "id,handle,title,vendor,status,image,variants";
+  let path: string | null = `products.json?limit=250&status=active&fields=${fields}`;
+  while (path) {
+    const { body, link } = await scGet(path);
+    const page = (body as { products?: (ScProduct & { handle: string })[] }).products ?? [];
+    for (const p of page) {
+      const single = p.variants.length <= 1;
+      for (const v of p.variants) {
+        const variantTitle =
+          v.title && v.title !== "Default Title" ? v.title : null;
+        out.push({
+          productId: p.id,
+          variantId: v.id,
+          name: single || !variantTitle ? p.title : `${p.title} · ${variantTitle}`,
+          productTitle: p.title,
+          variantTitle,
+          vendor: p.vendor,
+          sku: v.sku,
+          stock: v.inventory_quantity,
+          image: p.image?.src ?? null,
+          url: `https://${domain}/products/${p.handle}`,
+          handle: p.handle,
+        });
+      }
+    }
+    const cursor = nextPageInfo(link);
+    path = cursor ? `products.json?limit=250&page_info=${cursor}` : null;
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
