@@ -49,6 +49,9 @@ services:
         value: appj4DEH3RYFqct1Q
       - key: AIRTABLE_API_KEY
         sync: false
+      # Airtable "Master product list" — product costs (same token, 2nd base)
+      - key: AIRTABLE_PRICES_BASE_ID
+        value: appwCWGRd0jXOCxMA
       # Sake Company (second Shopify store — supplier catalog)
       - key: SAKECOMPANY_STORE_DOMAIN
         sync: false

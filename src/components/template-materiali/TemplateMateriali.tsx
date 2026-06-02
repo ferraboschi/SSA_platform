@@ -700,10 +700,10 @@ function TemplateEditor({
     const sake: Sake = {
       code: item.sku ?? "",
       name: item.productTitle,
-      type: item.variantTitle ?? "",
+      type: item.productType ?? item.variantTitle ?? "",
       sakagura: item.vendor ?? "",
       size: sizeMatch ? Number(sizeMatch[1]) : 0,
-      cost: 0,
+      cost: item.cost ?? 0, // real cost from the Airtable "Master product list"
       qty: 1,
       note: "",
     };
@@ -749,7 +749,12 @@ function TemplateEditor({
   const bottlesPerSku = Math.ceil(N / 15) || (N > 0 ? 1 : 0);
   const totalBottles = totalSakes * bottlesPerSku;
   const bottleCost = t.days.reduce(
-    (s, d) => s + d.sakes.reduce((ss, sk) => ss + bottlesPerSku * sk.cost, 0),
+    (s, d) =>
+      s +
+      d.sakes.reduce((ss, sk) => {
+        const liveCost = (sk.code && catBySku.get(sk.code)?.cost) || sk.cost;
+        return ss + bottlesPerSku * liveCost;
+      }, 0),
     0,
   );
   const materialiCourse = materialiPerStudent * N + extraPerCourse;

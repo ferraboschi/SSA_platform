@@ -116,6 +116,10 @@ export interface ScCatalogItem {
   /** Public product URL on the Sake Company store. */
   url: string;
   handle: string;
+  /** Cost in euros (from the Airtable "Master product list", merged by SKU). */
+  cost?: number;
+  /** Product type from Airtable (e.g. "Junmai Ginjo"), merged by SKU. */
+  productType?: string | null;
 }
 
 /** Full pickable catalog (all active products, flattened to variants). */
