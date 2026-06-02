@@ -17,10 +17,17 @@ export default async function LoginPage({
     redirect(next ?? "/dashboard");
   }
 
-  // Already signed in → bounce to the target page.
-  const sb = await getSupabaseServerClient();
-  const { data } = await sb.auth.getUser();
-  if (data.user) redirect(next ?? "/dashboard");
+  // Already signed in → bounce to the target page. getUser() must not 500 the
+  // login page if the session cookie is missing/expired/in a recovery state.
+  let signedIn = false;
+  try {
+    const sb = await getSupabaseServerClient();
+    const { data } = await sb.auth.getUser();
+    signedIn = !!data.user;
+  } catch {
+    signedIn = false;
+  }
+  if (signedIn) redirect(next ?? "/dashboard");
 
   return (
     <div

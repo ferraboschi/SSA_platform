@@ -18,9 +18,15 @@ export default async function AppLayout({
   // Live mode (Supabase + USE_SEED=false) requires a real signed-in user.
   // In dev (USE_SEED=true) we keep the in-memory stub auth — no login wall.
   if (supabaseConfig.isConfigured && !appConfig.useSeed) {
-    const sb = await getSupabaseServerClient();
-    const { data } = await sb.auth.getUser();
-    if (!data.user) redirect("/login");
+    let user = null;
+    try {
+      const sb = await getSupabaseServerClient();
+      const { data } = await sb.auth.getUser();
+      user = data.user;
+    } catch {
+      user = null; // treat an auth error as "not signed in"
+    }
+    if (!user) redirect("/login"); // outside try: redirect() throws internally
   }
 
   const ds = await getDataSource();

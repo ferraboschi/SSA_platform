@@ -647,8 +647,14 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
     },
 
     async getCurrent() {
-      const { data: authData } = await sb.auth.getUser();
-      if (!authData.user) {
+      let authUser = null;
+      try {
+        const { data: authData } = await sb.auth.getUser();
+        authUser = authData.user;
+      } catch {
+        authUser = null;
+      }
+      if (!authUser) {
         // No session yet — return a synthetic placeholder so SSR pages don't
         // crash while we wire up auth (Task #18).
         return {
@@ -669,14 +675,14 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       const { data, error } = await sb
         .from("profiles")
         .select("*")
-        .eq("id", authData.user.id)
+        .eq("id", authUser.id)
         .maybeSingle();
       if (error) throw error;
       return data
         ? profileToUser(data as ProfileRow)
         : profileToUser({
-            id: authData.user.id,
-            email: authData.user.email ?? "",
+            id: authUser.id,
+            email: authUser.email ?? "",
             first_name: "",
             last_name: "",
             display_name: null,
