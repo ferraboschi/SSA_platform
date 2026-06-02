@@ -3,15 +3,22 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import { Icon } from "@/components/ui";
-import { useT } from "@/lib/i18n";
+import { useT, format } from "@/lib/i18n";
 import {
   SakeProductPicker,
   StockBadge,
   type ScCatalogItem,
 } from "@/components/sake/SakeProductPicker";
 import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
-import { saveStockAlertsAction } from "./stock-alerts-actions";
+import { saveStockAlertsAction, sendTestStockAlertAction } from "./stock-alerts-actions";
 import type { StockAlert } from "@/lib/domain";
+
+export interface KitShipment {
+  courseId: string;
+  shortTitle: string;
+  enrolled: number;
+  shipBy: number; // days until the kit must ship (can be negative = overdue)
+}
 
 function newId(): string {
   try {
@@ -23,8 +30,10 @@ function newId(): string {
 
 export function StockAlertsPanel({
   initialAlerts,
+  shipments = [],
 }: {
   initialAlerts: StockAlert[];
+  shipments?: KitShipment[];
 }) {
   const t = useT();
   const s = t.dashboard.stockAlerts;
@@ -95,6 +104,17 @@ export function StockAlertsPanel({
     persist(alerts.map((a) => (a.id === id ? { ...a, min: Math.max(0, min) } : a)));
   }
 
+  // Test email to Camilla — lets staff verify the stock-alert email works.
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  function sendTest() {
+    setTestMsg(null);
+    startTransition(async () => {
+      const r = await sendTestStockAlertAction();
+      setTestMsg(r.ok ? s.testSent : r.error || s.testErr);
+      setTimeout(() => setTestMsg(null), 5000);
+    });
+  }
+
   const triggered = useMemo(
     () =>
       alerts.filter((a) =>
@@ -145,13 +165,84 @@ export function StockAlertsPanel({
           </div>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{s.sub}</div>
         </div>
-        {!adding && (
-          <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
-            <Icon name="plus" size={12} />
-            {s.add}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {testMsg && (
+            <span style={{ fontSize: 11, color: "var(--text-3)" }}>{testMsg}</span>
+          )}
+          <button className="btn btn-sm btn-ghost" onClick={sendTest} title={s.testHint}>
+            <Icon name="mail" size={12} />
+            {s.testBtn}
           </button>
-        )}
+          {!adding && (
+            <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+              <Icon name="plus" size={12} />
+              {s.add}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Spedizioni kit — corsi online */}
+      {shipments.length > 0 && (
+        <div style={{ borderBottom: "1px solid var(--border-2)", padding: "12px 16px" }}>
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "var(--ls-caps)",
+              textTransform: "uppercase",
+              color: "var(--text-4)",
+              marginBottom: 8,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Icon name="download" size={12} />
+            {s.shipmentsTitle}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {shipments.map((sh) => {
+              const urgent = sh.shipBy <= 3;
+              return (
+                <a
+                  key={sh.courseId}
+                  href={`/corsi/${sh.courseId}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "7px 10px",
+                    borderRadius: 8,
+                    textDecoration: "none",
+                    background: urgent ? "var(--danger-bg)" : "var(--surface-2)",
+                    borderLeft: `3px solid ${urgent ? "var(--danger)" : "var(--indigo)"}`,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      fontSize: 13,
+                      color: urgent ? "var(--danger-fg)" : "var(--indigo-600)",
+                      minWidth: 54,
+                    }}
+                  >
+                    {sh.shipBy <= 0
+                      ? s.shipNow
+                      : format(s.shipInDays, { n: sh.shipBy })}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>
+                    {sh.shortTitle}
+                  </span>
+                  <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                    {format(s.shipKits, { n: sh.enrolled })}
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {adding && (
         <div

@@ -8,7 +8,6 @@ import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { buildDashboard, capitalize, DASH_TODAY, DASH_WEEK, monthLabel } from "@/lib/dashboard";
 import {
   MonthReportButton,
-  OperationalReminders,
   PipelineBar,
   StockAlertsPanel,
 } from "@/components/dashboard";
@@ -194,11 +193,17 @@ export default async function DashboardPage() {
         />
       </section>
 
-      {/* Operational reminders */}
-      <OperationalReminders reminders={d.reminders} thresholds={thresholds} />
-
-      {/* Operator-defined low-stock SKU watches */}
-      <StockAlertsPanel initialAlerts={stockAlerts} />
+      {/* Memoria operativa: SKU stock watches + online-course kit shipping,
+          merged into one section. */}
+      <StockAlertsPanel
+        initialAlerts={stockAlerts}
+        shipments={d.reminders.shipments.map((sh) => ({
+          courseId: sh.courseId,
+          shortTitle: sh.shortTitle,
+          enrolled: sh.enrolled,
+          shipBy: sh.shipBy,
+        }))}
+      />
 
       {/* Pipeline strip */}
       <section className="card" style={{ marginBottom: 28 }}>

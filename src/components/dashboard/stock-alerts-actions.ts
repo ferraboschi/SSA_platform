@@ -1,6 +1,9 @@
 "use server";
 
 import { getDataSource } from "@/lib/data";
+import { getSession } from "@/lib/auth/session";
+import { sendStockAlertEmail } from "@/lib/alerts/emails";
+import { alertRecipients } from "@/lib/integrations/config";
 import type { StockAlert } from "@/lib/domain";
 
 /** Replace the full set of low-stock SKU watches (dashboard "Memoria operativa"). */
@@ -9,4 +12,23 @@ export async function saveStockAlertsAction(
 ): Promise<void> {
   const ds = await getDataSource();
   await ds.settings.setStockAlerts(alerts);
+}
+
+/** Send a sample low-stock alert to Camilla so staff can verify email works. */
+export async function sendTestStockAlertAction(): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSession();
+  const role = session?.user?.roleKey;
+  if (role !== "admin" && role !== "manager") {
+    return { ok: false, error: "Non autorizzato." };
+  }
+  try {
+    const res = await sendStockAlertEmail("Esempio (test)", [
+      { name: "Sake di prova", code: "TEST-SKU", stock: 3, min: 10 },
+    ]);
+    return res.status === "sent"
+      ? { ok: true }
+      : { ok: false, error: `Email non inviata (Resend non configurato? → ${alertRecipients.stock})` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Errore invio." };
+  }
 }

@@ -1,12 +1,27 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { signInAction } from "@/lib/auth/supabase-actions";
+import { useState, useTransition, type CSSProperties } from "react";
+import {
+  signInAction,
+  requestPasswordResetAction,
+} from "@/lib/auth/supabase-actions";
+
+const linkBtn: CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "var(--indigo-600)",
+  fontSize: 12.5,
+  fontWeight: 500,
+  cursor: "pointer",
+  padding: 4,
+  textAlign: "center",
+};
 
 export function LoginForm({ next }: { next: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"login" | "forgot" | "sent">("login");
   const [pending, startTransition] = useTransition();
 
   const submit = () => {
@@ -14,6 +29,18 @@ export function LoginForm({ next }: { next: string }) {
     startTransition(async () => {
       const result = await signInAction(email, password, next);
       if (!result.ok) setError(result.error ?? "Errore di accesso.");
+    });
+  };
+
+  const sendReset = () => {
+    setError(null);
+    if (!email) {
+      setError("Inserisci la tua email.");
+      return;
+    }
+    startTransition(async () => {
+      await requestPasswordResetAction(email);
+      setMode("sent");
     });
   };
 
@@ -43,61 +70,96 @@ export function LoginForm({ next }: { next: string }) {
         Accedi al tuo account
       </p>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-        style={{ display: "grid", gap: 12 }}
-      >
-        <Field
-          label="Email"
-          type="email"
-          value={email}
-          onChange={setEmail}
-          autoComplete="email"
-          required
-        />
-        <Field
-          label="Password"
-          type="password"
-          value={password}
-          onChange={setPassword}
-          autoComplete="current-password"
-          required
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          style={{
-            marginTop: 6,
-            padding: "11px 14px",
-            border: "none",
-            borderRadius: 8,
-            background: "var(--indigo-600)",
-            color: "white",
-            fontSize: 13.5,
-            fontWeight: 600,
-            cursor: pending ? "wait" : "pointer",
-            opacity: pending ? 0.7 : 1,
+      {mode === "sent" ? (
+        <div style={{ display: "grid", gap: 14, textAlign: "center" }}>
+          <p style={{ fontSize: 13.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+            Se l&apos;indirizzo è registrato, ti abbiamo inviato un&apos;email con
+            il link per reimpostare la password. Controlla anche lo spam.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("login");
+              setError(null);
+            }}
+            style={linkBtn}
+          >
+            Torna al login
+          </button>
+        </div>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            mode === "forgot" ? sendReset() : submit();
           }}
+          style={{ display: "grid", gap: 12 }}
         >
-          {pending ? "Attendi…" : "Accedi"}
-        </button>
-        {error && (
-          <div
+          <Field
+            label="Email"
+            type="email"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+            required
+          />
+          {mode === "login" && (
+            <Field
+              label="Password"
+              type="password"
+              value={password}
+              onChange={setPassword}
+              autoComplete="current-password"
+              required
+            />
+          )}
+          <button
+            type="submit"
+            disabled={pending}
             style={{
-              background: "var(--danger-bg)",
-              color: "var(--danger-fg)",
-              padding: "9px 12px",
-              borderRadius: 7,
-              fontSize: 12.5,
+              marginTop: 6,
+              padding: "11px 14px",
+              border: "none",
+              borderRadius: 8,
+              background: "var(--indigo-600)",
+              color: "white",
+              fontSize: 13.5,
+              fontWeight: 600,
+              cursor: pending ? "wait" : "pointer",
+              opacity: pending ? 0.7 : 1,
             }}
           >
-            {error}
-          </div>
-        )}
-      </form>
+            {pending
+              ? "Attendi…"
+              : mode === "forgot"
+                ? "Invia link di reset"
+                : "Accedi"}
+          </button>
+          {error && (
+            <div
+              style={{
+                background: "var(--danger-bg)",
+                color: "var(--danger-fg)",
+                padding: "9px 12px",
+                borderRadius: 7,
+                fontSize: 12.5,
+              }}
+            >
+              {error}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setMode(mode === "forgot" ? "login" : "forgot");
+              setError(null);
+            }}
+            style={linkBtn}
+          >
+            {mode === "forgot" ? "← Torna al login" : "Password dimenticata?"}
+          </button>
+        </form>
+      )}
 
       <p
         style={{

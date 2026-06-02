@@ -104,6 +104,18 @@ export const resendConfig = {
   },
 };
 
+/** Operational alert recipients (overridable via env). */
+export const alertRecipients = {
+  /** Stock / low-stock alerts → Camilla. */
+  get stock() {
+    return env("ALERT_EMAIL_STOCK") ?? "cosi@sakesommelierassociation.it";
+  },
+  /** Course-ended "da fatturare" notices → Luigi (accounting). */
+  get invoice() {
+    return env("ALERT_EMAIL_INVOICE") ?? "fatture@sakecompany.com";
+  },
+};
+
 export const supabaseConfig = {
   get url() {
     return env("NEXT_PUBLIC_SUPABASE_URL");

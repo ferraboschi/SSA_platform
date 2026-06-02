@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { runShopifySync } from "@/lib/sync/shopify-sync";
+import { runAlertChecks } from "@/lib/alerts/checks";
 import { SHELL_DATA_TAG } from "@/lib/shell-data";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,16 @@ async function handle(request: Request): Promise<NextResponse> {
   const fullBackfill = url.searchParams.get("full") === "1";
   try {
     const summary = await runShopifySync({ fullBackfill });
+    // Operational alert emails (invoice→Luigi, low-stock→Camilla). Non-fatal.
+    let alerts;
+    try {
+      alerts = await runAlertChecks(Date.now());
+    } catch {
+      /* alert checks must never fail the sync */
+    }
     revalidateTag(SHELL_DATA_TAG, "max");
     revalidatePath("/", "layout");
-    return NextResponse.json({ ok: true, summary });
+    return NextResponse.json({ ok: true, summary, alerts });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: (e as Error).message },

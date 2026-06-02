@@ -7,6 +7,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
+import { appConfig } from "@/lib/integrations/config";
 
 export interface AuthActionResult {
   ok: boolean;
@@ -67,4 +68,28 @@ export async function signOutAction(): Promise<void> {
   await sb.auth.signOut();
   revalidatePath("/", "layout");
   redirect("/login");
+}
+
+/** Send a password-reset email. Always reports success (don't leak whether the
+ *  address exists). The link lands on /reset-password to set a new password. */
+export async function requestPasswordResetAction(
+  email: string,
+): Promise<AuthActionResult> {
+  const sb = await getSupabaseServerClient();
+  const base = appConfig.baseUrl.replace(/\/$/, "");
+  await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: `${base}/reset-password`,
+  });
+  return { ok: true };
+}
+
+/** Set a new password for the user in the current (recovery) session. */
+export async function updatePasswordAction(
+  password: string,
+): Promise<AuthActionResult> {
+  const sb = await getSupabaseServerClient();
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
+  redirect("/dashboard");
 }
