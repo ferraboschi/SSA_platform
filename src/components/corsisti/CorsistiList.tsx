@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { toCsv, downloadCsv } from "@/lib/csv";
 import type { Corsista, ExamResultStatus } from "@/lib/domain";
 
 type Source = "tutti" | "attuali" | "storici" | "ripartecipanti";
@@ -77,7 +78,27 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
           </p>
         </div>
         <div className="page-actions">
-          <button className="btn">
+          <button
+            className="btn"
+            onClick={() =>
+              downloadCsv(
+                "corsisti",
+                toCsv(
+                  ["Nome", "Email", "Telefono", "Città", "Corsi", "Speso €", "Ricorrente", "Storico"],
+                  list.map((s) => [
+                    s.name,
+                    s.email,
+                    s.phone,
+                    s.city,
+                    s.courses.length,
+                    Math.round(s.totalSpent),
+                    s.isReturning ? "sì" : "no",
+                    s.historical ? "sì" : "no",
+                  ]),
+                ),
+              )
+            }
+          >
             <Icon name="download" size={13} />
             {t.exportCsv}
           </button>
