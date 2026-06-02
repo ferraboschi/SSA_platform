@@ -1205,6 +1205,7 @@ export const en: Dictionary = {
       retrial: "Retrial",
       failed: "Failed",
       free: "Free",
+      downloadCertificate: "Certificate",
       purchasesTitle: "Purchases ({n})",
       purchaseColProduct: "Product",
       purchaseColType: "Type",

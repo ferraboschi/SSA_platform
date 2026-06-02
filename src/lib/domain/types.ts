@@ -179,6 +179,8 @@ export interface CorsistaEnrollment {
   examResult: ExamResultStatus | null;
   /** Exam score percentage (0–100), when graded. */
   examScorePct?: number | null;
+  /** Public URL of the official certificate PDF (Supabase Storage), when issued. */
+  certificateUrl?: string | null;
   historical?: boolean;
 }
 

@@ -241,6 +241,18 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                         {c.examScorePct}%
                       </span>
                     )}
+                    {c.certificateUrl && (
+                      <a
+                        href={c.certificateUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ marginLeft: 8, fontSize: 12, color: "var(--indigo-600)", fontWeight: 500, textDecoration: "none", whiteSpace: "nowrap" }}
+                        title={t.downloadCertificate}
+                      >
+                        📄 {t.downloadCertificate}
+                      </a>
+                    )}
                   </td>
                   <td className="num" style={{ textAlign: "right" }}>
                     {c.amount > 0 ? (

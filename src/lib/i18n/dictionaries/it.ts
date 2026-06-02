@@ -1207,6 +1207,7 @@ export const it = {
       retrial: "Recupero",
       failed: "Bocciato",
       free: "Gratis",
+      downloadCertificate: "Certificato",
       purchasesTitle: "Acquisti ({n})",
       purchaseColProduct: "Prodotto",
       purchaseColType: "Tipo",

@@ -815,6 +815,29 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
   const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, exam_score_pct, historical, ${enrollmentCorso}`;
   const enrollmentSelectBase = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, historical, ${enrollmentCorso}`;
 
+  // Official certificate PDFs (Supabase Storage), keyed "<corsistaId>-<corsoId>".
+  // Stored in settings_kv by the import; cached per request.
+  let _certMap: Map<string, string> | null = null;
+  async function loadCertMap() {
+    if (_certMap) return _certMap;
+    const m = new Map<string, string>();
+    try {
+      const { data } = await sb
+        .from("settings_kv")
+        .select("value")
+        .eq("key", "exam_certificates")
+        .maybeSingle();
+      const items =
+        (data?.value as { items?: { corsistaId: number; corsoId: number; url: string }[] })
+          ?.items ?? [];
+      for (const it of items) m.set(`${it.corsistaId}-${it.corsoId}`, it.url);
+    } catch {
+      /* settings_kv unavailable — no certificates */
+    }
+    _certMap = m;
+    return m;
+  }
+
   const corsistiRepo: CorsistaRepository = {
     async list() {
       const { data: corsistiData, error: e1 } = await sb
@@ -833,10 +856,12 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       }
       if (e2) throw e2;
 
+      const certMap = await loadCertMap();
       const enrollByCorsista = new Map<number, CorsistaEnrollment[]>();
       for (const i of (iscrData ?? []) as IscrizioneRow[]) {
         const e = iscrizioneToEnrollment(i);
         if (!e) continue;
+        e.certificateUrl = certMap.get(`${i.corsista_id}-${i.corso_id}`) ?? null;
         const list = enrollByCorsista.get(i.corsista_id) ?? [];
         list.push(e);
         enrollByCorsista.set(i.corsista_id, list);
@@ -869,8 +894,13 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       }
       if (res.error) throw res.error;
       const iscr = res.data;
+      const certMap = await loadCertMap();
       const enrolls = ((iscr ?? []) as IscrizioneRow[])
-        .map(iscrizioneToEnrollment)
+        .map((i) => {
+          const e = iscrizioneToEnrollment(i);
+          if (e) e.certificateUrl = certMap.get(`${i.corsista_id}-${i.corso_id}`) ?? null;
+          return e;
+        })
         .filter((x): x is CorsistaEnrollment => x !== null);
 
       const { data: purch } = await sb
