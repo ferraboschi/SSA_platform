@@ -414,4 +414,6 @@ export interface Notification {
   email: string;
   href: string;
   courseId: string;
+  /** True when the operator has silenced this alert (bell "risolto"). */
+  dismissed?: boolean;
 }

@@ -219,6 +219,7 @@ export function createInMemoryDataSource(
     },
   };
 
+  const dismissedNotifs = new Set<string>();
   const settingsRepo: SettingsRepository = {
     async getThresholds() {
       return { ...thresholds };
@@ -226,6 +227,13 @@ export function createInMemoryDataSource(
     async setThresholds(patch) {
       thresholds = { ...thresholds, ...patch };
       return { ...thresholds };
+    },
+    async getDismissedNotifications() {
+      return [...dismissedNotifs];
+    },
+    async setNotificationDismissed(id, dismissed) {
+      if (dismissed) dismissedNotifs.add(id);
+      else dismissedNotifs.delete(id);
     },
   };
 

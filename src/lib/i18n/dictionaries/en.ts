@@ -103,6 +103,11 @@ export const en: Dictionary = {
     title: "Notifications",
     empty: "No notifications. All clear.",
     toHandle: "to handle",
+    dismiss: "Mark as resolved",
+    restore: "Restore",
+    showResolved: "Show resolved ({count})",
+    hideResolved: "Hide resolved",
+    resolvedTag: "Resolved",
     emailVia: "Email to {email} · via Resend",
     resendNote:
       "Automatic email delivery will be connected to Resend during implementation.",

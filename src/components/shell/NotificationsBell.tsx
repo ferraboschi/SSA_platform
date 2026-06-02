@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Badge, Icon } from "@/components/ui";
 import { format, useT } from "@/lib/i18n";
+import { setNotificationDismissedAction } from "@/lib/notifications/actions";
 import type { IconName } from "@/components/ui";
 import type { Notification } from "@/lib/domain";
 
@@ -13,8 +15,144 @@ export function NotificationsBell({
   notifications: Notification[];
 }) {
   const t = useT();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const n = notifications.length;
+  const [showResolved, setShowResolved] = useState(false);
+  const [, startTransition] = useTransition();
+  // Optimistic override so a click hides/shows the row instantly, before the
+  // server round-trip + router.refresh confirm it.
+  const [override, setOverride] = useState<Record<string, boolean>>({});
+
+  const isDismissed = (nt: Notification) =>
+    override[nt.id] ?? nt.dismissed ?? false;
+
+  const active = useMemo(
+    () => notifications.filter((nt) => !isDismissed(nt)),
+    [notifications, override],
+  );
+  const resolved = useMemo(
+    () => notifications.filter((nt) => isDismissed(nt)),
+    [notifications, override],
+  );
+  const n = active.length;
+
+  function toggle(id: string, dismissed: boolean) {
+    setOverride((o) => ({ ...o, [id]: dismissed }));
+    startTransition(async () => {
+      await setNotificationDismissedAction(id, dismissed);
+      router.refresh();
+    });
+  }
+
+  function row(nt: Notification, kind: "active" | "resolved") {
+    const k = t.notifications.kinds[nt.kind];
+    const dismissed = kind === "resolved";
+    return (
+      <div
+        key={nt.id}
+        style={{
+          position: "relative",
+          borderBottom: "1px solid var(--border-2)",
+          opacity: dismissed ? 0.62 : 1,
+        }}
+      >
+        <Link
+          href={nt.href}
+          onClick={() => setOpen(false)}
+          style={{
+            display: "flex",
+            gap: 11,
+            padding: "12px 40px 12px 16px",
+            textDecoration: "none",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-grid",
+              placeItems: "center",
+              width: 28,
+              height: 28,
+              borderRadius: 7,
+              background: dismissed ? "var(--surface-2)" : "var(--danger-bg)",
+              color: dismissed ? "var(--text-4)" : "var(--danger-fg)",
+              flexShrink: 0,
+            }}
+          >
+            <Icon name={nt.icon as IconName} size={14} />
+          </span>
+          <span style={{ minWidth: 0, flex: 1 }}>
+            <span
+              style={{
+                display: "block",
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "var(--text)",
+              }}
+            >
+              {format(k.title, nt.params)}
+            </span>
+            <span
+              style={{
+                display: "block",
+                fontSize: 11.5,
+                color: "var(--text-2)",
+                marginTop: 2,
+                lineHeight: 1.45,
+              }}
+            >
+              {format(k.body, nt.params)}
+            </span>
+            <span
+              style={{
+                display: "block",
+                fontSize: 10.5,
+                color: "var(--text-4)",
+                marginTop: 4,
+              }}
+            >
+              {format(k.meta, nt.params)}
+            </span>
+            {!dismissed && nt.email && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontSize: 10.5,
+                  color: "var(--indigo-600)",
+                  marginTop: 5,
+                  background: "var(--indigo-50)",
+                  padding: "2px 7px",
+                  borderRadius: 5,
+                }}
+              >
+                <Icon name="mail" size={10} />
+                {format(t.notifications.emailVia, { email: nt.email })}
+              </span>
+            )}
+          </span>
+        </Link>
+        <button
+          className="btn btn-icon btn-ghost"
+          title={dismissed ? t.notifications.restore : t.notifications.dismiss}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggle(nt.id, !dismissed);
+          }}
+          style={{
+            position: "absolute",
+            top: 9,
+            right: 8,
+            width: 24,
+            height: 24,
+          }}
+        >
+          <Icon name={dismissed ? "refresh" : "check"} size={13} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: "relative" }}>
@@ -89,7 +227,7 @@ export function NotificationsBell({
               )}
             </div>
             <div style={{ maxHeight: 360, overflow: "auto" }}>
-              {n === 0 && (
+              {n === 0 && !showResolved && (
                 <div
                   style={{
                     padding: 28,
@@ -101,90 +239,40 @@ export function NotificationsBell({
                   {t.notifications.empty}
                 </div>
               )}
-              {notifications.map((nt) => {
-                const k = t.notifications.kinds[nt.kind];
-                return (
-                <Link
-                  key={nt.id}
-                  href={nt.href}
-                  onClick={() => setOpen(false)}
-                  style={{
-                    display: "flex",
-                    gap: 11,
-                    padding: "12px 16px",
-                    borderBottom: "1px solid var(--border-2)",
-                    textDecoration: "none",
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-grid",
-                      placeItems: "center",
-                      width: 28,
-                      height: 28,
-                      borderRadius: 7,
-                      background: "var(--danger-bg)",
-                      color: "var(--danger-fg)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Icon name={nt.icon as IconName} size={14} />
-                  </span>
-                  <span style={{ minWidth: 0, flex: 1 }}>
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        color: "var(--text)",
-                      }}
-                    >
-                      {format(k.title, nt.params)}
-                    </span>
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: 11.5,
-                        color: "var(--text-2)",
-                        marginTop: 2,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      {format(k.body, nt.params)}
-                    </span>
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: 10.5,
-                        color: "var(--text-4)",
-                        marginTop: 4,
-                      }}
-                    >
-                      {format(k.meta, nt.params)}
-                    </span>
-                    {nt.email && (
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 4,
-                          fontSize: 10.5,
-                          color: "var(--indigo-600)",
-                          marginTop: 5,
-                          background: "var(--indigo-50)",
-                          padding: "2px 7px",
-                          borderRadius: 5,
-                        }}
-                      >
-                        <Icon name="mail" size={10} />
-                        {format(t.notifications.emailVia, { email: nt.email })}
-                      </span>
-                    )}
-                  </span>
-                </Link>
-                );
-              })}
+              {active.map((nt) => row(nt, "active"))}
+              {showResolved && resolved.map((nt) => row(nt, "resolved"))}
             </div>
+
+            {resolved.length > 0 && (
+              <button
+                onClick={() => setShowResolved((s) => !s)}
+                style={{
+                  width: "100%",
+                  padding: "9px 16px",
+                  fontSize: 11.5,
+                  color: "var(--text-3)",
+                  background: "var(--surface-2)",
+                  border: "none",
+                  borderTop: "1px solid var(--border-2)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                <Icon
+                  name={showResolved ? "arrow-up" : "arrow-dn"}
+                  size={12}
+                />
+                {showResolved
+                  ? t.notifications.hideResolved
+                  : format(t.notifications.showResolved, {
+                      count: String(resolved.length),
+                    })}
+              </button>
+            )}
+
             {n > 0 && (
               <div
                 style={{

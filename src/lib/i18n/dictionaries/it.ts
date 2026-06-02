@@ -105,6 +105,11 @@ export const it = {
     title: "Notifiche",
     empty: "Nessuna notifica. Tutto in regola.",
     toHandle: "da gestire",
+    dismiss: "Segna come risolto",
+    restore: "Ripristina",
+    showResolved: "Mostra risolti ({count})",
+    hideResolved: "Nascondi risolti",
+    resolvedTag: "Risolto",
     emailVia: "Mail a {email} · via Resend",
     resendNote:
       "L'invio email automatico sarà collegato a Resend in fase di implementazione.",

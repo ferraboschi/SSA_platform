@@ -1000,6 +1000,30 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       if (error) throw error;
       return next;
     },
+
+    async getDismissedNotifications() {
+      const { data, error } = await sb
+        .from("settings_kv")
+        .select("value")
+        .eq("key", "dismissed_notifications")
+        .maybeSingle();
+      if (error) throw error;
+      const value = data?.value as { ids?: string[] } | undefined;
+      return value?.ids ?? [];
+    },
+
+    async setNotificationDismissed(id, dismissed) {
+      const current = new Set(await this.getDismissedNotifications());
+      if (dismissed) current.add(id);
+      else current.delete(id);
+      const { error } = await svc
+        .from("settings_kv")
+        .upsert(
+          { key: "dismissed_notifications", value: { ids: [...current] } },
+          { onConflict: "key" },
+        );
+      if (error) throw error;
+    },
   };
 
   // ─── stubs (return safe empty shape until live mapping lands) ──────────
@@ -1288,10 +1312,12 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         return (quals.get(numId) ?? []).includes(type);
       };
       const current = await usersRepo.getCurrent();
+      const dismissed = new Set(await settingsRepo.getDismissedNotifications());
       const notifs = computeNotifications({ courses, isQualified });
       return notifs.map((n) => ({
         ...n,
         email: n.email || current.email,
+        dismissed: dismissed.has(n.id),
       }));
     },
   };
