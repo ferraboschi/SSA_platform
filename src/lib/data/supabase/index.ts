@@ -424,10 +424,26 @@ function corsoRowToDomain(
 }
 
 // ── exam templates (question bank imported from Airtable) ────────────────────
+// A stored question is EITHER the legacy Airtable shape ({prompt, choices}) OR
+// the rich domain shape written by the editor (has a `type` field). The reader
+// detects which and normalizes both to the domain ExamQuestion.
 interface ExamTemplateQuestionJson {
-  prompt: string;
+  // legacy Airtable shape
+  prompt?: string;
   weight?: number;
-  choices: Array<{ text: string; correct: boolean }>;
+  choices?: Array<{ text: string; correct: boolean }>;
+  // rich shape (domain ExamQuestion, written on save)
+  id?: string;
+  cat?: string;
+  type?: ExamQuestionType;
+  important?: boolean;
+  lang?: string;
+  text?: string;
+  points?: number;
+  options?: string[];
+  correct?: Array<number | string>;
+  pairs?: Array<{ l: string; r: string }>;
+  items?: string[];
 }
 interface ExamTemplateMiniTestJson {
   day: number;
@@ -442,8 +458,10 @@ interface ExamTemplateRow {
   name: string;
   data: {
     source?: string;
+    rich?: boolean;
     questions?: ExamTemplateQuestionJson[];
     miniTests?: ExamTemplateMiniTestJson[];
+    feedback?: { name?: string; questions?: ExamTemplateQuestionJson[] };
   };
 }
 
@@ -469,8 +487,25 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
     keyPrefix: string,
   ): ExamQuestion[] =>
     raw.map((q, i) => {
-      const options = q.choices.map((c) => c.text);
-      const correct = q.choices
+      // Rich shape (saved by the editor) → pass through, normalize defaults.
+      if (q.type) {
+        return {
+          id: q.id ?? `${keyPrefix}-${i}`,
+          cat: q.cat ?? cats[i % cats.length].id,
+          type: q.type,
+          important: q.important ?? false,
+          lang: q.lang ?? "it",
+          text: q.text ?? "",
+          points: q.points ?? 1,
+          options: q.options,
+          correct: q.correct as ExamQuestion["correct"],
+          pairs: q.pairs,
+          items: q.items,
+        };
+      }
+      // Legacy Airtable shape ({prompt, choices}).
+      const options = (q.choices ?? []).map((c) => c.text);
+      const correct = (q.choices ?? [])
         .map((c, idx) => (c.correct ? idx : -1))
         .filter((x) => x >= 0);
       const type: ExamQuestionType = correct.length > 1 ? "multi" : "single";
@@ -482,7 +517,7 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
         type,
         important: false,
         lang: "it",
-        text: q.prompt,
+        text: q.prompt ?? "",
         points: q.weight ?? 1,
         options,
         correct,
@@ -514,7 +549,42 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
       thresholds: { pass: EXAM_THRESHOLDS.pass, retrial: EXAM_THRESHOLDS.retrial },
     },
     miniTests,
-    feedback: { name: "Feedback", questions: [] },
+    feedback: {
+      name: row.data?.feedback?.name ?? "Feedback",
+      questions: mapQuestions(row.data?.feedback?.questions ?? [], `q-${row.id}-fb`),
+    },
+  };
+}
+
+/** Inverse of examTemplateRowToDomain: serialize the domain template to the
+ *  rich `exam_templates.data` JSON shape (round-trips type/cat/correct/etc.). */
+function examTemplateToData(template: ExamTemplate): ExamTemplateRow["data"] {
+  const q = (qs: ExamQuestion[]): ExamTemplateQuestionJson[] =>
+    qs.map((x) => ({
+      id: x.id,
+      cat: x.cat,
+      type: x.type,
+      important: x.important,
+      lang: x.lang,
+      text: x.text,
+      points: x.points,
+      options: x.options,
+      correct: x.correct,
+      pairs: x.pairs,
+      items: x.items,
+    }));
+  return {
+    rich: true,
+    source: "editor",
+    questions: q(template.finalExam.questions),
+    miniTests: template.miniTests.map((m) => ({
+      day: m.day,
+      name: m.name,
+      topic: m.topic,
+      duration: m.duration,
+      questions: q(m.questions),
+    })),
+    feedback: { name: template.feedback.name, questions: q(template.feedback.questions) },
   };
 }
 
@@ -1405,15 +1475,43 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       return (data as ExamTemplateRow[]).map(examTemplateRowToDomain);
     },
     async getByFamily(family) {
+      // DB family is 'certificato'|'shochu'; domain is 'nihonshu'|'shochu'.
+      const dbFamily = family === "shochu" ? "shochu" : "certificato";
       const { data, error } = await sb
         .from("exam_templates")
         .select("id,family,name,data")
-        .eq("family", family)
+        .eq("family", dbFamily)
         .order("id", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (error) throw error;
       return data ? examTemplateRowToDomain(data as ExamTemplateRow) : null;
+    },
+    async save(template) {
+      const dbFamily = template.family === "shochu" ? "shochu" : "certificato";
+      // Locate the existing row for this family (service client bypasses RLS).
+      const { data: existing } = await svc
+        .from("exam_templates")
+        .select("id,data")
+        .eq("family", dbFamily)
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const prev = (existing?.data ?? {}) as ExamTemplateRow["data"];
+      // Merge so we keep non-content metadata (count/source/version) if present.
+      const nextData = { ...prev, ...examTemplateToData(template) };
+      if (existing?.id) {
+        const { error } = await svc
+          .from("exam_templates")
+          .update({ data: nextData })
+          .eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await svc
+          .from("exam_templates")
+          .insert({ family: dbFamily, name: template.label, data: nextData });
+        if (error) throw error;
+      }
     },
   };
 

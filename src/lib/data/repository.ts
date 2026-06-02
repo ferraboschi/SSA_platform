@@ -70,6 +70,8 @@ export interface ExamRepository {
 export interface ExamTemplateRepository {
   list(): Promise<ExamTemplate[]>;
   getByFamily(family: ExamFamily): Promise<ExamTemplate | null>;
+  /** Persist an edited family template (questions / mini-tests / feedback). */
+  save(template: ExamTemplate): Promise<void>;
 }
 
 export interface UserRepository {

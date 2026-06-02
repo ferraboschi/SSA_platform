@@ -27,8 +27,15 @@ export interface PublicRunnerData {
 }
 
 interface QJson {
-  prompt: string;
+  // legacy
+  prompt?: string;
   choices?: Array<{ text: string; correct: boolean }>;
+  // rich (editor-saved)
+  id?: string;
+  type?: string;
+  text?: string;
+  options?: string[];
+  correct?: Array<number | string>;
 }
 interface MiniJson {
   day: number;
@@ -41,6 +48,19 @@ function mapQuestions(
   includeAnswers: boolean,
 ): PublicRunnerQuestion[] {
   return raw.map((q, i) => {
+    // Rich shape → use stored type/options/correct directly.
+    if (q.type) {
+      const options = q.options ?? [];
+      const correct = (q.correct ?? []).filter((c): c is number => typeof c === "number");
+      return {
+        id: q.id ?? `${prefix}-${i}`,
+        type: q.type,
+        text: q.text ?? "",
+        options,
+        ...(includeAnswers ? { correct } : {}),
+      };
+    }
+    // Legacy shape.
     const choices = q.choices ?? [];
     const correctCount = choices.filter((c) => c.correct).length;
     const correct = choices
@@ -49,7 +69,7 @@ function mapQuestions(
     return {
       id: `${prefix}-${i}`,
       type: choices.length === 0 ? "open" : correctCount > 1 ? "multi" : "single",
-      text: q.prompt,
+      text: q.prompt ?? "",
       options: choices.map((c) => c.text),
       ...(includeAnswers ? { correct } : {}),
     };
@@ -93,11 +113,15 @@ export async function loadPublicExam(
 
   let questions: PublicRunnerQuestion[] = [];
   if (tpl) {
-    const data = tpl.data as { questions?: QJson[]; miniTests?: MiniJson[] };
+    const data = tpl.data as {
+      questions?: QJson[];
+      miniTests?: MiniJson[];
+      feedback?: { questions?: QJson[] };
+    };
     if (testKey === "final") {
       questions = mapQuestions(data.questions ?? [], `q-${tpl.id}`, includeAnswers);
     } else if (testKey === "feedback") {
-      questions = [];
+      questions = mapQuestions(data.feedback?.questions ?? [], `q-${tpl.id}-fb`, includeAnswers);
     } else {
       const m = /^day(\d+)$/.exec(testKey);
       if (m) {

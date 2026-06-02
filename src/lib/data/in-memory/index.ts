@@ -184,6 +184,11 @@ export function createInMemoryDataSource(
     async getByFamily(family: ExamFamily) {
       return examTemplates.find((t) => t.family === family) ?? null;
     },
+    async save(template) {
+      const i = examTemplates.findIndex((t) => t.family === template.family);
+      if (i >= 0) examTemplates[i] = template;
+      else examTemplates.push(template);
+    },
   };
 
   const userRepo: UserRepository = {
