@@ -1214,6 +1214,12 @@ export const it = {
     openProfile: "Profilo",
     markOk: "OK (risolvi)",
     notConfigured: "Supabase non configurato.",
+    emailTitle: "Stessa persona, email diverse",
+    emailSubtitle:
+      "Stesso nome e cognome registrato con più indirizzi email — probabilmente la stessa persona iscritta più volte (es. typo nell'email o account diverso).",
+    emailCount: "{n} persone con più email",
+    emailBadge: "{n} email",
+    emailReviewed: "Verificato",
   },
 
   archivio: {

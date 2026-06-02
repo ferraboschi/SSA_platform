@@ -1212,6 +1212,12 @@ export const en: Dictionary = {
     openProfile: "Profile",
     markOk: "OK (resolve)",
     notConfigured: "Supabase not configured.",
+    emailTitle: "Same person, different emails",
+    emailSubtitle:
+      "The same first and last name registered with several email addresses — likely the same person enrolled more than once (e.g. an email typo or a different account).",
+    emailCount: "{n} people with multiple emails",
+    emailBadge: "{n} emails",
+    emailReviewed: "Reviewed",
   },
 
   archivio: {
