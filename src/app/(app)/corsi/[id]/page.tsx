@@ -11,6 +11,7 @@ import {
 } from "@/lib/corsi";
 import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
+import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -144,10 +145,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               <Icon name="whatsapp" size={13} />
               {td.whatsappGroup}
             </button>
-            <button className="btn">
-              <Icon name="share" size={13} />
-              {td.shareEducator}
-            </button>
+            <ShareEducatorButton courseId={course.id} />
             <button className="btn">
               <Icon name="download" size={13} />
               {td.excelStudents}
