@@ -45,6 +45,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     );
   }
 
+  // Ensure the currently-assigned educator is selectable even if inactive
+  // (educators.list() may exclude inactive ones), so the picker shows them.
+  if (course.educator.id && !educatorOptions.some((o) => o.id === course.educator.id)) {
+    educatorOptions.push({ id: course.educator.id, name: course.educator.name });
+  }
+
   const daysTo = daysToStart(course);
   const pct = course.capacity ? course.enrolled / course.capacity : 0;
   const costItems = Object.values(course.costs).filter(Boolean).length;

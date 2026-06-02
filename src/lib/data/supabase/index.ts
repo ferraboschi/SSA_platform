@@ -541,15 +541,6 @@ interface MaterialTemplateWithChildren extends MaterialTemplateRow {
   }>;
 }
 
-/** Coerce a display date string ("—", "12 Mar 2026", ISO) to ISO or null.
- *  Date-only strings are parsed as UTC midnight to avoid an off-by-one shift. */
-function toTimestampOrNull(s: string | null | undefined): string | null {
-  if (!s || s === "—") return null;
-  const isoDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
-  const d = new Date(isoDateOnly ? `${s.trim()}T00:00:00Z` : s);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
 /** Render a timestamptz back to a friendly display string ("12 mar 2026"). */
 function formatLastUsed(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -936,10 +927,12 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
           adv: template.materiali.adv,
         },
         uses: template.uses,
-        // `lastUsed` is a display string ("—", "12 Mar 2026"); the column is a
-        // timestamptz. Coerce to a valid ISO timestamp or null — otherwise
-        // Postgres rejects placeholders (error 22007) and the whole save fails.
-        last_used_at: toTimestampOrNull(template.lastUsed),
+        // NOTE: `last_used_at` is intentionally NOT written here. The domain
+        // `lastUsed` is a humanized display string ("02 giu 2026") that does
+        // NOT round-trip into a timestamptz — writing it back would null/shift
+        // the column on every edit. Omitting it preserves the DB value on
+        // updates; new templates default to null. The "last used" timestamp is
+        // owned by the usage path (when a course adopts the template).
       };
 
       const upsertResult = numericId
