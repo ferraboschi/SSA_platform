@@ -30,7 +30,6 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "dashboard", icon: "home", href: "/dashboard", group: "main" },
   { id: "corsi", icon: "book", href: "/corsi", group: "catalogo" },
   { id: "pianificatore", icon: "calendar", href: "/pianificatore", group: "catalogo" },
-  { id: "analisi", icon: "trending", href: "/analisi", group: "catalogo" },
   { id: "conto-economico", icon: "note", href: "/conto-economico", group: "catalogo" },
   {
     id: "esami",
@@ -44,6 +43,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "corsisti", icon: "users", href: "/corsisti", group: "persone" },
   { id: "anomalie", icon: "warn", href: "/anomalie", group: "persone" },
   { id: "educator", icon: "graduation", href: "/educator", group: "persone" },
+  { id: "analisi", icon: "trending", href: "/analisi", group: "sistema" },
   { id: "account", icon: "user", href: "/account", group: "sistema" },
   { id: "design-system", icon: "tag", href: "/design-system", group: "sistema" },
 ];

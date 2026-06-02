@@ -3,7 +3,6 @@
 import { getDataSource } from "@/lib/data";
 import { getSession } from "@/lib/auth/session";
 import { sendStockAlertEmail } from "@/lib/alerts/emails";
-import { alertRecipients } from "@/lib/integrations/config";
 import type { StockAlert } from "@/lib/domain";
 
 /** Replace the full set of low-stock SKU watches (dashboard "Memoria operativa"). */
@@ -27,12 +26,17 @@ export async function sendTestStockAlertAction(): Promise<{ ok: boolean; error?:
     return { ok: false, error: "Non autorizzato." };
   }
   try {
-    const res = await sendStockAlertEmail("Esempio (test)", [
-      { name: "Sake di prova", code: "TEST-SKU", stock: 3, min: 10 },
-    ]);
+    // During testing, route the sample alert to the admin's own inbox so we can
+    // verify delivery without spamming the real recipient (Camilla).
+    const testTo = "lorenzo@ef-ti.com";
+    const res = await sendStockAlertEmail(
+      "Esempio (test)",
+      [{ name: "Sake di prova", code: "TEST-SKU", stock: 3, min: 10 }],
+      testTo,
+    );
     return res.status === "sent"
       ? { ok: true }
-      : { ok: false, error: `Email non inviata (Resend non configurato? → ${alertRecipients.stock})` };
+      : { ok: false, error: `Email non inviata (Resend non configurato? → ${testTo})` };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Errore invio." };
   }

@@ -9,6 +9,8 @@ import {
   toTemplateData,
   toEsameData,
 } from "@/lib/corsi";
+import { loadCourseEconomics } from "@/lib/economics";
+import { EMPTY_ECON } from "@/lib/economics/types";
 import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
 import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
@@ -50,6 +52,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (course.educator.id && !educatorOptions.some((o) => o.id === course.educator.id)) {
     educatorOptions.push({ id: course.educator.id, name: course.educator.name });
   }
+
+  // Invoicing status is owned by Accounting (Luigi) on /conto-economico; here we
+  // only surface it as a read-only signal.
+  const econ = (await loadCourseEconomics()).get(course.id) ?? EMPTY_ECON;
 
   const daysTo = daysToStart(course);
   const pct = course.capacity ? course.enrolled / course.capacity : 0;
@@ -164,10 +170,24 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             )}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="btn">
-              <Icon name="whatsapp" size={13} />
-              {td.whatsappGroup}
-            </button>
+            {course.whatsappLink ? (
+              <a className="btn" href={course.whatsappLink} target="_blank" rel="noopener noreferrer">
+                <Icon name="whatsapp" size={13} />
+                {td.whatsappGroup}
+              </a>
+            ) : (
+              <a
+                className="btn"
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `${course.shortTitle} · ${course.day} ${course.month} ${course.year} · ${course.city}`,
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Icon name="whatsapp" size={13} />
+                {td.whatsappShare}
+              </a>
+            )}
             <ShareEducatorButton courseId={course.id} />
             <button className="btn">
               <Icon name="download" size={13} />
@@ -178,10 +198,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               {td.excelSake}
             </button>
             <div style={{ flex: 1 }} />
-            <button className="btn btn-primary">
-              <Icon name="check" size={13} />
-              {td.markInvoiced}
-            </button>
+            <Badge tone={econ.invoiced ? "success" : "neutral"} size="lg" dot>
+              {econ.invoiced ? td.invoicedYes : td.invoicedNo}
+            </Badge>
           </div>
         </div>
 

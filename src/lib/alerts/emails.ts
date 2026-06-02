@@ -37,6 +37,7 @@ export interface StockAlertRow {
 export async function sendStockAlertEmail(
   alertLabel: string,
   rows: StockAlertRow[],
+  toOverride?: string,
 ): Promise<EmailSendResult> {
   const list = rows
     .map(
@@ -55,7 +56,7 @@ export async function sendStockAlertEmail(
     { href: loginLink("/dashboard"), label: "Apri la dashboard" },
   );
   return getEmailService().send({
-    to: alertRecipients.stock,
+    to: toOverride || alertRecipients.stock,
     subject: `⚠️ Allerta scorte SSA — ${alertLabel}`,
     html,
     tag: "stock-alert",
