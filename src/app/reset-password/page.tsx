@@ -16,19 +16,19 @@ export const dynamic = "force-dynamic";
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string; error_description?: string }>;
+  searchParams: Promise<{ error_description?: string }>;
 }) {
-  const { code, error_description } = await searchParams;
+  const { error_description } = await searchParams;
 
+  // The recovery session was already established by /auth/reset (the Route
+  // Handler) which set the cookies — so we just need a live session here.
   let ready = false;
-  if (code) {
-    try {
-      const sb = await getSupabaseServerClient();
-      const { error } = await sb.auth.exchangeCodeForSession(code);
-      ready = !error;
-    } catch {
-      ready = false;
-    }
+  try {
+    const sb = await getSupabaseServerClient();
+    const { data } = await sb.auth.getUser();
+    ready = !!data.user;
+  } catch {
+    ready = false;
   }
 
   return (

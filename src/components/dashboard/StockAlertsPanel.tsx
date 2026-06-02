@@ -43,6 +43,7 @@ export function StockAlertsPanel({
   const [draftSkus, setDraftSkus] = useState<string[]>([]);
   const [draftMin, setDraftMin] = useState(10);
   const [draftLabel, setDraftLabel] = useState("");
+  const [testMsg, setTestMsg] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -61,9 +62,15 @@ export function StockAlertsPanel({
   }, []);
 
   function persist(next: StockAlert[]) {
+    const prev = alerts;
     setAlerts(next);
     startTransition(async () => {
-      await saveStockAlertsAction(next);
+      const r = await saveStockAlertsAction(next);
+      if (!r.ok) {
+        setAlerts(prev); // revert so the UI matches what's actually saved
+        setTestMsg(r.error || "Salvataggio non riuscito");
+        setTimeout(() => setTestMsg(null), 5000);
+      }
     });
   }
 
@@ -105,7 +112,6 @@ export function StockAlertsPanel({
   }
 
   // Test email to Camilla — lets staff verify the stock-alert email works.
-  const [testMsg, setTestMsg] = useState<string | null>(null);
   function sendTest() {
     setTestMsg(null);
     startTransition(async () => {

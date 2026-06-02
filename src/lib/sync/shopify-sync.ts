@@ -134,8 +134,15 @@ async function syncCourses(
   async function resolveEducatorId(productId: number | string): Promise<number | null> {
     const val = await getProductEducatorMetafield(productId);
     if (!val) return null;
-    const v = normName(val);
-    return educators.find((e) => e.n && v.includes(e.n))?.id ?? null;
+    // Whole-word match: every token of the educator name must appear as a full
+    // word in the metafield value (so "Marco" doesn't match "Gianmarco").
+    const tokens = new Set(normName(val).split(" ").filter(Boolean));
+    return (
+      educators.find((e) => {
+        const parts = e.n.split(" ").filter(Boolean);
+        return parts.length > 0 && parts.every((t) => tokens.has(t));
+      })?.id ?? null
+    );
   }
 
   for (const p of products) {

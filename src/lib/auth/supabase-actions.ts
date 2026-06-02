@@ -77,8 +77,10 @@ export async function requestPasswordResetAction(
 ): Promise<AuthActionResult> {
   const sb = await getSupabaseServerClient();
   const base = appConfig.baseUrl.replace(/\/$/, "");
+  // Land on the Route Handler — it can persist the recovery-session cookies
+  // (a Server Component cannot), then it forwards to /reset-password.
   await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: `${base}/reset-password`,
+    redirectTo: `${base}/auth/reset`,
   });
   return { ok: true };
 }

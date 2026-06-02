@@ -57,9 +57,11 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
       return endIso ? new Date(endIso).getTime() < now.getTime() : false;
     });
 
-    const notifiedObj = (await kvGet<{ ids: number[] }>(svc, "invoice_notified")) ?? { ids: [] };
-    const notified = new Set(notifiedObj.ids);
-    const firstRun = notified.size === 0;
+    const notifiedObj = await kvGet<{ ids: number[]; seeded?: boolean }>(svc, "invoice_notified");
+    const notified = new Set(notifiedObj?.ids ?? []);
+    // "First run" = the marker was never written (distinct from "ran but found
+    // zero ended courses"), so a first run with no ended courses still seeds.
+    const firstRun = !notifiedObj?.seeded;
 
     for (const c of ended) {
       if (notified.has(c.id)) continue;
@@ -96,7 +98,7 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
       }
       notified.add(c.id);
     }
-    await kvSet(svc, "invoice_notified", { ids: [...notified] });
+    await kvSet(svc, "invoice_notified", { ids: [...notified], seeded: true });
   } catch {
     /* corsi/settings unavailable — skip invoice checks */
   }
