@@ -241,7 +241,11 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                     )}
                   </td>
                   <td className="num" style={{ textAlign: "right" }}>
-                    {c.amount}€
+                    {c.amount > 0 ? (
+                      `${c.amount}€`
+                    ) : (
+                      <span className="text-3" style={{ fontSize: 12 }}>{t.free}</span>
+                    )}
                   </td>
                 </tr>
               ))}

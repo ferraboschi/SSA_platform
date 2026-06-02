@@ -1206,6 +1206,7 @@ export const it = {
       passed: "Promosso",
       retrial: "Recupero",
       failed: "Bocciato",
+      free: "Gratis",
       purchasesTitle: "Acquisti ({n})",
       purchaseColProduct: "Prodotto",
       purchaseColType: "Tipo",
@@ -1231,6 +1232,16 @@ export const it = {
     emailCount: "{n} persone con più email",
     emailBadge: "{n} email",
     emailReviewed: "Verificato",
+    repaidTitle: "Ripartecipazione pagata (dovrebbe essere gratis)",
+    repaidSubtitle:
+      "Regola SSA: chi ha già fatto un corso può ripartecipare allo stesso tipo gratis. Qui compaiono persone con più iscrizioni PAGATE dello stesso tipo — l'importo in più è probabilmente un errore.",
+    repaidCount: "{n} casi di ripartecipazione pagata",
+    repaidBadge: "{n} pagate",
+    dupTitle: "Corsi doppioni (stesso corso, due record)",
+    dupSubtitle:
+      "Stesso tipo, mese, anno e modalità registrati come due corsi diversi — è probabilmente lo stesso corso (es. versione storica + '8 date Online'). Da unificare.",
+    dupCount: "{n} possibili doppioni",
+    dupEnrolled: "{n} iscritti",
   },
 
   archivio: {

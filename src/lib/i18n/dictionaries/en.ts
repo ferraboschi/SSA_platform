@@ -1204,6 +1204,7 @@ export const en: Dictionary = {
       passed: "Passed",
       retrial: "Retrial",
       failed: "Failed",
+      free: "Free",
       purchasesTitle: "Purchases ({n})",
       purchaseColProduct: "Product",
       purchaseColType: "Type",
@@ -1229,6 +1230,16 @@ export const en: Dictionary = {
     emailCount: "{n} people with multiple emails",
     emailBadge: "{n} emails",
     emailReviewed: "Reviewed",
+    repaidTitle: "Paid re-participation (should be free)",
+    repaidSubtitle:
+      "SSA rule: anyone who already took a course may re-attend the same type for free. These people have more than one PAID enrollment of the same type — the extra amount is likely an error.",
+    repaidCount: "{n} paid re-participation cases",
+    repaidBadge: "{n} paid",
+    dupTitle: "Duplicate courses (same course, two records)",
+    dupSubtitle:
+      "Same type, month, year and mode recorded as two different courses — likely the same course (e.g. historical version + '8 date Online'). To merge.",
+    dupCount: "{n} possible duplicates",
+    dupEnrolled: "{n} enrolled",
   },
 
   archivio: {

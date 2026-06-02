@@ -156,6 +156,7 @@ interface IscrizioneRow {
   corso_id: number;
   corsista_id: number;
   amount_cents: number;
+  discount_cents?: number | null;
   exam_result: "passed" | "retrial" | "failed" | null;
   exam_score_pct?: number | null;
   historical: boolean;
@@ -237,7 +238,9 @@ function iscrizioneToEnrollment(row: IscrizioneRow): CorsistaEnrollment | null {
     month: corso.month,
     year: corso.year,
     status: corso.lifecycle,
-    amount: row.amount_cents / 100,
+    // NET paid (gross − discount). Free re-participations have a full discount,
+    // so they correctly show 0 instead of a misleading gross amount.
+    amount: Math.max((row.amount_cents || 0) - (row.discount_cents || 0), 0) / 100,
     examResult: row.exam_result,
     examScorePct: row.exam_score_pct ?? null,
     historical: row.historical || undefined,
@@ -803,8 +806,8 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       id, short_title, full_title, type, city, month, year, lifecycle
     )`;
   // `exam_score_pct` may not exist pre-migration → fall back without it.
-  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, exam_result, exam_score_pct, historical, ${enrollmentCorso}`;
-  const enrollmentSelectBase = `id, corso_id, corsista_id, amount_cents, exam_result, historical, ${enrollmentCorso}`;
+  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, exam_score_pct, historical, ${enrollmentCorso}`;
+  const enrollmentSelectBase = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, historical, ${enrollmentCorso}`;
 
   const corsistiRepo: CorsistaRepository = {
     async list() {
