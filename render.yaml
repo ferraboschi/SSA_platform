@@ -61,6 +61,14 @@ services:
         sync: false
       - key: EMBEDDINGS_API_KEY
         sync: false
+      # Resend (transactional email). RESEND_API_KEY is required to send;
+      # RESEND_FROM defaults to "SSA <no-reply@sakesommelierassociation.it>".
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        value: SSA <no-reply@mail.sakesommelierassociation.it>
+      - key: RESEND_REPLY_TO
+        sync: false
 
   # Continuous Shopify → platform sync. Hits the web service's sync endpoint
   # every 10 minutes; the endpoint pulls only orders changed since the last run,
