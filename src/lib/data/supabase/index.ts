@@ -157,6 +157,7 @@ interface IscrizioneRow {
   corsista_id: number;
   amount_cents: number;
   exam_result: "passed" | "retrial" | "failed" | null;
+  exam_score_pct?: number | null;
   historical: boolean;
   // PostgREST returns an embedded record as an array even when the relation
   // is many-to-one. We accept both shapes and normalize.
@@ -238,6 +239,7 @@ function iscrizioneToEnrollment(row: IscrizioneRow): CorsistaEnrollment | null {
     status: corso.lifecycle,
     amount: row.amount_cents / 100,
     examResult: row.exam_result,
+    examScorePct: row.exam_score_pct ?? null,
     historical: row.historical || undefined,
   };
 }
@@ -797,17 +799,12 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
   };
 
   // ─── corsisti ───────────────────────────────────────────────────────────
-  const enrollmentSelect = `
-    id,
-    corso_id,
-    corsista_id,
-    amount_cents,
-    exam_result,
-    historical,
-    corso:corsi (
+  const enrollmentCorso = `corso:corsi (
       id, short_title, full_title, type, city, month, year, lifecycle
-    )
-  `;
+    )`;
+  // `exam_score_pct` may not exist pre-migration → fall back without it.
+  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, exam_result, exam_score_pct, historical, ${enrollmentCorso}`;
+  const enrollmentSelectBase = `id, corso_id, corsista_id, amount_cents, exam_result, historical, ${enrollmentCorso}`;
 
   const corsistiRepo: CorsistaRepository = {
     async list() {
@@ -816,9 +813,15 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         .select("*")
         .order("full_name");
       if (e1) throw e1;
-      const { data: iscrData, error: e2 } = await sb
+      let { data: iscrData, error: e2 } = await sb
         .from("corsi_iscrizioni")
         .select(enrollmentSelect);
+      if (e2) {
+        // pre-migration: retry without exam_score_pct
+        ({ data: iscrData, error: e2 } = await sb
+          .from("corsi_iscrizioni")
+          .select(enrollmentSelectBase));
+      }
       if (e2) throw e2;
 
       const enrollByCorsista = new Map<number, CorsistaEnrollment[]>();

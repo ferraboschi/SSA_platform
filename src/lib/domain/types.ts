@@ -177,6 +177,8 @@ export interface CorsistaEnrollment {
   status: CourseLifecycle;
   amount: number;
   examResult: ExamResultStatus | null;
+  /** Exam score percentage (0–100), when graded. */
+  examScorePct?: number | null;
   historical?: boolean;
 }
 

@@ -234,6 +234,11 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                     {c.examResult === "retrial" && <Badge tone="warning">{t.retrial}</Badge>}
                     {c.examResult === "failed" && <Badge tone="danger">{t.failed}</Badge>}
                     {!c.examResult && <span className="text-mute">—</span>}
+                    {c.examResult && c.examScorePct != null && (
+                      <span className="num text-3" style={{ marginLeft: 6, fontSize: 12 }}>
+                        {c.examScorePct}%
+                      </span>
+                    )}
                   </td>
                   <td className="num" style={{ textAlign: "right" }}>
                     {c.amount}€

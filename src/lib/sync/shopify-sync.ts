@@ -72,7 +72,9 @@ function parseCourseTitle(title: string): ParsedCourse | null {
   else if (t.includes("introdutt")) type = "introduttivo";
   else if (t.includes("masterclass")) type = "masterclass";
   if (!month || !yearMatch || !type) return null;
-  const delivery = t.includes("online") ? "online" : "in-person";
+  // Masterclasses are always run online; otherwise infer from the title.
+  const delivery =
+    type === "masterclass" || t.includes("online") ? "online" : "in-person";
   let city = title.includes(",") ? title.split(",").pop()!.trim() : "—";
   if (city.toLowerCase() === "online") city = "Online";
   return { month: MONTHS[month], year: Number(yearMatch[0]), type, delivery, city };
