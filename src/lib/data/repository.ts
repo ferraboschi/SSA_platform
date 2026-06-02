@@ -16,6 +16,7 @@ import type {
   ExamTemplate,
   MaterialTemplate,
   Notification,
+  StockAlert,
   User,
 } from "@/lib/domain";
 import type {
@@ -91,6 +92,9 @@ export interface SettingsRepository {
   getDismissedNotifications(): Promise<string[]>;
   /** Silence (true) or restore (false) a notification by id. */
   setNotificationDismissed(id: string, dismissed: boolean): Promise<void>;
+  /** Operator-defined low-stock SKU watches (dashboard "Memoria operativa"). */
+  getStockAlerts(): Promise<StockAlert[]>;
+  setStockAlerts(alerts: StockAlert[]): Promise<void>;
 }
 
 export interface DataSource {

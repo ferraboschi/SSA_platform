@@ -87,6 +87,18 @@ export const DEFAULT_THRESHOLDS: DashThresholds = {
   sakeExamPct: 70,
 };
 
+// Operator-defined low-stock watch: link one or more Sake Company SKUs and get a
+// dashboard alert when live stock drops below `min`. Persisted in settings_kv.
+export interface StockAlert {
+  id: string;
+  /** Friendly label (optional; defaults to the first product name). */
+  label: string;
+  /** Watched Sake Company SKUs. */
+  skus: string[];
+  /** Alert fires when any linked SKU's stock is below this. */
+  min: number;
+}
+
 // Default educator qualifications (course types an educator may teach).
 // Founder (e1) qualified for everything; e2 explicitly NOT shochu.
 export const DEFAULT_QUALS: Record<string, CourseTypeKey[]> = {

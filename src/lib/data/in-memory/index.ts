@@ -11,6 +11,7 @@ import {
   FALLBACK_QUALS,
   type Course,
   type DashThresholds,
+  type StockAlert,
   type User,
 } from "@/lib/domain";
 import type {
@@ -67,6 +68,7 @@ export function createInMemoryDataSource(
   const qualOverrides = new Map<string, CourseTypeKey[]>();
   const profileOverrides = new Map<string, Partial<User>>();
   let thresholds: DashThresholds = { ...DEFAULT_THRESHOLDS };
+  let stockAlerts: StockAlert[] = [];
   let currentUserId = users[0]?.id ?? "lorenzo";
 
   const getQuals = (id: string): CourseTypeKey[] =>
@@ -234,6 +236,12 @@ export function createInMemoryDataSource(
     async setNotificationDismissed(id, dismissed) {
       if (dismissed) dismissedNotifs.add(id);
       else dismissedNotifs.delete(id);
+    },
+    async getStockAlerts() {
+      return stockAlerts.map((a) => ({ ...a }));
+    },
+    async setStockAlerts(alerts) {
+      stockAlerts = alerts.map((a) => ({ ...a }));
     },
   };
 

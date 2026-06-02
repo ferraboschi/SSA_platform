@@ -9,6 +9,7 @@ import {
   MonthReportButton,
   OperationalReminders,
   PipelineBar,
+  StockAlertsPanel,
 } from "@/components/dashboard";
 
 export default async function DashboardPage() {
@@ -22,6 +23,7 @@ export default async function DashboardPage() {
       ds.educators.list(),
       ds.settings.getThresholds(),
     ]);
+  const stockAlerts = await ds.settings.getStockAlerts();
 
   const d = buildDashboard(courses, corsisti, educators, thresholds);
   const dt = t.dashboard;
@@ -164,6 +166,9 @@ export default async function DashboardPage() {
 
       {/* Operational reminders */}
       <OperationalReminders reminders={d.reminders} thresholds={thresholds} />
+
+      {/* Operator-defined low-stock SKU watches */}
+      <StockAlertsPanel initialAlerts={stockAlerts} />
 
       {/* Pipeline strip */}
       <section className="card" style={{ marginBottom: 28 }}>

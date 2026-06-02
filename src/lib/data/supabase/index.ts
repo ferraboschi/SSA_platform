@@ -50,6 +50,7 @@ import type {
   ProgramDay,
   Purchase,
   Sake,
+  StockAlert,
   Student,
   User,
 } from "@/lib/domain";
@@ -1020,6 +1021,27 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         .from("settings_kv")
         .upsert(
           { key: "dismissed_notifications", value: { ids: [...current] } },
+          { onConflict: "key" },
+        );
+      if (error) throw error;
+    },
+
+    async getStockAlerts() {
+      const { data, error } = await sb
+        .from("settings_kv")
+        .select("value")
+        .eq("key", "stock_alerts")
+        .maybeSingle();
+      if (error) throw error;
+      const value = data?.value as { alerts?: StockAlert[] } | undefined;
+      return value?.alerts ?? [];
+    },
+
+    async setStockAlerts(alerts) {
+      const { error } = await svc
+        .from("settings_kv")
+        .upsert(
+          { key: "stock_alerts", value: { alerts } },
           { onConflict: "key" },
         );
       if (error) throw error;
