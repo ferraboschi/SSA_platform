@@ -44,6 +44,11 @@ services:
         sync: false
       - key: SHOPIFY_ADMIN_TOKEN
         sync: false
+      # Airtable (online exam system: questions, students, answers)
+      - key: AIRTABLE_BASE_ID
+        value: appj4DEH3RYFqct1Q
+      - key: AIRTABLE_API_KEY
+        sync: false
       # Sake Company (second Shopify store — supplier catalog)
       - key: SAKECOMPANY_STORE_DOMAIN
         sync: false
