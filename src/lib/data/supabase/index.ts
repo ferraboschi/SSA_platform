@@ -26,6 +26,7 @@ import {
   defaultMaterialCosts,
   EXAM_THRESHOLDS,
   NIHONSHU_CATS,
+  ROLE_META,
   SHOCHU_CATS,
   STATUS_META,
 } from "@/lib/domain";
@@ -51,6 +52,7 @@ import type {
   Notification,
   ProgramDay,
   Purchase,
+  RoleKey,
   Sake,
   StockAlert,
   Student,
@@ -86,7 +88,7 @@ interface ProfileRow {
   first_name: string;
   last_name: string;
   display_name: string | null;
-  role: "admin" | "manager";
+  role: RoleKey;
   phone: string;
   city: string;
   position: string;
@@ -189,7 +191,7 @@ function profileToUser(row: ProfileRow): User {
     first,
     last,
     name,
-    role: row.role === "admin" ? "Admin" : "Manager",
+    role: ROLE_META[row.role]?.label ?? "Staff",
     roleKey: row.role,
     email: row.email,
     phone: row.phone ?? "",

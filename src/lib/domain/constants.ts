@@ -176,5 +176,7 @@ export interface RoleMeta {
 
 export const ROLE_META: Record<RoleKey, RoleMeta> = {
   admin: { key: "admin", label: "Admin" },
-  manager: { key: "manager", label: "Manager" },
+  manager: { key: "manager", label: "Manager SSA" },
+  social: { key: "social", label: "Social & Campagne" },
+  accountant: { key: "accountant", label: "Contabilità" },
 };

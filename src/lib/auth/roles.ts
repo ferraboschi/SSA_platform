@@ -18,14 +18,19 @@ export const CAPABILITIES = [
   "exams:grade",
   "educators:manage",
   "settings:manage",
+  "finance:view",
+  "communications:manage",
   "designSystem:view",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
 
-// Admin (founder) has the full surface; the manager runs operations but not the
-// developer-facing design-system tooling. New capabilities default to admin-only
-// until explicitly granted to other roles.
+// Capability matrix per role:
+//   admin (Lorenzo)      → full surface.
+//   manager (Camilla)    → runs operations: courses, exams, educators, settings,
+//                          finance + communications; not the dev design-system.
+//   social (Dario)       → campaigns/communications + read-only course/audience.
+//   accountant (Luigi)   → finance/economics + read-only courses; no management.
 export const ROLE_CAPABILITIES: Record<RoleKey, Capability[]> = {
   admin: [...CAPABILITIES],
   manager: [
@@ -34,7 +39,11 @@ export const ROLE_CAPABILITIES: Record<RoleKey, Capability[]> = {
     "exams:grade",
     "educators:manage",
     "settings:manage",
+    "finance:view",
+    "communications:manage",
   ],
+  social: ["courses:view", "communications:manage"],
+  accountant: ["courses:view", "finance:view"],
 };
 
 export function roleCan(role: RoleKey, cap: Capability): boolean {
@@ -68,6 +77,31 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "template-materiali",
       "archivio",
     ],
+  },
+  // Dario — social/campaigns: audience + catalog, no ops/exams/finance tooling.
+  social: {
+    hidden: [
+      "esami",
+      "pianificatore",
+      "template-materiali",
+      "anomalie",
+      "educator",
+      "design-system",
+    ],
+    priority: ["dashboard", "corsisti", "corsi", "archivio"],
+  },
+  // Luigi — bookkeeping: economics + history, no course/people management.
+  accountant: {
+    hidden: [
+      "esami",
+      "pianificatore",
+      "template-materiali",
+      "corsisti",
+      "anomalie",
+      "educator",
+      "design-system",
+    ],
+    priority: ["dashboard", "corsi", "archivio"],
   },
 };
 

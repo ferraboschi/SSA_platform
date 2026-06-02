@@ -72,7 +72,7 @@ export type LiveSessionStatus = (typeof LIVE_SESSION_STATUSES)[number];
 export const MINI_TEST_STATUSES = ["pianificato", "completato"] as const;
 export type MiniTestStatus = (typeof MINI_TEST_STATUSES)[number];
 
-export const ROLE_KEYS = ["admin", "manager"] as const;
+export const ROLE_KEYS = ["admin", "manager", "social", "accountant"] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
 export const NOTIFICATION_TONES = ["danger", "warning", "info"] as const;
