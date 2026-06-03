@@ -53,6 +53,9 @@ const CHROME: Record<Lang, Record<string, string>> = {
     regAddress: "Indirizzo di spedizione del materiale",
     male: "Maschile",
     female: "Femminile",
+    iDone: "Ho finito",
+    emailInvalid: "Inserisci un'email valida",
+    emptyListTitle: "Domande lasciate vuote",
   },
   en: {
     test: "TEST MODE",
@@ -83,6 +86,9 @@ const CHROME: Record<Lang, Record<string, string>> = {
     regAddress: "Shipping address for materials",
     male: "Male",
     female: "Female",
+    iDone: "I'm done",
+    emailInvalid: "Enter a valid email",
+    emptyListTitle: "Questions left empty",
   },
   ja: {
     test: "テストモード",
@@ -113,6 +119,9 @@ const CHROME: Record<Lang, Record<string, string>> = {
     regAddress: "教材の配送先住所",
     male: "男性",
     female: "女性",
+    iDone: "完了",
+    emailInvalid: "有効なメールを入力してください",
+    emptyListTitle: "未回答の問題",
   },
 };
 
@@ -343,6 +352,15 @@ export function ExamRunner({
     else void finish();
   };
 
+  // Block "Avanti" while sitting on the email step with an invalid address.
+  const curEmail =
+    step.kind === "reg" && step.field === "email"
+      ? (answers["reg:email"] as string | undefined)
+      : undefined;
+  const emailInvalid =
+    typeof curEmail === "string" && curEmail.trim() !== "" && !EMAIL_RE.test(curEmail.trim());
+  const atLast = idx === total - 1;
+
   return (
     <div className="exam-public-shell">
       <div className="exam-public-card">
@@ -386,24 +404,31 @@ export function ExamRunner({
           >
             {t.back}
           </button>
-          {idx < total - 1 ? (
+          {!atLast && (
             <button
               type="button"
               className="exam-public-btn primary"
               onClick={() => setIdx((i) => Math.min(total - 1, i + 1))}
+              disabled={emailInvalid}
             >
               {t.next}
             </button>
-          ) : (
-            <button
-              type="button"
-              className="exam-public-btn primary"
-              onClick={goFinish}
-              disabled={submitting}
-            >
-              {submitting ? "…" : t.finish}
-            </button>
           )}
+          {/* "Ho finito" is always present; it turns orange + clickable on the
+              last step, regardless of how many questions are still empty. */}
+          <button
+            type="button"
+            className="exam-public-btn"
+            onClick={goFinish}
+            disabled={!atLast || submitting}
+            style={
+              atLast
+                ? { background: "#f59e0b", borderColor: "#f59e0b", color: "#fff" }
+                : { opacity: 0.45 }
+            }
+          >
+            {submitting ? "…" : t.iDone}
+          </button>
         </div>
       </div>
 
@@ -413,6 +438,25 @@ export function ExamRunner({
           <div className="exam-public-modal">
             <h3>{t.pendingTitle}</h3>
             <p>{t.pendingBody.replace("{n}", String(pendingPrompt.length))}</p>
+            <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)", margin: "2px 0 6px" }}>
+              {t.emptyListTitle}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+              {pendingPrompt.map((si) => (
+                <button
+                  key={si}
+                  type="button"
+                  className="exam-public-btn ghost"
+                  style={{ padding: "4px 11px", fontSize: 13, minWidth: 0 }}
+                  onClick={() => {
+                    setIdx(Number(si));
+                    setPendingPrompt(null);
+                  }}
+                >
+                  {t.question} {Number(si) + 1}
+                </button>
+              ))}
+            </div>
             <div className="exam-public-modal-actions">
               <button
                 className="exam-public-btn ghost"
@@ -438,6 +482,31 @@ export function ExamRunner({
       )}
     </div>
   );
+}
+
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Country dial codes — Italy first (the SSA audience), then common ones.
+const COUNTRY_CODES: { c: string; n: string }[] = [
+  { c: "+39", n: "Italia" },
+  { c: "+1", n: "USA / Canada" },
+  { c: "+44", n: "Regno Unito" },
+  { c: "+33", n: "Francia" },
+  { c: "+49", n: "Germania" },
+  { c: "+34", n: "Spagna" },
+  { c: "+41", n: "Svizzera" },
+  { c: "+43", n: "Austria" },
+  { c: "+32", n: "Belgio" },
+  { c: "+31", n: "Paesi Bassi" },
+  { c: "+81", n: "Giappone" },
+  { c: "+86", n: "Cina" },
+  { c: "+61", n: "Australia" },
+];
+
+function splitPhone(val: string): { code: string; num: string } {
+  const m = /^(\+\d{1,4})\s*(.*)$/.exec(val.trim());
+  if (m && COUNTRY_CODES.some((x) => x.c === m[1])) return { code: m[1], num: m[2] };
+  return { code: "+39", num: val.replace(/^\+\d{1,4}\s*/, "") };
 }
 
 function RegInput({
@@ -486,10 +555,53 @@ function RegInput({
           onChange={(e) => onChange(e.target.value)}
           rows={3}
         />
+      ) : field === "email" ? (
+        <>
+          <input
+            className="exam-public-input"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            value={val}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {val.trim() !== "" && !EMAIL_RE.test(val.trim()) && (
+            <p style={{ color: "#b42318", fontSize: 13, marginTop: 6 }}>{t.emailInvalid}</p>
+          )}
+        </>
+      ) : field === "phone" ? (
+        (() => {
+          const { code, num } = splitPhone(val);
+          return (
+            <div style={{ display: "flex", gap: 8 }}>
+              <select
+                className="exam-public-input"
+                value={code}
+                onChange={(e) => onChange(`${e.target.value} ${num}`.trim())}
+                style={{ flex: "0 0 130px" }}
+              >
+                {COUNTRY_CODES.map((cc) => (
+                  <option key={cc.c + cc.n} value={cc.c}>
+                    {cc.n} ({cc.c})
+                  </option>
+                ))}
+              </select>
+              <input
+                className="exam-public-input"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
+                value={num}
+                onChange={(e) => onChange(`${code} ${e.target.value}`.trim())}
+                style={{ flex: 1 }}
+              />
+            </div>
+          );
+        })()
       ) : (
         <input
           className="exam-public-input"
-          type={field === "email" ? "email" : field === "phone" ? "tel" : "text"}
+          type="text"
           value={val}
           onChange={(e) => onChange(e.target.value)}
         />
