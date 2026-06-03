@@ -37,6 +37,6 @@ export const getSakeCatalog = unstable_cache(
       return [];
     }
   },
-  ["sake-catalog-v3"],
+  ["sake-catalog-v4"],
   { revalidate: 600, tags: [SAKE_CATALOG_TAG] },
 );

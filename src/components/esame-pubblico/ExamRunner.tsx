@@ -626,6 +626,34 @@ function RegInput({
             </button>
           ))}
         </div>
+      ) : field === "name" ? (
+        (() => {
+          const sp = val.indexOf(" ");
+          const first = sp >= 0 ? val.slice(0, sp) : val;
+          const last = sp >= 0 ? val.slice(sp + 1) : "";
+          return (
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="exam-public-input"
+                type="text"
+                placeholder="Nome"
+                autoComplete="given-name"
+                value={first}
+                onChange={(e) => onChange(`${e.target.value} ${last}`.trim())}
+                style={{ flex: 1 }}
+              />
+              <input
+                className="exam-public-input"
+                type="text"
+                placeholder="Cognome"
+                autoComplete="family-name"
+                value={last}
+                onChange={(e) => onChange(`${first} ${e.target.value}`.trim())}
+                style={{ flex: 1 }}
+              />
+            </div>
+          );
+        })()
       ) : field === "address" ? (
         <GoogleAddressInput value={val} onChange={onChange} />
       ) : field === "email" ? (

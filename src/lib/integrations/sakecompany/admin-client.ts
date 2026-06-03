@@ -49,15 +49,42 @@ function nextPageInfo(link: string | null): string | null {
   return m ? m[1] : null;
 }
 
-async function scGet(path: string): Promise<{ body: unknown; link: string | null }> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Shopify's REST products endpoint is intermittently flaky for this store: it
+// sometimes returns HTTP 200 with an `{ errors }` body (or 429/5xx) instead of
+// the products. Retry a few times so a transient failure doesn't yield an empty
+// catalog (which then gets cached for 10 minutes).
+async function scGet(
+  path: string,
+  attempt = 0,
+): Promise<{ body: unknown; link: string | null }> {
   const res = await fetch(`${base()}/${path}`, {
     headers: { "X-Shopify-Access-Token": sakeCompanyConfig.adminToken as string },
     cache: "no-store",
   });
   if (!res.ok) {
+    // This store's REST products endpoint flaps between 200 and a transient 404
+    // (Shopify throttling), so retry 404 here too — the endpoint works ~1/3 of
+    // the time, so several attempts make it reliable.
+    if ((res.status === 429 || res.status === 404 || res.status >= 500) && attempt < 7) {
+      await sleep(Math.min(300 * (attempt + 1), 1500));
+      return scGet(path, attempt + 1);
+    }
     throw new Error(`Sake Company ${res.status}: ${(await res.text()).slice(0, 200)}`);
   }
-  return { body: await res.json(), link: res.headers.get("Link") };
+  const body = await res.json();
+  // A 200 with an `errors` body is a transient API hiccup, not real data.
+  if (body && typeof body === "object" && "errors" in (body as Record<string, unknown>)) {
+    if (attempt < 5) {
+      await sleep(400 * (attempt + 1));
+      return scGet(path, attempt + 1);
+    }
+    throw new Error(
+      `Sake Company error body: ${JSON.stringify((body as { errors: unknown }).errors).slice(0, 200)}`,
+    );
+  }
+  return { body, link: res.headers.get("Link") };
 }
 
 /** All collections (custom + smart), sorted by title. */
