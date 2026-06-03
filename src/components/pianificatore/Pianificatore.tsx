@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, Icon, PageHeader, type AvatarTone } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
@@ -16,7 +16,9 @@ import {
   type PlannedCourse,
   type PlannerEducator,
   type PlannerItem,
+  type PlannerSaved,
 } from "@/lib/pianificatore";
+import { savePlannerStateAction } from "@/lib/pianificatore-actions";
 import type { PrevYearItem } from "@/app/(app)/pianificatore/page";
 import type { AddAt, AddExtra } from "./types";
 import { PL_Views } from "./views";
@@ -105,6 +107,8 @@ export interface PianificatoreProps {
     roleKey: RoleKey;
   };
   adminName: string | null;
+  /** Server-persisted planner state (settings_kv); wins over localStorage. */
+  initialSaved?: PlannerSaved | null;
 }
 
 export function Pianificatore({
@@ -116,9 +120,12 @@ export function Pianificatore({
   returningCount,
   me,
   adminName,
+  initialSaved,
 }: PianificatoreProps) {
   const t = useT().pianificatore;
   const router = useRouter();
+  // Server state wins over the local cache (so edits sync across devices).
+  const saved0: PlSaved = { ...plLoad(), ...(initialSaved ?? {}) };
 
   const types = useMemo(() => Object.keys(COURSE_TYPES) as CourseTypeKey[], []);
   const typeLabels = useMemo(
@@ -135,31 +142,43 @@ export function Pianificatore({
 
   const win = useMemo(() => buildWindow(), []);
 
-  const [view, setView] = useState<string>(() => plLoad().view || "timeline");
-  const [scenario, setScenario] = useState<boolean>(() => {
-    const s = plLoad().scenario;
-    return s !== undefined ? s : true;
-  });
+  const [view, setView] = useState<string>(() => saved0.view || "timeline");
+  const [scenario, setScenario] = useState<boolean>(() =>
+    saved0.scenario !== undefined ? saved0.scenario : true,
+  );
   const [targets, setTargets] = useState<PlTargets>(() => ({
     ...PL_DEFAULT_TARGETS,
-    ...(plLoad().targets || {}),
+    ...(saved0.targets || {}),
   }));
   const [planned, setPlanned] = useState<PlannedCourse[]>(
-    () => plLoad().planned || plSeedPlanned(),
+    () => saved0.planned || plSeedPlanned(),
   );
   const [thresholds, setThresholds] = useState<PlThresholds>(() => ({
     ...PL_DEFAULT_THRESHOLDS,
-    ...(plLoad().thresholds || {}),
+    ...(saved0.thresholds || {}),
   }));
   const [editTargets, setEditTargets] = useState(false);
   const [addAt, setAddAt] = useState<AddAt | null>(null);
   const [actItem, setActItem] = useState<PlannerItem | null>(null);
   const [share, setShare] = useState(false);
 
-  // Persist state to localStorage on every change (client-only external sync).
+  // Persist on every change: instantly to localStorage (cache) + debounced to
+  // the server (settings_kv) so the plan is durable and shared across devices.
+  const canPersist = me.roleKey === "admin" || me.roleKey === "manager";
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstRender = useRef(true);
   useEffect(() => {
     plSave({ view, scenario, targets, planned, thresholds });
-  }, [view, scenario, targets, planned, thresholds]);
+    if (firstRender.current) {
+      firstRender.current = false;
+      return; // don't re-save the just-loaded state
+    }
+    if (!canPersist) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void savePlannerStateAction({ view, scenario, targets, planned, thresholds });
+    }, 800);
+  }, [view, scenario, targets, planned, thresholds, canPersist]);
 
   const plannedItems = useMemo(
     () => planned.map((p) => normalizePlanned(p, educators)),

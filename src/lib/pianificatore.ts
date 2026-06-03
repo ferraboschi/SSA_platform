@@ -200,6 +200,16 @@ export interface PlannedCourse {
   capacity?: number;
 }
 
+// Persisted planner state (settings_kv key "planner_state"). Structurally
+// compatible with the component's local PlSaved.
+export interface PlannerSaved {
+  view?: string;
+  scenario?: boolean;
+  targets?: Partial<Record<"intro" | "cert" | "citta" | "pass" | "somm", number>>;
+  planned?: PlannedCourse[];
+  thresholds?: Partial<Record<"conflictDays" | "canniDays", number>>;
+}
+
 // Minimal shape needed to normalize a real (Shopify) course into a planner item.
 export interface RealCourseInput {
   id: string;

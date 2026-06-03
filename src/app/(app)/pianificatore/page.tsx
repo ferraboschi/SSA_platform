@@ -10,6 +10,7 @@ import {
   type PlannerItem,
 } from "@/lib/pianificatore";
 import type { CourseTypeKey } from "@/lib/domain";
+import { loadPlannerState } from "@/lib/pianificatore-server";
 import { Pianificatore } from "@/components/pianificatore/Pianificatore";
 
 export interface PrevYearItem {
@@ -21,12 +22,13 @@ export interface PrevYearItem {
 export default async function Page() {
   await requireNavAccess("pianificatore");
   const ds = await getDataSource();
-  const [courses, educators, corsisti, users, session] = await Promise.all([
+  const [courses, educators, corsisti, users, session, plannerSaved] = await Promise.all([
     ds.courses.list(),
     ds.educators.list(),
     ds.corsisti.list(),
     ds.users.list(),
     getSession(),
+    loadPlannerState(),
   ]);
 
   const win = buildWindow();
@@ -109,6 +111,7 @@ export default async function Page() {
         roleKey: me.roleKey,
       }}
       adminName={adminName}
+      initialSaved={plannerSaved}
     />
   );
 }
