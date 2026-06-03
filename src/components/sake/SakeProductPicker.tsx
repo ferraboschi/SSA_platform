@@ -76,12 +76,12 @@ export function SakeProductPicker({
   const excluded = useMemo(() => new Set(excludeSkus.filter(Boolean)), [excludeSkus]);
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return catalog
-      .filter((i) => !(i.sku && excluded.has(i.sku)))
-      .filter((i) =>
-        `${i.name} ${i.vendor ?? ""} ${i.sku ?? ""}`.toLowerCase().includes(q),
-      )
+    const avail = catalog.filter((i) => !(i.sku && excluded.has(i.sku)));
+    // Empty query → show the first products so it's clear the catalog loaded
+    // (sake products are named by producer/label, not the word "sake").
+    if (!q) return avail.slice(0, 25);
+    return avail
+      .filter((i) => `${i.name} ${i.vendor ?? ""} ${i.sku ?? ""}`.toLowerCase().includes(q))
       .slice(0, 25);
   }, [catalog, query, excluded]);
 
