@@ -6,6 +6,9 @@
 import type { Metadata } from "next";
 import { verifyShareToken } from "@/lib/share-links/token";
 import { loadSharedCourse } from "@/lib/share-links/load";
+import { loadPlannerState } from "@/lib/pianificatore-server";
+import type { PlannerSaved } from "@/lib/pianificatore";
+import { COURSE_TYPES } from "@/lib/domain/constants";
 import "@/components/esame-pubblico/exam-public.css";
 
 export const metadata: Metadata = {
@@ -38,6 +41,12 @@ export default async function Page({
         ? "Questo link è scaduto. Chiedi alla segreteria SSA un link aggiornato."
         : "Questo link non è valido. Verifica di aver copiato l'indirizzo completo.";
     return <Invalid reason={msg} />;
+  }
+
+  // Planner share (sentinel id "planner") → read-only plan view.
+  if (res.payload.c === "planner") {
+    const plan = await loadPlannerState();
+    return <PlannerShareView plan={plan} />;
   }
 
   const course = await loadSharedCourse(res.payload.c);
@@ -252,6 +261,90 @@ function Chip({ children }: { children: React.ReactNode }) {
     >
       {children}
     </span>
+  );
+}
+
+function PlannerShareView({ plan }: { plan: PlannerSaved | null }) {
+  const planned = plan?.planned ?? [];
+  const targets = plan?.targets ?? {};
+  const groups = new Map<string, typeof planned>();
+  for (const p of planned) {
+    const d = p.dates?.[0];
+    if (!d) continue;
+    const key = d.slice(0, 7); // YYYY-MM
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(p);
+  }
+  const keys = [...groups.keys()].sort();
+  const monthLabel = (key: string) => {
+    const [y, m] = key.split("-").map(Number);
+    return new Date(y, (m || 1) - 1, 1).toLocaleDateString("it-IT", { month: "long", year: "numeric" });
+  };
+  const dayLabel = (iso?: string) =>
+    iso ? new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "short" }) : "—";
+
+  return (
+    <div className="exam-public-shell">
+      <div className="exam-public-card" style={{ maxWidth: 720 }}>
+        <div style={{ borderBottom: "1px solid var(--border, #e5e7eb)", paddingBottom: 16, marginBottom: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--indigo-600, #4f46e5)" }}>
+            Sake Sommelier Association
+          </div>
+          <h1 style={{ fontSize: "clamp(20px, 4vw, 26px)", margin: "6px 0 4px" }}>Pianificazione corsi</h1>
+          <p style={{ color: "var(--text-3, #6b7280)", fontSize: 13, margin: 0 }}>
+            {planned.length} corsi pianificati
+          </p>
+        </div>
+
+        {(targets.intro != null || targets.cert != null || targets.citta != null) && (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+            {targets.intro != null && <Stat label="Obiettivo introduttivi" value={String(targets.intro)} />}
+            {targets.cert != null && <Stat label="Obiettivo certificati" value={String(targets.cert)} />}
+            {targets.citta != null && <Stat label="Obiettivo città" value={String(targets.citta)} />}
+          </div>
+        )}
+
+        {planned.length === 0 ? (
+          <p style={{ color: "var(--text-3, #6b7280)", fontSize: 13, fontStyle: "italic" }}>
+            Nessun corso pianificato al momento.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {keys.map((k) => (
+              <div key={k}>
+                <h2 style={{ fontSize: 14, margin: "0 0 8px", textTransform: "capitalize" }}>{monthLabel(k)}</h2>
+                <div style={{ border: "1px solid var(--border, #e5e7eb)", borderRadius: 12, overflow: "hidden" }}>
+                  {groups.get(k)!.map((p, i, arr) => (
+                    <div
+                      key={p.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "10px 14px",
+                        borderBottom: i === arr.length - 1 ? "none" : "1px solid var(--border-2, #f0f1f3)",
+                      }}
+                    >
+                      <Chip>{COURSE_TYPES[p.type]?.label ?? p.type}</Chip>
+                      <span style={{ fontWeight: 600, fontSize: 13.5 }}>{p.city || "—"}</span>
+                      <span style={{ fontSize: 12, color: "var(--text-3, #6b7280)" }}>
+                        {p.mode === "online" ? "Online" : "In presenza"}
+                      </span>
+                      <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-4, #9ca3af)" }}>
+                        {dayLabel(p.dates?.[0])}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 22, paddingTop: 14, borderTop: "1px solid var(--border, #e5e7eb)", fontSize: 11.5, color: "var(--text-4, #9ca3af)", textAlign: "center" }}>
+          Vista di sola lettura · condivisa dalla SSA
+        </div>
+      </div>
+    </div>
   );
 }
 

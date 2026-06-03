@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
@@ -34,6 +34,21 @@ export function ExamResultsClient({
   results: GradedSubmission[];
 }) {
   const [expanded, setExpanded] = useState<number | null>(null);
+  const router = useRouter();
+  const [live, setLive] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  // LIVE monitor: re-fetch real submissions every 25s while enabled.
+  useEffect(() => {
+    if (!live) return;
+    const id = setInterval(() => {
+      router.refresh();
+      setLastRefresh(new Date());
+    }, 25000);
+    return () => clearInterval(id);
+  }, [live, router]);
+
+  const confirmedCount = results.filter((r) => r.currentResult).length;
 
   return (
     <div className="page">
@@ -45,6 +60,24 @@ export function ExamResultsClient({
         eyebrow="Esiti & correzione"
         title={`Risultati esame — ${courseTitle}`}
         sub="Consegne reali degli studenti, corrette in automatico sulle domande oggettive. Conferma l'esito: viene scritto sul profilo del corsista."
+        actions={
+          hasExam ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 12, color: "var(--text-3)" }}>
+                {results.length} consegne · {confirmedCount} confermate
+                {lastRefresh ? ` · agg. ${lastRefresh.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}` : ""}
+              </span>
+              <button
+                className={`btn btn-sm ${live ? "" : "btn-ghost"}`}
+                onClick={() => setLive((v) => !v)}
+                title="Aggiornamento automatico ogni 25s"
+              >
+                <span className={`s-dot ${live ? "success pulse" : ""}`} style={{ marginRight: 5 }} />
+                {live ? "LIVE" : "in pausa"}
+              </button>
+            </div>
+          ) : undefined
+        }
       />
 
       {!hasExam ? (

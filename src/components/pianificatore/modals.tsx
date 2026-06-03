@@ -1,7 +1,8 @@
 "use client";
 
-import { useId, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Avatar, Icon } from "@/components/ui";
+import { createPlannerShareLink } from "@/lib/share-links/actions";
 import { useT, format } from "@/lib/i18n";
 import { CITIES, type CourseTypeKey, type DeliveryMode } from "@/lib/domain";
 import {
@@ -644,8 +645,17 @@ export function PL_ShareModal({
   const [admin, setAdmin] = useState(true);
   const [eduSel, setEduSel] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
-  const token = "plan-" + useId().replace(/[^a-z0-9]/gi, "");
-  const link = `https://corsi.sakesommelierassociation.it/share/${token}?view=pianificatore`;
+  // Real, signed, expiring read-only link to the public planner share page.
+  const [link, setLink] = useState("");
+  useEffect(() => {
+    let alive = true;
+    createPlannerShareLink().then((r) => {
+      if (alive && r.ok && r.url) setLink(r.url);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const recipients = (admin ? 1 : 0) + eduSel.length;
   const toggleEdu = (id: string) =>
     setEduSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
