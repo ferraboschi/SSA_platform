@@ -203,12 +203,6 @@ export function EducatorDetail({ data }: { data: EducatorDetailData }) {
               )}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button className="btn">
-              <Icon name="share" size={13} />
-              {t.sharedLinks}
-            </button>
-          </div>
         </div>
       </section>
 
