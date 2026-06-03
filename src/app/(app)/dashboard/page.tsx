@@ -32,6 +32,12 @@ export default async function DashboardPage() {
     (c) => c.lifecycle === "passato" && !c.cancelled && !econ.get(c.id)?.invoiced,
   ).length;
 
+  // Real exam pass rate across graded enrollments (no more hardcoded 78%).
+  const gradedExams = corsisti.flatMap((c) => c.courses).filter((e) => e.examResult);
+  const examPassRate = gradedExams.length
+    ? Math.round((gradedExams.filter((e) => e.examResult === "passed").length / gradedExams.length) * 100)
+    : 0;
+
   // Real "last synced" timestamp — the refresh button re-runs the sync and
   // router.refresh()es, so this re-renders with the fresh time on every sync.
   let syncLabel = t.dashboard.updatedNever;
@@ -165,8 +171,6 @@ export default async function DashboardPage() {
           label={dt.kpi.activeCourses}
           value={kpis.activeCount}
           sub={format(dt.kpi.belowThreshold, { n: kpis.atRiskCount })}
-          delta={`+${kpis.activeCount - kpis.pastCount}`}
-          deltaDir="up"
           accent="indigo"
         />
         <KPI
@@ -174,8 +178,6 @@ export default async function DashboardPage() {
           label={dt.kpi.totalEnrolled}
           value={kpis.totalEnrolled.toLocaleString(locale)}
           sub={format(dt.kpi.avgPerCourse, { n: avgPerCourse })}
-          delta="+18%"
-          deltaDir="up"
           accent="azzurro"
         />
         <KPI
@@ -184,18 +186,14 @@ export default async function DashboardPage() {
           value={Math.round(kpis.totalMargin / 1000)}
           unit="k €"
           sub={format(dt.kpi.onRevenue, { n: marginPct })}
-          delta="-4%"
-          deltaDir="dn"
           accent={kpis.totalMargin > 0 ? "green" : "danger"}
         />
         <KPI
           anim
           label={dt.kpi.examPassRate}
-          value="78"
+          value={examPassRate}
           unit="%"
           sub={dt.kpi.last12}
-          delta="+3%"
-          deltaDir="up"
           accent="oro"
         />
       </section>
