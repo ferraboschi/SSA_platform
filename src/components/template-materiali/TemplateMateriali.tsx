@@ -49,7 +49,7 @@ function tmDeepClone(t: MaterialTemplate): MaterialTemplate {
 
 function tmTemplateStats(t: MaterialTemplate) {
   const totalSakes = t.days.reduce((s, d) => s + d.sakes.length, 0);
-  const sakeCost = t.days.reduce((s, d) => s + d.sakes.reduce((ss, sk) => ss + sk.cost * sk.qty, 0), 0);
+  const sakeCost = t.days.reduce((s, d) => s + d.sakes.reduce((ss, sk) => ss + (sk.cost || 0) * sk.qty, 0), 0);
   return { totalSakes, sakeCost };
 }
 
@@ -513,7 +513,7 @@ function TemplateSakeRow({
             {s.code} · {s.size}ML
           </div>
           <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
-            <span>{s.type ? `${s.type} · ` : ""}{s.sakagura}</span>
+            <span>{(s.type || catItem?.productType) ? `${s.type || catItem?.productType} · ` : ""}{s.sakagura || catItem?.vendor}</span>
             {catItem?.url && (
               <a
                 href={catItem.url}
@@ -528,7 +528,7 @@ function TemplateSakeRow({
         </div>
         <div style={{ textAlign: "right", minWidth: 50 }}>
           <div className="num" style={{ fontSize: 13, fontWeight: 600 }}>
-            {s.cost}€
+            {catItem?.cost ?? s.cost}€
           </div>
           <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 2 }}>×{s.qty}</div>
         </div>
@@ -592,7 +592,7 @@ function DayCard({
   const [editingName, setEditingName] = useState(false);
   const dragIndex = useRef<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
-  const cost = d.sakes.reduce((s, sk) => s + sk.cost * sk.qty, 0);
+  const cost = d.sakes.reduce((s, sk) => s + ((sk.code && catBySku.get(sk.code)?.cost) || sk.cost || 0) * sk.qty, 0);
 
   return (
     <div className="card">
@@ -690,13 +690,16 @@ function TemplateEditor({
 }) {
   const tm = useT().templateMateriali;
   const ed = tm.editor;
-  const { totalSakes, sakeCost } = tmTemplateStats(t);
+  const totalSakes = t.days.reduce((s, d) => s + d.sakes.length, 0);
+  // Sake cost inherited LIVE from the catalog (by SKU), fallback to stored.
+  const sakeCost = t.days.reduce(
+    (s, d) => s + d.sakes.reduce((ss, sk) => ss + (((sk.code && catBySku.get(sk.code)?.cost) || sk.cost || 0) * sk.qty), 0),
+    0,
+  );
 
   // Simulated enrollee count → drives the cost automatisms (materials per
   // student, bottles = ceil(students / 15)).
   const [simStudents, setSimStudents] = useState(15);
-  // Projected selling price per person → drives the P/L preview in the summary.
-  const [simPrice, setSimPrice] = useState(0);
   // Live Sake Company catalog (by SKU) → shows real photo/stock on each sake row.
   const [catBySku, setCatBySku] = useState<Map<string, ScCatalogItem>>(new Map());
   useEffect(() => {
@@ -830,7 +833,11 @@ function TemplateEditor({
   const materialiCourse = materialiPerStudent * N + perCourseTotal;
   const courseTotal = perDayTotal + materialiCourse + bottleCost;
   const costPerPerson = N > 0 ? Math.round(courseTotal / N) : 0;
-  const revenue = Math.max(0, simPrice) * N;
+  // Reference price comes from the course type (Shopify list price) — not asked.
+  // NB: the REAL course P/L accounts for discounts and free participants (net),
+  // so this is a gross projection, not a simple price × N on the real course.
+  const typePrice = COURSE_TYPES[t.type]?.price ?? 0;
+  const revenue = typePrice * N;
   const margin = revenue - courseTotal;
   const marginPct = revenue > 0 ? Math.round((margin / revenue) * 100) : 0;
   // Per-iscritto (variable) vs fixed split for the two cost sections.
@@ -893,43 +900,37 @@ function TemplateEditor({
         </div>
       </div>
 
-      {/* ── Riassunto economico (in alto) ───────────────────────────────── */}
+      {/* ── Riassunto economico (in alto, tutto su una riga allineata) ───── */}
       <div className="card card-pad" style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", gap: 18, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div className="field" style={{ width: 130 }}>
-            <div className="field-label">Num iscritti</div>
+        <div style={{ display: "flex", gap: 22, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ width: 110 }}>
+            <div className="field-label" style={{ marginBottom: 4 }}>Num iscritti</div>
             <input
               type="number"
               className="input"
               min={0}
               value={simStudents}
               onChange={(e) => setSimStudents(Math.max(0, Number(e.target.value) || 0))}
+              style={{ height: 34 }}
             />
           </div>
-          <div className="field" style={{ width: 150 }}>
-            <div className="field-label">Prezzo / persona (€)</div>
-            <input
-              type="number"
-              className="input"
-              min={0}
-              value={simPrice || ""}
-              placeholder="0"
-              onChange={(e) => setSimPrice(Math.max(0, Number(e.target.value) || 0))}
-            />
-          </div>
-          <div style={{ flex: 1 }} />
+          <SumKpi label="Prezzo / persona" value={`${typePrice.toLocaleString("it-IT")} €`} sub="da Shopify (tipo corso)" />
           <SumKpi label="Costo totale" value={`${courseTotal.toLocaleString("it-IT")} €`} sub={`di cui sake ${bottleCost.toLocaleString("it-IT")} €`} />
           <SumKpi label="Costo / persona" value={`${costPerPerson.toLocaleString("it-IT")} €`} />
           <SumKpi
-            label="P/L corso"
+            label="P/L corso (stima)"
             value={`${margin >= 0 ? "+" : ""}${margin.toLocaleString("it-IT")} €`}
-            sub={simPrice > 0 ? `${marginPct}% su ricavi` : "imposta un prezzo"}
+            sub={`${marginPct}% su ricavi`}
             tone={margin >= 0 ? "ok" : "bad"}
           />
         </div>
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 10, display: "flex", alignItems: "center", gap: 5 }}>
+          <Icon name="info" size={11} />
+          Stima lorda. Il P/L reale del corso tiene conto di sconti e partecipanti gratuiti (incasso netto).
+        </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 20, alignItems: "start" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8 }}>
             <div>
