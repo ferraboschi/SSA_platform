@@ -409,6 +409,7 @@ export const en: Dictionary = {
       invoicedYes: "Invoiced: Yes",
       invoicedNo: "Invoiced: No",
       whatsappShare: "Share on WhatsApp",
+      examResultsLink: "Results & grading",
       statIscritti: "Enrolled",
       thresholdReached: "threshold reached",
       statRicavi: "Revenue",

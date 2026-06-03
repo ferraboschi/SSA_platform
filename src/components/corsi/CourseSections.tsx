@@ -84,6 +84,14 @@ export function CourseSections({
       )}
       {section === "esame" && (
         <div style={{ display: "grid", gap: 18 }}>
+          {examFamily && (
+            <div>
+              <Link className="btn btn-primary" href={`/esami/${courseId}/risultati`}>
+                <Icon name="exam" size={13} />
+                {t.examResultsLink}
+              </Link>
+            </div>
+          )}
           {esame && <EsameTabSummary courseId={courseId} esame={esame} />}
           {examFamily && <ExamLinkPanel courseId={courseId} family={examFamily} />}
         </div>

@@ -411,6 +411,7 @@ export const it = {
       invoicedYes: "Fatturato: Sì",
       invoicedNo: "Fatturato: No",
       whatsappShare: "Condividi su WhatsApp",
+      examResultsLink: "Risultati & correzione",
       statIscritti: "Iscritti",
       thresholdReached: "soglia raggiunta",
       statRicavi: "Ricavi",
