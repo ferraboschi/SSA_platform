@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { toCsv, downloadCsv } from "@/lib/csv";
 import {
   sortCourses,
   STATUS_RULE_KEYS,
@@ -84,7 +85,28 @@ export function CorsiCatalog({
           <p className="page-sub">{t.sub}</p>
         </div>
         <div className="page-actions">
-          <button className="btn">
+          <button
+            className="btn"
+            onClick={() =>
+              downloadCsv(
+                "corsi",
+                toCsv(
+                  ["Corso", "Tipo", "Città", "Mese", "Anno", "Modalità", "Iscritti", "Capienza", "Educator"],
+                  items.map((c) => [
+                    c.shortTitle,
+                    c.typeLabel,
+                    c.city,
+                    c.month,
+                    c.year,
+                    c.mode,
+                    c.enrolled,
+                    c.capacity,
+                    c.educatorName,
+                  ]),
+                ),
+              )
+            }
+          >
             <Icon name="download" size={13} />
             {t.export}
           </button>

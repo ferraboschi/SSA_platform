@@ -15,6 +15,7 @@ import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
 import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
+import { CourseExportButtons } from "@/components/corsi/CourseExportButtons";
 import { EducatorAssign } from "@/components/corsi/EducatorAssign";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
@@ -195,14 +196,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               </a>
             )}
             <ShareEducatorButton courseId={course.id} />
-            <button className="btn">
-              <Icon name="download" size={13} />
-              {td.excelStudents}
-            </button>
-            <button className="btn">
-              <Icon name="download" size={13} />
-              {td.excelSake}
-            </button>
+            <CourseExportButtons
+              title={course.shortTitle}
+              students={course.students}
+              program={course.program}
+              labelStudents={td.excelStudents}
+              labelSake={td.excelSake}
+            />
             <div style={{ flex: 1 }} />
             <Badge tone={econ.invoiced ? "success" : "neutral"} size="lg" dot>
               {econ.invoiced ? td.invoicedYes : td.invoicedNo}

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format, type Dictionary } from "@/lib/i18n";
+import { toCsv, downloadCsv } from "@/lib/csv";
 import { COURSE_TYPES, type Corsista, type CorsistaEnrollment, type Purchase } from "@/lib/domain";
 
 const MONTH_ORDER = [
@@ -171,7 +172,29 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
             <a className="btn btn-icon" href={`tel:${(s.phone || "").replace(/\s/g, "")}`}>
               <Icon name="whatsapp" size={13} />
             </a>
-            <button className="btn">{t.exportSheet}</button>
+            <button
+              className="btn"
+              onClick={() =>
+                downloadCsv(
+                  `scheda-${s.name.replace(/[^\w-]+/g, "-").toLowerCase()}`,
+                  toCsv(
+                    ["Corso", "Tipo", "Città", "Mese", "Anno", "Esito", "Punteggio %", "Pagato €"],
+                    s.courses.map((c) => [
+                      c.courseTitle,
+                      COURSE_TYPES[c.courseType]?.label ?? c.courseType,
+                      c.city,
+                      c.month,
+                      c.year,
+                      c.examResult ?? "",
+                      c.examScorePct ?? "",
+                      Math.round(c.amount),
+                    ]),
+                  ),
+                )
+              }
+            >
+              {t.exportSheet}
+            </button>
           </div>
         </div>
         <div className="rgrid-4" style={{ borderTop: "1px solid var(--border)" }}>
