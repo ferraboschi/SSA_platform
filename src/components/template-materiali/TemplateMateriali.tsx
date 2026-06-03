@@ -264,6 +264,17 @@ function SummaryLine({ label, value, last }: { label: string; value: string; las
   );
 }
 
+function SumKpi({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "ok" | "bad" }) {
+  const color = tone === "ok" ? "var(--success-fg)" : tone === "bad" ? "var(--danger-fg)" : "var(--text)";
+  return (
+    <div style={{ minWidth: 120 }}>
+      <div style={{ fontSize: 10.5, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".04em" }}>{label}</div>
+      <div className="num" style={{ fontSize: 22, fontWeight: 700, color, lineHeight: 1.15 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+}
+
 function CostGroupLabel({ text }: { text: string }) {
   return (
     <div
@@ -684,6 +695,8 @@ function TemplateEditor({
   // Simulated enrollee count → drives the cost automatisms (materials per
   // student, bottles = ceil(students / 15)).
   const [simStudents, setSimStudents] = useState(15);
+  // Projected selling price per person → drives the P/L preview in the summary.
+  const [simPrice, setSimPrice] = useState(0);
   // Live Sake Company catalog (by SKU) → shows real photo/stock on each sake row.
   const [catBySku, setCatBySku] = useState<Map<string, ScCatalogItem>>(new Map());
   useEffect(() => {
@@ -759,8 +772,8 @@ function TemplateEditor({
 
   const extra = t.materiali.extra || [];
   const setExtra = (next: MaterialExtra[]) => onChange({ ...t, materiali: { ...t.materiali, extra: next } });
-  const addExtraCost = () =>
-    setExtra([...extra, { id: "x-" + Date.now(), label: ed.newCostLabel, value: 0, per: "iscritto" }]);
+  const addExtraCost = (per: "iscritto" | "corso" = "iscritto") =>
+    setExtra([...extra, { id: "x-" + Date.now(), label: ed.newCostLabel, value: 0, per }]);
   const updateExtraCost = (id: string, patch: Partial<MaterialExtra>) =>
     setExtra(extra.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const removeExtraCost = (id: string) => setExtra(extra.filter((c) => c.id !== id));
@@ -816,6 +829,15 @@ function TemplateEditor({
   );
   const materialiCourse = materialiPerStudent * N + perCourseTotal;
   const courseTotal = perDayTotal + materialiCourse + bottleCost;
+  const costPerPerson = N > 0 ? Math.round(courseTotal / N) : 0;
+  const revenue = Math.max(0, simPrice) * N;
+  const margin = revenue - courseTotal;
+  const marginPct = revenue > 0 ? Math.round((margin / revenue) * 100) : 0;
+  // Per-iscritto (variable) vs fixed split for the two cost sections.
+  const variableExtra = extra.filter((c) => c.per === "iscritto");
+  const fixedExtra = extra.filter((c) => c.per === "corso");
+  const variablePerStudentTotal = materialiPerStudent; // diploma+libro+extra/iscritto
+  const fixedTotal = perDayTotal + perCourseTotal; // educator/gestione (×days) + per-course
 
   return (
     <>
@@ -871,6 +893,42 @@ function TemplateEditor({
         </div>
       </div>
 
+      {/* ── Riassunto economico (in alto) ───────────────────────────────── */}
+      <div className="card card-pad" style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 18, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div className="field" style={{ width: 130 }}>
+            <div className="field-label">Num iscritti</div>
+            <input
+              type="number"
+              className="input"
+              min={0}
+              value={simStudents}
+              onChange={(e) => setSimStudents(Math.max(0, Number(e.target.value) || 0))}
+            />
+          </div>
+          <div className="field" style={{ width: 150 }}>
+            <div className="field-label">Prezzo / persona (€)</div>
+            <input
+              type="number"
+              className="input"
+              min={0}
+              value={simPrice || ""}
+              placeholder="0"
+              onChange={(e) => setSimPrice(Math.max(0, Number(e.target.value) || 0))}
+            />
+          </div>
+          <div style={{ flex: 1 }} />
+          <SumKpi label="Costo totale" value={`${courseTotal.toLocaleString("it-IT")} €`} sub={`di cui sake ${bottleCost.toLocaleString("it-IT")} €`} />
+          <SumKpi label="Costo / persona" value={`${costPerPerson.toLocaleString("it-IT")} €`} />
+          <SumKpi
+            label="P/L corso"
+            value={`${margin >= 0 ? "+" : ""}${margin.toLocaleString("it-IT")} €`}
+            sub={simPrice > 0 ? `${marginPct}% su ricavi` : "imposta un prezzo"}
+            tone={margin >= 0 ? "ok" : "bad"}
+          />
+        </div>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 20, alignItems: "start" }}>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8 }}>
@@ -912,8 +970,57 @@ function TemplateEditor({
           <div className="card card-pad">
             <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 14, lineHeight: 1.5 }}>{ed.materialiIntro}</div>
 
-            {/* Group 1 — per giornata (× giorni) */}
-            <CostGroupLabel text={format(ed.groupPerDay, { n: t.days.length, unit: dayUnit(t.days.length, tm) })} />
+            {/* ── COSTI VARIABILI — per iscritto (× iscritti) ── */}
+            <CostGroupLabel text="Costi variabili · per iscritto (× iscritti)" />
+            <MaterialeRow
+              icon="tag"
+              label={ed.matDiplomi}
+              hint={format(ed.diplomaHint, {
+                cert: COST_RATES.diploma.certificato,
+                intro: COST_RATES.diploma.introduttivo,
+              })}
+              value={t.materiali.diplomaPerStudent}
+              suffix={ed.perStudentSuffix}
+              onChange={(v) => setMateriali({ diplomaPerStudent: v })}
+            />
+            <MaterialeRow
+              icon="book"
+              label={ed.matLibri}
+              hint={format(ed.libroHint, {
+                cert: COST_RATES.libro.certificato,
+                intro: COST_RATES.libro.introduttivo,
+              })}
+              value={t.materiali.libroPerStudent}
+              suffix={ed.perStudentSuffix}
+              last={variableExtra.length === 0}
+              onChange={(v) => setMateriali({ libroPerStudent: v })}
+            />
+            {variableExtra.map((c, i) => (
+              <ExtraCostRow
+                key={c.id}
+                cost={c}
+                last={i === variableExtra.length - 1}
+                onChange={(patch) => updateExtraCost(c.id, patch)}
+                onRemove={() => removeExtraCost(c.id)}
+              />
+            ))}
+            <div style={{ fontSize: 11, color: "var(--text-3)", padding: "4px 2px 6px" }}>
+              <Icon name="info" size={11} style={{ marginRight: 5, verticalAlign: "-1px" }} />
+              + il <strong>sake</strong> (auto): {bottleCost.toLocaleString("it-IT")} € su {N} iscritti
+            </div>
+            <button className="btn btn-sm" style={{ width: "100%", marginTop: 6 }} onClick={() => addExtraCost("iscritto")}>
+              <Icon name="plus" size={12} />
+              Aggiungi costo variabile
+            </button>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12.5 }}>
+              <span className="text-3">Subtotale variabile</span>
+              <strong className="num">{variablePerStudentTotal.toLocaleString("it-IT")} €/iscritto · {(variablePerStudentTotal * N + bottleCost).toLocaleString("it-IT")} € totali</strong>
+            </div>
+
+            {/* ── COSTI FISSI — non cambiano con gli iscritti ── */}
+            <div style={{ marginTop: 18 }}>
+              <CostGroupLabel text="Costi fissi · non cambiano con gli iscritti" />
+            </div>
             <MaterialeRow
               icon="graduation"
               label={ed.matEducator}
@@ -936,46 +1043,9 @@ function TemplateEditor({
               })}
               value={t.materiali.gestionePerDay}
               suffix={ed.perDaySuffix}
-              last
               onChange={(v) => setMateriali({ gestionePerDay: v })}
             />
-
-            {/* Group 2 — per corsista (× iscritti), default by type */}
-            <CostGroupLabel text={ed.groupPerStudent} />
-            <MaterialeRow
-              icon="tag"
-              label={ed.matDiplomi}
-              hint={format(ed.diplomaHint, {
-                cert: COST_RATES.diploma.certificato,
-                intro: COST_RATES.diploma.introduttivo,
-              })}
-              value={t.materiali.diplomaPerStudent}
-              suffix={ed.perStudentSuffix}
-              onChange={(v) => setMateriali({ diplomaPerStudent: v })}
-            />
-            <MaterialeRow
-              icon="book"
-              label={ed.matLibri}
-              hint={format(ed.libroHint, {
-                cert: COST_RATES.libro.certificato,
-                intro: COST_RATES.libro.introduttivo,
-              })}
-              value={t.materiali.libroPerStudent}
-              suffix={ed.perStudentSuffix}
-              last
-              onChange={(v) => setMateriali({ libroPerStudent: v })}
-            />
-
-            {/* Group 3 — sake (automatico) */}
-            <CostGroupLabel text={ed.groupSake} />
-            <div style={{ fontSize: 11.5, color: "var(--text-3)", padding: "4px 2px 10px", lineHeight: 1.5 }}>
-              <Icon name="info" size={11} style={{ marginRight: 5, verticalAlign: "-1px" }} />
-              {ed.sakeAutoNote}
-            </div>
-
-            {/* Group 4 — da imputare per corso (default 0) */}
-            <CostGroupLabel text={ed.groupPerCourse} />
-            {PER_COURSE_FIELDS.map((f, i) => (
+            {PER_COURSE_FIELDS.map((f) => (
               <MaterialeRow
                 key={f.key}
                 icon="tag"
@@ -983,79 +1053,41 @@ function TemplateEditor({
                 hint={ed.daImputareHint}
                 value={(t.materiali[f.key] as number) || 0}
                 suffix={ed.perCourseSuffix}
-                last={i === PER_COURSE_FIELDS.length - 1}
                 onChange={(v) => setMateriali({ [f.key]: v })}
               />
             ))}
-
-            {/* Voci extra libere (legacy / ad-hoc) */}
-            {extra.length > 0 && <CostGroupLabel text={ed.groupExtra} />}
-            {extra.map((c, i) => (
+            {fixedExtra.map((c, i) => (
               <ExtraCostRow
                 key={c.id}
                 cost={c}
-                last={i === extra.length - 1}
+                last={i === fixedExtra.length - 1}
                 onChange={(patch) => updateExtraCost(c.id, patch)}
                 onRemove={() => removeExtraCost(c.id)}
               />
             ))}
-            <button className="btn btn-sm" style={{ width: "100%", marginTop: 14 }} onClick={addExtraCost}>
+            <button className="btn btn-sm" style={{ width: "100%", marginTop: 6 }} onClick={() => addExtraCost("corso")}>
               <Icon name="plus" size={12} />
-              {ed.addCost}
+              Aggiungi costo fisso
             </button>
-          </div>
-
-          <div className="card card-pad" style={{ marginTop: 12, background: "var(--surface-2)", boxShadow: "none", border: "1px solid var(--border-2)" }}>
-            <div className="eyebrow" style={{ marginBottom: 10 }}>
-              {ed.summaryTitle}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12.5 }}>
+              <span className="text-3">Subtotale fisso</span>
+              <strong className="num">{fixedTotal.toLocaleString("it-IT")} €</strong>
             </div>
-            <SummaryLine label={ed.sumGiornate} value={`${t.days.length}`} />
-            <SummaryLine label={ed.sumSakeTot} value={`${totalSakes}`} />
-            <SummaryLine label={ed.sumCostoSake} value={`${sakeCost.toLocaleString("it-IT")} €`} />
-            <SummaryLine label={ed.sumEducator} value={`${educatorTotal.toLocaleString("it-IT")} €`} />
-            <SummaryLine label={ed.sumGestione} value={`${gestioneTotal.toLocaleString("it-IT")} €`} />
-            <SummaryLine
-              label={ed.sumMatPerStudent}
-              value={`${materialiPerStudent.toLocaleString("it-IT")} €`}
-              last={perCourseTotal === 0}
-            />
-            {perCourseTotal > 0 && (
-              <SummaryLine label={ed.sumPerCourse} value={`${perCourseTotal.toLocaleString("it-IT")} €`} last />
-            )}
           </div>
 
-          {/* Cost automatisms — scale with the simulated enrollee count. */}
           <div
-            className="card card-pad"
-            style={{ marginTop: 12, border: "1px solid var(--indigo-100)", background: "var(--indigo-50)", boxShadow: "none" }}
+            style={{
+              marginTop: 12,
+              fontSize: 11.5,
+              color: "var(--text-3)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              justifyContent: "center",
+            }}
           >
-            <div className="eyebrow" style={{ marginBottom: 10 }}>
-              {ed.simTitle}
-            </div>
-            <div className="field" style={{ marginBottom: 10 }}>
-              <div className="field-label">{ed.simStudents}</div>
-              <input
-                type="number"
-                className="input"
-                min={0}
-                value={simStudents}
-                onChange={(e) => setSimStudents(Math.max(0, Number(e.target.value) || 0))}
-              />
-            </div>
-            <SummaryLine
-              label={format(ed.simMateriali, { n: N })}
-              value={`${(materialiPerStudent * N).toLocaleString("it-IT")} €`}
-            />
-            <SummaryLine label={ed.sumEducator} value={`${educatorTotal.toLocaleString("it-IT")} €`} />
-            <SummaryLine label={ed.sumGestione} value={`${gestioneTotal.toLocaleString("it-IT")} €`} />
-            {perCourseTotal > 0 && (
-              <SummaryLine label={ed.sumPerCourse} value={`${perCourseTotal.toLocaleString("it-IT")} €`} />
-            )}
-            <SummaryLine
-              label={format(ed.simBottiglie, { per: bottlesPerSku })}
-              value={`${totalBottles} (${bottleCost.toLocaleString("it-IT")} €)`}
-            />
-            <SummaryLine label={ed.simTotale} value={`${courseTotal.toLocaleString("it-IT")} €`} last />
+            <Icon name="check" size={12} style={{ color: "var(--success-fg)" }} />
+            Salvataggio automatico — ogni modifica viene salvata.
           </div>
         </div>
       </div>

@@ -9,6 +9,7 @@ import type {
   CourseTypeColor,
   CourseTypeKey,
   DeliveryMode,
+  MaterialCosts,
   MaterialTemplate,
   ProgramDay,
   Sake,
@@ -282,6 +283,8 @@ export interface TemplateData {
   uses: number;
   createdBy: string;
   days: { day: number; name: string; sakes: Sake[] }[];
+  /** The template's cost structure, so applying it brings its costs to the course. */
+  materiali: MaterialCosts;
 }
 
 export function toTemplateData(t: MaterialTemplate): TemplateData {
@@ -297,6 +300,7 @@ export function toTemplateData(t: MaterialTemplate): TemplateData {
     uses: t.uses,
     createdBy: t.createdBy,
     days: t.days.map((d) => ({ day: d.day, name: d.name, sakes: d.sakes.map((s) => ({ ...s })) })),
+    materiali: t.materiali,
   };
 }
 
