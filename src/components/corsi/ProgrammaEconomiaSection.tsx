@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Badge, Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import type { ProgrammaData, TemplateData } from "@/lib/corsi";
@@ -13,6 +13,8 @@ import {
 } from "@/components/sake/SakeProductPicker";
 import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
 import { deleteTemplateAction } from "@/lib/data/template-actions";
+import { saveCourseProgramAction } from "@/lib/corsi/program-actions";
+import type { CourseProgramOverlay } from "@/lib/corsi/program-overlay";
 
 /** Bottles needed per SKU: one bottle covers ~15 students. */
 export function bottlesForStudents(enrolled: number): number {
@@ -45,23 +47,37 @@ interface CostLine {
 const fmtIt = (n: number) => n.toLocaleString("it-IT");
 
 export function ProgrammaEconomiaSection({
+  courseId,
   data,
+  programOverlay,
   templates: initialTemplates,
 }: {
+  courseId: string;
   data: ProgrammaData;
+  programOverlay?: CourseProgramOverlay;
   templates: TemplateData[];
 }) {
   const tr = useT();
   const t = tr.corsi.programma;
 
   const [days, setDays] = useState<DayState[]>(() =>
-    data.program.map((sec, di) => ({
-      id: `day-${di + 1}`,
-      day: sec.day,
-      name: sec.name,
-      sakes: sec.sakes.map((sk, si) => ({ ...sk, id: `sake-${di + 1}-${si}`, note: "" })),
-    })),
+    // A saved overlay (operator edits) wins over the base program from the DB.
+    programOverlay?.days
+      ? programOverlay.days.map((d) => ({
+          id: d.id,
+          day: d.day,
+          name: d.name,
+          sakes: d.sakes.map((sk) => ({ ...sk })),
+        }))
+      : data.program.map((sec, di) => ({
+          id: `day-${di + 1}`,
+          day: sec.day,
+          name: sec.name,
+          sakes: sec.sakes.map((sk, si) => ({ ...sk, id: `sake-${di + 1}-${si}`, note: "" })),
+        })),
   );
+  const [dirty, setDirty] = useState(false);
+  const [saving, startSave] = useTransition();
   const [openNote, setOpenNote] = useState<string | null>(null);
   const [templateModal, setTemplateModal] = useState(false);
   const [templates, setTemplates] = useState<TemplateData[]>(initialTemplates);
@@ -223,12 +239,36 @@ export function ProgrammaEconomiaSection({
     },
   ];
 
-  const [customLines, setCustomLines] = useState<CostLine[]>(() => [
-    { id: "ssa_fee", label: t.costGestione, value: data.costGestione || 900 },
-    { id: "location", label: t.costLocation, value: data.costLocation || 0 },
-    { id: "food", label: t.costFood, value: data.costFood || 0 },
-    { id: "adv", label: t.costAdv, value: data.costAdv || 0 },
-  ]);
+  const [customLines, setCustomLines] = useState<CostLine[]>(() =>
+    programOverlay?.customLines && programOverlay.customLines.length
+      ? programOverlay.customLines.map((l) => ({ ...l }))
+      : [
+          { id: "ssa_fee", label: t.costGestione, value: data.costGestione || 900 },
+          { id: "location", label: t.costLocation, value: data.costLocation || 0 },
+          { id: "food", label: t.costFood, value: data.costFood || 0 },
+          { id: "adv", label: t.costAdv, value: data.costAdv || 0 },
+        ],
+  );
+
+  // Mark unsaved once the operator changes anything (skip the initial render).
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (mounted.current) setDirty(true);
+    else mounted.current = true;
+  }, [days, customLines]);
+
+  const handleSaveProgram = () => {
+    startSave(async () => {
+      const overlay: CourseProgramOverlay = { days, customLines };
+      const res = await saveCourseProgramAction(courseId, overlay);
+      if (res.ok) {
+        setDirty(false);
+        showToast(t.programSaved);
+      } else {
+        showToast(res.error || t.programSaveError);
+      }
+    });
+  };
 
   const totalAuto = autoLines.reduce((s, l) => s + l.value, 0);
   const totalCustom = customLines.reduce((s, l) => s + l.value, 0);
@@ -370,14 +410,24 @@ export function ProgrammaEconomiaSection({
                 {format(t.totalSakesCost, { n: totalSakes, c: fmtIt(sakeCost) })}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {dirty && (
+                <span className="text-3" style={{ fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 4, color: "var(--warning-fg)" }}>
+                  <Icon name="edit" size={11} />
+                  {t.programUnsaved}
+                </span>
+              )}
               <button className="btn btn-sm" onClick={() => setTemplateModal(true)}>
                 <Icon name="copy" size={12} />
                 {t.templateBtn}
               </button>
-              <button className="btn btn-sm btn-primary" onClick={addDay}>
+              <button className="btn btn-sm" onClick={addDay}>
                 <Icon name="plus" size={12} />
                 {t.addDay}
+              </button>
+              <button className="btn btn-sm btn-primary" onClick={handleSaveProgram} disabled={saving || !dirty}>
+                <Icon name="save" size={12} />
+                {saving ? t.programSaving : t.saveProgram}
               </button>
             </div>
           </div>

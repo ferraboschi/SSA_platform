@@ -10,6 +10,7 @@ import { IscrittiSection } from "./IscrittiSection";
 import { ProgrammaEconomiaSection } from "./ProgrammaEconomiaSection";
 import { ExamLinkPanel } from "./ExamLinkPanel";
 import type { EsameData, ProgrammaData, TemplateData } from "@/lib/corsi";
+import type { CourseProgramOverlay } from "@/lib/corsi/program-overlay";
 import type { Student } from "@/lib/domain";
 
 type SectionId = "iscritti" | "programma" | "esame";
@@ -21,6 +22,7 @@ export function CourseSections({
   students,
   whatsappLink,
   programma,
+  programOverlay,
   templates,
   esame,
   examFamily = null,
@@ -31,6 +33,7 @@ export function CourseSections({
   students: Student[];
   whatsappLink: string;
   programma: ProgrammaData;
+  programOverlay?: CourseProgramOverlay;
   templates: TemplateData[];
   esame: EsameData | null;
   examFamily?: "nihonshu" | "shochu" | null;
@@ -71,7 +74,14 @@ export function CourseSections({
       </div>
 
       {section === "iscritti" && <IscrittiSection students={students} whatsappLink={whatsappLink} />}
-      {section === "programma" && <ProgrammaEconomiaSection data={programma} templates={templates} />}
+      {section === "programma" && (
+        <ProgrammaEconomiaSection
+          courseId={courseId}
+          data={programma}
+          programOverlay={programOverlay}
+          templates={templates}
+        />
+      )}
       {section === "esame" && (
         <div style={{ display: "grid", gap: 18 }}>
           {esame && <EsameTabSummary courseId={courseId} esame={esame} />}

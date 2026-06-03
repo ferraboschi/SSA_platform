@@ -11,6 +11,7 @@ import {
 } from "@/lib/corsi";
 import { loadCourseEconomics } from "@/lib/economics";
 import { EMPTY_ECON } from "@/lib/economics/types";
+import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
 import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
@@ -55,7 +56,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   // Invoicing status is owned by Accounting (Luigi) on /conto-economico; here we
   // only surface it as a read-only signal.
-  const econ = (await loadCourseEconomics()).get(course.id) ?? EMPTY_ECON;
+  const [econMap, programMap] = await Promise.all([
+    loadCourseEconomics(),
+    loadCourseProgram(),
+  ]);
+  const econ = econMap.get(course.id) ?? EMPTY_ECON;
+  const programOverlay = programMap.get(course.id);
 
   const daysTo = daysToStart(course);
   const pct = course.capacity ? course.enrolled / course.capacity : 0;
@@ -289,6 +295,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         students={course.students}
         whatsappLink={course.whatsappLink}
         programma={toProgrammaData(course)}
+        programOverlay={programOverlay}
         templates={templates}
         esame={esame}
         examFamily={examFamily}
