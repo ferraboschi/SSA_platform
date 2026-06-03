@@ -842,15 +842,24 @@ function SakeRow({
   // `||` (not `??`): a null/0 catalog cost must fall back to the stored cost.
   const liveCost = catItem?.cost || s.cost;
   const stock = catItem?.stock ?? null;
+  // Behaviour A: a product below the stock-alert limit, used in this course,
+  // gets a red outline (a "to-watch" signal — no email is sent here).
+  const lowStock = stock != null && stock < LOW_STOCK;
 
   return (
     <div
       onDragOver={onDragOver}
       onDrop={onDrop}
+      title={lowStock ? `${t.stockKo} · ${stock} pz` : undefined}
       style={{
         borderBottom: isLast ? "none" : "1px solid var(--border-2)",
+        borderLeft: lowStock ? "3px solid var(--danger-fg, #b42318)" : "3px solid transparent",
         opacity: dragging ? 0.4 : 1,
-        background: dragging ? "var(--indigo-50)" : "transparent",
+        background: dragging
+          ? "var(--indigo-50)"
+          : lowStock
+            ? "var(--danger-bg, #fde8e6)"
+            : "transparent",
         transition: "background var(--dur-fast)",
       }}
     >
