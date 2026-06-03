@@ -63,6 +63,37 @@ export async function sendStockAlertEmail(
   });
 }
 
+export interface MismatchCourse {
+  id: string;
+  title: string;
+  city: string;
+  month: string;
+  year: number;
+  educator: string;
+  typeLabel: string;
+}
+
+/** An educator assigned to a course type they aren't qualified for → Camilla. */
+export async function sendEducatorMismatchEmail(course: MismatchCourse): Promise<EmailSendResult> {
+  const html = shell(
+    `⚠️ Educator non abilitato`,
+    `<p style="font-size:14px;line-height:1.5"><strong>${course.educator}</strong> è assegnato al corso <strong>${course.title}</strong> (${course.typeLabel}) ma <strong>non risulta abilitato</strong> a questa tipologia. Verifica l'assegnazione.</p>
+     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px">
+       <tr><td style="padding:5px 0;color:#6b7280">Corso</td><td style="padding:5px 0;text-align:right;font-weight:600">${course.title}</td></tr>
+       <tr><td style="padding:5px 0;color:#6b7280">Luogo / data</td><td style="padding:5px 0;text-align:right">${course.city} · ${course.month} ${course.year}</td></tr>
+       <tr><td style="padding:5px 0;color:#6b7280">Educator</td><td style="padding:5px 0;text-align:right">${course.educator}</td></tr>
+     </table>`,
+    { href: loginLink(`/corsi/${course.id}`), label: "Apri il corso" },
+  );
+  return getEmailService().send({
+    // TESTING: route to admin until verified, then switch to Camilla.
+    to: "lorenzo@ef-ti.com",
+    subject: `⚠️ Educator non abilitato — ${course.title}`,
+    html,
+    tag: "educator-mismatch",
+  });
+}
+
 export interface ReminderCourse {
   id: string;
   title: string;

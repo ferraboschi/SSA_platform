@@ -12,6 +12,7 @@ import {
   sendInvoiceNoticeEmail,
   sendStockAlertEmail,
   sendCourseReminderEmail,
+  sendEducatorMismatchEmail,
   type StockAlertRow,
 } from "./emails";
 import type { StockAlert } from "@/lib/domain";
@@ -51,12 +52,19 @@ export interface AlertCheckResult {
   invoiceSeeded: number;
   stockSent: number;
   reminderSent: number;
+  educatorMismatchSent: number;
 }
 
 export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
   const svc = getSupabaseServiceClient();
   const now = new Date(nowMs);
-  const out: AlertCheckResult = { invoiceSent: 0, invoiceSeeded: 0, stockSent: 0, reminderSent: 0 };
+  const out: AlertCheckResult = {
+    invoiceSent: 0,
+    invoiceSeeded: 0,
+    stockSent: 0,
+    reminderSent: 0,
+    educatorMismatchSent: 0,
+  };
 
   // ── Invoice notices → Luigi ──────────────────────────────────────────────
   try {
@@ -191,6 +199,60 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
     await kvSet(svc, "course_reminders_sent", sent);
   } catch {
     /* corsi/settings unavailable — skip reminders */
+  }
+
+  // ── Educator not qualified for the course type → Camilla ─────────────────
+  // First run seeds existing mismatches silently (the bell already shows them);
+  // only NEW assignments (e.g. a Shopify change) trigger an email afterwards.
+  try {
+    const { data: cr } = await svc
+      .from("corsi")
+      .select("id, short_title, full_title, city, month, year, type, educator_id, lifecycle, notebook")
+      .not("educator_id", "is", null)
+      .in("lifecycle", ["pubblicato", "bozza"]);
+    const courses = (cr ?? []) as Array<CourseRow & { educator_id: number }>;
+    const { data: qr } = await svc.from("educator_qualifications").select("educator_id, course_type");
+    const quals = new Map<number, Set<string>>();
+    for (const q of (qr ?? []) as Array<{ educator_id: number; course_type: string }>) {
+      const s = quals.get(q.educator_id) ?? new Set<string>();
+      s.add(q.course_type);
+      quals.set(q.educator_id, s);
+    }
+    const { data: er } = await svc.from("educators").select("id, full_name");
+    const eduName = new Map<number, string>(
+      ((er ?? []) as Array<{ id: number; full_name: string }>).map((e) => [e.id, e.full_name]),
+    );
+    const notifiedObj = await kvGet<{ ids: number[]; seeded?: boolean }>(svc, "educator_mismatch_notified");
+    const notified = new Set(notifiedObj?.ids ?? []);
+    const firstRun = !notifiedObj?.seeded;
+    for (const c of courses) {
+      if (c.notebook && (c.notebook as { cancelled?: boolean }).cancelled) continue;
+      if (!c.type || !c.educator_id) continue;
+      if (quals.get(c.educator_id)?.has(c.type)) continue; // qualified → fine
+      if (notified.has(c.id)) continue;
+      if (firstRun) {
+        notified.add(c.id); // seed existing mismatch silently
+        continue;
+      }
+      try {
+        await sendEducatorMismatchEmail({
+          id: String(c.id),
+          title: c.short_title ?? c.full_title ?? `Corso ${c.id}`,
+          city: c.city ?? "—",
+          month: c.month ?? "",
+          year: c.year ?? 0,
+          educator: eduName.get(c.educator_id) ?? "—",
+          typeLabel: c.type,
+        });
+        out.educatorMismatchSent++;
+        notified.add(c.id);
+      } catch {
+        /* keep going */
+      }
+    }
+    await kvSet(svc, "educator_mismatch_notified", { ids: [...notified], seeded: true });
+  } catch {
+    /* corsi/educators/settings unavailable — skip */
   }
 
   return out;

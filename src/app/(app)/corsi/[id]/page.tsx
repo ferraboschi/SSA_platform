@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Avatar, Badge, Icon, StatusBadge } from "@/components/ui";
 import { getTranslations } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n/dictionary";
@@ -32,6 +33,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     ds.materialTemplates.list(),
     ds.educators.list(),
   ]);
+  // Canonicalize to the readable handle URL: any /corsi/<numeric-id> link
+  // (dashboard, educator, planner, anomalie…) 308-redirects to /corsi/<handle>.
+  if (course && /^\d+$/.test(id) && course.handle && course.handle !== id) {
+    redirect(`/corsi/${course.handle}`);
+  }
+
   const educatorOptions = allEducators.map((e) => ({ id: e.id, name: e.name }));
 
   const td = t.corsi.detail;

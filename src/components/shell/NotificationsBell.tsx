@@ -138,7 +138,14 @@ export function NotificationsBell({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            toggle(nt.id, !dismissed);
+            const next = !dismissed;
+            toggle(nt.id, next);
+            // Resolving (✓) takes you to the page that raised the alert (e.g.
+            // the course with the unqualified educator) so you can act on it.
+            if (next) {
+              setOpen(false);
+              router.push(nt.href);
+            }
           }}
           style={{
             position: "absolute",
