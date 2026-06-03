@@ -13,7 +13,16 @@ export const getSakeCatalog = unstable_cache(
   async (): Promise<ScCatalogItem[]> => {
     if (!sakeCompanyConfig.isConfigured) return [];
     try {
-      const [items, costs] = await Promise.all([listCatalog(), getProductCosts()]);
+      // Load the Shopify catalog first. The Airtable cost/type merge is only an
+      // ENHANCEMENT — if it fails (token/permissions/model), still return the
+      // products, otherwise the whole product picker goes empty.
+      const items = await listCatalog();
+      let costs: Awaited<ReturnType<typeof getProductCosts>> = new Map();
+      try {
+        costs = await getProductCosts();
+      } catch {
+        /* Airtable cost merge unavailable → return Shopify products as-is */
+      }
       // Merge cost + type from the Airtable "Master product list" by SKU.
       return items.map((i) => {
         const c = i.sku ? costs.get(i.sku) : undefined;
@@ -28,6 +37,6 @@ export const getSakeCatalog = unstable_cache(
       return [];
     }
   },
-  ["sake-catalog-v2"],
+  ["sake-catalog-v3"],
   { revalidate: 600, tags: [SAKE_CATALOG_TAG] },
 );

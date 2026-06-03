@@ -7,7 +7,7 @@
 import "server-only";
 import { shopifyConfig } from "../config";
 
-const API_VERSION = "2025-01";
+const API_VERSION = "2026-01"; // bumped: 2025-01 is past Shopify's support window (Jun 2026)
 
 export interface AdminProductVariant {
   price: string | null;
