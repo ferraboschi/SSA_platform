@@ -14,11 +14,15 @@ import type {
   RetrievedChunk,
 } from "./types";
 
+// A model may report WHICH context passages (0-based indices into `context`) it
+// actually relied on, so the auditable citations are the cited passages — not the
+// whole retrieved set.
+export type GradeModelResult = Omit<GradeSuggestion, "citations"> & {
+  citedIndices?: number[];
+};
+
 export interface GradingModel {
-  grade(
-    input: OpenAnswerGradingInput,
-    context: RetrievedChunk[],
-  ): Promise<Omit<GradeSuggestion, "citations">>;
+  grade(input: OpenAnswerGradingInput, context: RetrievedChunk[]): Promise<GradeModelResult>;
 }
 
 // Minimum cosine similarity for a retrieved passage to count as on-topic. Below
@@ -29,10 +33,7 @@ const MIN_RELEVANCE = 0.2;
 // (the wiki/dispensa corpus), never outside knowledge. Returns which passages it
 // relied on so a human can audit the grounding.
 export class ClaudeGradingModel implements GradingModel {
-  async grade(
-    input: OpenAnswerGradingInput,
-    context: RetrievedChunk[],
-  ): Promise<Omit<GradeSuggestion, "citations">> {
+  async grade(input: OpenAnswerGradingInput, context: RetrievedChunk[]): Promise<GradeModelResult> {
     const passages = context
       .map((c, i) => `[[${i + 1}]] (${c.chunk.title})\n${c.chunk.text}`)
       .join("\n\n");
@@ -51,18 +52,40 @@ export class ClaudeGradingModel implements GradingModel {
       `RISPOSTA STUDENTE: ${input.answer}`;
     const raw = await callClaude({ system, user, maxTokens: 1024 });
     const r = parseJsonFromClaude<{
-      score: number;
-      confidence: number;
-      rationale: string;
+      score?: number;
+      confidence?: number;
+      rationale?: string;
       citations?: number[];
     }>(raw);
+
     const score = Number(r.score);
+    // Refuse (don't silently zero) on a malformed/out-of-range score — the answer
+    // goes to manual review instead of being graded on garbage.
+    if (!Number.isFinite(score) || score < 0 || score > input.maxPoints) {
+      return {
+        suggestedPoints: 0,
+        confidence: 0,
+        rationale:
+          "Risposta del modello non valida (punteggio fuori range o assente): correzione " +
+          "automatica sospesa, serve revisione manuale.",
+        provider: "model",
+        citedIndices: [],
+      };
+    }
     const confidence = Number(r.confidence);
+    // Map Claude's 1-based [[n]] citations to valid 0-based context indices.
+    const citedIndices = Array.isArray(r.citations)
+      ? [...new Set(r.citations.map((n) => Math.trunc(Number(n)) - 1))].filter(
+          (i) => Number.isInteger(i) && i >= 0 && i < context.length,
+        )
+      : undefined;
+
     return {
-      suggestedPoints: Math.max(0, Math.min(input.maxPoints, Number.isFinite(score) ? score : 0)),
+      suggestedPoints: Math.max(0, Math.min(input.maxPoints, score)),
       confidence: Math.max(0, Math.min(1, Number.isFinite(confidence) ? confidence : 0.5)),
       rationale: r.rationale || "",
       provider: "model",
+      citedIndices,
     };
   }
 }
@@ -147,6 +170,12 @@ export async function gradeOpenAnswer(
       provider: "model",
     };
   }
-  const result = await getGradingModel().grade(input, citations);
-  return { ...result, citations };
+  const { citedIndices, ...result } = await getGradingModel().grade(input, citations);
+  // Auditable citations = the passages the model actually cited (mapped from its
+  // [[n]] indices), falling back to the full on-topic set if it cited none.
+  const cited =
+    citedIndices && citedIndices.length
+      ? citedIndices.map((i) => citations[i]).filter(Boolean)
+      : citations;
+  return { ...result, citations: cited };
 }

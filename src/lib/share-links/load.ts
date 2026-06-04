@@ -107,9 +107,12 @@ export async function loadSharedCourse(
   for (const r of (iscr ?? []) as unknown as IscrJoin[]) {
     const c = r.corsista;
     if (!c) continue;
-    const key = (c.email || c.full_name || "").toLowerCase();
-    if (key && seen.has(key)) continue;
-    if (key) seen.add(key);
+    const key = (c.email || c.full_name || "").trim().toLowerCase();
+    // No identifying field → unusable roster row, skip it (an empty key never
+    // dedups, so blank indistinguishable students would pile up).
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
     students.push({
       name: c.full_name ?? "",
       email: c.email ?? "",

@@ -38,6 +38,7 @@ export async function dismissEmailClusterAction(nameKey: string): Promise<void> 
 
 /** Names of email-clusters the operator already reviewed (settings_kv). */
 export async function getReviewedEmailClusters(): Promise<string[]> {
+  await assertRole(["admin", "manager"]);
   const svc = getSupabaseServiceClient();
   const { data } = await svc
     .from("settings_kv")

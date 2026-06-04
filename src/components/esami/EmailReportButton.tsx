@@ -27,7 +27,7 @@ export function EmailReportButton({
 
   return (
     <span className="no-print" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      <button className="btn btn-primary" disabled={pending || !courseId || !email} onClick={send}>
+      <button className="btn btn-primary" disabled={pending || !courseId?.trim() || !email?.trim()} onClick={send}>
         <Icon name="mail" size={13} />
         {pending ? "Invio…" : label}
       </button>

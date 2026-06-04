@@ -772,7 +772,10 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
             first_name: "",
             last_name: "",
             display_name: null,
-            role: "manager",
+            // Least privilege: a signed-in user whose profile row hasn't been
+            // created yet (race with the AFTER INSERT trigger) must NOT default
+            // to manager — that would be a transient privilege escalation.
+            role: "guest",
             phone: "",
             city: "",
             position: "",

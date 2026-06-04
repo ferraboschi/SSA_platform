@@ -36,7 +36,7 @@ export default async function DashboardPage() {
       c.lifecycle === "passato" &&
       !c.cancelled &&
       !econ.get(c.id)?.invoiced &&
-      !isLegacyInvoiced(c.year, Math.max(0, monthIndexIt(c.month)), true),
+      !isLegacyInvoiced(c.year, monthIndexIt(c.month), true),
   ).length;
 
   // Real exam pass rate across graded enrollments (no more hardcoded 78%).

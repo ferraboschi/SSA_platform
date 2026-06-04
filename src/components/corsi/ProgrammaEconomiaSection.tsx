@@ -240,7 +240,9 @@ export function ProgrammaEconomiaSection({
   ];
 
   const [customLines, setCustomLines] = useState<CostLine[]>(() =>
-    programOverlay?.customLines && programOverlay.customLines.length
+    // `!= null` so an intentionally-emptied list ([]) is honored instead of
+    // reverting to the default cost lines on reload.
+    programOverlay?.customLines != null
       ? programOverlay.customLines.map((l) => ({ ...l }))
       : [
           { id: "ssa_fee", label: t.costGestione, value: data.costGestione || 900 },
@@ -412,7 +414,7 @@ export function ProgrammaEconomiaSection({
           label={t.kpiMarginPerStudent}
           value={`${marginPerIscritto >= 0 ? "+" : ""}${marginPerIscritto}`}
           unit="€"
-          sub={format(t.kpiBreakeven, { n: Math.ceil(totalCost / data.price) })}
+          sub={format(t.kpiBreakeven, { n: data.price ? Math.ceil(totalCost / data.price) : "—" })}
         />
       </div>
 

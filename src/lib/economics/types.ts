@@ -64,5 +64,8 @@ export const INVOICING_GO_LIVE = { year: 2026, month0: 5 } as const;
  */
 export function isLegacyInvoiced(year: number, month0: number, ended: boolean): boolean {
   if (!ended) return false;
+  // Invalid/unknown month (monthIndexIt returned -1) → don't treat as legacy, so
+  // the course stays visible in the invoice list instead of silently vanishing.
+  if (!Number.isInteger(month0) || month0 < 0 || month0 > 11) return false;
   return year * 12 + month0 < INVOICING_GO_LIVE.year * 12 + INVOICING_GO_LIVE.month0;
 }

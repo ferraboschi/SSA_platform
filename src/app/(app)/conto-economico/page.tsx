@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
 import { monthIndexIt } from "@/lib/dashboard";
 import { loadCourseEconomics } from "@/lib/economics";
-import { EMPTY_ECON, isLegacyInvoiced, type EconCourseRow } from "@/lib/economics/types";
+import { EMPTY_ECON, isLegacyInvoiced, INVOICING_GO_LIVE, type EconCourseRow } from "@/lib/economics/types";
 import { ContoEconomicoClient } from "@/components/economics/ContoEconomicoClient";
 
 export const dynamic = "force-dynamic";
@@ -25,10 +25,15 @@ export default async function Page() {
       // Courses ended before invoicing go-live (Giugno 2026) were invoiced by
       // hand → show them as already settled instead of "da fatturare". No write:
       // we only fold the legacy flag into the view model.
-      const legacy = isLegacyInvoiced(c.year, Math.max(0, monthIndexIt(c.month)), ended);
+      const legacy = isLegacyInvoiced(c.year, monthIndexIt(c.month), ended);
       const rowEcon =
         legacy && !base.invoiced
-          ? { ...base, invoiced: true, invoicedBy: base.invoicedBy ?? "Storico (saldato a mano)" }
+          ? {
+              ...base,
+              invoiced: true,
+              invoicedBy: base.invoicedBy ?? "Storico (saldato a mano)",
+              invoicedAt: base.invoicedAt ?? `${INVOICING_GO_LIVE.year}-01-01T00:00:00.000Z`,
+            }
           : base;
       return {
         id: c.id,

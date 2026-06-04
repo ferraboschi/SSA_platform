@@ -65,23 +65,29 @@ export async function loadCourseFeedbackResults(
     for (const s of rows) {
       const given = s.answers?.[q.id];
       if (given == null || (Array.isArray(given) && given.length === 0) || given === "") continue;
-      answered++;
 
       if (isRating) {
         const n = Number(Array.isArray(given) ? given[0] : given);
+        // Only count it as answered when it's a valid 1–5 rating, so the shown
+        // response count matches the average's denominator.
         if (Number.isFinite(n) && n >= 1 && n <= 5) {
+          answered++;
           buckets[Math.round(n) - 1]++;
           ratingSum += n;
           ratingN++;
         }
       } else if (isChoice) {
+        answered++;
         const vals = (Array.isArray(given) ? given : [given]).map((v) => norm(String(v)));
         q.options.forEach((opt, i) => {
           if (vals.includes(norm(opt))) optionCounts[i]++;
         });
       } else {
         const text = String(Array.isArray(given) ? given.join(", ") : given).trim();
-        if (text) openResponses.push(text);
+        if (text) {
+          answered++;
+          openResponses.push(text);
+        }
       }
     }
 

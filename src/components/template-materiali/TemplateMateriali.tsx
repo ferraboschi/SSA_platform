@@ -528,7 +528,7 @@ function TemplateSakeRow({
         </div>
         <div style={{ textAlign: "right", minWidth: 50 }}>
           <div className="num" style={{ fontSize: 13, fontWeight: 600 }}>
-            {catItem?.cost ?? s.cost}€
+            {((catItem?.cost ?? s.cost) || 0).toLocaleString("it-IT")}€
           </div>
           <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 2 }}>×{s.qty}</div>
         </div>
@@ -1129,7 +1129,7 @@ export function TemplateMateriali({
         await saveTemplateAction(t);
         flash(tm.toast.saved);
       } catch {
-        flash(tm.toast.deleteError ?? "Salvataggio non riuscito — riprova");
+        flash("Salvataggio non riuscito — riprova");
       }
     });
 

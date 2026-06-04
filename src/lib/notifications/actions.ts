@@ -5,6 +5,7 @@ import { getTranslations } from "@/lib/i18n/server";
 import { appConfig } from "@/lib/integrations/config";
 import { getEmailService } from "@/lib/integrations/email";
 import { getDataSource } from "@/lib/data";
+import { assertRole } from "@/lib/auth/guard";
 import type { EmailSendResult } from "@/lib/integrations/email";
 import type { Notification } from "@/lib/domain";
 import { buildNotificationEmail } from "./registry";
@@ -14,6 +15,9 @@ export async function setNotificationDismissedAction(
   id: string,
   dismissed: boolean,
 ): Promise<void> {
+  // The dismissed set is a single shared settings_kv key — gate it so a normal
+  // user can't dismiss notifications for everyone.
+  await assertRole(["admin", "manager"]);
   const ds = await getDataSource();
   await ds.settings.setNotificationDismissed(id, dismissed);
 }

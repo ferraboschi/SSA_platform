@@ -35,21 +35,43 @@ export interface GradedSubmission {
   answers: GradedAnswer[];
 }
 
-const toIdxSet = (given: string | string[] | undefined): Set<number> => {
-  const arr = given == null ? [] : Array.isArray(given) ? given : [given];
-  return new Set(arr.map((x) => Number(x)).filter((n) => !Number.isNaN(n)));
-};
-const setsEqual = (a: Set<number>, b: Set<number>) =>
-  a.size === b.size && [...a].every((x) => b.has(x));
+function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  return a.size === b.size && [...a].every((x) => b.has(x));
+}
+
+const normStr = (s: unknown) => String(s ?? "").trim().toLowerCase();
+const asArray = (given: string | string[] | undefined): string[] =>
+  given == null ? [] : Array.isArray(given) ? given : [given];
+
+// The public runner stores the selected option TEXT (not its index). So grade
+// by comparing the given TEXTS to the correct option texts; fall back to index
+// comparison for any legacy/index-stored answers. (Comparing by index against
+// text answers is why every objective answer used to score 0%.)
+function gradeObjective(given: string | string[] | undefined, q: PublicRunnerQuestion): boolean {
+  const correctIdx = q.correct ?? [];
+  const givenSet = new Set(asArray(given).map(normStr).filter(Boolean));
+  const correctTextSet = new Set(
+    correctIdx.map((i) => normStr(q.options[i])).filter(Boolean),
+  );
+  const correctIdxSet = new Set(correctIdx.map((i) => normStr(i)));
+  return (
+    (correctTextSet.size > 0 && setsEqual(givenSet, correctTextSet)) ||
+    setsEqual(givenSet, correctIdxSet)
+  );
+}
 
 function fmtGiven(given: string | string[] | undefined, q: PublicRunnerQuestion): string {
   if (given == null || (Array.isArray(given) && given.length === 0)) return "—";
+  const arr = asArray(given);
   if (q.options.length) {
-    const idx = toIdxSet(given);
-    const labels = [...idx].map((i) => q.options[i]).filter(Boolean);
-    return labels.length ? labels.join(", ") : String(given);
+    // Answers are stored as option TEXT; map any legacy numeric indices to text.
+    const labels = arr.map((v) => {
+      const n = Number(v);
+      return Number.isInteger(n) && q.options[n] != null ? q.options[n] : v;
+    });
+    return labels.join(", ");
   }
-  return Array.isArray(given) ? given.join(", ") : String(given);
+  return arr.join(", ");
 }
 
 const isObjective = (t: string) =>
@@ -107,7 +129,7 @@ export async function loadCourseExamResults(
         return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, q), correct: "—", ok: null };
       }
       gradable++;
-      const ok = setsEqual(toIdxSet(given), new Set(q.correct));
+      const ok = gradeObjective(given, q);
       if (ok) correct++;
       return {
         qid: q.id,

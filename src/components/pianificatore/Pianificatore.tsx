@@ -10,6 +10,7 @@ import {
   genDates,
   nextId,
   normalizePlanned,
+  parseYmd,
   ymd,
   HUB_CITIES,
   NON_CITIES,
@@ -83,8 +84,11 @@ function plReconcile(planned: PlannedCourse[], real: PlannerItem[]): PlannedCour
     let year = p.year ?? null;
     let mIdx = p.mIdx ?? null;
     if (p.dates && p.dates.length) {
-      const d = new Date(p.dates[0]);
-      if (!Number.isNaN(d.getTime())) {
+      // parseYmd builds a LOCAL date — new Date("YYYY-MM-DD") parses as UTC, so
+      // getMonth() could be off by one at month boundaries west of UTC and the
+      // reconcile key would miss the matching Shopify course.
+      const d = parseYmd(p.dates[0]);
+      if (d && !Number.isNaN(d.getTime())) {
         year = d.getFullYear();
         mIdx = d.getMonth();
       }

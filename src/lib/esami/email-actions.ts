@@ -58,8 +58,9 @@ export async function sendExamResultEmailAction(
       });
       const slug = result.name.normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
       pdf = { filename: `certificato-${slug || "esame"}.pdf`, base64: buf.toString("base64") };
-    } catch {
-      /* PDF render failed → still send the email with the report link */
+    } catch (e) {
+      // Don't fail the send, but surface that the certificate is missing.
+      console.error("Exam result PDF render failed:", e);
     }
 
     const res = await sendExamResultEmail({
@@ -71,7 +72,8 @@ export async function sendExamResultEmailAction(
       reportUrl,
       pdf,
     });
-    return { ok: true, status: res.status, sentTo: TEST_TO };
+    const status = !pdf && res.status === "sent" ? "sent_without_attachment" : res.status;
+    return { ok: true, status, sentTo: TEST_TO };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invio non riuscito." };
   }
