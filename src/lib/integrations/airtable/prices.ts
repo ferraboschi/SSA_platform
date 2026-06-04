@@ -8,11 +8,8 @@ import { airtableConfig } from "@/lib/integrations/config";
 
 const TABLE = "tblilRsJLHIVJ1xju"; // "Master product list"
 const F_CODE = "CODE";
-// The COST SSA pays for a bottle. Prefer the explicit "Cost EUR" (the supplier
-// cost, e.g. Etsu Gin Double Yuzu = 25.58 €), falling back to the all-in landed
-// "TOTAL COST IN ITALY" when "Cost EUR" isn't filled (it's only on ~35 rows).
-// NOT "SC Network price …" — that's a SELLING price, which overstated costs.
-const F_COST_EUR = "Cost EUR";
+// The COST SSA pays for a bottle = the all-in landed "TOTAL COST IN ITALY"
+// (populated on every product), as chosen by the SSA owner.
 const F_TOTAL_COST = "TOTAL COST IN ITALY";
 const F_TYPE = "Product Type";
 
@@ -40,7 +37,7 @@ async function fetchAll(): Promise<Map<string, ProductCost>> {
   const out = new Map<string, ProductCost>();
   if (!token || !base) return out;
 
-  const fieldsParam = [F_CODE, F_COST_EUR, F_TOTAL_COST, F_TYPE]
+  const fieldsParam = [F_CODE, F_TOTAL_COST, F_TYPE]
     .map((f) => `fields%5B%5D=${encodeURIComponent(f)}`)
     .join("&");
   let offset: string | undefined;
@@ -57,15 +54,11 @@ async function fetchAll(): Promise<Map<string, ProductCost>> {
     for (const r of body.records ?? []) {
       const code = String(r.fields[F_CODE] ?? "").trim();
       if (!code) continue;
-      const costEur = r.fields[F_COST_EUR];
       const totalCost = r.fields[F_TOTAL_COST];
-      const raw =
-        typeof costEur === "number" && costEur > 0
-          ? costEur
-          : typeof totalCost === "number" && totalCost > 0
-            ? totalCost
-            : null;
-      const cost = raw != null ? Math.round(raw * 100) / 100 : null;
+      const cost =
+        typeof totalCost === "number" && totalCost > 0
+          ? Math.round(totalCost * 100) / 100
+          : null;
       const type = (r.fields[F_TYPE] as string | undefined) ?? null;
       out.set(code, { cost, type });
     }
@@ -75,7 +68,7 @@ async function fetchAll(): Promise<Map<string, ProductCost>> {
 }
 
 /** Cached map: SKU/CODE → { cost (euros), type }. */
-export const getProductCosts = unstable_cache(fetchAll, ["product-costs-v3"], {
+export const getProductCosts = unstable_cache(fetchAll, ["product-costs-v4"], {
   revalidate: 600,
   tags: ["product-costs"],
 });
