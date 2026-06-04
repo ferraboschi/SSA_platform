@@ -19,6 +19,8 @@ export interface PublicRunnerQuestion {
   /** Correct answers — option INDICES for choice questions, accepted STRINGS for
    *  "fill". Populated in validate mode and for grading (includeAnswers). */
   correct?: Array<number | string>;
+  /** Image URL for "image" (identify) questions — shown above the options. */
+  image?: string;
 }
 type TransMap = Record<string, RunnerI18n>;
 export interface PublicRunnerData {
@@ -41,6 +43,7 @@ interface QJson {
   text?: string;
   options?: string[];
   correct?: Array<number | string>;
+  imageId?: string;
 }
 interface MiniJson {
   day: number;
@@ -83,6 +86,7 @@ function mapQuestions(
         text: q.text ?? "",
         options,
         ...(i18n ? { i18n } : {}),
+        ...(q.imageId ? { image: q.imageId } : {}),
         ...(includeAnswers ? { correct } : {}),
       };
     }

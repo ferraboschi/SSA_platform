@@ -32,6 +32,19 @@ const cloneTpl = (t: ExamTemplate): ExamTemplate =>
 const genId = () =>
   "q-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+// Short "how this works" tip shown above each question type in the editor.
+const TYPE_TIPS: Record<string, string> = {
+  single: "Scelta singola: lo studente sceglie UNA risposta. Tocca il cerchio per segnare la corretta. Auto-correzione.",
+  multi: "Scelta multipla: lo studente può sceglierne PIÙ di una. Segna TUTTE le corrette. Auto-correzione (devono coincidere esattamente).",
+  truefalse: "Vero / Falso: due opzioni, segna quella corretta. Auto-correzione.",
+  image: "Identifica immagine: mostra un'immagine (incolla l'URL qui sotto) e lo studente sceglie l'opzione corretta. Segna la corretta. Auto-correzione.",
+  fill: "Riempi spazio: lo studente DIGITA la risposta. Elenca le risposte accettate separate da virgola (maiuscole/minuscole e spazi non contano). Auto-correzione.",
+  open: "Testo libero: risposta aperta, corretta dall'AI in base alla knowledge base SSA (suggerimento, poi confermi a mano).",
+  match: "Abbinamento: lo studente abbina gli elementi di sinistra a quelli di destra. ⚠ Non ancora disponibile nel test studente.",
+  order: "Ordina: lo studente mette gli elementi nell'ordine corretto. ⚠ Non ancora disponibile nel test studente.",
+  rating: "Valutazione 1–5 stelle (usata nel modulo di feedback di fine corso, non nell'esame).",
+};
+
 function newQuestion(type: ExamQuestionType): ExamQuestion {
   const base: ExamQuestion = {
     id: genId(),
@@ -612,6 +625,28 @@ function QuestionDetail({
         )}
       </div>
 
+      {/* How this question type works (for the operator building the exam). */}
+      {TYPE_TIPS[q.type] && (
+        <div
+          style={{
+            display: "flex",
+            gap: 7,
+            alignItems: "flex-start",
+            fontSize: 12,
+            color: "var(--text-3)",
+            background: "var(--indigo-50)",
+            border: "1px solid var(--indigo-100)",
+            borderRadius: 7,
+            padding: "8px 10px",
+            marginBottom: 14,
+            lineHeight: 1.45,
+          }}
+        >
+          <Icon name="info" size={13} className="text-2" style={{ marginTop: 1, flexShrink: 0 }} />
+          <span>{TYPE_TIPS[q.type]}</span>
+        </div>
+      )}
+
       <div className="field">
         <div className="field-label">{t.qText}</div>
         <textarea
@@ -655,7 +690,27 @@ function QuestionDetail({
         {(q.type === "single" || q.type === "multi" || q.type === "truefalse" || q.type === "image") && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {q.type === "image" && (
-              <div className="ph-img" style={{ height: 140, marginBottom: 8 }}>{t.imgPlaceholder}</div>
+              <div style={{ marginBottom: 8 }}>
+                {!ro && (
+                  <input
+                    className="input"
+                    placeholder="URL immagine (es. https://…/etichetta.jpg)"
+                    value={q.imageId ?? ""}
+                    onChange={(e) => onChange({ imageId: e.target.value })}
+                    style={{ marginBottom: 8 }}
+                  />
+                )}
+                {q.imageId ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={q.imageId}
+                    alt=""
+                    style={{ maxWidth: "100%", maxHeight: 200, borderRadius: 8, objectFit: "contain", border: "1px solid var(--border)" }}
+                  />
+                ) : (
+                  <div className="ph-img" style={{ height: 120 }}>{t.imgPlaceholder}</div>
+                )}
+              </div>
             )}
             {(q.options ?? []).map((opt, i) => {
               const isC = correctSet.has(i);

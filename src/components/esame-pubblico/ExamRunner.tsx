@@ -13,6 +13,8 @@ export interface RunnerQuestion {
   /** Correct answers — option INDICES for choice questions, accepted STRINGS for
    *  "fill". Present only in validate mode. */
   correct?: Array<number | string>;
+  /** Image URL for "image" (identify) questions. */
+  image?: string;
 }
 
 /** Render a question in the chosen language, falling back to the original (IT). */
@@ -398,6 +400,14 @@ export function ExamRunner({
               return (
                 <>
                   <p className="exam-public-q-text">{lq.text}</p>
+                  {lq.type === "image" && lq.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={lq.image}
+                      alt=""
+                      style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 8, margin: "8px 0 14px", objectFit: "contain" }}
+                    />
+                  )}
                   <QuestionInput
                     q={lq}
                     value={answers[step.q.id]}

@@ -444,6 +444,7 @@ interface ExamTemplateQuestionJson {
   correct?: Array<number | string>;
   pairs?: Array<{ l: string; r: string }>;
   items?: string[];
+  imageId?: string;
 }
 interface ExamTemplateMiniTestJson {
   day: number;
@@ -516,6 +517,7 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
           correct: q.correct as ExamQuestion["correct"],
           pairs: q.pairs,
           items: q.items,
+          imageId: q.imageId,
         };
       }
       // Legacy Airtable shape ({prompt, choices}).
@@ -587,6 +589,7 @@ function examTemplateToData(template: ExamTemplate): ExamTemplateRow["data"] {
       correct: x.correct,
       pairs: x.pairs,
       items: x.items,
+      imageId: x.imageId,
     }));
   return {
     rich: true,
