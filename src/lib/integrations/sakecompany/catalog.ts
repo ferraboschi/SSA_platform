@@ -6,8 +6,18 @@ import { unstable_cache } from "next/cache";
 import { sakeCompanyConfig } from "@/lib/integrations/config";
 import { listCatalog, type ScCatalogItem } from "./admin-client";
 import { getProductCosts } from "@/lib/integrations/airtable/prices";
+import scB2bPrices from "./sc-b2b-prices.json";
 
 export const SAKE_CATALOG_TAG = "sake-catalog";
+
+// PRIMARY cost source: the SC "B2B Price no VAT" (column W of MASTER PRODUCT
+// PRICING.xlsx), keyed by SKU. Committed snapshot — re-run the import script when
+// the spreadsheet changes. Falls back to Airtable / Shopify price below.
+const B2B_PRICES: Record<string, number> = scB2bPrices as Record<string, number>;
+function b2bPrice(sku: string | undefined): number | undefined {
+  if (!sku) return undefined;
+  return B2B_PRICES[sku] ?? B2B_PRICES[sku.replace(/-C\d+$/i, "")];
+}
 
 export const getSakeCatalog = unstable_cache(
   async (): Promise<ScCatalogItem[]> => {
@@ -23,10 +33,8 @@ export const getSakeCatalog = unstable_cache(
       } catch {
         /* Airtable cost merge unavailable → return Shopify products as-is */
       }
-      // Merge cost + type from the Airtable "Master product list" by SKU.
-      // Cost priority: Airtable supplier cost → Sake Company Shopify list price
-      // (so products NOT in the cost list, e.g. beers, still show a real price
-      // instead of 0 €). Type comes from Airtable when available.
+      // Cost priority: SC B2B price (column W) → Airtable cost → Sake Company
+      // Shopify list price (so nothing real shows 0 €). Type comes from Airtable.
       return items.map((i) => {
         const sku = i.sku ?? undefined;
         let c = sku ? costs.get(sku) : undefined;
@@ -36,7 +44,8 @@ export const getSakeCatalog = unstable_cache(
           const baseSku = sku.replace(/-C\d+$/i, "");
           if (baseSku !== sku) c = costs.get(baseSku);
         }
-        const cost = c?.cost != null ? c.cost : i.price;
+        const w = b2bPrice(sku);
+        const cost = w != null ? w : c?.cost != null ? c.cost : i.price;
         const productType = c?.type ?? i.productType;
         if (cost == null && productType == null) return i;
         return { ...i, ...(cost != null ? { cost } : {}), productType };
@@ -45,6 +54,6 @@ export const getSakeCatalog = unstable_cache(
       return [];
     }
   },
-  ["sake-catalog-v8"],
+  ["sake-catalog-v9"],
   { revalidate: 600, tags: [SAKE_CATALOG_TAG] },
 );
