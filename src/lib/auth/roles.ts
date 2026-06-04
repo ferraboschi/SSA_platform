@@ -68,7 +68,7 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
     priority: [],
   },
   manager: {
-    hidden: ["design-system"],
+    hidden: [],
     priority: [
       "dashboard",
       "corsi",
@@ -89,7 +89,6 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "template-materiali",
       "anomalie",
       "educator",
-      "design-system",
     ],
     priority: ["dashboard", "conto-economico", "corsi", "corsisti", "archivio"],
   },
@@ -103,7 +102,6 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "corsisti",
       "anomalie",
       "educator",
-      "design-system",
     ],
     priority: ["dashboard", "conto-economico", "corsi", "archivio"],
   },
@@ -123,7 +121,6 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "anomalie",
       "educator",
       "account",
-      "design-system",
     ],
     priority: [],
   },

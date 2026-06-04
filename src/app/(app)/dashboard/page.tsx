@@ -5,8 +5,9 @@ import { format } from "@/lib/i18n/dictionary";
 import { getSession } from "@/lib/auth/session";
 import { getDataSource } from "@/lib/data";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
-import { buildDashboard, capitalize, DASH_TODAY, DASH_WEEK, monthLabel } from "@/lib/dashboard";
+import { buildDashboard, capitalize, DASH_TODAY, DASH_WEEK, monthIndexIt, monthLabel } from "@/lib/dashboard";
 import { loadCourseEconomics } from "@/lib/economics";
+import { isLegacyInvoiced } from "@/lib/economics/types";
 import {
   MonthReportButton,
   PipelineBar,
@@ -27,9 +28,15 @@ export default async function DashboardPage() {
   const stockAlerts = await ds.settings.getStockAlerts();
 
   // Real "to invoice" count: held courses not yet marked invoiced (Conto economico).
+  // Courses that ended before invoicing go-live (Giugno 2026) are legacy and count
+  // as already settled, so this no longer surfaces ~100 historical hand-done rows.
   const econ = await loadCourseEconomics();
   const toInvoiceCount = courses.filter(
-    (c) => c.lifecycle === "passato" && !c.cancelled && !econ.get(c.id)?.invoiced,
+    (c) =>
+      c.lifecycle === "passato" &&
+      !c.cancelled &&
+      !econ.get(c.id)?.invoiced &&
+      !isLegacyInvoiced(c.year, Math.max(0, monthIndexIt(c.month)), true),
   ).length;
 
   // Real exam pass rate across graded enrollments (no more hardcoded 78%).

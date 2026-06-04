@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
 import { monthIndexIt } from "@/lib/dashboard";
 import { loadCourseEconomics } from "@/lib/economics";
-import { EMPTY_ECON, type EconCourseRow } from "@/lib/economics/types";
+import { EMPTY_ECON, isLegacyInvoiced, type EconCourseRow } from "@/lib/economics/types";
 import { ContoEconomicoClient } from "@/components/economics/ContoEconomicoClient";
 
 export const dynamic = "force-dynamic";
@@ -19,18 +19,30 @@ export default async function Page() {
 
   const rows: EconCourseRow[] = courses
     .filter((c) => !c.cancelled)
-    .map((c) => ({
-      id: c.id,
-      title: c.shortTitle || c.title,
-      type: c.type,
-      typeLabel: c.typeLabel,
-      city: c.city,
-      month: c.month,
-      year: c.year,
-      revenue: c.revenue,
-      ended: c.lifecycle === "passato",
-      econ: econ.get(c.id) ?? EMPTY_ECON,
-    }))
+    .map((c) => {
+      const ended = c.lifecycle === "passato";
+      const base = econ.get(c.id) ?? EMPTY_ECON;
+      // Courses ended before invoicing go-live (Giugno 2026) were invoiced by
+      // hand → show them as already settled instead of "da fatturare". No write:
+      // we only fold the legacy flag into the view model.
+      const legacy = isLegacyInvoiced(c.year, Math.max(0, monthIndexIt(c.month)), ended);
+      const rowEcon =
+        legacy && !base.invoiced
+          ? { ...base, invoiced: true, invoicedBy: base.invoicedBy ?? "Storico (saldato a mano)" }
+          : base;
+      return {
+        id: c.id,
+        title: c.shortTitle || c.title,
+        type: c.type,
+        typeLabel: c.typeLabel,
+        city: c.city,
+        month: c.month,
+        year: c.year,
+        revenue: c.revenue,
+        ended,
+        econ: rowEcon,
+      };
+    })
     .sort((a, b) => {
       const da = a.year * 12 + monthIndexIt(a.month);
       const db = b.year * 12 + monthIndexIt(b.month);

@@ -69,27 +69,32 @@ function plSave(patch: PlSaved) {
   localStorage.setItem(PL_LS, JSON.stringify({ ...cur, ...patch }));
 }
 
-// Two example planned courses seeded so the feature is visible on first load.
-// Deterministic ids keep this pure (safe to call from a useState initializer).
-function plSeedPlanned(): PlannedCourse[] {
-  return [
-    {
-      id: "pl-seed-intro",
-      type: "introduttivo",
-      mode: "online",
-      city: "Bologna",
-      educatorId: "e7",
-      dates: genDates("2027-01-13", "introduttivo", "online"),
-    },
-    {
-      id: "pl-seed-cert",
-      type: "certificato",
-      mode: "presenza",
-      city: "Torino",
-      educatorId: "e6",
-      dates: genDates("2027-02-10", "certificato", "presenza"),
-    },
-  ];
+// Reconcile the persisted manual-planning layer against the live Shopify courses.
+// Removes (a) the old demo seeds (ids "pl-seed-*") that were never real courses,
+// and (b) any manual plan that now exists as a real Shopify course (same type +
+// city + month/year) so it doesn't show as a phantom duplicate. Genuine forward
+// plans not yet on Shopify are kept. Pure → safe in a useState initializer.
+function plReconcile(planned: PlannedCourse[], real: PlannerItem[]): PlannedCourse[] {
+  const realKeys = new Set(
+    real.map((r) => `${r.type}|${(r.city || "").trim().toLowerCase()}|${r.year}|${r.mIdx}`),
+  );
+  return planned.filter((p) => {
+    if (p.id.startsWith("pl-seed-")) return false; // legacy demo seeds, not real plans
+    let year = p.year ?? null;
+    let mIdx = p.mIdx ?? null;
+    if (p.dates && p.dates.length) {
+      const d = new Date(p.dates[0]);
+      if (!Number.isNaN(d.getTime())) {
+        year = d.getFullYear();
+        mIdx = d.getMonth();
+      }
+    }
+    if (year != null && mIdx != null) {
+      const key = `${p.type}|${(p.city || "").trim().toLowerCase()}|${year}|${mIdx}`;
+      if (realKeys.has(key)) return false; // already a real Shopify course → drop the dup
+    }
+    return true;
+  });
 }
 
 export interface PianificatoreProps {
@@ -150,9 +155,14 @@ export function Pianificatore({
     ...PL_DEFAULT_TARGETS,
     ...(saved0.targets || {}),
   }));
-  const [planned, setPlanned] = useState<PlannedCourse[]>(
-    () => saved0.planned || plSeedPlanned(),
+  // Persisted manual plans, reconciled against live Shopify courses so phantom
+  // entries (old demo seeds, or plans that are now real Shopify courses) drop out.
+  const rawPlanned = saved0.planned ?? [];
+  const [planned, setPlanned] = useState<PlannedCourse[]>(() =>
+    plReconcile(rawPlanned, realItems),
   );
+  // If reconciliation pruned anything, persist the cleaned state once on mount.
+  const needsCleanSave = useRef(plReconcile(rawPlanned, realItems).length !== rawPlanned.length);
   const [thresholds, setThresholds] = useState<PlThresholds>(() => ({
     ...PL_DEFAULT_THRESHOLDS,
     ...(saved0.thresholds || {}),
@@ -179,6 +189,16 @@ export function Pianificatore({
       void savePlannerStateAction({ view, scenario, targets, planned, thresholds });
     }, 800);
   }, [view, scenario, targets, planned, thresholds, canPersist]);
+
+  // Persist the reconciled (phantom-free) plan once if the load pruned anything,
+  // so the cleanup sticks across sessions without waiting for a manual edit.
+  useEffect(() => {
+    if (needsCleanSave.current && canPersist) {
+      needsCleanSave.current = false;
+      void savePlannerStateAction({ view, scenario, targets, planned, thresholds });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const plannedItems = useMemo(
     () => planned.map((p) => normalizePlanned(p, educators)),
