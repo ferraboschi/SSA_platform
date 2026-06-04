@@ -1121,10 +1121,16 @@ export function TemplateMateriali({
   };
 
   // Templates auto-save on every change; flash a confirmation so it's visible.
+  // Errors are caught so a transient save failure shows a toast instead of
+  // bubbling to the route error boundary ("Pagina non caricata").
   const persist = (t: MaterialTemplate) =>
     startSave(async () => {
-      await saveTemplateAction(t);
-      flash(tm.toast.saved);
+      try {
+        await saveTemplateAction(t);
+        flash(tm.toast.saved);
+      } catch {
+        flash(tm.toast.deleteError ?? "Salvataggio non riuscito — riprova");
+      }
     });
 
   const open = openId ? templates.find((t) => t.id === openId) ?? null : null;

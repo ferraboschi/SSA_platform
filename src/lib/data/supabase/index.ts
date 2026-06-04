@@ -1102,9 +1102,11 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
             name: s.name,
             type: s.type,
             sakagura: s.sakagura,
-            size_ml: Math.round(s.size) || 0,
-            cost_cents: Math.round(s.cost * 100),
-            qty: Math.max(1, Math.round(s.qty) || 1),
+            size_ml: Math.round(Number(s.size)) || 0,
+            // NaN-safe: a sake with an undefined/empty cost must not blow up the
+            // whole template save (which re-inserts every sake on each edit).
+            cost_cents: Math.round((Number(s.cost) || 0) * 100),
+            qty: Math.max(1, Math.round(Number(s.qty)) || 1),
             note: s.note ?? null,
             position: j,
           }));
