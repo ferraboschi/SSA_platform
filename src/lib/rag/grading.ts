@@ -7,6 +7,7 @@
 // flow is testable offline.
 
 import { retrieve } from "./pipeline";
+import { callClaude, parseJsonFromClaude } from "@/lib/integrations/anthropic/client";
 import type {
   GradeSuggestion,
   OpenAnswerGradingInput,
@@ -18,6 +19,52 @@ export interface GradingModel {
     input: OpenAnswerGradingInput,
     context: RetrievedChunk[],
   ): Promise<Omit<GradeSuggestion, "citations">>;
+}
+
+// Minimum cosine similarity for a retrieved passage to count as on-topic. Below
+// this the corpus has nothing relevant → we refuse rather than grade on noise.
+const MIN_RELEVANCE = 0.2;
+
+// Live grader: scores STRICTLY against the retrieved SSA knowledge-base passages
+// (the wiki/dispensa corpus), never outside knowledge. Returns which passages it
+// relied on so a human can audit the grounding.
+export class ClaudeGradingModel implements GradingModel {
+  async grade(
+    input: OpenAnswerGradingInput,
+    context: RetrievedChunk[],
+  ): Promise<Omit<GradeSuggestion, "citations">> {
+    const passages = context
+      .map((c, i) => `[[${i + 1}]] (${c.chunk.title})\n${c.chunk.text}`)
+      .join("\n\n");
+    const system =
+      "Sei un esaminatore della Sake Sommelier Association. Correggi la risposta aperta " +
+      "ESCLUSIVAMENTE in base ai passaggi della knowledge base forniti, che sono l'unica " +
+      "fonte di verità. NON usare conoscenze esterne. Se i passaggi non coprono la domanda, " +
+      "assegna un punteggio prudente e dillo. Rispondi SOLO con JSON " +
+      '{"score": number (0..max), "confidence": number (0..1), "rationale": string (in italiano), ' +
+      '"citations": number[] (i numeri [[n]] dei passaggi usati)}. Niente commento, niente code fence.';
+    const user =
+      `PASSAGGI KNOWLEDGE BASE:\n${passages}\n\n` +
+      `DOMANDA: ${input.question}\n` +
+      (input.rubricKey ? `RUBRICA / RISPOSTA MODELLO: ${input.rubricKey}\n` : "") +
+      `PUNTEGGIO MASSIMO: ${input.maxPoints}\n` +
+      `RISPOSTA STUDENTE: ${input.answer}`;
+    const raw = await callClaude({ system, user, maxTokens: 1024 });
+    const r = parseJsonFromClaude<{
+      score: number;
+      confidence: number;
+      rationale: string;
+      citations?: number[];
+    }>(raw);
+    const score = Number(r.score);
+    const confidence = Number(r.confidence);
+    return {
+      suggestedPoints: Math.max(0, Math.min(input.maxPoints, Number.isFinite(score) ? score : 0)),
+      confidence: Math.max(0, Math.min(1, Number.isFinite(confidence) ? confidence : 0.5)),
+      rationale: r.rationale || "",
+      provider: "model",
+    };
+  }
 }
 
 // Heuristic fallback: lexical overlap between answer and retrieved context.
@@ -84,7 +131,22 @@ export async function gradeOpenAnswer(
   const query = input.rubricKey
     ? `${input.question} ${input.rubricKey}`
     : input.question;
-  const citations = await retrieve(query, k);
+  const retrieved = await retrieve(query, k);
+  // Keep only on-topic passages. If nothing relevant comes back, REFUSE: a
+  // missing/misconfigured corpus must never silently produce a hallucinated
+  // grade — the answer goes to manual review with score 0 / confidence 0.
+  const citations = retrieved.filter((c) => c.score >= MIN_RELEVANCE);
+  if (citations.length === 0) {
+    return {
+      suggestedPoints: 0,
+      confidence: 0,
+      rationale:
+        "Nessun contenuto pertinente nella knowledge base SSA: la correzione automatica è " +
+        "sospesa per questa risposta — serve revisione manuale di un educatore.",
+      citations: [],
+      provider: "model",
+    };
+  }
   const result = await getGradingModel().grade(input, citations);
   return { ...result, citations };
 }

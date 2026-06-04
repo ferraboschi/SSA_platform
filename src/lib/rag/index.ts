@@ -16,5 +16,8 @@ export {
   gradeOpenAnswer,
   getGradingModel,
   setGradingModel,
+  ClaudeGradingModel,
   type GradingModel,
 } from "./grading";
+export { SupabaseVectorStore } from "./supabase-store";
+export { ensureRagWired, ragGroundingStatus } from "./runtime";

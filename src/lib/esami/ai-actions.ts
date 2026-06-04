@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { hasRole } from "@/lib/auth/guard";
 import { callClaude, parseJsonFromClaude, anthropicConfig } from "@/lib/integrations/anthropic/client";
+import { ensureRagWired, setGradingModel, ClaudeGradingModel, gradeOpenAnswer } from "@/lib/rag";
 import type { ExamFamily } from "@/lib/domain";
 
 type TLang = "en" | "ja";
@@ -114,9 +115,19 @@ export interface GradeOpenResult {
   score?: number;
   feedback?: string;
   error?: string;
+  /** True when the grade was grounded in retrieved SSA knowledge-base passages. */
+  grounded?: boolean;
+  confidence?: number;
+  /** The KB passages the grade relied on (title + similarity), for audit. */
+  citations?: { title: string; score: number }[];
 }
 
-/** AI grade an open-ended answer (0..maxPoints). Seam for future open questions. */
+/**
+ * AI-grade an open-ended answer (0..maxPoints), GROUNDED in the SSA knowledge
+ * base. Retrieves the relevant corpus passages and grades strictly against them;
+ * if nothing relevant is found it REFUSES (score 0, grounded:false) and routes to
+ * manual review — it never grades on the model's outside knowledge.
+ */
 export async function gradeOpenAnswerAction(input: {
   prompt: string;
   modelAnswer?: string;
@@ -126,12 +137,22 @@ export async function gradeOpenAnswerAction(input: {
   if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
   if (!anthropicConfig.isConfigured) return { ok: false, error: "AI non configurata." };
   try {
-    const system =
-      "You grade open-ended answers for a Sake Sommelier exam. Be strict but fair. Return ONLY JSON {\"score\": number, \"feedback\": string} where score is between 0 and the given maximum.";
-    const user = `Question: ${input.prompt}\nModel answer / rubric: ${input.modelAnswer || "(none provided)"}\nMaximum points: ${input.maxPoints}\nStudent answer: ${input.studentAnswer}`;
-    const raw = await callClaude({ system, user, maxTokens: 1024 });
-    const r = parseJsonFromClaude<{ score: number; feedback: string }>(raw);
-    return { ok: true, score: Math.max(0, Math.min(input.maxPoints, r.score)), feedback: r.feedback };
+    ensureRagWired();
+    setGradingModel(new ClaudeGradingModel());
+    const sug = await gradeOpenAnswer({
+      question: input.prompt,
+      answer: input.studentAnswer,
+      rubricKey: input.modelAnswer,
+      maxPoints: input.maxPoints,
+    });
+    return {
+      ok: true,
+      score: sug.suggestedPoints,
+      feedback: sug.rationale,
+      grounded: sug.citations.length > 0,
+      confidence: sug.confidence,
+      citations: sug.citations.map((c) => ({ title: c.chunk.title, score: Math.round(c.score * 100) / 100 })),
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Valutazione non riuscita." };
   }

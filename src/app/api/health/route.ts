@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getConnectionStatus } from "@/lib/integrations/config";
 import { getProductCosts } from "@/lib/integrations/airtable/prices";
 import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
+import { ensureRagWired, ragGroundingStatus } from "@/lib/rag";
+import { getVectorStore } from "@/lib/rag/store";
 
 // Public, secret-free health check: reports which integrations have credentials
 // configured (booleans only — never the values). Useful to verify env wiring.
@@ -24,6 +26,17 @@ export async function GET() {
     /* diagnostic best-effort */
   }
 
+  // RAG grounding diagnostic: confirms the knowledge-base corpus is reachable so
+  // open-answer grading is grounded (not hallucinated). chunkCount > 0 means the
+  // persistent pgvector corpus is wired and queryable.
+  let ragChunkCount = 0;
+  try {
+    ensureRagWired();
+    ragChunkCount = await getVectorStore().count();
+  } catch {
+    /* diagnostic best-effort */
+  }
+
   return NextResponse.json({
     ok: true,
     ...getConnectionStatus(),
@@ -32,5 +45,6 @@ export async function GET() {
     resend: Boolean(process.env.RESEND_API_KEY),
     airtablePricesBaseEnv: Boolean(process.env.AIRTABLE_PRICES_BASE_ID),
     sake: { priceCodes, catalogTotal, catalogWithCost },
+    rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
   });
 }
