@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Icon } from "@/components/ui";
-import { createExamLink } from "@/lib/exam-links/actions";
+import { createExamLink, createPersonalExamLinks, type PersonalExamLink } from "@/lib/exam-links/actions";
 import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
 
 interface TestDef {
@@ -38,6 +38,43 @@ export function ExamLinkPanel({
   const tests = testsForFamily(family);
   const [links, setLinks] = useState<LinkState>({});
   const [busy, setBusy] = useState<string | null>(null);
+
+  // Personal links (one per enrolled student), keyed by test.
+  const [personal, setPersonal] = useState<
+    Record<string, { links: PersonalExamLink[]; stored: boolean; open: boolean }>
+  >({});
+  const [pBusy, setPBusy] = useState<string | null>(null);
+  const [pErr, setPErr] = useState<string | null>(null);
+
+  const genPersonal = async (key: ExamTestKey) => {
+    setPBusy(key);
+    setPErr(null);
+    const res = await createPersonalExamLinks(courseId, key, "exam");
+    setPBusy(null);
+    if (!res.ok) {
+      setPErr(res.error || "Generazione non riuscita");
+      return;
+    }
+    setPersonal((p) => ({
+      ...p,
+      [key]: { links: res.links ?? [], stored: Boolean(res.stored), open: true },
+    }));
+  };
+
+  const downloadCsv = (key: ExamTestKey, label: string) => {
+    const rows = personal[key]?.links ?? [];
+    const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
+    const csv = [
+      ["Nome", "Email", "Link personale", "Scadenza"].join(","),
+      ...rows.map((r) => [esc(r.name), esc(r.email), esc(r.url), esc(r.expiresAt)].join(",")),
+    ].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `link-personali-${label.replace(/\s+/g, "-").toLowerCase()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const slot = (key: ExamTestKey, mode: ExamLinkMode) => `${key}:${mode}`;
 
@@ -136,12 +173,97 @@ export function ExamLinkPanel({
         )}
       </div>
 
+      {/* ── Personal links: one per enrolled student, stored + tied to them ── */}
+      <div className="card card-pad" style={{ marginBottom: 16, border: "1px solid var(--indigo-100)", boxShadow: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          <div style={{ fontSize: 13, color: "var(--text-2)" }}>
+            <strong>Link personali</strong> — uno per studente iscritto, memorizzato e collegato alla persona
+            (così l&apos;esito torna sul suo profilo). Genera, scarica il CSV e invia a ciascuno il suo link.
+          </div>
+        </div>
+        {pErr && <div style={{ fontSize: 12, color: "var(--danger-fg)", marginBottom: 8 }}>{pErr}</div>}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {tests.map((tst) => (
+            <button
+              key={tst.key}
+              className={`btn btn-sm ${tst.important ? "btn-primary" : ""}`}
+              onClick={() => genPersonal(tst.key)}
+              disabled={pBusy === tst.key}
+            >
+              <Icon name="users" size={12} />
+              {pBusy === tst.key ? "…" : `Link personali · ${tst.label}`}
+            </button>
+          ))}
+        </div>
+
+        {tests.map((tst) => {
+          const p = personal[tst.key];
+          if (!p) return null;
+          return (
+            <div key={tst.key} style={{ marginTop: 12, borderTop: "1px solid var(--border-2)", paddingTop: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <strong style={{ fontSize: 13 }}>{tst.label}</strong>
+                <span style={{ fontSize: 12, color: "var(--text-3)" }}>{p.links.length} studenti</span>
+                <button className="btn btn-xs" onClick={() => downloadCsv(tst.key, tst.label)} disabled={!p.links.length}>
+                  <Icon name="download" size={11} /> CSV
+                </button>
+                <button
+                  className="btn btn-xs btn-ghost"
+                  onClick={() => setPersonal((s) => ({ ...s, [tst.key]: { ...p, open: !p.open } }))}
+                >
+                  {p.open ? "Nascondi" : "Mostra"}
+                </button>
+                {!p.stored && (
+                  <span style={{ fontSize: 11, color: "var(--warning-fg)" }}>
+                    ⚠ non memorizzati (applica la migrazione exam_student_links)
+                  </span>
+                )}
+              </div>
+              {p.open && (
+                <div className="table-wrap" style={{ marginTop: 8 }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Studente</th>
+                        <th>Email</th>
+                        <th style={{ width: 90 }}>Link</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.links.map((r) => (
+                        <tr key={r.corsistaId}>
+                          <td style={{ fontWeight: 600 }}>{r.name}</td>
+                          <td style={{ color: "var(--text-3)", fontSize: 12 }}>{r.email}</td>
+                          <td>
+                            <button className="btn btn-xs btn-ghost" onClick={() => copy(`p:${tst.key}:${r.corsistaId}`, r.url)}>
+                              <Icon name="copy" size={11} />
+                              {links[`p:${tst.key}:${r.corsistaId}`]?.copied ? "Copiato!" : "Copia"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {p.links.length === 0 && (
+                        <tr>
+                          <td colSpan={3} style={{ color: "var(--text-4)", fontSize: 12 }}>
+                            Nessuno studente iscritto a questo corso.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
               <th>Test</th>
-              <th style={{ width: 220 }}>Link esame (studente)</th>
+              <th style={{ width: 220 }}>Link esame (condiviso)</th>
               <th style={{ width: 220 }}>Link test (anteprima)</th>
             </tr>
           </thead>

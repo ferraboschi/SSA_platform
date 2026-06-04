@@ -22,6 +22,10 @@ export interface ExamTokenPayload {
   m: ExamLinkMode;
   /** Optional forced language (else the student picks). */
   l?: string;
+  /** Optional enrolled-student (corsista) id — set on PERSONAL links so the
+   *  submission can be tied back to the student. Absent on shared links
+   *  (backwards compatible: old links keep verifying). */
+  s?: string;
   /** Expiry, epoch seconds. */
   e: number;
 }
