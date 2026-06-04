@@ -16,6 +16,7 @@ import { QUESTION_EST_SEC, estimateSeconds, formatEstimate } from "@/lib/esami";
 import { saveExamTemplateAction } from "@/lib/esami/actions";
 import { createExamLink } from "@/lib/exam-links/actions";
 import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
+import { translateExamTemplateAction } from "@/lib/esami/ai-actions";
 
 type Section = "esame" | "feedback" | `day${number}`;
 
@@ -67,6 +68,19 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
   const t = esami.editor;
   const router = useRouter();
   const [previewing, setPreviewing] = useState<string | null>(null);
+  const [translating, startTranslate] = useTransition();
+  const [translateMsg, setTranslateMsg] = useState<string | null>(null);
+  const runTranslate = () => {
+    setTranslateMsg(null);
+    startTranslate(async () => {
+      const res = await translateExamTemplateAction(fam);
+      setTranslateMsg(
+        res.ok
+          ? `Tradotte ${res.count ?? 0} domande in EN e JA ✓`
+          : res.error || "Traduzione non riuscita",
+      );
+    });
+  };
 
   const [drafts, setDrafts] = useState<Record<ExamFamily, ExamTemplate>>(() => {
     const out = {} as Record<ExamFamily, ExamTemplate>;
@@ -355,6 +369,24 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
             </span>
           ) : (
             <span className="text-3" style={{ fontSize: 11 }}>{t.noPreviewCourse}</span>
+          )}
+          {unlocked && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <button
+                className="btn btn-sm"
+                onClick={runTranslate}
+                disabled={translating}
+                title="Traduci tutte le domande in inglese e giapponese (una volta, con AI). Le traduzioni vengono salvate."
+              >
+                <Icon name="globe" size={12} />
+                {translating ? "Traduco…" : "Traduci (AI)"}
+              </button>
+              {translateMsg && (
+                <span style={{ fontSize: 11, color: translateMsg.includes("✓") ? "var(--success-fg)" : "var(--danger-fg)" }}>
+                  {translateMsg}
+                </span>
+              )}
+            </span>
           )}
           {unlocked ? (
             <>

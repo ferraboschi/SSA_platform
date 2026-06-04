@@ -8,14 +8,18 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import type { ExamTestKey } from "./token";
 
+export type RunnerI18n = Partial<Record<"en" | "ja", { text: string; options: string[] }>>;
 export interface PublicRunnerQuestion {
   id: string;
   type: string;
   text: string;
   options: string[];
+  /** Stored EN/JA translations (Claude, one-time) — runner renders by language. */
+  i18n?: RunnerI18n;
   /** Correct option indices — only populated in "validate" mode. */
   correct?: number[];
 }
+type TransMap = Record<string, RunnerI18n>;
 export interface PublicRunnerData {
   header: {
     courseName: string;
@@ -46,17 +50,21 @@ function mapQuestions(
   raw: QJson[],
   prefix: string,
   includeAnswers: boolean,
+  trans?: TransMap,
 ): PublicRunnerQuestion[] {
   return raw.map((q, i) => {
+    const id = q.id ?? `${prefix}-${i}`;
+    const i18n = trans?.[id];
     // Rich shape → use stored type/options/correct directly.
     if (q.type) {
       const options = q.options ?? [];
       const correct = (q.correct ?? []).filter((c): c is number => typeof c === "number");
       return {
-        id: q.id ?? `${prefix}-${i}`,
+        id,
         type: q.type,
         text: q.text ?? "",
         options,
+        ...(i18n ? { i18n } : {}),
         ...(includeAnswers ? { correct } : {}),
       };
     }
@@ -67,10 +75,11 @@ function mapQuestions(
       .map((c, idx) => (c.correct ? idx : -1))
       .filter((x) => x >= 0);
     return {
-      id: `${prefix}-${i}`,
+      id,
       type: choices.length === 0 ? "open" : correctCount > 1 ? "multi" : "single",
       text: q.prompt ?? "",
       options: choices.map((c) => c.text),
+      ...(i18n ? { i18n } : {}),
       ...(includeAnswers ? { correct } : {}),
     };
   });
@@ -117,21 +126,19 @@ export async function loadPublicExam(
       questions?: QJson[];
       miniTests?: MiniJson[];
       feedback?: { questions?: QJson[] };
+      translations?: TransMap;
     };
+    const trans = data.translations;
     if (testKey === "final") {
-      questions = mapQuestions(data.questions ?? [], `q-${tpl.id}`, includeAnswers);
+      questions = mapQuestions(data.questions ?? [], `q-${tpl.id}`, includeAnswers, trans);
     } else if (testKey === "feedback") {
-      questions = mapQuestions(data.feedback?.questions ?? [], `q-${tpl.id}-fb`, includeAnswers);
+      questions = mapQuestions(data.feedback?.questions ?? [], `q-${tpl.id}-fb`, includeAnswers, trans);
     } else {
       const m = /^day(\d+)$/.exec(testKey);
       if (m) {
         const day = Number(m[1]);
         const mt = (data.miniTests ?? []).find((x) => x.day === day);
-        questions = mapQuestions(
-          mt?.questions ?? [],
-          `q-${tpl.id}-d${day}`,
-          includeAnswers,
-        );
+        questions = mapQuestions(mt?.questions ?? [], `q-${tpl.id}-d${day}`, includeAnswers, trans);
       }
     }
   }

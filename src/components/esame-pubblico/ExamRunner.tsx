@@ -8,8 +8,18 @@ export interface RunnerQuestion {
   type: string;
   text: string;
   options: string[];
+  /** Stored EN/JA translations (one-time, via Claude). */
+  i18n?: Partial<Record<"en" | "ja", { text: string; options: string[] }>>;
   /** Correct option indices — present only in validate mode. */
   correct?: number[];
+}
+
+/** Render a question in the chosen language, falling back to the original (IT). */
+function localizeQ(q: RunnerQuestion, lang: "it" | "en" | "ja"): RunnerQuestion {
+  if (lang === "it") return q;
+  const tr = q.i18n?.[lang];
+  if (!tr) return q;
+  return { ...q, text: tr.text || q.text, options: tr.options?.length ? tr.options : q.options };
 }
 export interface RunnerHeader {
   courseName: string;
@@ -382,16 +392,21 @@ export function ExamRunner({
               onChange={(v) => setAnswer("reg:" + step.field, v)}
             />
           ) : (
-            <>
-              <p className="exam-public-q-text">{step.q.text}</p>
-              <QuestionInput
-                q={step.q}
-                value={answers[step.q.id]}
-                onChange={(v) => setAnswer(step.q.id, v)}
-                answerLabel={t.yourAnswer}
-                reveal={reveal}
-              />
-            </>
+            (() => {
+              const lq = localizeQ(step.q, lang);
+              return (
+                <>
+                  <p className="exam-public-q-text">{lq.text}</p>
+                  <QuestionInput
+                    q={lq}
+                    value={answers[step.q.id]}
+                    onChange={(v) => setAnswer(step.q.id, v)}
+                    answerLabel={t.yourAnswer}
+                    reveal={reveal}
+                  />
+                </>
+              );
+            })()
           )}
         </div>
 
