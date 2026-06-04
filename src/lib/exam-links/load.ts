@@ -46,13 +46,28 @@ interface MiniJson {
   questions?: QJson[];
 }
 
+// Drop duplicate questions by normalized text (a re-imported bank duplicates
+// text with regenerated ids). Keeps the first occurrence so the student sees
+// each question once.
+function dedupByText(qs: PublicRunnerQuestion[]): PublicRunnerQuestion[] {
+  const seen = new Set<string>();
+  const out: PublicRunnerQuestion[] = [];
+  for (const q of qs) {
+    const key = (q.text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    out.push(q);
+  }
+  return out;
+}
+
 function mapQuestions(
   raw: QJson[],
   prefix: string,
   includeAnswers: boolean,
   trans?: TransMap,
 ): PublicRunnerQuestion[] {
-  return raw.map((q, i) => {
+  return dedupByText(raw.map((q, i) => {
     const id = q.id ?? `${prefix}-${i}`;
     const i18n = trans?.[id];
     // Rich shape → use stored type/options/correct directly.
@@ -82,7 +97,7 @@ function mapQuestions(
       ...(i18n ? { i18n } : {}),
       ...(includeAnswers ? { correct } : {}),
     };
-  });
+  }));
 }
 
 export async function loadPublicExam(

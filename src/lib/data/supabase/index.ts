@@ -477,6 +477,21 @@ function defaultMiniTests(family: ExamFamily): ExamTemplateMiniTestJson[] {
   }));
 }
 
+// Drop duplicate questions by normalized text, keeping the first occurrence.
+// A re-imported bank duplicates question TEXT with regenerated ids (so id-based
+// dedup misses it) — the shochu final had 190 entries but only 92 unique texts.
+function dedupQuestionsByText(qs: ExamQuestion[]): ExamQuestion[] {
+  const seen = new Set<string>();
+  const out: ExamQuestion[] = [];
+  for (const q of qs) {
+    const key = (q.text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    out.push(q);
+  }
+  return out;
+}
+
 function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
   // DB exam_templates.family is 'certificato'|'shochu'; domain ExamFamily is
   // 'nihonshu'|'shochu' (nihonshu = the certified sake exam).
@@ -524,7 +539,7 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
       };
     });
 
-  const questions = mapQuestions(row.data?.questions ?? [], `q-${row.id}`);
+  const questions = dedupQuestionsByText(mapQuestions(row.data?.questions ?? [], `q-${row.id}`));
   const miniSource =
     row.data?.miniTests && row.data.miniTests.length > 0
       ? row.data.miniTests
@@ -534,7 +549,7 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
     name: m.name ?? `Test day ${m.day}`,
     topic: m.topic ?? "",
     duration: m.duration ?? 10,
-    questions: mapQuestions(m.questions ?? [], `q-${row.id}-d${m.day}`),
+    questions: dedupQuestionsByText(mapQuestions(m.questions ?? [], `q-${row.id}-d${m.day}`)),
   }));
 
   return {
@@ -551,7 +566,7 @@ function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
     miniTests,
     feedback: {
       name: row.data?.feedback?.name ?? "Feedback",
-      questions: mapQuestions(row.data?.feedback?.questions ?? [], `q-${row.id}-fb`),
+      questions: dedupQuestionsByText(mapQuestions(row.data?.feedback?.questions ?? [], `q-${row.id}-fb`)),
     },
   };
 }
