@@ -55,6 +55,38 @@ export async function GET() {
     /* diagnostic best-effort */
   }
 
+  // Exam question-count diagnostic per family: how many exam_templates rows
+  // exist, and for the latest row the final/day/feedback counts + duplicate-id
+  // detection (a duplicated question bank shows up here).
+  async function examCounts(family: "shochu" | "certificato") {
+    try {
+      const svc = getSupabaseServiceClient();
+      const { data } = await svc
+        .from("exam_templates")
+        .select("id, data")
+        .eq("family", family)
+        .order("id", { ascending: false });
+      const rows = (data ?? []) as Array<{ id: number; data: Record<string, unknown> }>;
+      const latest = rows[0]?.data ?? {};
+      const finalQs = (latest.questions as unknown[] | undefined) ?? [];
+      const mini = (latest.miniTests as Array<{ day?: number; questions?: unknown[] }> | undefined) ?? [];
+      const fb = ((latest.feedback as { questions?: unknown[] } | undefined)?.questions) ?? [];
+      const ids = finalQs.map((q) => (q as { id?: string }).id).filter(Boolean) as string[];
+      const dupFinal = ids.length - new Set(ids).size;
+      return {
+        rows: rows.length,
+        final: finalQs.length,
+        finalDuplicateIds: dupFinal,
+        days: mini.map((m) => ({ day: m.day, q: (m.questions ?? []).length })),
+        feedback: fb.length,
+      };
+    } catch {
+      return { rows: -1 };
+    }
+  }
+  const shochuExam = await examCounts("shochu");
+  const certExam = await examCounts("certificato");
+
   return NextResponse.json({
     ok: true,
     ...getConnectionStatus(),
@@ -65,5 +97,6 @@ export async function GET() {
     sake: { priceCodes, catalogTotal, catalogWithCost },
     rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
     examLinks: { studentLinksTable, studentLinksRows, submissionsCorsistaCol },
+    exam: { shochu: shochuExam, certificato: certExam },
   });
 }
