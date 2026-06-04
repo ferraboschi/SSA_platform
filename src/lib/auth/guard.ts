@@ -9,6 +9,9 @@ import { notFound } from "next/navigation";
 import type { RoleKey } from "@/lib/domain";
 import { getSession } from "./session";
 import { ROLE_VIEWS } from "./roles";
+import { NAV_ITEMS } from "./navigation";
+
+const NAV_IDS = new Set(NAV_ITEMS.flatMap((i) => [i.id, ...(i.children ?? []).map((c) => c.id)]));
 
 export async function currentRole(): Promise<RoleKey> {
   return (await getSession()).user.roleKey;
@@ -26,6 +29,8 @@ export async function assertRole(allowed: RoleKey[]): Promise<void> {
 /** 404 a page when the current role hides this nav id (single source of truth:
  *  ROLE_VIEWS.hidden — same list that hides the sidebar link). */
 export async function requireNavAccess(navId: string): Promise<void> {
+  // Fail safe on an unknown nav id (developer typo) instead of silently allowing.
+  if (!NAV_IDS.has(navId)) notFound();
   const role = await currentRole();
   if (ROLE_VIEWS[role]?.hidden.includes(navId)) notFound();
 }

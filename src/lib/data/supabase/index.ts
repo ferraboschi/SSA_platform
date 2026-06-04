@@ -1402,22 +1402,30 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       if (error) throw error;
       const corsoRows = (data ?? []) as CorsoRow[];
 
-      // Aggregate enrolled + revenue per course (one pass over enrollments).
-      const { data: iscr } = await sb
-        .from("corsi_iscrizioni")
-        .select("corso_id,amount_cents,discount_cents")
-        .limit(5000);
+      // Aggregate enrolled + revenue per course. PAGINATE — there are >6500
+      // enrollments and PostgREST caps a single request (~1000 rows), so a flat
+      // .limit() silently truncated totals and undercounted revenue/headcount.
       const agg = new Map<number, { n: number; rev: number }>();
-      for (const i of (iscr ?? []) as {
-        corso_id: number;
-        amount_cents: number;
-        discount_cents: number | null;
-      }[]) {
-        const a = agg.get(i.corso_id) ?? { n: 0, rev: 0 };
-        a.n++;
-        // Net paid = gross − discount (mirror buildFullCourse), never negative.
-        a.rev += Math.max((i.amount_cents || 0) - (i.discount_cents || 0), 0) / 100;
-        agg.set(i.corso_id, a);
+      const ENR_PAGE = 1000;
+      for (let from = 0; ; from += ENR_PAGE) {
+        const { data: page, error: pErr } = await sb
+          .from("corsi_iscrizioni")
+          .select("corso_id,amount_cents,discount_cents")
+          .range(from, from + ENR_PAGE - 1);
+        if (pErr) throw pErr;
+        const rows = (page ?? []) as {
+          corso_id: number;
+          amount_cents: number;
+          discount_cents: number | null;
+        }[];
+        for (const i of rows) {
+          const a = agg.get(i.corso_id) ?? { n: 0, rev: 0 };
+          a.n++;
+          // Net paid = gross − discount (mirror buildFullCourse), never negative.
+          a.rev += Math.max((i.amount_cents || 0) - (i.discount_cents || 0), 0) / 100;
+          agg.set(i.corso_id, a);
+        }
+        if (rows.length < ENR_PAGE) break;
       }
 
       const eduMap = await loadEducatorsMap();
