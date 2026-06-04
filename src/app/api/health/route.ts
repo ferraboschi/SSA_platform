@@ -73,10 +73,20 @@ export async function GET() {
       const fb = ((latest.feedback as { questions?: unknown[] } | undefined)?.questions) ?? [];
       const ids = finalQs.map((q) => (q as { id?: string }).id).filter(Boolean) as string[];
       const dupFinal = ids.length - new Set(ids).size;
+      // Duplicate-text detection (re-import with regenerated ids duplicates text,
+      // not ids). Normalize + count uniques; surface a few repeated texts.
+      const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+      const texts = finalQs.map((q) => norm(String((q as { text?: string }).text ?? "")));
+      const seen = new Map<string, number>();
+      for (const t of texts) seen.set(t, (seen.get(t) ?? 0) + 1);
+      const repeated = [...seen.entries()].filter(([, n]) => n > 1);
       return {
         rows: rows.length,
         final: finalQs.length,
+        finalUniqueTexts: seen.size,
         finalDuplicateIds: dupFinal,
+        finalTextsRepeatedMax: repeated.reduce((m, [, n]) => Math.max(m, n), 1),
+        sampleRepeated: repeated.slice(0, 3).map(([t, n]) => `${n}× ${t.slice(0, 50)}`),
         days: mini.map((m) => ({ day: m.day, q: (m.questions ?? []).length })),
         feedback: fb.length,
       };
