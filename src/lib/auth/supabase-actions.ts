@@ -66,9 +66,16 @@ export async function signUpAction(
 
 export async function signOutAction(): Promise<void> {
   const sb = await getSupabaseServerClient();
-  await sb.auth.signOut();
+  // scope "local" clears THIS device's session cookies without a network revoke
+  // call that could hang/fail; wrapped so even a transient error still clears +
+  // lets the client navigate. (Navigation is done client-side after this returns
+  // — a redirect() inside a transition action doesn't reliably navigate.)
+  try {
+    await sb.auth.signOut({ scope: "local" });
+  } catch {
+    /* still revalidate + let the client redirect to /login */
+  }
   revalidatePath("/", "layout");
-  redirect("/login");
 }
 
 /** Send a password-reset email. Always reports success (don't leak whether the

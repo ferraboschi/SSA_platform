@@ -157,7 +157,12 @@ export function UserSwitcher({ users }: { users: User[] }) {
             <button
               onClick={() => {
                 setOpen(false);
-                startSignOut(() => signOutAction());
+                startSignOut(async () => {
+                  await signOutAction();
+                  // Navigate client-side once the session cookies are cleared.
+                  router.replace("/login");
+                  router.refresh();
+                });
               }}
               disabled={signingOut}
               style={{
