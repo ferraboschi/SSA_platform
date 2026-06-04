@@ -25,7 +25,14 @@ export const getSakeCatalog = unstable_cache(
       }
       // Merge cost + type from the Airtable "Master product list" by SKU.
       return items.map((i) => {
-        const c = i.sku ? costs.get(i.sku) : undefined;
+        const sku = i.sku ?? undefined;
+        let c = sku ? costs.get(sku) : undefined;
+        // Carton/variant suffixes (e.g. "S075-1800-C06") aren't in the master
+        // list — fall back to the base SKU ("S075-1800") so they still price.
+        if (!c && sku) {
+          const baseSku = sku.replace(/-C\d+$/i, "");
+          if (baseSku !== sku) c = costs.get(baseSku);
+        }
         if (!c) return i;
         // Attach the type always; only override cost when Airtable has a price
         // (a missing/null price must not clobber any stored supplier cost).
@@ -37,6 +44,6 @@ export const getSakeCatalog = unstable_cache(
       return [];
     }
   },
-  ["sake-catalog-v4"],
+  ["sake-catalog-v5"],
   { revalidate: 600, tags: [SAKE_CATALOG_TAG] },
 );

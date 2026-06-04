@@ -16,8 +16,13 @@ export interface ProductCost {
   type: string | null;
 }
 
+// The "Master product list" base id. Falls back to the known value when the env
+// var isn't configured on the host (it was missing on Render, which silently
+// emptied every sake cost/type in the template). A base id is an identifier, not
+// a secret — access is still gated by AIRTABLE_API_KEY.
+const PRICES_BASE_FALLBACK = "appwCWGRd0jXOCxMA";
 function baseId(): string | undefined {
-  return process.env.AIRTABLE_PRICES_BASE_ID;
+  return process.env.AIRTABLE_PRICES_BASE_ID || PRICES_BASE_FALLBACK;
 }
 
 interface AtRecord {
@@ -58,7 +63,7 @@ async function fetchAll(): Promise<Map<string, ProductCost>> {
 }
 
 /** Cached map: SKU/CODE → { cost (euros), type }. */
-export const getProductCosts = unstable_cache(fetchAll, ["product-costs-v1"], {
+export const getProductCosts = unstable_cache(fetchAll, ["product-costs-v2"], {
   revalidate: 600,
   tags: ["product-costs"],
 });
