@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
 import { gradeEnrollmentAction } from "@/lib/exam-links/grading-actions";
+import { gradeOpenAnswerAction, type GradeOpenResult } from "@/lib/esami/ai-actions";
 import { FeedbackSummary } from "./FeedbackSummary";
 import type { ExamOutcome, GradedSubmission } from "@/lib/exam-links/results";
 import type { FeedbackAggregateResult } from "@/lib/exam-links/feedback-results";
@@ -128,6 +129,38 @@ export function ExamResultsClient({
   );
 }
 
+// AI-grade an open answer, GROUNDED in the SSA knowledge base (advisory — the
+// educator confirms). Surfaces score, whether it was grounded, and feedback.
+function AiGradeButton({ prompt, answer }: { prompt: string; answer: string }) {
+  const [pending, start] = useTransition();
+  const [res, setRes] = useState<GradeOpenResult | null>(null);
+  return (
+    <div style={{ marginTop: 5, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <button
+        className="btn btn-xs"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            setRes(await gradeOpenAnswerAction({ prompt, studentAnswer: answer, maxPoints: 5 }));
+          })
+        }
+      >
+        <Icon name="sparkle" size={11} />
+        {pending ? "Valuto…" : "Valuta con AI"}
+      </button>
+      {res &&
+        (res.ok ? (
+          <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>
+            <strong>{res.score}/5</strong> · {res.grounded ? "✓ basato su KB" : "⚠ nessuna fonte KB"}
+            {res.feedback ? ` · ${res.feedback.slice(0, 120)}` : ""}
+          </span>
+        ) : (
+          <span style={{ fontSize: 11.5, color: "var(--danger-fg)" }}>{res.error}</span>
+        ))}
+    </div>
+  );
+}
+
 function ResultRow({
   r,
   courseId,
@@ -231,6 +264,10 @@ function ResultRow({
                       {a.ok !== null && a.ok === false && <> · Corretta: <strong style={{ color: "var(--success-fg)" }}>{a.correct}</strong></>}
                       {a.ok === null && <> · <em>valutazione manuale</em></>}
                     </div>
+                    {a.ok === null &&
+                      (a.type === "open" || a.type === "fill") &&
+                      a.given &&
+                      a.given !== "—" && <AiGradeButton prompt={a.text} answer={a.given} />}
                   </div>
                 </div>
               ))}

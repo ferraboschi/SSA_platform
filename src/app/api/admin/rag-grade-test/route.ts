@@ -6,16 +6,20 @@ import {
   gradeOpenAnswer,
 } from "@/lib/rag";
 import { anthropicConfig } from "@/lib/integrations/anthropic/client";
+import { hasRole } from "@/lib/auth/guard";
 
 // Gated diagnostic: runs the REAL RAG-grounded grading pipeline (retrieve from
 // the live pgvector corpus -> Claude grades strictly against the cited passages)
 // on a sample sake question, so we can verify end-to-end that free-text grading
-// works and is grounded. Gated by SYNC_SECRET — never public.
+// works and is grounded. Authorize via an ADMIN session (open it in the browser
+// while logged in) OR the SYNC_SECRET query param — never public.
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const secret = new URL(req.url).searchParams.get("secret");
-  if (!process.env.SYNC_SECRET || secret !== process.env.SYNC_SECRET) {
+  const bySecret = Boolean(process.env.SYNC_SECRET) && secret === process.env.SYNC_SECRET;
+  const byAdmin = await hasRole(["admin"]).catch(() => false);
+  if (!bySecret && !byAdmin) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   if (!anthropicConfig.isConfigured) {
