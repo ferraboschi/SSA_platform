@@ -11,6 +11,13 @@ export interface EmailAddress {
   name?: string;
 }
 
+export interface EmailAttachment {
+  filename: string;
+  /** Base64-encoded file content (Resend's `attachments[].content` format). */
+  content: string;
+  contentType?: string;
+}
+
 export interface EmailMessage {
   to: string | string[];
   subject: string;
@@ -20,6 +27,7 @@ export interface EmailMessage {
   replyTo?: string;
   /** Optional tag for analytics / templating (e.g. "educator-mismatch"). */
   tag?: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface EmailSendResult {
@@ -54,6 +62,11 @@ class ResendEmailService implements EmailService {
         text: message.text,
         reply_to: message.replyTo ?? this.defaultReplyTo,
         tags: message.tag ? [{ name: "tag", value: message.tag }] : undefined,
+        attachments: message.attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          content_type: a.contentType,
+        })),
       }),
     });
 

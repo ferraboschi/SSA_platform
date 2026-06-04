@@ -41,6 +41,7 @@ export default async function Page({
     <EsameReport
       result={result}
       family={course.exam.family}
+      courseId={id}
       course={{
         day: course.day,
         month: course.month,

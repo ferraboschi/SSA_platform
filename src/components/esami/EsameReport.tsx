@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { REPORT_I18N, type ReportLang } from "@/lib/i18n/report";
+import { EmailReportButton } from "./EmailReportButton";
 import type { ExamFamily, ExamResult } from "@/lib/domain";
 
 interface ReportCourse {
@@ -18,15 +19,25 @@ export interface EsameReportProps {
   result: ExamResult;
   family: ExamFamily;
   course: ReportCourse;
+  /** Course id — needed to send the result email. */
+  courseId: string;
 }
 
 const LANGS: ReportLang[] = ["it", "en", "ja"];
 const LOCALE_TAG: Record<ReportLang, string> = { it: "it-IT", en: "en-GB", ja: "ja-JP" };
 
-export function EsameReport({ result, family, course }: EsameReportProps) {
+export function EsameReport({ result, family, course, courseId }: EsameReportProps) {
   const t = useT().esami.reportView;
   const [lang, setLang] = useState<ReportLang>("it");
   const [view, setView] = useState<"single" | "trio">("single");
+
+  // Download = print-to-PDF: the browser renders a real, multilingual PDF
+  // (including Japanese via system fonts) from the certificate below. The print
+  // CSS isolates #exam-report-print so only the certificate prints.
+  const downloadPdf = () => {
+    if (view === "trio") setView("single");
+    window.print();
+  };
 
   const statusLabel =
     result.status === "passed" ? t.statusPassed : result.status === "retrial" ? t.statusRetrial : t.statusFailed;
@@ -73,18 +84,28 @@ export function EsameReport({ result, family, course }: EsameReportProps) {
               ))}
             </div>
           )}
-          <button className="btn">
+          <button className="btn no-print" onClick={downloadPdf}>
             <Icon name="download" size={13} />
             {t.download}
           </button>
-          <button className="btn btn-primary">
-            <Icon name="mail" size={13} />
-            {t.sendEmail}
-          </button>
+          <EmailReportButton courseId={courseId} email={result.email} label={t.sendEmail} />
         </div>
       </div>
 
+      {/* Print rules: when printing, show ONLY the certificate, full-bleed. */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #exam-report-print, #exam-report-print * { visibility: visible !important; }
+          #exam-report-print { position: absolute; inset: 0; margin: 0; padding: 0; background: #fff !important; border: none !important; box-shadow: none !important; }
+          #exam-report-print > div { box-shadow: none !important; }
+          .no-print { display: none !important; }
+          @page { margin: 12mm; }
+        }
+      `}</style>
+
       <div
+        id="exam-report-print"
         style={{
           background: "linear-gradient(135deg, var(--indigo-50), var(--surface-2))",
           padding: 32,

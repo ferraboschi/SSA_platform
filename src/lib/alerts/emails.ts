@@ -129,6 +129,46 @@ export async function sendCourseReminderEmail(
   });
 }
 
+export interface ExamResultEmailInput {
+  /** Recipient (the student; during testing routed to the admin by the action). */
+  to: string;
+  studentName: string;
+  courseTitle: string;
+  scorePct: number;
+  status: "passed" | "retrial" | "failed";
+  /** Link to the printable certificate/report (student can save it as PDF). */
+  reportUrl: string;
+  /** Optional pre-rendered PDF certificate to attach (base64). */
+  pdf?: { filename: string; base64: string };
+}
+
+/** Personal exam-result email to the student (bilingual IT/EN) + report link. */
+export async function sendExamResultEmail(input: ExamResultEmailInput): Promise<EmailSendResult> {
+  const statusIt =
+    input.status === "passed" ? "Promosso" : input.status === "retrial" ? "Promosso con riserva" : "Non promosso";
+  const statusEn =
+    input.status === "passed" ? "Passed" : input.status === "retrial" ? "Passed with reservation" : "Not passed";
+  const html = shell(
+    `Esito esame · Exam result`,
+    `<p style="font-size:14px;line-height:1.5">Ciao ${input.studentName}, il tuo esito per <strong>${input.courseTitle}</strong> è pronto.<br/>
+     <span style="color:#6b7280">Hi ${input.studentName}, your result for <strong>${input.courseTitle}</strong> is ready.</span></p>
+     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px">
+       <tr><td style="padding:5px 0;color:#6b7280">Punteggio · Score</td><td style="padding:5px 0;text-align:right;font-weight:700">${input.scorePct}%</td></tr>
+       <tr><td style="padding:5px 0;color:#6b7280">Esito · Result</td><td style="padding:5px 0;text-align:right;font-weight:600">${statusIt} · ${statusEn}</td></tr>
+     </table>`,
+    { href: input.reportUrl, label: "Apri il certificato · Open certificate" },
+  );
+  return getEmailService().send({
+    to: input.to,
+    subject: `Esito esame SSA · ${input.courseTitle} (${input.scorePct}%)`,
+    html,
+    tag: "exam-result",
+    attachments: input.pdf
+      ? [{ filename: input.pdf.filename, content: input.pdf.base64, contentType: "application/pdf" }]
+      : undefined,
+  });
+}
+
 export interface InvoiceCourse {
   id: string;
   title: string;
