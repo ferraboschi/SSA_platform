@@ -145,6 +145,9 @@ export interface ScCatalogItem {
   handle: string;
   /** Cost in euros (from the Airtable "Master product list", merged by SKU). */
   cost?: number;
+  /** Sake Company store list price (€) for this variant — used as the cost
+   *  fallback when the product isn't in the Airtable cost list (e.g. beers). */
+  price?: number;
   /** Product type from Airtable (e.g. "Junmai Ginjo"), merged by SKU. */
   productType?: string | null;
 }
@@ -163,6 +166,7 @@ export async function listCatalog(): Promise<ScCatalogItem[]> {
       for (const v of p.variants) {
         const variantTitle =
           v.title && v.title !== "Default Title" ? v.title : null;
+        const priceNum = v.price != null && v.price !== "" ? Number(v.price) : undefined;
         out.push({
           productId: p.id,
           variantId: v.id,
@@ -175,6 +179,7 @@ export async function listCatalog(): Promise<ScCatalogItem[]> {
           image: p.image?.src ?? null,
           url: `https://${domain}/products/${p.handle}`,
           handle: p.handle,
+          price: priceNum != null && Number.isFinite(priceNum) ? priceNum : undefined,
         });
       }
     }

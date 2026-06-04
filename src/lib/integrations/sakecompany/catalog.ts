@@ -24,6 +24,9 @@ export const getSakeCatalog = unstable_cache(
         /* Airtable cost merge unavailable → return Shopify products as-is */
       }
       // Merge cost + type from the Airtable "Master product list" by SKU.
+      // Cost priority: Airtable supplier cost → Sake Company Shopify list price
+      // (so products NOT in the cost list, e.g. beers, still show a real price
+      // instead of 0 €). Type comes from Airtable when available.
       return items.map((i) => {
         const sku = i.sku ?? undefined;
         let c = sku ? costs.get(sku) : undefined;
@@ -33,17 +36,15 @@ export const getSakeCatalog = unstable_cache(
           const baseSku = sku.replace(/-C\d+$/i, "");
           if (baseSku !== sku) c = costs.get(baseSku);
         }
-        if (!c) return i;
-        // Attach the type always; only override cost when Airtable has a price
-        // (a missing/null price must not clobber any stored supplier cost).
-        return c.cost != null
-          ? { ...i, cost: c.cost, productType: c.type }
-          : { ...i, productType: c.type };
+        const cost = c?.cost != null ? c.cost : i.price;
+        const productType = c?.type ?? i.productType;
+        if (cost == null && productType == null) return i;
+        return { ...i, ...(cost != null ? { cost } : {}), productType };
       });
     } catch {
       return [];
     }
   },
-  ["sake-catalog-v5"],
+  ["sake-catalog-v6"],
   { revalidate: 600, tags: [SAKE_CATALOG_TAG] },
 );
