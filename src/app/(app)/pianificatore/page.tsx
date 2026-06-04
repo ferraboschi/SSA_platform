@@ -34,10 +34,15 @@ export default async function Page() {
   const win = buildWindow();
   const winKeys = new Set(win.map((w) => w.key));
 
+  // Only CONFIRMED courses appear as "real": those published on Shopify
+  // (lifecycle "pubblicato" = a Shopify ACTIVE product). Drafts ("bozza" =
+  // Shopify draft), archived and past are NOT confirmed and must not show — the
+  // only confirmation comes from Shopify. Manual planner "ipotesi" are layered on
+  // top separately and are dropped once Shopify confirms the same course.
   const realItems: PlannerItem[] = courses
     .filter((c) => winKeys.has(keyOf(c.year, monthIdx(c.month))))
-    .filter((c) => !c.cancelled) // cancelled / phantom-draft courses don't plan
-    .filter((c) => c.lifecycle === "pubblicato" || c.lifecycle === "bozza")
+    .filter((c) => !c.cancelled)
+    .filter((c) => c.lifecycle === "pubblicato")
     .map((c) =>
       normalizeReal({
         id: c.id,
