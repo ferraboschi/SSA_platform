@@ -691,16 +691,15 @@ function TemplateEditor({
   const tm = useT().templateMateriali;
   const ed = tm.editor;
   const totalSakes = t.days.reduce((s, d) => s + d.sakes.length, 0);
-  // Sake cost inherited LIVE from the catalog (by SKU), fallback to stored.
-  const sakeCost = t.days.reduce(
-    (s, d) => s + d.sakes.reduce((ss, sk) => ss + (((sk.code && catBySku.get(sk.code)?.cost) || sk.cost || 0) * sk.qty), 0),
-    0,
-  );
 
   // Simulated enrollee count → drives the cost automatisms (materials per
   // student, bottles = ceil(students / 15)).
   const [simStudents, setSimStudents] = useState(15);
   // Live Sake Company catalog (by SKU) → shows real photo/stock on each sake row.
+  // MUST be declared before any reduce() that reads catBySku — those callbacks
+  // run synchronously during render, so referencing it earlier hits the TDZ
+  // (ReferenceError: Cannot access 'catBySku' before initialization) and crashes
+  // the editor whenever a day has at least one sake.
   const [catBySku, setCatBySku] = useState<Map<string, ScCatalogItem>>(new Map());
   useEffect(() => {
     let alive = true;
@@ -714,6 +713,12 @@ function TemplateEditor({
       alive = false;
     };
   }, []);
+
+  // Sake cost inherited LIVE from the catalog (by SKU), fallback to stored.
+  const sakeCost = t.days.reduce(
+    (s, d) => s + d.sakes.reduce((ss, sk) => ss + (((sk.code && catBySku.get(sk.code)?.cost) || sk.cost || 0) * sk.qty), 0),
+    0,
+  );
 
   const setField = (patch: Partial<MaterialTemplate>) => onChange({ ...t, ...patch });
   const setDays = (days: MaterialDay[]) => onChange({ ...t, days });
