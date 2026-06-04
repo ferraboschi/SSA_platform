@@ -51,7 +51,7 @@ function gradeObjective(given: string | string[] | undefined, q: PublicRunnerQue
   const correctIdx = q.correct ?? [];
   const givenSet = new Set(asArray(given).map(normStr).filter(Boolean));
   const correctTextSet = new Set(
-    correctIdx.map((i) => normStr(q.options[i])).filter(Boolean),
+    correctIdx.map((i) => normStr(q.options[Number(i)])).filter(Boolean),
   );
   const correctIdxSet = new Set(correctIdx.map((i) => normStr(i)));
   return (
@@ -124,6 +124,28 @@ export async function loadCourseExamResults(
     let manual = 0;
     const detail: GradedAnswer[] = questions.map((q) => {
       const given = ans[q.id];
+      // FILL ("Riempi spazio"): the typed answer is matched, case-insensitive,
+      // against the accepted answers (q.correct holds the accepted STRINGS). This
+      // is deterministic → auto-graded, not sent to manual review.
+      if (q.type === "fill") {
+        const accepted = (q.correct ?? []).map((c) => normStr(c)).filter(Boolean);
+        if (accepted.length === 0) {
+          manual++;
+          return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, q), correct: "—", ok: null };
+        }
+        gradable++;
+        const givenNorm = normStr(Array.isArray(given) ? given[0] : given);
+        const ok = givenNorm !== "" && accepted.includes(givenNorm);
+        if (ok) correct++;
+        return {
+          qid: q.id,
+          type: q.type,
+          text: q.text,
+          given: fmtGiven(given, q),
+          correct: (q.correct ?? []).map(String).join(", "),
+          ok,
+        };
+      }
       if (!isObjective(q.type) || !q.correct) {
         manual++;
         return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, q), correct: "—", ok: null };
@@ -136,7 +158,7 @@ export async function loadCourseExamResults(
         type: q.type,
         text: q.text,
         given: fmtGiven(given, q),
-        correct: q.correct.map((i) => q.options[i]).filter(Boolean).join(", "),
+        correct: q.correct.map((i) => q.options[Number(i)]).filter(Boolean).join(", "),
         ok,
       };
     });

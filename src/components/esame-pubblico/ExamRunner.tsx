@@ -10,8 +10,9 @@ export interface RunnerQuestion {
   options: string[];
   /** Stored EN/JA translations (one-time, via Claude). */
   i18n?: Partial<Record<"en" | "ja", { text: string; options: string[] }>>;
-  /** Correct option indices — present only in validate mode. */
-  correct?: number[];
+  /** Correct answers — option INDICES for choice questions, accepted STRINGS for
+   *  "fill". Present only in validate mode. */
+  correct?: Array<number | string>;
 }
 
 /** Render a question in the chosen language, falling back to the original (IT). */

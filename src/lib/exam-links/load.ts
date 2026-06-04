@@ -16,8 +16,9 @@ export interface PublicRunnerQuestion {
   options: string[];
   /** Stored EN/JA translations (Claude, one-time) — runner renders by language. */
   i18n?: RunnerI18n;
-  /** Correct option indices — only populated in "validate" mode. */
-  correct?: number[];
+  /** Correct answers — option INDICES for choice questions, accepted STRINGS for
+   *  "fill". Populated in validate mode and for grading (includeAnswers). */
+  correct?: Array<number | string>;
 }
 type TransMap = Record<string, RunnerI18n>;
 export interface PublicRunnerData {
@@ -73,7 +74,9 @@ function mapQuestions(
     // Rich shape → use stored type/options/correct directly.
     if (q.type) {
       const options = q.options ?? [];
-      const correct = (q.correct ?? []).filter((c): c is number => typeof c === "number");
+      // Keep correct as-is: numeric indices for choice questions, accepted answer
+      // STRINGS for "fill" (filtering to numbers used to drop the fill answers).
+      const correct = q.correct ?? [];
       return {
         id,
         type: q.type,
