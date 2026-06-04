@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getDataSource } from "@/lib/data";
 import { requireNavAccess } from "@/lib/auth/guard";
 import { loadCourseExamResults } from "@/lib/exam-links/results";
+import { loadCourseFeedbackResults } from "@/lib/exam-links/feedback-results";
 import { ExamResultsClient } from "@/components/esami/ExamResultsClient";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   const family: "nihonshu" | "shochu" | null =
     course.type === "certificato" ? "nihonshu" : course.type === "shochu" ? "shochu" : null;
-  const results = family ? await loadCourseExamResults(course.id, family) : [];
+  const [results, feedback] = family
+    ? await Promise.all([
+        loadCourseExamResults(course.id, family),
+        loadCourseFeedbackResults(course.id, family),
+      ])
+    : [[], null];
 
   return (
     <ExamResultsClient
@@ -25,6 +31,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       courseTitle={course.shortTitle}
       hasExam={!!family}
       results={results}
+      feedback={feedback}
     />
   );
 }

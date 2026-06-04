@@ -797,6 +797,35 @@ function QuestionInput({
     );
   }
 
+  if (q.type === "rating") {
+    const current = Number(typeof value === "string" ? value : Array.isArray(value) ? value[0] : 0) || 0;
+    return (
+      <div style={{ display: "flex", gap: 8 }}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(String(n))}
+            aria-label={`${n}`}
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: 10,
+              border: "1.5px solid " + (n <= current ? "#e8a33d" : "var(--border, #d4d4d8)"),
+              background: n <= current ? "#fbe9c8" : "transparent",
+              color: n <= current ? "#b97400" : "var(--text-mute, #9ca3af)",
+              fontSize: 20,
+              cursor: "pointer",
+              transition: "all 120ms",
+            }}
+          >
+            ★
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <textarea
       className="exam-public-textarea"

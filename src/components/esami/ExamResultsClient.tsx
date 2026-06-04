@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
 import { gradeEnrollmentAction } from "@/lib/exam-links/grading-actions";
+import { FeedbackSummary } from "./FeedbackSummary";
 import type { ExamOutcome, GradedSubmission } from "@/lib/exam-links/results";
+import type { FeedbackAggregateResult } from "@/lib/exam-links/feedback-results";
 
 const OUTCOME_TONE: Record<string, BadgeTone> = {
   passed: "success",
@@ -27,11 +29,13 @@ export function ExamResultsClient({
   courseTitle,
   hasExam,
   results,
+  feedback,
 }: {
   courseId: string;
   courseTitle: string;
   hasExam: boolean;
   results: GradedSubmission[];
+  feedback?: FeedbackAggregateResult | null;
 }) {
   const [expanded, setExpanded] = useState<number | null>(null);
   const router = useRouter();
@@ -118,6 +122,8 @@ export function ExamResultsClient({
           </table>
         </div>
       )}
+
+      {hasExam && feedback && <FeedbackSummary data={feedback} />}
     </div>
   );
 }
