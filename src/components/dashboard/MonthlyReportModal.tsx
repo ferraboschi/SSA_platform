@@ -36,6 +36,7 @@ export function MonthlyReportModal({
     const map = new Map<string, { year: number; mIdx: number }>();
     courses.forEach((c) => {
       const mIdx = monthIndexIt(c.monthKey);
+      if (mIdx < 0) return; // skip courses with an unparseable month
       const k = `${c.year}-${mIdx}`;
       if (!map.has(k)) map.set(k, { year: c.year, mIdx });
     });
@@ -209,9 +210,13 @@ export function MonthlyReportModal({
                 </thead>
                 <tbody>
                   {inMonth.map((c) => {
-                    const monthShort = new Intl.DateTimeFormat(locale, { month: "short" })
-                      .format(new Date(2000, monthIndexIt(c.monthKey), 1))
-                      .replace(".", "");
+                    const cIdx = monthIndexIt(c.monthKey);
+                    const monthShort =
+                      cIdx >= 0
+                        ? new Intl.DateTimeFormat(locale, { month: "short" })
+                            .format(new Date(2000, cIdx, 1))
+                            .replace(".", "")
+                        : "—";
                     return (
                       <tr key={c.id}>
                         <td className="num" style={{ whiteSpace: "nowrap" }}>

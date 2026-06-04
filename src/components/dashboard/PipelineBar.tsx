@@ -40,11 +40,11 @@ export function PipelineBar({ bar }: { bar: PipelineBarData }) {
   }
 
   const tone = barTone(bar.status);
-  const monthShort = bar.monthKey
-    ? new Intl.DateTimeFormat(locale, { month: "short" })
-        .format(new Date(2000, Math.max(0, monthIndexIt(bar.monthKey)), 1))
-        .replace(".", "")
-    : "";
+  const mIdx = bar.monthKey ? monthIndexIt(bar.monthKey) : -1;
+  const monthShort =
+    mIdx >= 0
+      ? new Intl.DateTimeFormat(locale, { month: "short" }).format(new Date(2000, mIdx, 1)).replace(".", "")
+      : "";
 
   return (
     <Link
