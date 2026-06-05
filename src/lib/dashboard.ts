@@ -3,7 +3,7 @@
 // prototype's page-dashboard.jsx computations.
 
 import type { Corsista, Course, DashThresholds, Educator } from "@/lib/domain";
-import type { CourseStatus, CourseTypeColor, CourseLifecycle } from "@/lib/domain";
+import type { CourseStatus, CourseTypeColor, CourseLifecycle, CourseTypeKey } from "@/lib/domain";
 
 // The prototype hero/reminders anchor "today" to 25 May 2026 (Monday, week 22).
 export const DASH_TODAY = new Date(2026, 4, 25);
@@ -141,6 +141,7 @@ export interface ReportCourse {
   monthKey: string;
   year: number;
   shortTitle: string;
+  type: CourseTypeKey;
   typeShort: string;
   typeColor: CourseTypeColor;
   educatorName: string | null;
@@ -150,6 +151,9 @@ export interface ReportCourse {
   margin: number;
   revenue: number;
   lifecycle: CourseLifecycle;
+  /** Planned but cancelled/annulled (never held) — flagged in the report. */
+  cancelled: boolean;
+  cancelReason: string | null;
   examResults: { passed: number; retrial: number; failed: number } | null;
 }
 
@@ -327,6 +331,7 @@ export function buildDashboard(
     monthKey: c.month,
     year: c.year,
     shortTitle: c.shortTitle,
+    type: c.type,
     typeShort: c.typeShort,
     typeColor: c.typeColor,
     educatorName: c.educator?.name ?? null,
@@ -336,6 +341,8 @@ export function buildDashboard(
     margin: c.margin,
     revenue: c.revenue,
     lifecycle: c.lifecycle,
+    cancelled: Boolean(c.cancelled),
+    cancelReason: c.cancelReason ?? null,
     examResults: c.examResults ?? null,
   }));
 

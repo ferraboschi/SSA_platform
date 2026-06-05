@@ -31,6 +31,11 @@ export function MonthlyReportModal({
     if (lc === "archiviato") return m.lifeAnnullato;
     return lc;
   };
+  // "Annullato" = explicitly cancelled (notebook flag) OR archived lifecycle
+  // (e.g. a Shopify-archived course that never ran).
+  const isAnnullato = (c: ReportCourse) => c.cancelled || c.lifecycle === "archiviato";
+  const statusTone = (c: ReportCourse): BadgeTone => (isAnnullato(c) ? "danger" : lifeTone(c.lifecycle));
+  const statusLabel = (c: ReportCourse): string => (isAnnullato(c) ? m.lifeAnnullato : lifeLabel(c.lifecycle));
 
   const periods = useMemo(() => {
     const map = new Map<string, { year: number; mIdx: number }>();
@@ -51,11 +56,36 @@ export function MonthlyReportModal({
     ) || periods[0];
 
   const [key, setKey] = useState(`${withPast.year}-${withPast.mIdx}`);
+  const [filter, setFilter] = useState<"tutti" | "introduttivo" | "certificato" | "shochu" | "annullati">("tutti");
   const [yy, mm] = key.split("-").map(Number);
 
   const inMonth = courses
     .filter((c) => c.year === yy && monthIndexIt(c.monthKey) === mm)
     .sort((a, b) => (a.day || 0) - (b.day || 0));
+  const filtered = inMonth.filter((c) =>
+    filter === "tutti"
+      ? true
+      : filter === "annullati"
+        ? isAnnullato(c)
+        : c.type === filter && !isAnnullato(c),
+  );
+
+  // All courses ANNULLED in the selected year — count + a tooltip list (name ·
+  // city · date), since only a few show per month.
+  const cancelledYear = courses
+    .filter((c) => c.year === yy && isAnnullato(c))
+    .sort((a, b) => monthIndexIt(a.monthKey) - monthIndexIt(b.monthKey) || (a.day || 0) - (b.day || 0));
+  const cancelledTip =
+    cancelledYear
+      .map((c) => {
+        const mi = monthIndexIt(c.monthKey);
+        const ms =
+          mi >= 0
+            ? new Intl.DateTimeFormat(locale, { month: "short" }).format(new Date(2000, mi, 1)).replace(".", "")
+            : c.monthKey;
+        return `• ${c.shortTitle} — ${c.city}${c.day ? ` · ${c.day} ${ms}` : ""}${c.cancelReason ? ` (${c.cancelReason})` : ""}`;
+      })
+      .join("\n") || "Nessun corso annullato";
   const svolti = inMonth.filter((c) => c.lifecycle === "passato");
   const exam = svolti.reduce(
     (a, c) => {
@@ -180,7 +210,56 @@ export function MonthlyReportModal({
             />
           </div>
 
-          {inMonth.length === 0 ? (
+          {/* Filter by type + cancelled, and a year-wide cancelled count with a
+              tooltip listing every annulled course (name · city · date). */}
+          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+            {(
+              [
+                ["tutti", "Tutti"],
+                ["introduttivo", "Introduttivo"],
+                ["certificato", "Certificato"],
+                ["shochu", "Shochu"],
+                ["annullati", "Annullati"],
+              ] as const
+            ).map(([k, label]) => {
+              const n =
+                k === "tutti"
+                  ? inMonth.length
+                  : k === "annullati"
+                    ? inMonth.filter((c) => isAnnullato(c)).length
+                    : inMonth.filter((c) => c.type === k && !isAnnullato(c)).length;
+              return (
+                <button
+                  key={k}
+                  className={`pill ${filter === k ? "on" : ""}`}
+                  onClick={() => setFilter(k)}
+                  style={k === "annullati" && filter === k ? { background: "var(--danger-bg)", color: "var(--danger-fg)" } : undefined}
+                >
+                  {label} <span style={{ opacity: 0.6 }}>{n}</span>
+                </button>
+              );
+            })}
+            <span style={{ flex: 1 }} />
+            <span
+              title={cancelledTip}
+              style={{
+                fontSize: 11.5,
+                color: "var(--danger-fg)",
+                background: "var(--danger-bg)",
+                padding: "3px 10px",
+                borderRadius: 999,
+                cursor: "help",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <Icon name="warn" size={12} />
+              {cancelledYear.length} annullati nel {yy}
+            </span>
+          </div>
+
+          {filtered.length === 0 ? (
             <div
               style={{
                 padding: 40,
@@ -209,7 +288,7 @@ export function MonthlyReportModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {inMonth.map((c) => {
+                  {filtered.map((c) => {
                     const cIdx = monthIndexIt(c.monthKey);
                     const monthShort =
                       cIdx >= 0
@@ -218,7 +297,11 @@ export function MonthlyReportModal({
                             .replace(".", "")
                         : "—";
                     return (
-                      <tr key={c.id}>
+                      <tr
+                        key={c.id}
+                        title={isAnnullato(c) ? `Annullato${c.cancelReason ? ": " + c.cancelReason : ""}` : undefined}
+                        style={isAnnullato(c) ? { opacity: 0.7 } : undefined}
+                      >
                         <td className="num" style={{ whiteSpace: "nowrap" }}>
                           <strong>{c.day}</strong> {monthShort}
                         </td>
@@ -243,7 +326,7 @@ export function MonthlyReportModal({
                           )}
                         </td>
                         <td>
-                          <Badge tone={lifeTone(c.lifecycle)}>{lifeLabel(c.lifecycle)}</Badge>
+                          <Badge tone={statusTone(c)}>{statusLabel(c)}</Badge>
                         </td>
                         <td
                           className="num"
