@@ -1,9 +1,7 @@
 "use server";
 
 // Exam-result email: sends a student their personal result + a link to the
-// printable certificate. During testing it routes to the admin inbox (like the
-// other alert emails) until the flow is verified, then the `to` becomes the
-// student's address. Admin/manager only.
+// printable certificate, straight to the student's address. Admin/manager only.
 
 import { getDataSource } from "@/lib/data";
 import { hasRole } from "@/lib/auth/guard";
@@ -12,14 +10,11 @@ import { sendExamResultEmail } from "@/lib/alerts/emails";
 import { renderCertificatePdf } from "./certificate-pdf";
 import type { ExamFamily } from "@/lib/domain";
 
-// TESTING: route result emails here until the flow is verified end-to-end.
-const TEST_TO = "lorenzo@ef-ti.com";
-
 export interface SendExamResultResult {
   ok: boolean;
   /** "sent" (Resend) or "skipped" (stub / no RESEND_API_KEY). */
   status?: string;
-  /** Where the mail actually went (test inbox while testing). */
+  /** Where the mail actually went. */
   sentTo?: string;
   error?: string;
 }
@@ -64,7 +59,7 @@ export async function sendExamResultEmailAction(
     }
 
     const res = await sendExamResultEmail({
-      to: TEST_TO, // TESTING: send to admin; switch to `email` (student) once verified
+      to: email, // the student's address
       studentName: result.name,
       courseTitle: course.shortTitle || course.title,
       scorePct: result.score,
@@ -73,7 +68,7 @@ export async function sendExamResultEmailAction(
       pdf,
     });
     const status = !pdf && res.status === "sent" ? "sent_without_attachment" : res.status;
-    return { ok: true, status, sentTo: TEST_TO };
+    return { ok: true, status, sentTo: email };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invio non riuscito." };
   }

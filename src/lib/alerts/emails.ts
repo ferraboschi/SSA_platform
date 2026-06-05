@@ -86,8 +86,7 @@ export async function sendEducatorMismatchEmail(course: MismatchCourse): Promise
     { href: loginLink(`/corsi/${course.id}`), label: "Apri il corso" },
   );
   return getEmailService().send({
-    // TESTING: route to admin until verified, then switch to Camilla.
-    to: "lorenzo@ef-ti.com",
+    to: alertRecipients.stock, // operations → Camilla
     subject: `⚠️ Educator non abilitato — ${course.title}`,
     html,
     tag: "educator-mismatch",
@@ -120,9 +119,7 @@ export async function sendCourseReminderEmail(
     { href: loginLink(`/corsi/${course.id}`), label: "Apri il corso" },
   );
   return getEmailService().send({
-    // TESTING: route reminders to the admin until verified, then switch to
-    // operations (alertRecipients.stock = Camilla).
-    to: "lorenzo@ef-ti.com",
+    to: alertRecipients.stock, // operations → Camilla
     subject: `${title} — ${course.title} (tra ${course.daysToStart} gg)`,
     html,
     tag: `reminder-${kind}`,
