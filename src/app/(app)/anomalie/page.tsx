@@ -63,7 +63,7 @@ export default async function Page() {
     note: c.review_note,
   }));
 
-  // ── Multi-email clusters: same person registered under several emails. ──
+  // ── Load every corsista (paginated) for duplicate detection. ──
   const all: CorsistaLite[] = [];
   for (let from = 0; ; from += 1000) {
     const { data: page, error } = await sb
@@ -74,32 +74,7 @@ export default async function Page() {
     all.push(...(page as CorsistaLite[]));
     if (page.length < 1000) break;
   }
-
-  const byName = new Map<string, CorsistaLite[]>();
-  for (const c of all) {
-    if (c.merged_into) continue; // already merged → skip
-    const n = normName(c.full_name);
-    if (!n || n.split(" ").length < 2) continue; // need a full name
-    (byName.get(n) ?? byName.set(n, []).get(n)!).push(c);
-  }
-
   const reviewed = new Set(await getReviewedEmailClusters());
-  const emailClusters: EmailCluster[] = [];
-  for (const [nameKey, members] of byName) {
-    if (reviewed.has(nameKey)) continue;
-    const emails = new Set(
-      members.map((m) => (m.email ?? "").toLowerCase()).filter(Boolean),
-    );
-    if (emails.size < 2) continue;
-    emailClusters.push({
-      nameKey,
-      name: members.find((m) => m.full_name)?.full_name ?? nameKey,
-      members: members
-        .map((m) => ({ id: m.id, email: m.email ?? "", phone: m.phone ?? "" }))
-        .sort((a, b) => a.email.localeCompare(b.email)),
-    });
-  }
-  emailClusters.sort((a, b) => b.members.length - a.members.length);
 
   // ── Enrollments + courses (for the next two clusters) ──
   const corsistaName = new Map<number, string>(
@@ -195,6 +170,103 @@ export default async function Page() {
     });
   }
   dupCourses.sort((a, b) => b.courses.length - a.courses.length);
+
+  // ── Probable DUPLICATE PEOPLE: same email or phone (certainly the same person)
+  // or same full name (possible homonymy). Union-find over the three keys groups
+  // all linked records into one cluster; the operator can merge them into one. ──
+  const enrPerCorsista = new Map<number, number>();
+  for (const e of enr) enrPerCorsista.set(e.corsista_id, (enrPerCorsista.get(e.corsista_id) ?? 0) + 1);
+  const live = all.filter((c) => !c.merged_into);
+
+  const normEmail = (s: string | null) => (s ?? "").trim().toLowerCase();
+  const normPhone = (s: string | null) => {
+    const d = (s ?? "").replace(/[^\d+]/g, "").replace(/^00/, "+");
+    return d.length >= 6 ? d : "";
+  };
+
+  const parent = new Map<number, number>();
+  const find = (x: number): number => {
+    let r = x;
+    while (parent.get(r) !== undefined && parent.get(r) !== r) r = parent.get(r)!;
+    parent.set(x, r);
+    return r;
+  };
+  const union = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  for (const c of live) parent.set(c.id, c.id);
+
+  // Link records that share an email, a phone, or a (multi-word) full name.
+  const emailIdx = new Map<string, number[]>();
+  const phoneIdx = new Map<string, number[]>();
+  const nameIdx = new Map<string, number[]>();
+  const push = (m: Map<string, number[]>, k: string, id: number) => {
+    if (!k) return;
+    (m.get(k) ?? m.set(k, []).get(k)!).push(id);
+  };
+  for (const c of live) {
+    push(emailIdx, normEmail(c.email), c.id);
+    push(phoneIdx, normPhone(c.phone), c.id);
+    const n = normName(c.full_name);
+    if (n && n.split(" ").length >= 2) push(nameIdx, n, c.id);
+  }
+  for (const idx of [emailIdx, phoneIdx, nameIdx]) {
+    for (const ids of idx.values()) for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+  }
+
+  const byCluster = new Map<number, CorsistaLite[]>();
+  for (const c of live) (byCluster.get(find(c.id)) ?? byCluster.set(find(c.id), []).get(find(c.id))!).push(c);
+
+  const norm = (s: string | null, fn: (x: string | null) => string) => fn(s);
+  const hasShared = (members: CorsistaLite[], get: (c: CorsistaLite) => string) => {
+    const seen = new Set<string>();
+    for (const m of members) {
+      const k = get(m);
+      if (k && seen.has(k)) return true;
+      if (k) seen.add(k);
+    }
+    return false;
+  };
+
+  const emailClusters: EmailCluster[] = [];
+  for (const [, members] of byCluster) {
+    if (members.length < 2) continue;
+    const reasons: string[] = [];
+    if (hasShared(members, (m) => norm(m.email, normEmail))) reasons.push("email");
+    if (hasShared(members, (m) => norm(m.phone, normPhone))) reasons.push("phone");
+    if (hasShared(members, (m) => normName(m.full_name))) reasons.push("name");
+    if (reasons.length === 0) continue;
+    const key = "dup-" + members.map((m) => m.id).sort((a, b) => a - b).join("-");
+    if (reviewed.has(key)) continue;
+    // Suggested survivor = the record with the most enrollments (ties → lowest id).
+    const survivor = [...members].sort(
+      (a, b) => (enrPerCorsista.get(b.id) ?? 0) - (enrPerCorsista.get(a.id) ?? 0) || a.id - b.id,
+    )[0];
+    emailClusters.push({
+      nameKey: key,
+      name: members.find((m) => m.full_name)?.full_name ?? key,
+      reasons,
+      confidence: reasons.includes("email") || reasons.includes("phone") ? "alta" : "media",
+      survivorId: survivor.id,
+      members: members
+        .map((m) => ({
+          id: m.id,
+          name: m.full_name ?? "",
+          email: m.email ?? "",
+          phone: m.phone ?? "",
+          enrollments: enrPerCorsista.get(m.id) ?? 0,
+        }))
+        .sort((a, b) => b.enrollments - a.enrollments || a.id - b.id),
+    });
+  }
+  // Strongest + biggest first.
+  emailClusters.sort(
+    (a, b) =>
+      (a.confidence === "alta" ? 0 : 1) - (b.confidence === "alta" ? 0 : 1) ||
+      b.members.length - a.members.length,
+  );
 
   return (
     <AnomaliesClient

@@ -7,6 +7,7 @@ import { format, useT } from "@/lib/i18n";
 import {
   resolveAnomalyAction,
   dismissEmailClusterAction,
+  mergeCorsistiAction,
 } from "@/lib/data/anomalie-actions";
 
 interface AnomalyItem {
@@ -19,7 +20,10 @@ interface AnomalyItem {
 export interface EmailCluster {
   nameKey: string;
   name: string;
-  members: { id: number; email: string; phone: string }[];
+  reasons: string[];
+  confidence: "alta" | "media";
+  survivorId: number;
+  members: { id: number; name: string; email: string; phone: string; enrollments: number }[];
 }
 export interface RepaidCluster {
   corsistaId: number;
@@ -46,10 +50,29 @@ export function AnomaliesClient({
   const t = useT().anomalie;
   const [resolved, setResolved] = useState<Set<number>>(() => new Set());
   const [dismissedClusters, setDismissedClusters] = useState<Set<string>>(() => new Set());
+  const [mergedKeys, setMergedKeys] = useState<Set<string>>(() => new Set());
   const [pending, startTransition] = useTransition();
 
   const visible = items.filter((it) => !resolved.has(it.id));
-  const clusters = emailClusters.filter((c) => !dismissedClusters.has(c.nameKey));
+  const clusters = emailClusters.filter(
+    (c) => !dismissedClusters.has(c.nameKey) && !mergedKeys.has(c.nameKey),
+  );
+
+  const merge = (c: EmailCluster) => {
+    const dupIds = c.members.map((m) => m.id).filter((id) => id !== c.survivorId);
+    setMergedKeys((prev) => new Set(prev).add(c.nameKey));
+    startTransition(async () => {
+      try {
+        await mergeCorsistiAction(c.survivorId, dupIds);
+      } catch {
+        setMergedKeys((prev) => {
+          const n = new Set(prev);
+          n.delete(c.nameKey);
+          return n;
+        });
+      }
+    });
+  };
 
   const resolve = (id: number) => {
     setResolved((prev) => new Set(prev).add(id));
@@ -134,14 +157,16 @@ export function AnomaliesClient({
         </div>
       )}
 
-      {/* ── Section 2: same person, multiple emails ── */}
+      {/* ── Section 2: probable duplicate people → merge into one profile ── */}
       <div style={{ marginTop: 36 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600 }}>{t.emailTitle}</h2>
-        <p className="text-3" style={{ fontSize: 12.5, marginTop: 4 }}>
-          {t.emailSubtitle}
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>Possibili duplicati corsisti</h2>
+        <p className="text-3" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 680 }}>
+          Stessa email o stesso telefono = quasi certamente la stessa persona; stesso nome = possibile
+          omonimia. &ldquo;Unisci&rdquo; fonde i record in un unico profilo principale (email/telefoni
+          e iscrizioni vengono conservati, niente viene cancellato).
         </p>
         <div style={{ margin: "12px 0", fontSize: 13, color: "var(--text-2)" }}>
-          {format(t.emailCount, { n: clusters.length })}
+          {clusters.length} gruppi
         </div>
 
         {clusters.length === 0 ? (
@@ -150,59 +175,82 @@ export function AnomaliesClient({
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {clusters.map((c) => (
-              <div key={c.nameKey} className="card" style={{ padding: "12px 14px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</div>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "var(--warning-fg)",
-                      background: "var(--warning-bg)",
-                      padding: "1px 8px",
-                      borderRadius: 999,
-                    }}
-                  >
-                    {format(t.emailBadge, { n: c.members.length })}
-                  </span>
-                  <button
-                    className="btn btn-sm"
-                    style={{ marginLeft: "auto" }}
-                    disabled={pending}
-                    onClick={() => dismissCluster(c.nameKey)}
-                  >
-                    <Icon name="check" size={12} /> {t.emailReviewed}
-                  </button>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {c.members.map((m) => (
-                    <div
-                      key={m.id}
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "5px 8px",
-                        borderRadius: 6,
-                        background: "var(--surface-2)",
-                        fontSize: 12.5,
-                      }}
-                    >
-                      <Link
-                        href={`/corsisti/${encodeURIComponent(m.email)}`}
-                        className="link"
-                        style={{ fontFamily: "var(--font-mono)", flex: "1 1 220px", minWidth: 0 }}
+            {clusters.map((c) => {
+              const REASON: Record<string, string> = {
+                email: "Stessa email",
+                phone: "Stesso telefono",
+                name: "Stesso nome",
+              };
+              return (
+                <div key={c.nameKey} className="card" style={{ padding: "12px 14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--warning-fg)", background: "var(--warning-bg)", padding: "1px 8px", borderRadius: 999 }}>
+                      {c.members.length} record
+                    </span>
+                    {c.reasons.map((r) => (
+                      <span
+                        key={r}
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          color: r === "name" ? "var(--text-3)" : "var(--danger-fg)",
+                          background: r === "name" ? "var(--surface-2)" : "var(--danger-bg)",
+                          padding: "1px 7px",
+                          borderRadius: 999,
+                        }}
                       >
-                        {m.email || "—"}
-                      </Link>
-                      {m.phone && <span className="text-3">{m.phone}</span>}
+                        {REASON[r]}
+                      </span>
+                    ))}
+                    <span style={{ fontSize: 10.5, color: c.confidence === "alta" ? "var(--danger-fg)" : "var(--text-4)" }}>
+                      {c.confidence === "alta" ? "duplicato quasi certo" : "possibile omonimia"}
+                    </span>
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                      <button className="btn btn-sm btn-primary" disabled={pending} onClick={() => merge(c)}>
+                        <Icon name="users" size={12} /> Unisci
+                      </button>
+                      <button className="btn btn-sm" disabled={pending} onClick={() => dismissCluster(c.nameKey)}>
+                        Non è duplicato
+                      </button>
                     </div>
-                  ))}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {c.members.map((m) => (
+                      <div
+                        key={m.id}
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "5px 8px",
+                          borderRadius: 6,
+                          background: m.id === c.survivorId ? "var(--success-bg)" : "var(--surface-2)",
+                          fontSize: 12.5,
+                        }}
+                      >
+                        {m.id === c.survivorId && (
+                          <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--success-fg)", letterSpacing: "0.04em" }}>
+                            PRINCIPALE
+                          </span>
+                        )}
+                        <span style={{ fontWeight: 500 }}>{m.name || "—"}</span>
+                        <Link
+                          href={`/corsisti/${encodeURIComponent(m.email)}`}
+                          className="link"
+                          style={{ fontFamily: "var(--font-mono)", flex: "1 1 200px", minWidth: 0 }}
+                        >
+                          {m.email || "—"}
+                        </Link>
+                        {m.phone && <span className="text-3">{m.phone}</span>}
+                        <span className="text-4" style={{ fontSize: 11 }}>{m.enrollments} corsi</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
