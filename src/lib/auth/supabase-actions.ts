@@ -148,6 +148,9 @@ export interface StaffInvite {
   userId: string | null;
   createdAt: string;
   lastSentAt: string;
+  /** When the invite page was first opened (link "used", before setting pw). */
+  openedAt: string | null;
+  /** When the password was set (invite fully accepted). */
   acceptedAt: string | null;
 }
 
@@ -161,6 +164,7 @@ export interface StaffInviteView {
   role: StaffRole;
   createdAt: string;
   lastSentAt: string;
+  openedAt: string | null;
   acceptedAt: string | null;
   inviteUrl: string;
 }
@@ -201,6 +205,7 @@ function toView(i: StaffInvite): StaffInviteView {
     role: i.role,
     createdAt: i.createdAt,
     lastSentAt: i.lastSentAt,
+    openedAt: i.openedAt ?? null,
     acceptedAt: i.acceptedAt,
     inviteUrl: inviteUrl(i.token),
   };
@@ -312,7 +317,8 @@ export async function inviteStaffAction(input: {
       userId,
       createdAt: now,
       lastSentAt: now,
-      acceptedAt: idx >= 0 ? null : null,
+      openedAt: null,
+      acceptedAt: null,
     };
     if (idx >= 0) invites[idx] = invite;
     else invites.push(invite);
@@ -369,25 +375,38 @@ export async function resendInviteAction(email: string): Promise<AuthActionResul
   };
 }
 
-/** Public (token-gated): look up a pending invite by its token. */
+/**
+ * Public (token-gated): look up an invite by its token and RECORD that the link
+ * was opened (usage status). Deliberately does NOT return the email — the person
+ * must type it on the accept page, so the link alone is useless without knowing
+ * the address it was sent to ("il link funziona solo con la mail inserita").
+ */
 export async function getInviteByTokenAction(
   token: string,
-): Promise<{ email: string; firstName: string; accepted: boolean } | null> {
+): Promise<{ firstName: string; accepted: boolean } | null> {
   if (!token) return null;
   const svc = getSupabaseServiceClient();
   const invites = await readInvites(svc);
-  const inv = invites.find((i) => i.token === token);
-  if (!inv) return null;
-  return { email: inv.email, firstName: inv.firstName, accepted: !!inv.acceptedAt };
+  const idx = invites.findIndex((i) => i.token === token);
+  if (idx < 0) return null;
+  const inv = invites[idx];
+  // Stamp first-open time (link "used") if not yet accepted/opened.
+  if (!inv.acceptedAt && !inv.openedAt) {
+    invites[idx] = { ...inv, openedAt: new Date().toISOString() };
+    await writeInvites(svc, invites);
+  }
+  return { firstName: inv.firstName, accepted: !!inv.acceptedAt };
 }
 
 /**
- * Public (token-gated): the invited person sets their password. Validates the
- * token, sets the password via the admin API, marks the invite accepted, and
+ * Public (token-gated): the invited person sets their password. Requires BOTH
+ * the token AND the matching email — the link only works for the address it was
+ * sent to. Sets the password via the admin API, marks the invite accepted, and
  * signs the user in (creates the session cookie), then redirects to /dashboard.
  */
 export async function acceptInviteAction(
   token: string,
+  email: string,
   password: string,
 ): Promise<AuthActionResult> {
   if (!token) return { ok: false, error: "Link non valido." };
@@ -399,6 +418,11 @@ export async function acceptInviteAction(
   const idx = invites.findIndex((i) => i.token === token);
   if (idx < 0) return { ok: false, error: "Link non valido o revocato." };
   const inv = invites[idx];
+
+  // The link is bound to the invited address: the email typed must match.
+  if (email.trim().toLowerCase() !== inv.email) {
+    return { ok: false, error: "L'email non corrisponde a quella dell'invito." };
+  }
 
   // Resolve userId defensively (older invites may have stored null).
   let userId = inv.userId;
@@ -426,4 +450,21 @@ export async function acceptInviteAction(
   }
   revalidatePath("/", "layout");
   redirect("/dashboard");
+}
+
+/**
+ * Admin: cancel (revoke) an invite — removes the invite token so the link stops
+ * working and drops the row from the list. Does NOT delete the person's auth
+ * account or profile (never destroy account data); to remove access entirely,
+ * that's a separate, deliberate step.
+ */
+export async function revokeInviteAction(email: string): Promise<AuthActionResult> {
+  await assertRole(["admin"]);
+  const target = email.trim().toLowerCase();
+  const svc = getSupabaseServiceClient();
+  const invites = await readInvites(svc);
+  const next = invites.filter((i) => i.email !== target);
+  if (next.length === invites.length) return { ok: false, error: "Invito non trovato." };
+  await writeInvites(svc, next);
+  return { ok: true, note: `Invito per ${target} annullato. Il link non è più valido.` };
 }

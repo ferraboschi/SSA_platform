@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { acceptInviteAction } from "@/lib/auth/supabase-actions";
 
 export function AcceptInviteForm({ token }: { token: string }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -13,6 +14,10 @@ export function AcceptInviteForm({ token }: { token: string }) {
   const submit = () => {
     setError(null);
     setNote(null);
+    if (!email.trim() || !email.includes("@")) {
+      setError("Inserisci l'email a cui hai ricevuto l'invito.");
+      return;
+    }
     if (password.length < 8) {
       setError("La password deve avere almeno 8 caratteri.");
       return;
@@ -22,7 +27,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
       return;
     }
     startTransition(async () => {
-      const r = await acceptInviteAction(token, password);
+      const r = await acceptInviteAction(token, email, password);
       if (!r.ok) setError(r.error ?? "Impossibile impostare la password.");
       else if (r.note) setNote(r.note);
       // on success the action redirects to /dashboard
@@ -37,6 +42,13 @@ export function AcceptInviteForm({ token }: { token: string }) {
       }}
       style={{ display: "grid", gap: 12 }}
     >
+      <Field
+        label="La tua email"
+        value={email}
+        onChange={setEmail}
+        type="email"
+        autoComplete="email"
+      />
       <Field
         label="Scegli una password"
         value={password}
@@ -102,17 +114,19 @@ function Field({
   value,
   onChange,
   autoComplete,
+  type = "password",
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   autoComplete?: string;
+  type?: string;
 }) {
   return (
     <label style={{ display: "grid", gap: 5 }}>
       <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-2)" }}>{label}</span>
       <input
-        type="password"
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}

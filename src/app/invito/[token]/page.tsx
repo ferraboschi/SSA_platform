@@ -80,9 +80,8 @@ export default async function Page({
             </p>
             <div style={{ display: "grid", gap: 14 }}>
               <p style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.5, textAlign: "center" }}>
-                Hai già impostato la password per <b>{invite.email}</b>. Accedi
-                dalla pagina di login (o usa “Password dimenticata?” se non la
-                ricordi).
+                Hai già impostato la password. Accedi dalla pagina di login (o usa
+                “Password dimenticata?” se non la ricordi).
               </p>
               <Link
                 href="/login"
@@ -104,11 +103,11 @@ export default async function Page({
         ) : (
           <>
             <p style={{ fontSize: 13, color: "var(--text-2)", textAlign: "center", marginBottom: 6 }}>
-              {invite.firstName ? `Ciao ${invite.firstName}, ` : ""}imposta la tua
-              password
+              {invite.firstName ? `Ciao ${invite.firstName}, ` : ""}attiva il tuo
+              account
             </p>
-            <p style={{ fontSize: 12, color: "var(--text-3)", textAlign: "center", marginBottom: 22 }}>
-              {invite.email}
+            <p style={{ fontSize: 12, color: "var(--text-3)", textAlign: "center", marginBottom: 22, lineHeight: 1.5 }}>
+              Inserisci l’email a cui hai ricevuto l’invito e scegli una password.
             </p>
             <AcceptInviteForm token={token} />
           </>

@@ -9,6 +9,7 @@ import {
   updateOwnPasswordAction,
   inviteStaffAction,
   resendInviteAction,
+  revokeInviteAction,
   type StaffInviteView,
 } from "@/lib/auth/supabase-actions";
 import { useT } from "@/lib/i18n";
@@ -112,6 +113,30 @@ function InviteStaff({ invites }: { invites: StaffInviteView[] }) {
     });
   };
 
+  const revoke = (addr: string) => {
+    if (!window.confirm(`Annullare l'invito per ${addr}? Il link smetterà di funzionare. L'account NON viene eliminato.`)) {
+      return;
+    }
+    setMsg(null);
+    setBusyEmail(addr);
+    startResend(async () => {
+      const r = await revokeInviteAction(addr);
+      setMsg({ ok: r.ok, text: r.ok ? r.note || "Invito annullato." : r.error || "Errore." });
+      setBusyEmail(null);
+      if (r.ok) router.refresh();
+    });
+  };
+
+  const usage = (inv: StaffInviteView) => {
+    if (inv.acceptedAt) {
+      return { tone: "success" as const, label: "Attivo", detail: `attivato il ${fmtDate(inv.acceptedAt)}` };
+    }
+    if (inv.openedAt) {
+      return { tone: "warning" as const, label: "Link aperto", detail: `aperto il ${fmtDate(inv.openedAt)} · password non ancora impostata` };
+    }
+    return { tone: "neutral" as const, label: "Inviato", detail: `inviato il ${fmtDate(inv.lastSentAt)} · link non ancora aperto` };
+  };
+
   return (
     <section className="card card-pad" style={{ marginTop: 24 }}>
       <div className="eyebrow" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
@@ -173,6 +198,8 @@ function InviteStaff({ invites }: { invites: StaffInviteView[] }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {invites.map((inv) => {
               const accepted = !!inv.acceptedAt;
+              const u = usage(inv);
+              const busy = resending && busyEmail === inv.email;
               return (
                 <div
                   key={inv.email}
@@ -184,53 +211,63 @@ function InviteStaff({ invites }: { invites: StaffInviteView[] }) {
                     border: "1px solid var(--border-2)",
                     borderRadius: 9,
                     background: "var(--surface)",
+                    flexWrap: "wrap",
                   }}
                 >
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>
-                      {[inv.firstName, inv.lastName].filter(Boolean).join(" ") || inv.email}
+                  <span style={{ flex: 1, minWidth: 160 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>
+                        {[inv.firstName, inv.lastName].filter(Boolean).join(" ") || inv.email}
+                      </span>
+                      <Badge tone={u.tone} dot>
+                        {u.label}
+                      </Badge>
                     </span>
                     <span
                       style={{
                         display: "block",
                         fontSize: 11.5,
                         color: "var(--text-3)",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
+                        marginTop: 2,
                       }}
+                      title={u.detail}
                     >
-                      {inv.email} · {ROLE_LABEL[inv.role] || inv.role}
-                      {accepted
-                        ? ` · attivato il ${fmtDate(inv.acceptedAt!)}`
-                        : ` · invitato il ${fmtDate(inv.lastSentAt)}`}
+                      {inv.email} · {ROLE_LABEL[inv.role] || inv.role} · {u.detail}
                     </span>
                   </span>
-                  {accepted ? (
-                    <Badge tone="success" dot>
-                      Attivo
-                    </Badge>
-                  ) : (
-                    <span style={{ display: "inline-flex", gap: 6, flexShrink: 0 }}>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => copyLink(inv)}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
-                      >
-                        <Icon name={copiedEmail === inv.email ? "check" : "copy"} size={12} />
-                        {copiedEmail === inv.email ? "Copiato" : "Copia link"}
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        disabled={resending && busyEmail === inv.email}
-                        onClick={() => resend(inv.email)}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
-                      >
-                        <Icon name="mail" size={12} />
-                        {resending && busyEmail === inv.email ? "Invio…" : "Reinvia"}
-                      </button>
-                    </span>
-                  )}
+                  <span style={{ display: "inline-flex", gap: 6, flexShrink: 0 }}>
+                    {!accepted && (
+                      <>
+                        <button
+                          className="btn btn-ghost"
+                          onClick={() => copyLink(inv)}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
+                        >
+                          <Icon name={copiedEmail === inv.email ? "check" : "copy"} size={12} />
+                          {copiedEmail === inv.email ? "Copiato" : "Copia link"}
+                        </button>
+                        <button
+                          className="btn btn-ghost"
+                          disabled={busy}
+                          onClick={() => resend(inv.email)}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
+                        >
+                          <Icon name="mail" size={12} />
+                          {busy ? "…" : "Reinvia"}
+                        </button>
+                      </>
+                    )}
+                    <button
+                      className="btn btn-ghost"
+                      disabled={busy}
+                      onClick={() => revoke(inv.email)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--danger-fg)" }}
+                      title="Annulla l'invito (il link smette di funzionare; l'account non viene eliminato)"
+                    >
+                      <Icon name="trash" size={12} />
+                      Cancella
+                    </button>
+                  </span>
                 </div>
               );
             })}
