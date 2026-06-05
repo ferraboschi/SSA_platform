@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { Avatar, Badge, Icon, type AvatarTone } from "@/components/ui";
 import { useSession } from "@/lib/auth";
 import { updateProfileAction } from "@/lib/auth/actions";
-import { updateOwnPasswordAction } from "@/lib/auth/supabase-actions";
+import { updateOwnPasswordAction, inviteStaffAction } from "@/lib/auth/supabase-actions";
 import { useT } from "@/lib/i18n";
 import { CITIES } from "@/lib/domain";
 import type { User } from "@/lib/domain";
@@ -36,6 +36,90 @@ function Field({
         style={{ width: "100%" }}
       />
     </div>
+  );
+}
+
+const STAFF_ROLES = [
+  { value: "manager", label: "Manager SSA" },
+  { value: "social", label: "Social & Campagne" },
+  { value: "accountant", label: "Contabilità" },
+] as const;
+
+function InviteStaff() {
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"manager" | "social" | "accountant">("manager");
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const invite = () => {
+    setMsg(null);
+    start(async () => {
+      const r = await inviteStaffAction({ email, firstName: first, lastName: last, role });
+      setMsg({ ok: r.ok, text: r.ok ? r.note || "Invito inviato." : r.error || "Errore." });
+      if (r.ok) {
+        setFirst("");
+        setLast("");
+        setEmail("");
+        setRole("manager");
+      }
+    });
+  };
+
+  return (
+    <section className="card card-pad" style={{ marginTop: 24 }}>
+      <div className="eyebrow" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+        <Icon name="users" size={12} />
+        Invita staff
+      </div>
+      <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 14, lineHeight: 1.5 }}>
+        Crea l’account di un collaboratore e invia l’email per impostare la
+        password. Scegli tu il ruolo: la persona riceverà un link e potrà entrare
+        senza che tu condivida alcuna password.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <Field label="Nome" value={first} onChange={setFirst} placeholder="Camilla" />
+        <Field label="Cognome" value={last} onChange={setLast} placeholder="Rossi" />
+        <Field label="Email" value={email} onChange={setEmail} type="email" placeholder="nome@ssa.it" mono />
+        <div className="field">
+          <div className="field-label">Ruolo</div>
+          <select
+            className="input"
+            value={role}
+            onChange={(e) => setRole(e.target.value as typeof role)}
+            style={{ width: "100%" }}
+          >
+            {STAFF_ROLES.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <button
+        className="btn btn-primary"
+        disabled={pending || !email.trim() || !email.includes("@")}
+        onClick={invite}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+      >
+        <Icon name="mail" size={13} />
+        {pending ? "Invio…" : "Crea e invita"}
+      </button>
+      {msg && (
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 12.5,
+            lineHeight: 1.5,
+            color: msg.ok ? "var(--good-fg, #15803d)" : "var(--bad-fg, #b91c1c)",
+          }}
+        >
+          {msg.text}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -281,6 +365,8 @@ export function AccountClient({ me, users }: { me: User; users: User[] }) {
           </div>
         </div>
       </section>
+
+      {isAdmin && <InviteStaff />}
     </div>
   );
 }

@@ -6,13 +6,20 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
+import {
+  getSupabaseServerClient,
+  getSupabaseServiceClient,
+} from "@/lib/integrations/supabase/server";
 import { appConfig } from "@/lib/integrations/config";
+import { assertRole } from "./guard";
+import { getEmailService } from "@/lib/integrations/email";
 import { safeNext } from "./safe-next";
 
 export interface AuthActionResult {
   ok: boolean;
   error?: string;
+  /** Informational note shown even on success (e.g. email not configured). */
+  note?: string;
 }
 
 export async function signInAction(
@@ -117,4 +124,77 @@ export async function updateOwnPasswordAction(
   const { error } = await sb.auth.updateUser({ password });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * Admin: invite a staff member. Creates their auth user (or reuses an existing
+ * one), sets the chosen role + name on their profile, and emails a set-password
+ * link via Resend. The role is chosen explicitly (never the manager default).
+ */
+export async function inviteStaffAction(input: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: "manager" | "social" | "accountant";
+}): Promise<AuthActionResult> {
+  await assertRole(["admin"]);
+  const email = input.email.trim().toLowerCase();
+  if (!email || !email.includes("@")) return { ok: false, error: "Email non valida." };
+  if (!["manager", "social", "accountant"].includes(input.role)) {
+    return { ok: false, error: "Ruolo non valido." };
+  }
+
+  const svc = getSupabaseServiceClient();
+  const base = appConfig.baseUrl.replace(/\/$/, "");
+
+  // Create the auth user (idempotent: an "already registered" user is re-invited).
+  let userId: string | null = null;
+  const created = await svc.auth.admin.createUser({
+    email,
+    email_confirm: true,
+    user_metadata: { first_name: input.firstName, last_name: input.lastName },
+  });
+  if (created.error) {
+    if (!/already|registered|exists/i.test(created.error.message)) {
+      return { ok: false, error: created.error.message };
+    }
+  } else {
+    userId = created.data.user?.id ?? null;
+  }
+
+  // Set the chosen role + name on the profile (created by the auth trigger).
+  const patch = { role: input.role, first_name: input.firstName, last_name: input.lastName };
+  const q = svc.from("profiles").update(patch);
+  const upd = userId ? await q.eq("id", userId) : await q.eq("email", email);
+  if (upd.error) return { ok: false, error: upd.error.message };
+
+  // Generate a set-password (recovery) link and email it via Resend.
+  const link = await svc.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: { redirectTo: `${base}/auth/reset` },
+  });
+  const actionLink = link.data?.properties?.action_link;
+  if (link.error || !actionLink) {
+    return { ok: true, note: "Account creato, ma non ho potuto generare il link di accesso. Chiedi alla persona di usare “Password dimenticata?”." };
+  }
+
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;color:#1a1a1a">
+    <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5">Sake Sommelier Association</div>
+    <h2 style="font-size:18px;margin:8px 0 14px">Benvenuto/a nella piattaforma SSA</h2>
+    <p style="font-size:14px;line-height:1.5">${input.firstName ? input.firstName + ", " : ""}il tuo account è pronto. Imposta la password per accedere:</p>
+    <p style="margin:22px 0 6px"><a href="${actionLink}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Imposta la password</a></p>
+    <p style="font-size:11px;color:#9ca3af;margin-top:20px">Se non aspettavi questo invito, ignora l'email. · Sake Sommelier Association</p>
+  </div>`;
+
+  const res = await getEmailService().send({
+    to: email,
+    subject: "Invito alla piattaforma SSA — imposta la tua password",
+    html,
+    tag: "staff-invite",
+  });
+  if (res.status === "skipped") {
+    return { ok: true, note: "Account creato. Email NON inviata (Resend non configurato): la persona può usare “Password dimenticata?”." };
+  }
+  return { ok: true, note: `Invito inviato a ${email}.` };
 }
