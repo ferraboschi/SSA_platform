@@ -94,7 +94,16 @@ export const resendConfig = {
     return env("RESEND_API_KEY");
   },
   get from() {
-    return env("RESEND_FROM") ?? "SSA <no-reply@sakesommelierassociation.it>";
+    // Default sender uses the VERIFIED Resend domain. Only `mail.sakesommelierassociation.it`
+    // is verified (the bare apex domain is NOT) — sending from an unverified
+    // domain makes Resend reject the request, so the subdomain is required.
+    const configured = env("RESEND_FROM") ?? "SSA <no-reply@mail.sakesommelierassociation.it>";
+    // Defensive: if RESEND_FROM (env) still points at the unverified apex domain,
+    // rewrite it to the verified subdomain so mail isn't silently rejected.
+    return configured.replace(
+      /@sakesommelierassociation\.it/gi,
+      "@mail.sakesommelierassociation.it",
+    );
   },
   get replyTo() {
     return env("RESEND_REPLY_TO");
