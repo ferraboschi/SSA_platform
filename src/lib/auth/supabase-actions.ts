@@ -151,7 +151,9 @@ export interface StaffInvite {
   acceptedAt: string | null;
 }
 
-/** Client-safe view of an invite (no token / userId leaked to the browser). */
+/** Client-safe view of an invite. The token IS exposed here (as the full link)
+ *  because this is shown only on the admin-gated Account page — the admin is who
+ *  created it — and the link is the fallback delivery channel ("Copia link"). */
 export interface StaffInviteView {
   email: string;
   firstName: string;
@@ -160,6 +162,7 @@ export interface StaffInviteView {
   createdAt: string;
   lastSentAt: string;
   acceptedAt: string | null;
+  inviteUrl: string;
 }
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
@@ -186,6 +189,10 @@ function newToken(): string {
   return (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
 }
 
+function inviteUrl(token: string): string {
+  return `${appConfig.baseUrl.replace(/\/$/, "")}/invito/${token}`;
+}
+
 function toView(i: StaffInvite): StaffInviteView {
   return {
     email: i.email,
@@ -195,6 +202,7 @@ function toView(i: StaffInvite): StaffInviteView {
     createdAt: i.createdAt,
     lastSentAt: i.lastSentAt,
     acceptedAt: i.acceptedAt,
+    inviteUrl: inviteUrl(i.token),
   };
 }
 
@@ -209,16 +217,23 @@ function inviteEmailHtml(firstName: string, link: string): string {
   </div>`;
 }
 
-async function sendInviteEmail(invite: StaffInvite): Promise<"sent" | "skipped"> {
-  const base = appConfig.baseUrl.replace(/\/$/, "");
-  const link = `${base}/invito/${invite.token}`;
-  const res = await getEmailService().send({
-    to: invite.email,
-    subject: "Invito alla piattaforma SSA — imposta la tua password",
-    html: inviteEmailHtml(invite.firstName, link),
-    tag: "staff-invite",
-  });
-  return res.status === "skipped" ? "skipped" : "sent";
+async function sendInviteEmail(
+  invite: StaffInvite,
+): Promise<{ status: "sent" | "skipped" | "error"; error?: string }> {
+  const link = inviteUrl(invite.token);
+  try {
+    const res = await getEmailService().send({
+      to: invite.email,
+      subject: "Invito alla piattaforma SSA — imposta la tua password",
+      html: inviteEmailHtml(invite.firstName, link),
+      tag: "staff-invite",
+    });
+    return { status: res.status === "skipped" ? "skipped" : "sent" };
+  } catch (e) {
+    // Resend rejects (e.g. unverified sending domain → 403) surface here instead
+    // of crashing the action — the admin can still deliver the link manually.
+    return { status: "error", error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /**
@@ -305,10 +320,16 @@ export async function inviteStaffAction(input: {
   await writeInvites(svc, invites);
 
   const mail = await sendInviteEmail(invite);
-  if (mail === "skipped") {
-    return { ok: true, note: "Account creato e invito salvato. Email NON inviata (Resend non configurato): puoi reinviare o condividere il link manualmente." };
+  if (mail.status === "sent") {
+    return { ok: true, note: `Invito inviato a ${email} (il link non scade).` };
   }
-  return { ok: true, note: `Invito inviato a ${email}. Il link non scade.` };
+  if (mail.status === "skipped") {
+    return { ok: true, note: "Account creato. Email non configurata: usa “Copia link” qui sotto e invialo tu." };
+  }
+  return {
+    ok: true,
+    note: `Account creato, ma l'email non è partita (${mail.error || "errore"}). Usa “Copia link” qui sotto e invialo tu.`,
+  };
 }
 
 /** Admin: the list of invited staff (for the Account page). */
@@ -336,10 +357,16 @@ export async function resendInviteAction(email: string): Promise<AuthActionResul
   invites[idx] = { ...invites[idx], lastSentAt: new Date().toISOString() };
   await writeInvites(svc, invites);
   const mail = await sendInviteEmail(invites[idx]);
-  if (mail === "skipped") {
-    return { ok: true, note: "Email NON inviata (Resend non configurato)." };
+  if (mail.status === "sent") {
+    return { ok: true, note: `Invito reinviato a ${target}.` };
   }
-  return { ok: true, note: `Invito reinviato a ${target}.` };
+  if (mail.status === "skipped") {
+    return { ok: true, note: "Email non configurata: usa “Copia link” qui sotto." };
+  }
+  return {
+    ok: true,
+    note: `Email non partita (${mail.error || "errore"}). Usa “Copia link” qui sotto.`,
+  };
 }
 
 /** Public (token-gated): look up a pending invite by its token. */

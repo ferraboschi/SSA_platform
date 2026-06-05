@@ -72,7 +72,19 @@ function InviteStaff({ invites }: { invites: StaffInviteView[] }) {
   const [pending, start] = useTransition();
   const [resending, startResend] = useTransition();
   const [busyEmail, setBusyEmail] = useState<string | null>(null);
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const copyLink = async (inv: StaffInviteView) => {
+    try {
+      await navigator.clipboard.writeText(inv.inviteUrl);
+      setCopiedEmail(inv.email);
+      setTimeout(() => setCopiedEmail((e) => (e === inv.email ? null : e)), 2000);
+    } catch {
+      // Clipboard blocked — fall back to a prompt so the link is still copyable.
+      window.prompt("Copia il link d’invito:", inv.inviteUrl);
+    }
+  };
 
   const invite = () => {
     setMsg(null);
@@ -199,15 +211,25 @@ function InviteStaff({ invites }: { invites: StaffInviteView[] }) {
                       Attivo
                     </Badge>
                   ) : (
-                    <button
-                      className="btn btn-ghost"
-                      disabled={resending && busyEmail === inv.email}
-                      onClick={() => resend(inv.email)}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
-                    >
-                      <Icon name="mail" size={12} />
-                      {resending && busyEmail === inv.email ? "Invio…" : "Reinvia"}
-                    </button>
+                    <span style={{ display: "inline-flex", gap: 6, flexShrink: 0 }}>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => copyLink(inv)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
+                      >
+                        <Icon name={copiedEmail === inv.email ? "check" : "copy"} size={12} />
+                        {copiedEmail === inv.email ? "Copiato" : "Copia link"}
+                      </button>
+                      <button
+                        className="btn btn-ghost"
+                        disabled={resending && busyEmail === inv.email}
+                        onClick={() => resend(inv.email)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
+                      >
+                        <Icon name="mail" size={12} />
+                        {resending && busyEmail === inv.email ? "Invio…" : "Reinvia"}
+                      </button>
+                    </span>
                   )}
                 </div>
               );
