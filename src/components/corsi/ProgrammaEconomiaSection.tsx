@@ -335,29 +335,29 @@ export function ProgrammaEconomiaSection({
       return next;
     });
 
-    // #10: bring the template's COSTS into the course economics (materialized
-    // for the current enrolled count) so they're really present after applying.
+    // Bring the TEMPLATE's costs into the course economics — only the costs the
+    // template owns (gestione, educator, diplomi, libri + template extras). The
+    // per-course costs (location, food, cocktail, accommodation, transport, ADV)
+    // are course-specific and are PRESERVED, not overwritten by the template.
     const m = template.materiali;
     if (m) {
       const enrolled = data.enrolled || 0;
       const days = template.days.length;
-      const lines: CostLine[] = [
+      const tplLines: CostLine[] = [
         { id: "ssa_fee", label: t.costGestione, value: Math.round((m.gestionePerDay || 0) * days) },
         { id: "educator", label: "Educator", value: Math.round((m.educatorPerDay || 0) * days), custom: true },
         { id: "diplomi", label: "Diplomi", value: Math.round((m.diplomaPerStudent || 0) * enrolled), custom: true },
         { id: "libri", label: "Libri", value: Math.round((m.libroPerStudent || 0) * enrolled), custom: true },
-        { id: "location", label: t.costLocation, value: m.location || 0 },
-        { id: "food", label: t.costFood, value: m.foodPairing || 0 },
-        { id: "adv", label: t.costAdv, value: m.adv || 0 },
       ];
-      if (m.cocktailFee) lines.push({ id: "cocktail", label: "Cocktail", value: m.cocktailFee, custom: true });
-      if (m.accommodation) lines.push({ id: "accommodation", label: "Alloggio", value: m.accommodation, custom: true });
-      if (m.transport) lines.push({ id: "transport", label: "Trasporto", value: m.transport, custom: true });
       for (const e of m.extra ?? []) {
         const mult = e.per === "iscritto" ? enrolled : 1;
-        lines.push({ id: `tpl-${e.id}`, label: e.label, value: Math.round((e.value || 0) * mult), custom: true });
+        tplLines.push({ id: `tpl-${e.id}`, label: e.label, value: Math.round((e.value || 0) * mult), custom: true });
       }
-      setCustomLines(lines);
+      setCustomLines((prev) => {
+        const byId = new Map(prev.map((l) => [l.id, l]));
+        for (const l of tplLines) byId.set(l.id, l); // upsert template lines, keep course lines
+        return [...byId.values()];
+      });
     }
   };
 

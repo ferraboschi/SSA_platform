@@ -791,20 +791,10 @@ function TemplateEditor({
   const materialiPerStudent =
     (t.materiali.diplomaPerStudent || 0) + (t.materiali.libroPerStudent || 0) + extraPerStudent;
 
-  // "Da imputare" per-course categories (location, food, cocktail, …).
-  const m = t.materiali;
-  const perCourseFixed =
-    (m.location || 0) + (m.foodPairing || 0) + (m.cocktailFee || 0) +
-    (m.accommodation || 0) + (m.transport || 0) + (m.adv || 0);
-  const perCourseTotal = perCourseFixed + extraPerCourse;
-  const PER_COURSE_FIELDS: { key: keyof MaterialTemplate["materiali"]; label: string }[] = [
-    { key: "location", label: ed.matLocation },
-    { key: "foodPairing", label: ed.matFood },
-    { key: "cocktailFee", label: ed.matCocktail },
-    { key: "accommodation", label: ed.matAccommodation },
-    { key: "transport", label: ed.matTransport },
-    { key: "adv", label: ed.matAdv },
-  ];
+  // The standard per-course categories (location, food, cocktail, accommodation,
+  // transport, ADV) are COURSE-specific and live in the course's Programma &
+  // economia — NOT in the template. Only operator-added fixed extras count here.
+  const perCourseTotal = extraPerCourse;
 
   const reorderSake = (idx: number, from: number, to: number) =>
     setDays(
@@ -976,26 +966,20 @@ function TemplateEditor({
           <div className="card card-pad">
             <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 14, lineHeight: 1.5 }}>{ed.materialiIntro}</div>
 
-            {/* ── COSTI VARIABILI — per iscritto (× iscritti) ── */}
-            <CostGroupLabel text="Costi variabili · per iscritto (× iscritti)" />
+            {/* ── DIPLOMI E LIBRI DI TESTO — per iscritto (× iscritti) ── */}
+            <CostGroupLabel text="Diplomi e libri di testo · per iscritto (× iscritti)" />
             <MaterialeRow
               icon="tag"
-              label={ed.matDiplomi}
-              hint={format(ed.diplomaHint, {
-                cert: COST_RATES.diploma.certificato,
-                intro: COST_RATES.diploma.introduttivo,
-              })}
+              label="Diplomi SSA"
+              hint={`Introduttivo ${COST_RATES.diploma.introduttivo} € · Certificato/Shochu ${COST_RATES.diploma.certificato} € — applicato in automatico al tipo corso`}
               value={t.materiali.diplomaPerStudent}
               suffix={ed.perStudentSuffix}
               onChange={(v) => setMateriali({ diplomaPerStudent: v })}
             />
             <MaterialeRow
               icon="book"
-              label={ed.matLibri}
-              hint={format(ed.libroHint, {
-                cert: COST_RATES.libro.certificato,
-                intro: COST_RATES.libro.introduttivo,
-              })}
+              label="Libri di testo"
+              hint={`Introduttivo ${COST_RATES.libro.introduttivo} € · Certificato/Shochu ${COST_RATES.libro.certificato} € — applicato in automatico al tipo corso`}
               value={t.materiali.libroPerStudent}
               suffix={ed.perStudentSuffix}
               last={variableExtra.length === 0}
@@ -1023,13 +1007,13 @@ function TemplateEditor({
               <strong className="num">{variablePerStudentTotal.toLocaleString("it-IT")} €/iscritto · {(variablePerStudentTotal * N + bottleCost).toLocaleString("it-IT")} € totali</strong>
             </div>
 
-            {/* ── COSTI FISSI — non cambiano con gli iscritti ── */}
+            {/* ── EDUCATOR E GESTIONE SSA — per giornata ── */}
             <div style={{ marginTop: 18 }}>
-              <CostGroupLabel text="Costi fissi · non cambiano con gli iscritti" />
+              <CostGroupLabel text="Educator e gestione SSA · per giornata" />
             </div>
             <MaterialeRow
               icon="graduation"
-              label={ed.matEducator}
+              label="Educator a giornata"
               hint={format(ed.matEducatorHint, {
                 days: t.days.length,
                 unit: dayUnit(t.days.length, tm),
@@ -1041,7 +1025,7 @@ function TemplateEditor({
             />
             <MaterialeRow
               icon="settings"
-              label={ed.matGestione}
+              label="Gestione SSA a giornata"
               hint={format(ed.matGestioneHint, {
                 days: t.days.length,
                 unit: dayUnit(t.days.length, tm),
@@ -1051,17 +1035,11 @@ function TemplateEditor({
               suffix={ed.perDaySuffix}
               onChange={(v) => setMateriali({ gestionePerDay: v })}
             />
-            {PER_COURSE_FIELDS.map((f) => (
-              <MaterialeRow
-                key={f.key}
-                icon="tag"
-                label={f.label}
-                hint={ed.daImputareHint}
-                value={(t.materiali[f.key] as number) || 0}
-                suffix={ed.perCourseSuffix}
-                onChange={(v) => setMateriali({ [f.key]: v })}
-              />
-            ))}
+            <div style={{ fontSize: 11, color: "var(--text-4)", padding: "6px 2px 2px", lineHeight: 1.5 }}>
+              <Icon name="info" size={11} style={{ marginRight: 5, verticalAlign: "-1px" }} />
+              Location, food pairing, cocktail, alloggio, trasferte e ADV sono <strong>specifici di ogni corso</strong>:
+              si impostano nella sezione <strong>Programma &amp; economia</strong> del corso, non qui nel template.
+            </div>
             {fixedExtra.map((c, i) => (
               <ExtraCostRow
                 key={c.id}

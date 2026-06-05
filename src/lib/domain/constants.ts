@@ -93,18 +93,18 @@ export const DEFAULT_THRESHOLDS: DashThresholds = {
 export const COST_RATES = {
   educatorPerDay: 200,
   gestionePerDay: 300,
-  diploma: { certificato: 115, introduttivo: 60, default: 115 },
-  libro: { certificato: 9, introduttivo: 8, default: 9 },
+  // SSA diploma cost per student: Introduttivo 60 €, Certificato/Shochu 100 €.
+  diploma: { introduttivo: 60, certificato: 100, shochu: 100, default: 100 },
+  // Textbook cost per student: Introduttivo 8 €, Certificato/Shochu 9 €.
+  libro: { introduttivo: 8, certificato: 9, shochu: 9, default: 9 },
 } as const;
 
 /** Sensible default material costs for a template of the given course type. */
 export function defaultMaterialCosts(type: CourseTypeKey): MaterialCosts {
   const diploma =
-    COST_RATES.diploma[type as "certificato" | "introduttivo"] ??
-    COST_RATES.diploma.default;
+    (COST_RATES.diploma as Record<string, number>)[type] ?? COST_RATES.diploma.default;
   const libro =
-    COST_RATES.libro[type as "certificato" | "introduttivo"] ??
-    COST_RATES.libro.default;
+    (COST_RATES.libro as Record<string, number>)[type] ?? COST_RATES.libro.default;
   return {
     educatorPerDay: COST_RATES.educatorPerDay,
     gestionePerDay: COST_RATES.gestionePerDay,
