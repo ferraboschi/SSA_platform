@@ -126,33 +126,130 @@ export async function updateOwnPasswordAction(
   return { ok: true };
 }
 
+// ── Staff invites ──────────────────────────────────────────────────────────
+//
+// We DON'T rely on Supabase's recovery/magic links for staff onboarding: those
+// expire after the project's OTP TTL (~1h) and are often pre-consumed by email
+// security scanners, so they arrive "già scaduto". Instead we mint our OWN
+// invite token (no expiry) stored in settings_kv, email a link to /invito/<token>,
+// and the public accept page sets the password via the admin API. This also
+// gives us, for free, the persisted list of invited emails + one-click resend.
+
+const INVITES_KEY = "staff-invites";
+
+type StaffRole = "manager" | "social" | "accountant";
+
+export interface StaffInvite {
+  token: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: StaffRole;
+  userId: string | null;
+  createdAt: string;
+  lastSentAt: string;
+  acceptedAt: string | null;
+}
+
+/** Client-safe view of an invite (no token / userId leaked to the browser). */
+export interface StaffInviteView {
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: StaffRole;
+  createdAt: string;
+  lastSentAt: string;
+  acceptedAt: string | null;
+}
+
+type Svc = ReturnType<typeof getSupabaseServiceClient>;
+
+async function readInvites(svc: Svc): Promise<StaffInvite[]> {
+  const { data } = await svc
+    .from("settings_kv")
+    .select("value")
+    .eq("key", INVITES_KEY)
+    .maybeSingle();
+  const v = data?.value as { invites?: StaffInvite[] } | StaffInvite[] | null;
+  if (!v) return [];
+  return Array.isArray(v) ? v : v.invites ?? [];
+}
+
+async function writeInvites(svc: Svc, invites: StaffInvite[]): Promise<void> {
+  await svc
+    .from("settings_kv")
+    .upsert({ key: INVITES_KEY, value: { invites } }, { onConflict: "key" });
+}
+
+function newToken(): string {
+  // 256 bits of entropy — unguessable. No expiry, so it must be long & random.
+  return (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
+}
+
+function toView(i: StaffInvite): StaffInviteView {
+  return {
+    email: i.email,
+    firstName: i.firstName,
+    lastName: i.lastName,
+    role: i.role,
+    createdAt: i.createdAt,
+    lastSentAt: i.lastSentAt,
+    acceptedAt: i.acceptedAt,
+  };
+}
+
+function inviteEmailHtml(firstName: string, link: string): string {
+  return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;color:#1a1a1a">
+    <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5">Sake Sommelier Association</div>
+    <h2 style="font-size:18px;margin:8px 0 14px">Benvenuto/a nella piattaforma SSA</h2>
+    <p style="font-size:14px;line-height:1.5">${firstName ? firstName + ", " : ""}il tuo account è pronto. Imposta la password per accedere — il link non scade:</p>
+    <p style="margin:22px 0 6px"><a href="${link}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Imposta la password</a></p>
+    <p style="font-size:12px;color:#6b7280;margin-top:10px">Oppure copia questo indirizzo nel browser:<br><span style="word-break:break-all;color:#4f46e5">${link}</span></p>
+    <p style="font-size:11px;color:#9ca3af;margin-top:20px">Se non aspettavi questo invito, ignora l'email. · Sake Sommelier Association</p>
+  </div>`;
+}
+
+async function sendInviteEmail(invite: StaffInvite): Promise<"sent" | "skipped"> {
+  const base = appConfig.baseUrl.replace(/\/$/, "");
+  const link = `${base}/invito/${invite.token}`;
+  const res = await getEmailService().send({
+    to: invite.email,
+    subject: "Invito alla piattaforma SSA — imposta la tua password",
+    html: inviteEmailHtml(invite.firstName, link),
+    tag: "staff-invite",
+  });
+  return res.status === "skipped" ? "skipped" : "sent";
+}
+
 /**
  * Admin: invite a staff member. Creates their auth user (or reuses an existing
- * one), sets the chosen role + name on their profile, and emails a set-password
- * link via Resend. The role is chosen explicitly (never the manager default).
+ * one), sets the chosen role + name on their profile, mints a non-expiring
+ * invite token, and emails a set-password link. Idempotent per email: re-running
+ * keeps the same person and refreshes/sends the invite.
  */
 export async function inviteStaffAction(input: {
   email: string;
   firstName: string;
   lastName: string;
-  role: "manager" | "social" | "accountant";
+  role: StaffRole;
 }): Promise<AuthActionResult> {
   await assertRole(["admin"]);
   const email = input.email.trim().toLowerCase();
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
   if (!email || !email.includes("@")) return { ok: false, error: "Email non valida." };
   if (!["manager", "social", "accountant"].includes(input.role)) {
     return { ok: false, error: "Ruolo non valido." };
   }
 
   const svc = getSupabaseServiceClient();
-  const base = appConfig.baseUrl.replace(/\/$/, "");
 
   // Create the auth user (idempotent: an "already registered" user is re-invited).
   let userId: string | null = null;
   const created = await svc.auth.admin.createUser({
     email,
     email_confirm: true,
-    user_metadata: { first_name: input.firstName, last_name: input.lastName },
+    user_metadata: { first_name: firstName, last_name: lastName },
   });
   if (created.error) {
     if (!/already|registered|exists/i.test(created.error.message)) {
@@ -163,38 +260,143 @@ export async function inviteStaffAction(input: {
   }
 
   // Set the chosen role + name on the profile (created by the auth trigger).
-  const patch = { role: input.role, first_name: input.firstName, last_name: input.lastName };
+  const patch = { role: input.role, first_name: firstName, last_name: lastName };
   const q = svc.from("profiles").update(patch);
   const upd = userId ? await q.eq("id", userId) : await q.eq("email", email);
   if (upd.error) return { ok: false, error: upd.error.message };
 
-  // Generate a set-password (recovery) link and email it via Resend.
-  const link = await svc.auth.admin.generateLink({
-    type: "recovery",
-    email,
-    options: { redirectTo: `${base}/auth/reset` },
-  });
-  const actionLink = link.data?.properties?.action_link;
-  if (link.error || !actionLink) {
-    return { ok: true, note: "Account creato, ma non ho potuto generare il link di accesso. Chiedi alla persona di usare “Password dimenticata?”." };
+  // Resolve the auth user id (profiles.id === auth.users.id) for the accept step.
+  if (!userId) {
+    const { data: prof } = await svc.from("profiles").select("id").eq("email", email).maybeSingle();
+    userId = (prof?.id as string | undefined) ?? null;
   }
 
-  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;color:#1a1a1a">
-    <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5">Sake Sommelier Association</div>
-    <h2 style="font-size:18px;margin:8px 0 14px">Benvenuto/a nella piattaforma SSA</h2>
-    <p style="font-size:14px;line-height:1.5">${input.firstName ? input.firstName + ", " : ""}il tuo account è pronto. Imposta la password per accedere:</p>
-    <p style="margin:22px 0 6px"><a href="${actionLink}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Imposta la password</a></p>
-    <p style="font-size:11px;color:#9ca3af;margin-top:20px">Se non aspettavi questo invito, ignora l'email. · Sake Sommelier Association</p>
-  </div>`;
-
-  const res = await getEmailService().send({
-    to: email,
-    subject: "Invito alla piattaforma SSA — imposta la tua password",
-    html,
-    tag: "staff-invite",
-  });
-  if (res.status === "skipped") {
-    return { ok: true, note: "Account creato. Email NON inviata (Resend non configurato): la persona può usare “Password dimenticata?”." };
+  // Upsert the invite record. Reuse the existing token if the person was already
+  // invited and hasn't accepted yet (so any old email still works); otherwise mint.
+  const now = new Date().toISOString();
+  const invites = await readInvites(svc);
+  const idx = invites.findIndex((i) => i.email === email);
+  let invite: StaffInvite;
+  if (idx >= 0 && !invites[idx].acceptedAt) {
+    invite = {
+      ...invites[idx],
+      firstName,
+      lastName,
+      role: input.role,
+      userId,
+      lastSentAt: now,
+    };
+    invites[idx] = invite;
+  } else {
+    invite = {
+      token: newToken(),
+      email,
+      firstName,
+      lastName,
+      role: input.role,
+      userId,
+      createdAt: now,
+      lastSentAt: now,
+      acceptedAt: idx >= 0 ? null : null,
+    };
+    if (idx >= 0) invites[idx] = invite;
+    else invites.push(invite);
   }
-  return { ok: true, note: `Invito inviato a ${email}.` };
+  await writeInvites(svc, invites);
+
+  const mail = await sendInviteEmail(invite);
+  if (mail === "skipped") {
+    return { ok: true, note: "Account creato e invito salvato. Email NON inviata (Resend non configurato): puoi reinviare o condividere il link manualmente." };
+  }
+  return { ok: true, note: `Invito inviato a ${email}. Il link non scade.` };
+}
+
+/** Admin: the list of invited staff (for the Account page). */
+export async function listStaffInvitesAction(): Promise<StaffInviteView[]> {
+  await assertRole(["admin"]);
+  const svc = getSupabaseServiceClient();
+  const invites = await readInvites(svc);
+  return invites
+    .slice()
+    .sort((a, b) => (a.lastSentAt < b.lastSentAt ? 1 : -1))
+    .map(toView);
+}
+
+/** Admin: re-send the invite email for an already-invited address. */
+export async function resendInviteAction(email: string): Promise<AuthActionResult> {
+  await assertRole(["admin"]);
+  const target = email.trim().toLowerCase();
+  const svc = getSupabaseServiceClient();
+  const invites = await readInvites(svc);
+  const idx = invites.findIndex((i) => i.email === target);
+  if (idx < 0) return { ok: false, error: "Invito non trovato." };
+  if (invites[idx].acceptedAt) {
+    return { ok: false, error: "Questa persona ha già impostato la password (accesso attivo)." };
+  }
+  invites[idx] = { ...invites[idx], lastSentAt: new Date().toISOString() };
+  await writeInvites(svc, invites);
+  const mail = await sendInviteEmail(invites[idx]);
+  if (mail === "skipped") {
+    return { ok: true, note: "Email NON inviata (Resend non configurato)." };
+  }
+  return { ok: true, note: `Invito reinviato a ${target}.` };
+}
+
+/** Public (token-gated): look up a pending invite by its token. */
+export async function getInviteByTokenAction(
+  token: string,
+): Promise<{ email: string; firstName: string; accepted: boolean } | null> {
+  if (!token) return null;
+  const svc = getSupabaseServiceClient();
+  const invites = await readInvites(svc);
+  const inv = invites.find((i) => i.token === token);
+  if (!inv) return null;
+  return { email: inv.email, firstName: inv.firstName, accepted: !!inv.acceptedAt };
+}
+
+/**
+ * Public (token-gated): the invited person sets their password. Validates the
+ * token, sets the password via the admin API, marks the invite accepted, and
+ * signs the user in (creates the session cookie), then redirects to /dashboard.
+ */
+export async function acceptInviteAction(
+  token: string,
+  password: string,
+): Promise<AuthActionResult> {
+  if (!token) return { ok: false, error: "Link non valido." };
+  if (!password || password.length < 8) {
+    return { ok: false, error: "La password deve avere almeno 8 caratteri." };
+  }
+  const svc = getSupabaseServiceClient();
+  const invites = await readInvites(svc);
+  const idx = invites.findIndex((i) => i.token === token);
+  if (idx < 0) return { ok: false, error: "Link non valido o revocato." };
+  const inv = invites[idx];
+
+  // Resolve userId defensively (older invites may have stored null).
+  let userId = inv.userId;
+  if (!userId) {
+    const { data: prof } = await svc.from("profiles").select("id").eq("email", inv.email).maybeSingle();
+    userId = (prof?.id as string | undefined) ?? null;
+  }
+  if (!userId) return { ok: false, error: "Account non trovato. Contatta l'amministratore." };
+
+  const set = await svc.auth.admin.updateUserById(userId, {
+    password,
+    email_confirm: true,
+  });
+  if (set.error) return { ok: false, error: set.error.message };
+
+  invites[idx] = { ...inv, userId, acceptedAt: new Date().toISOString() };
+  await writeInvites(svc, invites);
+
+  // Sign them in so they land already authenticated.
+  const sb = await getSupabaseServerClient();
+  const { error } = await sb.auth.signInWithPassword({ email: inv.email, password });
+  if (error) {
+    // Password is set even if auto-login failed — send them to /login.
+    return { ok: true, note: "Password impostata. Accedi dalla pagina di login." };
+  }
+  revalidatePath("/", "layout");
+  redirect("/dashboard");
 }

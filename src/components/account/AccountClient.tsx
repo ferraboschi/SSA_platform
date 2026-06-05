@@ -1,10 +1,16 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon, type AvatarTone } from "@/components/ui";
 import { useSession } from "@/lib/auth";
 import { updateProfileAction } from "@/lib/auth/actions";
-import { updateOwnPasswordAction, inviteStaffAction } from "@/lib/auth/supabase-actions";
+import {
+  updateOwnPasswordAction,
+  inviteStaffAction,
+  resendInviteAction,
+  type StaffInviteView,
+} from "@/lib/auth/supabase-actions";
 import { useT } from "@/lib/i18n";
 import { CITIES } from "@/lib/domain";
 import type { User } from "@/lib/domain";
@@ -45,12 +51,27 @@ const STAFF_ROLES = [
   { value: "accountant", label: "Contabilità" },
 ] as const;
 
-function InviteStaff() {
+const ROLE_LABEL: Record<string, string> = {
+  manager: "Manager SSA",
+  social: "Social & Campagne",
+  accountant: "Contabilità",
+};
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function InviteStaff({ invites }: { invites: StaffInviteView[] }) {
+  const router = useRouter();
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"manager" | "social" | "accountant">("manager");
   const [pending, start] = useTransition();
+  const [resending, startResend] = useTransition();
+  const [busyEmail, setBusyEmail] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const invite = () => {
@@ -63,7 +84,19 @@ function InviteStaff() {
         setLast("");
         setEmail("");
         setRole("manager");
+        router.refresh();
       }
+    });
+  };
+
+  const resend = (addr: string) => {
+    setMsg(null);
+    setBusyEmail(addr);
+    startResend(async () => {
+      const r = await resendInviteAction(addr);
+      setMsg({ ok: r.ok, text: r.ok ? r.note || "Invito reinviato." : r.error || "Errore." });
+      setBusyEmail(null);
+      if (r.ok) router.refresh();
     });
   };
 
@@ -75,8 +108,8 @@ function InviteStaff() {
       </div>
       <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 14, lineHeight: 1.5 }}>
         Crea l’account di un collaboratore e invia l’email per impostare la
-        password. Scegli tu il ruolo: la persona riceverà un link e potrà entrare
-        senza che tu condivida alcuna password.
+        password. Scegli tu il ruolo: la persona riceverà un link (che non scade)
+        e potrà entrare senza che tu condivida alcuna password.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <Field label="Nome" value={first} onChange={setFirst} placeholder="Camilla" />
@@ -119,11 +152,82 @@ function InviteStaff() {
           {msg.text}
         </div>
       )}
+
+      {invites.length > 0 && (
+        <div style={{ marginTop: 22 }}>
+          <div className="field-label" style={{ marginBottom: 8 }}>
+            Inviti ({invites.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {invites.map((inv) => {
+              const accepted = !!inv.acceptedAt;
+              return (
+                <div
+                  key={inv.email}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 12px",
+                    border: "1px solid var(--border-2)",
+                    borderRadius: 9,
+                    background: "var(--surface)",
+                  }}
+                >
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>
+                      {[inv.firstName, inv.lastName].filter(Boolean).join(" ") || inv.email}
+                    </span>
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 11.5,
+                        color: "var(--text-3)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {inv.email} · {ROLE_LABEL[inv.role] || inv.role}
+                      {accepted
+                        ? ` · attivato il ${fmtDate(inv.acceptedAt!)}`
+                        : ` · invitato il ${fmtDate(inv.lastSentAt)}`}
+                    </span>
+                  </span>
+                  {accepted ? (
+                    <Badge tone="success" dot>
+                      Attivo
+                    </Badge>
+                  ) : (
+                    <button
+                      className="btn btn-ghost"
+                      disabled={resending && busyEmail === inv.email}
+                      onClick={() => resend(inv.email)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
+                    >
+                      <Icon name="mail" size={12} />
+                      {resending && busyEmail === inv.email ? "Invio…" : "Reinvia"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
 
-export function AccountClient({ me, users }: { me: User; users: User[] }) {
+export function AccountClient({
+  me,
+  users,
+  invites = [],
+}: {
+  me: User;
+  users: User[];
+  invites?: StaffInviteView[];
+}) {
   const t = useT().account.page;
   const { switchUser, switching } = useSession();
   const [, startSave] = useTransition();
@@ -366,7 +470,7 @@ export function AccountClient({ me, users }: { me: User; users: User[] }) {
         </div>
       </section>
 
-      {isAdmin && <InviteStaff />}
+      {isAdmin && <InviteStaff invites={invites} />}
     </div>
   );
 }
