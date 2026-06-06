@@ -114,15 +114,34 @@ export async function listAllProducts(): Promise<AdminProduct[]> {
 export async function getProductEducatorMetafield(
   productId: number | string,
 ): Promise<string | null> {
+  const mf = await getProductCustomMetafields(productId);
+  return mf.sake_educator?.trim() || null;
+}
+
+/**
+ * All `custom.*` metafields of a product as a flat { key: value } map. SSA stores
+ * the course's real metadata here — `tipologia_di_corso`, `luogo_e_orari`
+ * (event date), `termine_iscrizioni` (deadline, carries the year), `luogo`,
+ * `sake_educator` — which is the source of truth for products (e.g. masterclasses)
+ * whose title doesn't encode a month/year.
+ */
+export async function getProductCustomMetafields(
+  productId: number | string,
+): Promise<Record<string, string>> {
   try {
     const { body } = await adminGet(`products/${productId}/metafields.json`);
     const mfs =
       (body as { metafields?: Array<{ namespace: string; key: string; value: string }> })
         .metafields ?? [];
-    const m = mfs.find((x) => x.namespace === "custom" && x.key === "sake_educator");
-    return m?.value?.trim() || null;
+    const out: Record<string, string> = {};
+    for (const m of mfs) {
+      if (m.namespace === "custom" && m.key && typeof m.value === "string") {
+        out[m.key] = m.value;
+      }
+    }
+    return out;
   } catch {
-    return null;
+    return {};
   }
 }
 

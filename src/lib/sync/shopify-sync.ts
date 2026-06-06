@@ -13,7 +13,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import {
   listAllProducts,
   listOrdersUpdatedSince,
-  getProductEducatorMetafield,
+  getProductCustomMetafields,
   type AdminOrder,
   type AdminProduct,
 } from "@/lib/integrations/shopify/admin-client";
@@ -42,7 +42,39 @@ const TYPE_LABEL: Record<string, string> = {
   introduttivo: "Corso Introduttivo al Sake",
   shochu: "Shochu Professional",
   masterclass: "Masterclass",
+  mixology: "Mixology",
 };
+
+/** Detect a course type from free text (title or the tipologia metafield).
+ *  Whitespace/punctuation-insensitive so "Master Class" / "Master-Class" match. */
+function detectType(text: string): string | null {
+  const t = (text || "").toLowerCase();
+  const compact = t.replace(/[^a-z0-9]+/g, "");
+  if (t.includes("shochu")) return "shochu";
+  if (t.includes("certificat") || t.includes("certified")) return "certificato";
+  if (t.includes("introdutt") || t.includes("introduct")) return "introduttivo";
+  if (compact.includes("masterclass")) return "masterclass";
+  if (t.includes("mixolog")) return "mixology";
+  return null;
+}
+
+/** Pull day/month/year out of an Italian date string like "14 settembre" or
+ *  "4 Settembre 2026". Returns whatever it can find (any field may be null). */
+function parseItDate(text: string): { day: number | null; month: number | null; year: number | null } {
+  const t = (text || "").toLowerCase();
+  const monthName = Object.keys(MONTHS).find((m) => t.includes(m));
+  const month = monthName ? MONTHS[monthName] : null;
+  const yearMatch = t.match(/20(2[0-9]|3\d)/);
+  const year = yearMatch ? Number(yearMatch[0]) : null;
+  // day immediately before the month name (e.g. "14 settembre"), else any 1–2 digit.
+  let day: number | null = null;
+  if (monthName) {
+    const m = t.match(new RegExp(`(\\d{1,2})\\s*[°ºª]?\\s+${monthName}`));
+    if (m) day = Number(m[1]);
+  }
+  if (day != null && (day < 1 || day > 31)) day = null;
+  return { day, month, year };
+}
 
 function slug(s: string): string {
   return s
@@ -57,6 +89,7 @@ function slug(s: string): string {
 interface ParsedCourse {
   month: number;
   year: number;
+  day: number | null;
   type: string;
   delivery: "online" | "in-person";
   city: string;
@@ -66,18 +99,53 @@ function parseCourseTitle(title: string): ParsedCourse | null {
   const t = title.toLowerCase();
   const month = Object.keys(MONTHS).find((m) => t.includes(m));
   const yearMatch = t.match(/20(2[6-9]|3\d)/);
-  let type: string | null = null;
-  if (t.includes("shochu")) type = "shochu";
-  else if (t.includes("certificat")) type = "certificato";
-  else if (t.includes("introdutt")) type = "introduttivo";
-  else if (t.includes("masterclass")) type = "masterclass";
+  const type = detectType(t);
   if (!month || !yearMatch || !type) return null;
   // Masterclasses are always run online; otherwise infer from the title.
   const delivery =
     type === "masterclass" || t.includes("online") ? "online" : "in-person";
   let city = title.includes(",") ? title.split(",").pop()!.trim() : "—";
   if (city.toLowerCase() === "online") city = "Online";
-  return { month: MONTHS[month], year: Number(yearMatch[0]), type, delivery, city };
+  return { month: MONTHS[month], year: Number(yearMatch[0]), day: null, type, delivery, city };
+}
+
+/**
+ * Fallback parser for products whose TITLE has no month/year (e.g. masterclasses):
+ * derive the course from the `custom.*` metafields — `tipologia_di_corso` (type),
+ * `luogo_e_orari` (event day/month), `termine_iscrizioni` (deadline → year),
+ * `luogo` (venue / Online). Returns null if no type or no month can be found.
+ */
+function parseCourseFromMetafields(
+  title: string,
+  tags: string,
+  mf: Record<string, string>,
+): ParsedCourse | null {
+  const type = detectType(mf.tipologia_di_corso || "") || detectType(title);
+  if (!type) return null;
+
+  const event = parseItDate(mf.luogo_e_orari || "");
+  const deadline = parseItDate(mf.termine_iscrizioni || "");
+  const month = event.month ?? deadline.month;
+  if (!month) return null; // can't place on the calendar without a month
+  const day = event.day;
+  // Year: event date → deadline → infer (this/next year from the month).
+  let year = event.year ?? deadline.year;
+  if (!year) {
+    const now = new Date();
+    const cur0 = now.getMonth(); // 0-based
+    year = month - 1 >= cur0 ? now.getFullYear() : now.getFullYear() + 1;
+  }
+
+  const luogo = (mf.luogo || "").trim();
+  const tagsL = (tags || "").toLowerCase();
+  const online =
+    type === "masterclass" ||
+    /online/.test(luogo.toLowerCase()) ||
+    /online/.test(tagsL) ||
+    /online/.test(title.toLowerCase());
+  const city = online ? "Online" : luogo || "—";
+
+  return { month, year, day, type, delivery: online ? "online" : "in-person", city };
 }
 
 interface Classification {
@@ -133,8 +201,7 @@ async function syncCourses(
   const educators = (eduRows ?? [])
     .map((e) => ({ id: e.id as number, n: normName(e.full_name as string) }))
     .sort((a, b) => b.n.length - a.n.length); // longest name first
-  async function resolveEducatorId(productId: number | string): Promise<number | null> {
-    const val = await getProductEducatorMetafield(productId);
+  function resolveEducatorByName(val: string | null): number | null {
     if (!val) return null;
     // Whole-word match: every token of the educator name must appear as a full
     // word in the metafield value (so "Marco" doesn't match "Gianmarco").
@@ -153,12 +220,26 @@ async function syncCourses(
     // products are not on the public site, so they must not appear as courses
     // here (they'd be phantom "bozza" courses with no real presence).
     if (p.status !== "active") continue;
-    const parsed = parseCourseTitle(p.title);
+
+    // Custom metafields are fetched at most once per product, lazily — only when
+    // the title can't be parsed (date lives in metafields, e.g. masterclasses)
+    // or when we need the educator. Avoids an API call for already-complete rows.
+    let mf: Record<string, string> | null = null;
+    const getMf = async () => (mf ??= await getProductCustomMetafields(p.id));
+
+    // Title first (fast path); fall back to metafields so EVERY published course
+    // — masterclass, mixology, dateless titles — is recovered, not just the ones
+    // whose title encodes the month/year.
+    let parsed = parseCourseTitle(p.title);
+    if (!parsed) parsed = parseCourseFromMetafields(p.title, p.tags || "", await getMf());
     if (!parsed) continue;
+
     const key = parsed.year * 12 + (parsed.month - 1);
     if (key < curKey) continue; // only future / current-month courses
     const variant = p.variants?.[0];
     const price = Math.round(parseFloat(variant?.price || "0") * 100) || 0;
+    const mm = String(parsed.month).padStart(2, "0");
+    const dd = String(parsed.day ?? 1).padStart(2, "0");
 
     // Sync-owned columns: refreshed from Shopify on every run.
     const syncOwned = {
@@ -172,7 +253,7 @@ async function syncCourses(
       city: parsed.city || "—",
       month: MONTHS_IT[parsed.month - 1],
       year: parsed.year,
-      start_date: `${parsed.year}-${String(parsed.month).padStart(2, "0")}-01`,
+      start_date: `${parsed.year}-${mm}-${dd}`,
       price_cents: price,
     };
 
@@ -187,7 +268,7 @@ async function syncCourses(
       // Backfill the educator only when it's still missing (never overwrite a
       // manual assignment).
       if (educatorByExt.get(String(p.id)) == null) {
-        const eid = await resolveEducatorId(p.id);
+        const eid = resolveEducatorByName((await getMf()).sake_educator || null);
         if (eid != null) {
           await sb
             .from("corsi")
@@ -200,7 +281,7 @@ async function syncCourses(
       // New course: seed staff-owned columns once. inventory_quantity is the
       // REMAINING stock, used only as an initial capacity hint.
       const capacity = Math.max(variant?.inventory_quantity ?? 0, 0);
-      const educatorId = await resolveEducatorId(p.id);
+      const educatorId = resolveEducatorByName((await getMf()).sake_educator || null);
       const { error } = await sb.from("corsi").insert({
         ...syncOwned,
         lifecycle: "pubblicato",
