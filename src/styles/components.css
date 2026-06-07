@@ -205,7 +205,8 @@
 
 .topbar-search {
   flex: 1;
-  max-width: 460px;
+  max-width: 720px;
+  margin-right: auto;
   position: relative;
 }
 .topbar-search input {

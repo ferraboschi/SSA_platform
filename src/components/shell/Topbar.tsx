@@ -1,9 +1,7 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { Crumbs, Icon, type Crumb } from "@/components/ui";
-import { NAV_ITEMS, type NavGroup } from "@/lib/auth";
-import { useT } from "@/lib/i18n";
+import { Icon } from "@/components/ui";
+import type { NavGroup } from "@/lib/auth";
 import type { Notification } from "@/lib/domain";
 import type { SearchIndex } from "@/lib/shell";
 import type { ConnectionStatus } from "@/lib/integrations/config";
@@ -28,10 +26,6 @@ const CONNECTION_LABELS: { key: keyof ConnectionStatus; label: string }[] = [
 ];
 
 export function Topbar({ nav, searchIndex, notifications, connections, onMenu }: TopbarProps) {
-  const t = useT();
-  const pathname = usePathname();
-  const crumbs = buildCrumbs(pathname, t);
-
   return (
     <header className="topbar">
       <button
@@ -41,9 +35,9 @@ export function Topbar({ nav, searchIndex, notifications, connections, onMenu }:
       >
         <Icon name="grid" size={16} />
       </button>
-      {crumbs.length > 0 && <Crumbs items={crumbs} />}
-      <div style={{ flex: 1 }}></div>
 
+      {/* Search sits on the left and fills the space (the page title lives in the
+          page header, so it isn't repeated here). */}
       <GlobalSearch index={searchIndex} nav={nav} />
 
       <div className="topbar-right">
@@ -69,25 +63,4 @@ export function Topbar({ nav, searchIndex, notifications, connections, onMenu }:
       </div>
     </header>
   );
-}
-
-type T = ReturnType<typeof useT>;
-
-function buildCrumbs(pathname: string, t: T): Crumb[] {
-  const segments = pathname.split("/").filter(Boolean);
-  if (segments.length === 0) return [];
-
-  const items = t.nav.items as Record<string, string>;
-  const rootHref = "/" + segments[0];
-  const rootItem = NAV_ITEMS.find((it) => it.href === rootHref);
-  const rootLabel = rootItem ? items[rootItem.id] : segments[0];
-
-  if (segments.length === 1) {
-    return [{ label: rootLabel }];
-  }
-
-  return [
-    { label: rootLabel, href: rootHref },
-    { label: decodeURIComponent(segments[segments.length - 1]) },
-  ];
 }
