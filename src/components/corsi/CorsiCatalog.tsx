@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { toCsv, downloadCsv } from "@/lib/csv";
@@ -21,9 +22,15 @@ type ViewMode = "timeline" | "grid" | "table";
 export function CorsiCatalog({
   items,
   filterOptions,
+  initialType,
+  backHref,
 }: {
   items: CourseListItem[];
   filterOptions: CatalogFilterOptions;
+  /** Pre-selected type filter (e.g. deep-linked from the planner). */
+  initialType?: string;
+  /** When set, show a back link (e.g. "← Pianificatore"). */
+  backHref?: string;
 }) {
   const tr = useT();
   const t = tr.corsi.catalog;
@@ -32,7 +39,7 @@ export function CorsiCatalog({
   const [view, setView] = useState<ViewMode>("timeline");
   const [search, setSearch] = useState("");
   const [filterCity, setFilterCity] = useState("");
-  const [filterType, setFilterType] = useState("");
+  const [filterType, setFilterType] = useState(initialType ?? "");
   const [filterEdu, setFilterEdu] = useState("");
   const [sortKey, setSortKey] = useState<CourseSortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -80,6 +87,22 @@ export function CorsiCatalog({
     <div className="page">
       <div className="page-header">
         <div className="page-title-block">
+          {backHref && (
+            <Link
+              href={backHref}
+              className="link"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 12.5,
+                marginBottom: 6,
+              }}
+            >
+              <Icon name="arrow" size={12} style={{ transform: "rotate(180deg)" }} />
+              Pianificatore
+            </Link>
+          )}
           <div className="eyebrow">{t.eyebrow}</div>
           <h1 className="page-title">{t.title}</h1>
           <p className="page-sub">{t.sub}</p>

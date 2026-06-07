@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, type CSSProperties, type DragEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { CITIES, type CourseTypeKey } from "@/lib/domain";
@@ -559,6 +560,7 @@ function PL_BarsByTypeView({
   typeLabels,
 }: ViewProps & { types: CourseTypeKey[]; typeLabels: Record<CourseTypeKey, string> }) {
   const t = useT().pianificatore;
+  const router = useRouter();
   const [over, setOver] = useState<string | null>(null);
   const data = win.map((w) => {
     const cs = monthCourses(courses, w.year, w.mIdx);
@@ -568,6 +570,9 @@ function PL_BarsByTypeView({
   });
   const max = Math.max(3, ...data.map((d) => d.total));
   const H = 168;
+  // Click a bar segment → open Corsi pre-filtered by that type (back returns here).
+  const openCourses = (ty: CourseTypeKey) =>
+    router.push(`/corsi?type=${ty}&from=pianificatore`);
   return (
     <div>
       <div style={{ display: "flex", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
@@ -584,7 +589,7 @@ function PL_BarsByTypeView({
           );
         })}
       </div>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: H + 26, paddingTop: 4 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: H + 96, paddingTop: 4 }}>
         {data.map((d) => {
           const isOver = over === d.w.key;
           return (
@@ -640,8 +645,26 @@ function PL_BarsByTypeView({
                     return (
                       <div
                         key={ty}
-                        title={`${typeLabels[ty]}: ${n}`}
-                        style={{ height: (n / max) * H, background: tc.solid, borderRadius: 3, minHeight: 6 }}
+                        role="button"
+                        tabIndex={0}
+                        title={`${typeLabels[ty]}: ${n} — apri i corsi`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCourses(ty);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openCourses(ty);
+                          }
+                        }}
+                        style={{
+                          height: (n / max) * H,
+                          background: tc.solid,
+                          borderRadius: 3,
+                          minHeight: 6,
+                          cursor: "pointer",
+                        }}
                       />
                     );
                   })
