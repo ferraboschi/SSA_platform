@@ -56,7 +56,9 @@ export function MonthlyReportModal({
     ) || periods[0];
 
   const [key, setKey] = useState(`${withPast.year}-${withPast.mIdx}`);
-  const [filter, setFilter] = useState<"tutti" | "introduttivo" | "certificato" | "shochu" | "annullati">("tutti");
+  const [filter, setFilter] = useState<
+    "tutti" | "introduttivo" | "certificato" | "shochu" | "masterclass" | "mixology" | "annullati"
+  >("tutti");
   const [yy, mm] = key.split("-").map(Number);
 
   const inMonth = courses
@@ -219,6 +221,8 @@ export function MonthlyReportModal({
                 ["introduttivo", "Introduttivo"],
                 ["certificato", "Certificato"],
                 ["shochu", "Shochu"],
+                ["masterclass", "Masterclass"],
+                ["mixology", "Mixology"],
                 ["annullati", "Annullati"],
               ] as const
             ).map(([k, label]) => {
@@ -228,6 +232,8 @@ export function MonthlyReportModal({
                   : k === "annullati"
                     ? inMonth.filter((c) => isAnnullato(c)).length
                     : inMonth.filter((c) => c.type === k && !isAnnullato(c)).length;
+              // Hide empty type pills (keep Tutti + Annullati always visible).
+              if (n === 0 && k !== "tutti" && k !== "annullati" && filter !== k) return null;
               return (
                 <button
                   key={k}
