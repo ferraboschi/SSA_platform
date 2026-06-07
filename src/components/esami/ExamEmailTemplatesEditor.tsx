@@ -85,12 +85,16 @@ export function ExamEmailTemplatesEditor({
     });
   };
 
-  const preview = renderExamEmail(cur, {
-    nome: "Mario Rossi",
-    corso: "Sake Sommelier Certificato",
-    punteggio: 82,
-    esito: OUTCOME_LABEL_IT[active],
-  });
+  const preview = renderExamEmail(
+    cur,
+    {
+      nome: "Mario Rossi",
+      corso: "Sake Sommelier Certificato",
+      punteggio: 82,
+      esito: OUTCOME_LABEL_IT[active],
+    },
+    { reportUrl: "#", outcome: active },
+  );
 
   return (
     <div className="page">

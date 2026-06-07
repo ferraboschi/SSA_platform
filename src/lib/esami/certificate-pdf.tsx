@@ -6,16 +6,36 @@ import "server-only";
 // font); the result email also links to the on-screen report, which prints JA
 // via the browser's system fonts.
 
+import { readFileSync } from "fs";
+import { join } from "path";
 import {
   Document,
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { REPORT_I18N, type ReportLang } from "@/lib/i18n/report";
 import type { ExamFamily } from "@/lib/domain";
+
+// SSA logo loaded once as a data URI for the PDF header (falls back to a text
+// mark if the asset can't be read).
+const LOGO_DATA_URI: string | null = (() => {
+  try {
+    const buf = readFileSync(join(process.cwd(), "public", "ssa-logo.png"));
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+})();
+
+const PRIVACY_NOTE: Record<ReportLang, string> = {
+  it: "Questo esito è personale: ti chiediamo di non pubblicare questo documento sui social.",
+  en: "This result is personal: please do not publish this document on social media.",
+  ja: "この結果は個人的なものです。本書類をSNS上に公開しないようお願いします。",
+};
 
 export interface CertificatePdfInput {
   name: string;
@@ -44,6 +64,8 @@ const styles = StyleSheet.create({
   brand: { fontSize: 9, color: COLORS.mute, letterSpacing: 1, textTransform: "uppercase", fontFamily: "Helvetica-Bold" },
   certWord: { fontSize: 13, marginTop: 4, fontFamily: "Helvetica-Bold" },
   mark: { width: 34, height: 34, backgroundColor: COLORS.navy, color: "#fff", textAlign: "center", paddingTop: 8, fontSize: 16, fontFamily: "Helvetica-Bold", borderRadius: 4 },
+  logo: { height: 38, objectFit: "contain" },
+  privacy: { fontSize: 9, color: COLORS.faint, fontStyle: "italic", marginTop: 22, lineHeight: 1.4 },
   family: { fontSize: 9, color: COLORS.mute, letterSpacing: 1, textTransform: "uppercase", marginTop: 22, fontFamily: "Helvetica-Bold" },
   name: { fontSize: 26, marginTop: 6, fontFamily: "Helvetica-Bold" },
   meta: { fontSize: 10, color: COLORS.mute, marginTop: 8 },
@@ -82,7 +104,11 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
           <Text style={styles.brand}>Sake Sommelier Association</Text>
           <Text style={styles.certWord}>{t.cert}</Text>
         </View>
-        <Text style={styles.mark}>S</Text>
+        {LOGO_DATA_URI ? (
+          <Image src={LOGO_DATA_URI} style={styles.logo} />
+        ) : (
+          <Text style={styles.mark}>S</Text>
+        )}
       </View>
 
       <Text style={styles.family}>{t.family[input.family]}</Text>
@@ -116,6 +142,8 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
           ))}
         </>
       )}
+
+      <Text style={styles.privacy}>{PRIVACY_NOTE[lang]}</Text>
 
       <View style={styles.footer}>
         <Text>{t.issued}: {issued}</Text>

@@ -31,30 +31,40 @@ export const EXAM_EMAIL_VARS: { key: string; desc: string }[] = [
 
 export const DEFAULT_EXAM_EMAIL_TEMPLATES: ExamEmailTemplates = {
   passed: {
-    subject: "Esito esame SSA · {corso}",
+    subject: "Hai superato l'esame SSA · {corso}",
     body:
       "Ciao {nome},\n\n" +
-      "complimenti! Hai superato l'esame del corso {corso} con un punteggio del {punteggio}%.\n\n" +
-      "In allegato trovi il tuo certificato; puoi anche aprirlo dal pulsante qui sotto.\n\n" +
+      "complimenti! Hai superato l'esame del corso {corso} con un punteggio del {punteggio}%. È un traguardo di cui andare fieri.\n\n" +
+      "In allegato trovi il tuo certificato ufficiale. Continua il tuo percorso con gli altri corsi SSA: sarebbe un piacere riaverti in aula.\n\n" +
       "A presto,\nSake Sommelier Association",
   },
   retrial: {
     subject: "Esito esame SSA · {corso}",
     body:
       "Ciao {nome},\n\n" +
-      "il tuo esame del corso {corso} si è concluso con un punteggio del {punteggio}%: sei ammesso al recupero.\n\n" +
-      "Ti contatteremo a breve con le indicazioni per la prova di recupero.\n\n" +
+      "il tuo esame del corso {corso} si è concluso con un punteggio del {punteggio}%: sei ammesso al recupero. Ci sei quasi!\n\n" +
+      "Ti contatteremo a breve con le indicazioni per la prova di recupero. In allegato trovi il dettaglio del tuo esito.\n\n" +
       "A presto,\nSake Sommelier Association",
   },
   failed: {
     subject: "Esito esame SSA · {corso}",
     body:
       "Ciao {nome},\n\n" +
-      "il tuo esame del corso {corso} si è concluso con un punteggio del {punteggio}%, che non raggiunge la soglia di superamento.\n\n" +
-      "Per qualsiasi chiarimento siamo a tua disposizione.\n\n" +
+      "il tuo esame del corso {corso} si è concluso con un punteggio del {punteggio}%, che non raggiunge la soglia di superamento. Non scoraggiarti: può capitare e puoi riprovare.\n\n" +
+      "Puoi ripartecipare allo stesso corso gratuitamente: scrivi a corsi@sakesommelierassociation.it e organizziamo una nuova data per te. In allegato trovi il dettaglio del tuo esito.\n\n" +
       "Un caro saluto,\nSake Sommelier Association",
   },
 };
+
+// Branded email assets (absolute URLs — emails can't reference local files).
+const LOGO_URL = "https://platform.sakesommelierassociation.it/ssa-logo.png";
+const COURSES_URL = "https://www.sakesommelierassociation.it";
+const ACCENT: Record<ExamOutcome, string> = {
+  passed: "#15803d",
+  retrial: "#b45309",
+  failed: "#b42318",
+};
+const COURSE_LIST = ["Introduttivo", "Certificato", "Shochu", "Masterclass"];
 
 export interface ExamEmailVars {
   nome: string;
@@ -92,21 +102,53 @@ export function bodyToHtml(body: string, v: ExamEmailVars): string {
     .join("");
 }
 
-/** Full email: subject + the fixed SSA shell wrapping the rendered body. */
+/** Full email: subject + the fixed branded SSA shell wrapping the rendered body,
+ *  a prominent score badge, the certificate + courses CTAs, and the privacy note. */
 export function renderExamEmail(
   tpl: ExamEmailTemplate,
   v: ExamEmailVars,
-  reportUrl?: string,
+  opts?: { reportUrl?: string; outcome?: ExamOutcome },
 ): { subject: string; html: string } {
   const subject = fillVars(tpl.subject, v);
-  const button = reportUrl
-    ? `<p style="margin:22px 0 6px"><a href="${reportUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600">Apri il certificato</a></p>`
+  const outcome = opts?.outcome ?? "passed";
+  const accent = ACCENT[outcome];
+
+  // Prominent score badge ("valorizza la numerica").
+  const scoreBadge = `<table role="presentation" width="100%" style="margin:8px 0 20px"><tr><td>
+    <div style="border:2px solid ${accent};border-radius:12px;padding:18px 20px;text-align:center">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${accent}">Punteggio</div>
+      <div style="font-size:46px;line-height:1.05;font-weight:800;color:${accent};margin:4px 0">${v.punteggio}%</div>
+      <div style="font-size:14px;font-weight:700;color:${accent}">${v.esito}</div>
+    </div>
+  </td></tr></table>`;
+
+  const certButton = opts?.reportUrl
+    ? `<p style="margin:8px 0 4px"><a href="${opts.reportUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Apri il certificato</a></p>`
     : "";
-  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a">
-    <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5">Sake Sommelier Association</div>
-    <div style="margin-top:14px">${bodyToHtml(tpl.body, v)}</div>
-    ${button}
-    <p style="font-size:11px;color:#9ca3af;margin-top:20px">Email automatica · Sake Sommelier Association</p>
+
+  const coursesCta = `<div style="margin-top:26px;padding-top:18px;border-top:1px solid #ececf1">
+    <div style="font-size:13px;font-weight:700;color:#1a1a2e">Continua il tuo percorso con SSA</div>
+    <div style="font-size:13px;color:#6b7280;margin:6px 0 12px">${COURSE_LIST.join(" · ")}</div>
+    <a href="${COURSES_URL}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600">Vedi tutti i corsi</a>
+  </div>`;
+
+  const privacy = `<p style="font-size:11.5px;color:#9ca3af;line-height:1.5;margin-top:22px;font-style:italic">
+    Questo esito è personale: ti chiediamo di non pubblicare questo documento sui social.
+  </p>`;
+
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #ececf1;border-radius:14px;overflow:hidden">
+    <div style="padding:24px 28px 18px;text-align:center;border-bottom:1px solid #ececf1">
+      <img src="${LOGO_URL}" alt="Sake Sommelier Association" height="44" style="height:44px;width:auto" />
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#4f46e5;margin-top:8px">Sake Sommelier Association</div>
+    </div>
+    <div style="padding:24px 28px;color:#1a1a1a">
+      ${scoreBadge}
+      <div>${bodyToHtml(tpl.body, v)}</div>
+      ${certButton}
+      ${coursesCta}
+      ${privacy}
+      <p style="font-size:11px;color:#c0c4cc;margin-top:18px">Email automatica · Sake Sommelier Association</p>
+    </div>
   </div>`;
   return { subject, html };
 }

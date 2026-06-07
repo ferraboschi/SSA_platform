@@ -153,7 +153,7 @@ export async function sendExamResultEmail(input: ExamResultEmailInput): Promise<
       punteggio: input.scorePct,
       esito: OUTCOME_LABEL_IT[input.status],
     },
-    input.reportUrl,
+    { reportUrl: input.reportUrl, outcome: input.status },
   );
   return getEmailService().send({
     to: input.to,

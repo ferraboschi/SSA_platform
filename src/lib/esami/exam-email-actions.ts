@@ -7,6 +7,7 @@
 import { assertRole } from "@/lib/auth/guard";
 import { getEmailService } from "@/lib/integrations/email";
 import { appConfig } from "@/lib/integrations/config";
+import { renderCertificatePdf } from "./certificate-pdf";
 import { loadExamEmailTemplates, writeExamEmailTemplates } from "./exam-email-store";
 import {
   renderExamEmail,
@@ -66,14 +67,34 @@ export async function sendExamResultTestAction(
       punteggio: 82,
       esito: OUTCOME_LABEL_IT[outcome],
     },
-    `${base}/esami`,
+    { reportUrl: `${base}/esami`, outcome },
   );
+  // Attach a sample outcome PDF so the test also shows the branded attachment.
+  let attachments: { filename: string; content: string; contentType?: string }[] | undefined;
+  try {
+    const buf = await renderCertificatePdf({
+      name: "Mario Rossi",
+      family: "nihonshu",
+      status: outcome,
+      score: 82,
+      sections: [],
+      course: { day: 14, month: "Settembre", year: 2026, city: "Online", educatorName: "—" },
+      completedAt: new Date().toISOString(),
+    });
+    attachments = [
+      { filename: "esito-esame-prova.pdf", content: buf.toString("base64"), contentType: "application/pdf" },
+    ];
+  } catch {
+    /* PDF is best-effort for the test — still send the email */
+  }
+
   try {
     const res = await getEmailService().send({
       to: dest,
       subject: `[PROVA] ${subject}`,
       html,
       tag: "exam-result-test",
+      attachments,
     });
     if (res.status === "skipped") {
       return { ok: true, status: "skipped", error: "Email non configurata (Resend assente)." };
