@@ -20,6 +20,12 @@ export function EsamiHub({ data }: { data: ExamHubData }) {
           <h1 className="page-title">{t.title}</h1>
           <p className="page-sub">{t.sub}</p>
         </div>
+        <div className="page-actions">
+          <Link className="btn" href="/esami/email-templates">
+            <Icon name="mail" size={13} />
+            Modelli email esito
+          </Link>
+        </div>
       </div>
 
       <div className="kpi-grid cols-4" style={{ marginBottom: 24 }}>
