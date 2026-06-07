@@ -15,6 +15,8 @@ import {
 import { useT } from "@/lib/i18n";
 import { CITIES } from "@/lib/domain";
 import type { User } from "@/lib/domain";
+import { InstallAppButton } from "@/components/pwa/InstallAppButton";
+import { EnablePushButton } from "@/components/pwa/EnablePushButton";
 
 function Field({
   label,
@@ -526,6 +528,22 @@ export function AccountClient({
               );
             })}
           </div>
+        </div>
+      </section>
+
+      <section className="card card-pad" style={{ marginTop: 24 }}>
+        <div className="eyebrow" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+          <Icon name="smartphone" size={12} />
+          App e notifiche
+        </div>
+        <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 14, lineHeight: 1.5, maxWidth: 460 }}>
+          Installa la piattaforma come app sul telefono (senza store) e attiva le
+          notifiche per ricevere allerte e aggiornamenti. Su iPhone, installa
+          prima l’app e poi riaprila per abilitare le notifiche.
+        </div>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          <InstallAppButton />
+          <EnablePushButton />
         </div>
       </section>
 

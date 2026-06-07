@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { LOCALE_META } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
@@ -24,6 +24,20 @@ export const metadata: Metadata = {
   title: "SSA — Sake Sommelier Association",
   description:
     "Piattaforma di gestione SSA: corsi, corsisti, educator, esami e pianificazione.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "SSA",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1a1a2e",
 };
 
 export default async function RootLayout({

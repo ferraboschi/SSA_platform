@@ -9,6 +9,7 @@ import { appConfig, supabaseConfig, getConnectionStatus } from "@/lib/integratio
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { getShellData } from "@/lib/shell-data";
 import { Shell } from "@/components/shell/Shell";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 
 export default async function AppLayout({
   children,
@@ -45,6 +46,7 @@ export default async function AppLayout({
   return (
     <I18nProvider locale={locale} dictionary={t}>
       <SessionProvider session={session}>
+        <ServiceWorkerRegister />
         <Shell
           nav={nav}
           counts={shell.counts}
