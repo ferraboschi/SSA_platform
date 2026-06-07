@@ -58,13 +58,18 @@ export const DEFAULT_EXAM_EMAIL_TEMPLATES: ExamEmailTemplates = {
 
 // Branded email assets (absolute URLs — emails can't reference local files).
 const LOGO_URL = "https://platform.sakesommelierassociation.it/ssa-logo.png";
-const COURSES_URL = "https://www.sakesommelierassociation.it";
+const COURSES_URL = "https://www.sakesommelierassociation.it/collections/tutti-i-corsi";
 const ACCENT: Record<ExamOutcome, string> = {
   passed: "#15803d",
   retrial: "#b45309",
   failed: "#b42318",
 };
-const COURSE_LIST = ["Introduttivo", "Certificato", "Shochu", "Masterclass"];
+// Fallback when no live upcoming courses are available (e.g. editor preview).
+const COURSE_LIST_FALLBACK = ["Introduttivo", "Certificato", "Shochu", "Masterclass"];
+
+export interface UpcomingCourseLine {
+  label: string;
+}
 
 export interface ExamEmailVars {
   nome: string;
@@ -107,7 +112,7 @@ export function bodyToHtml(body: string, v: ExamEmailVars): string {
 export function renderExamEmail(
   tpl: ExamEmailTemplate,
   v: ExamEmailVars,
-  opts?: { reportUrl?: string; outcome?: ExamOutcome },
+  opts?: { reportUrl?: string; outcome?: ExamOutcome; courses?: UpcomingCourseLine[] },
 ): { subject: string; html: string } {
   const subject = fillVars(tpl.subject, v);
   const outcome = opts?.outcome ?? "passed";
@@ -126,9 +131,18 @@ export function renderExamEmail(
     ? `<p style="margin:8px 0 4px"><a href="${opts.reportUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Apri il certificato</a></p>`
     : "";
 
+  const courseList =
+    opts?.courses && opts.courses.length
+      ? opts.courses
+          .map(
+            (c) =>
+              `<tr><td style="padding:5px 0;font-size:13px;color:#1a1a1a;border-bottom:1px solid #f3f3f6">${escapeHtml(c.label)}</td></tr>`,
+          )
+          .join("")
+      : `<tr><td style="padding:5px 0;font-size:13px;color:#6b7280">${COURSE_LIST_FALLBACK.join(" · ")}</td></tr>`;
   const coursesCta = `<div style="margin-top:26px;padding-top:18px;border-top:1px solid #ececf1">
-    <div style="font-size:13px;font-weight:700;color:#1a1a2e">Continua il tuo percorso con SSA</div>
-    <div style="font-size:13px;color:#6b7280;margin:6px 0 12px">${COURSE_LIST.join(" · ")}</div>
+    <div style="font-size:13px;font-weight:700;color:#1a1a2e">Continua il tuo percorso · prossimi corsi</div>
+    <table role="presentation" width="100%" style="margin:8px 0 14px">${courseList}</table>
     <a href="${COURSES_URL}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600">Vedi tutti i corsi</a>
   </div>`;
 

@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth/session";
 import { loadExamEmailTemplates } from "@/lib/esami/exam-email-store";
+import { getUpcomingCourseLines } from "@/lib/esami/upcoming-courses";
 import { ExamEmailTemplatesEditor } from "@/components/esami/ExamEmailTemplatesEditor";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +17,15 @@ export default async function Page() {
       </div>
     );
   }
-  const templates = await loadExamEmailTemplates();
+  const [templates, upcoming] = await Promise.all([
+    loadExamEmailTemplates(),
+    getUpcomingCourseLines(4),
+  ]);
   return (
-    <ExamEmailTemplatesEditor initial={templates} testTo={session.user.email || ""} />
+    <ExamEmailTemplatesEditor
+      initial={templates}
+      testTo={session.user.email || ""}
+      upcoming={upcoming}
+    />
   );
 }

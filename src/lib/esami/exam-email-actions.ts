@@ -9,6 +9,7 @@ import { getEmailService } from "@/lib/integrations/email";
 import { appConfig } from "@/lib/integrations/config";
 import { renderCertificatePdf } from "./certificate-pdf";
 import { loadExamEmailTemplates, writeExamEmailTemplates } from "./exam-email-store";
+import { getUpcomingCourseLines } from "./upcoming-courses";
 import {
   renderExamEmail,
   EXAM_OUTCOMES,
@@ -59,6 +60,7 @@ export async function sendExamResultTestAction(
     return { ok: false, error: "Oggetto e testo sono obbligatori." };
   }
   const base = appConfig.baseUrl.replace(/\/$/, "");
+  const courses = await getUpcomingCourseLines(4);
   const { subject, html } = renderExamEmail(
     tpl,
     {
@@ -67,7 +69,7 @@ export async function sendExamResultTestAction(
       punteggio: 82,
       esito: OUTCOME_LABEL_IT[outcome],
     },
-    { reportUrl: `${base}/esami`, outcome },
+    { reportUrl: `${base}/esami`, outcome, courses },
   );
   // Attach a sample outcome PDF so the test also shows the branded attachment.
   let attachments: { filename: string; content: string; contentType?: string }[] | undefined;

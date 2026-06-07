@@ -10,6 +10,7 @@ import {
   EXAM_EMAIL_VARS,
   type ExamEmailTemplates,
   type ExamOutcome,
+  type UpcomingCourseLine,
 } from "@/lib/esami/exam-email";
 import {
   saveExamEmailTemplatesAction,
@@ -25,9 +26,11 @@ const OUTCOME_TONE: Record<ExamOutcome, string> = {
 export function ExamEmailTemplatesEditor({
   initial,
   testTo,
+  upcoming = [],
 }: {
   initial: ExamEmailTemplates;
   testTo: string;
+  upcoming?: UpcomingCourseLine[];
 }) {
   const [templates, setTemplates] = useState<ExamEmailTemplates>(initial);
   const [active, setActive] = useState<ExamOutcome>("passed");
@@ -93,7 +96,7 @@ export function ExamEmailTemplatesEditor({
       punteggio: 82,
       esito: OUTCOME_LABEL_IT[active],
     },
-    { reportUrl: "#", outcome: active },
+    { reportUrl: "#", outcome: active, courses: upcoming },
   );
 
   return (

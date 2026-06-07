@@ -10,6 +10,7 @@ import { appConfig, alertRecipients } from "@/lib/integrations/config";
 import { getEmailService, type EmailSendResult } from "@/lib/integrations/email";
 import { loadExamEmailTemplates } from "@/lib/esami/exam-email-store";
 import { renderExamEmail, OUTCOME_LABEL_IT } from "@/lib/esami/exam-email";
+import { getUpcomingCourseLines } from "@/lib/esami/upcoming-courses";
 
 function loginLink(path = "/dashboard"): string {
   const base = appConfig.baseUrl.replace(/\/$/, "");
@@ -144,7 +145,10 @@ export interface ExamResultEmailInput {
 /** Personal exam-result email to the student. Uses the staff-editable templates
  *  (one per outcome), rendered with the student's data + certificate link. */
 export async function sendExamResultEmail(input: ExamResultEmailInput): Promise<EmailSendResult> {
-  const templates = await loadExamEmailTemplates();
+  const [templates, courses] = await Promise.all([
+    loadExamEmailTemplates(),
+    getUpcomingCourseLines(4),
+  ]);
   const { subject, html } = renderExamEmail(
     templates[input.status],
     {
@@ -153,7 +157,7 @@ export async function sendExamResultEmail(input: ExamResultEmailInput): Promise<
       punteggio: input.scorePct,
       esito: OUTCOME_LABEL_IT[input.status],
     },
-    { reportUrl: input.reportUrl, outcome: input.status },
+    { reportUrl: input.reportUrl, outcome: input.status, courses },
   );
   return getEmailService().send({
     to: input.to,
