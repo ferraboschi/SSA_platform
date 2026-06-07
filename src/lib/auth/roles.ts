@@ -20,7 +20,6 @@ export const CAPABILITIES = [
   "settings:manage",
   "finance:view",
   "communications:manage",
-  "designSystem:view",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

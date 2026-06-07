@@ -26,7 +26,6 @@ export const en: Dictionary = {
       anomalie: "Anomalies",
       educator: "Educators",
       account: "Account",
-      "design-system": "Design system",
     },
   },
 

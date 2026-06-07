@@ -28,7 +28,6 @@ export const it = {
       anomalie: "Anomalie",
       educator: "Educator",
       account: "Account",
-      "design-system": "Design system",
     },
   },
 

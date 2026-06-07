@@ -44,8 +44,6 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "educator", icon: "graduation", href: "/educator", group: "persone" },
   { id: "analisi", icon: "trending", href: "/analisi", group: "sistema" },
   { id: "account", icon: "user", href: "/account", group: "sistema" },
-  // Conto economico lives at the bottom (in "sistema"): for admin/manager it sits
-  // low in the menu, while finance roles (social/accountant) pin it to the top of
-  // their group via ROLE_VIEWS.priority.
-  { id: "conto-economico", icon: "note", href: "/conto-economico", group: "sistema" },
+  // NOTE: "conto-economico" is intentionally NOT listed here — it's hidden from
+  // the menu (the page still exists at /conto-economico if reached directly).
 ];
