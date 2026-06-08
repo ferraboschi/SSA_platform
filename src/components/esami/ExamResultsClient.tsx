@@ -7,8 +7,10 @@ import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
 import { gradeEnrollmentAction } from "@/lib/exam-links/grading-actions";
 import { gradeOpenAnswerAction, type GradeOpenResult } from "@/lib/esami/ai-actions";
 import { FeedbackSummary } from "./FeedbackSummary";
+import { SendResultsSection } from "./SendResultsSection";
 import type { ExamOutcome, GradedSubmission } from "@/lib/exam-links/results";
 import type { FeedbackAggregateResult } from "@/lib/exam-links/feedback-results";
+import type { ExamResult } from "@/lib/domain";
 
 const OUTCOME_TONE: Record<string, BadgeTone> = {
   passed: "success",
@@ -31,12 +33,16 @@ export function ExamResultsClient({
   hasExam,
   results,
   feedback,
+  confirmedResults = [],
+  adminEmail = "",
 }: {
   courseId: string;
   courseTitle: string;
   hasExam: boolean;
   results: GradedSubmission[];
   feedback?: FeedbackAggregateResult | null;
+  confirmedResults?: ExamResult[];
+  adminEmail?: string;
 }) {
   const [expanded, setExpanded] = useState<number | null>(null);
   const router = useRouter();
@@ -122,6 +128,10 @@ export function ExamResultsClient({
             </tbody>
           </table>
         </div>
+      )}
+
+      {hasExam && (
+        <SendResultsSection courseId={courseId} results={confirmedResults} adminEmail={adminEmail} />
       )}
 
       {hasExam && feedback && <FeedbackSummary data={feedback} />}

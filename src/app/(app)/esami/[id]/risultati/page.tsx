@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getDataSource } from "@/lib/data";
 import { requireNavAccess } from "@/lib/auth/guard";
+import { getSession } from "@/lib/auth/session";
 import { loadCourseExamResults } from "@/lib/exam-links/results";
 import { loadCourseFeedbackResults } from "@/lib/exam-links/feedback-results";
 import { ExamResultsClient } from "@/components/esami/ExamResultsClient";
@@ -18,12 +19,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   const family: "nihonshu" | "shochu" | null =
     course.type === "certificato" ? "nihonshu" : course.type === "shochu" ? "shochu" : null;
-  const [results, feedback] = family
+  const [results, feedback, session] = family
     ? await Promise.all([
         loadCourseExamResults(course.id, family),
         loadCourseFeedbackResults(course.id, family),
+        getSession(),
       ])
-    : [[], null];
+    : [[], null, await getSession()];
 
   return (
     <ExamResultsClient
@@ -32,6 +34,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       hasExam={!!family}
       results={results}
       feedback={feedback}
+      confirmedResults={course.examResults2 ?? []}
+      adminEmail={session?.user?.email ?? ""}
     />
   );
 }

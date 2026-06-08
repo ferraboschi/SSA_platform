@@ -22,8 +22,12 @@ export interface SendExamResultResult {
 export async function sendExamResultEmailAction(
   courseId: string,
   email: string,
+  opts?: { toOverride?: string },
 ): Promise<SendExamResultResult> {
   if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
+  // TEST MODE: while not operational, the caller passes toOverride to route the
+  // email to staff instead of the student. Remove the override at go-live.
+  const dest = opts?.toOverride?.trim() || email;
   const ds = await getDataSource();
   const course = await ds.courses.getById(courseId);
   const result = course?.examResults2?.find((r) => r.email === email);
@@ -59,7 +63,7 @@ export async function sendExamResultEmailAction(
     }
 
     const res = await sendExamResultEmail({
-      to: email, // the student's address
+      to: dest, // student, or the test override
       studentName: result.name,
       courseTitle: course.shortTitle || course.title,
       scorePct: result.score,
@@ -68,7 +72,7 @@ export async function sendExamResultEmailAction(
       pdf,
     });
     const status = !pdf && res.status === "sent" ? "sent_without_attachment" : res.status;
-    return { ok: true, status, sentTo: email };
+    return { ok: true, status, sentTo: dest };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invio non riuscito." };
   }
