@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyExamToken } from "@/lib/exam-links/token";
 import { loadPublicExam } from "@/lib/exam-links/load";
-import { ExamRunner } from "@/components/esame-pubblico/ExamRunner";
+import { ExamGate } from "@/components/esame-pubblico/ExamGate";
 import "@/components/esame-pubblico/exam-public.css";
 
 export const metadata: Metadata = {
@@ -53,8 +53,12 @@ export default async function Page({
   if (!corso) return <Invalid reason="Corso non trovato." />;
 
   const family = corso.type === "shochu" ? "shochu" : "nihonshu";
-  const validate = res.payload.m === "validate";
-  const data = await loadPublicExam(res.payload.c, family, res.payload.t, validate);
+  const mode = res.payload.m;
+  const isPreview = mode === "test" || mode === "validate";
+  // Previews load the correct answers so the runner can compute the outcome at
+  // the end. Only "validate" reveals answers DURING the run; "test" is a clean
+  // student-like preview that ends with the computed esito.
+  const data = await loadPublicExam(res.payload.c, family, res.payload.t, isPreview);
   if (!data) return <Invalid reason="Corso non trovato." />;
 
   const baseLabel =
@@ -63,14 +67,17 @@ export default async function Page({
       : res.payload.t === "feedback"
         ? "Feedback"
         : `Test ${res.payload.t.replace("day", "giorno ")}`;
-  const testLabel = validate ? `${baseLabel} · VALIDAZIONE` : baseLabel;
+  const testLabel =
+    mode === "validate" ? `${baseLabel} · VALIDAZIONE` : mode === "test" ? `${baseLabel} · ANTEPRIMA` : baseLabel;
 
   return (
-    <ExamRunner
-      mode={res.payload.m}
+    <ExamGate
+      token={token}
+      mode={mode}
       forcedLang={res.payload.l}
-      collectRegistration={res.payload.t === "final" && !validate}
-      reveal={validate}
+      collectRegistration={res.payload.t === "final" && mode === "exam"}
+      reveal={mode === "validate"}
+      showResult={isPreview}
       header={{
         courseName: data.header.courseName,
         testLabel,
@@ -79,7 +86,6 @@ export default async function Page({
         educator: data.header.educator,
       }}
       questions={data.questions}
-      token={token}
     />
   );
 }

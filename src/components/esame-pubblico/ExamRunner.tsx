@@ -76,6 +76,14 @@ const CHROME: Record<Lang, Record<string, string>> = {
     allReviewed: "Hai completato tutte le domande saltate.",
     exitReview: "Esci dalla revisione",
     dragHint: "Trascina o usa le frecce per ordinare",
+    previewTitle: "Anteprima · esito calcolato",
+    previewScore: "Punteggio (domande oggettive)",
+    previewPassed: "Promosso",
+    previewFailed: "Non superato",
+    previewManual: "domande aperte da valutare a mano",
+    previewNote: "Questa è un'anteprima: nessun esito è stato salvato.",
+    waitTitle: "Sei in sala d'attesa",
+    waitBody: "Attendi che l'educator ti ammetta all'esame. Resta su questa pagina.",
   },
   en: {
     test: "TEST MODE",
@@ -116,6 +124,14 @@ const CHROME: Record<Lang, Record<string, string>> = {
     allReviewed: "You've completed all skipped questions.",
     exitReview: "Exit review",
     dragHint: "Drag or use the arrows to order",
+    previewTitle: "Preview · computed result",
+    previewScore: "Score (objective questions)",
+    previewPassed: "Passed",
+    previewFailed: "Not passed",
+    previewManual: "open questions to grade manually",
+    previewNote: "This is a preview: no result was saved.",
+    waitTitle: "You're in the waiting room",
+    waitBody: "Wait for the educator to admit you to the exam. Stay on this page.",
   },
   ja: {
     test: "テストモード",
@@ -156,8 +172,45 @@ const CHROME: Record<Lang, Record<string, string>> = {
     allReviewed: "スキップした問題をすべて完了しました。",
     exitReview: "確認を終了",
     dragHint: "ドラッグまたは矢印で並べ替え",
+    previewTitle: "プレビュー・計算結果",
+    previewScore: "得点（客観式問題）",
+    previewPassed: "合格",
+    previewFailed: "不合格",
+    previewManual: "手動採点の記述式問題",
+    previewNote: "これはプレビューです。結果は保存されていません。",
+    waitTitle: "待機室にいます",
+    waitBody: "教員が試験への参加を許可するまでお待ちください。このページのままにしてください。",
   },
 };
+
+// Client-side objective grading for the COMPLETE PREVIEW outcome (validate mode,
+// where `correct` is present). Returns true/false, or null when not auto-gradable
+// (open/order/rating, or no correct answer available).
+function gradePreviewQuestion(q: RunnerQuestion, given: string[] | string | undefined): boolean | null {
+  if (!q.correct || q.correct.length === 0) return null;
+  const optionTypes = ["single", "multi", "truefalse", "image"];
+  if (optionTypes.includes(q.type)) {
+    const correctTexts = new Set(
+      (q.correct.filter((c) => typeof c === "number") as number[])
+        .map((i) => q.options[i])
+        .filter((x): x is string => typeof x === "string"),
+    );
+    if (correctTexts.size === 0) return null;
+    const givenArr = Array.isArray(given) ? given : given ? [given] : [];
+    return givenArr.length === correctTexts.size && givenArr.every((g) => correctTexts.has(g));
+  }
+  if (q.type === "fill") {
+    const accepted = (q.correct.filter((c) => typeof c === "string") as string[]).map((s) =>
+      s.trim().toLowerCase(),
+    );
+    if (!accepted.length) return null;
+    const g = (typeof given === "string" ? given : Array.isArray(given) ? given[0] ?? "" : "")
+      .trim()
+      .toLowerCase();
+    return accepted.includes(g);
+  }
+  return null;
+}
 
 // Block copy/cut/paste/right-click on exam content (anti-cheat deterrent).
 const noCopy = {
@@ -180,6 +233,19 @@ function fmtClock(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+export interface ResumeState {
+  answers: Record<string, string[] | string>;
+  currentIdx: number;
+  lang?: string;
+  elapsed: number;
+}
+export interface PersistState {
+  answers: Record<string, string[] | string>;
+  currentIdx: number;
+  lang: string;
+  elapsed: number;
+}
+
 export function ExamRunner({
   mode,
   forcedLang,
@@ -188,6 +254,10 @@ export function ExamRunner({
   header,
   questions,
   token,
+  resumeState,
+  onPersist,
+  onSubmitSession,
+  showResult,
 }: {
   mode: "exam" | "test" | "validate";
   forcedLang?: string;
@@ -197,28 +267,72 @@ export function ExamRunner({
   questions: RunnerQuestion[];
   /** Signed exam token — required to persist a real ("exam") submission. */
   token?: string;
+  /** Restore in-progress state on resume (proctored session). */
+  resumeState?: ResumeState;
+  /** Called (debounced + periodic) to persist progress server-side. */
+  onPersist?: (s: PersistState) => void;
+  /** Submit override (resumable session). When set, replaces the legacy submit. */
+  onSubmitSession?: () => Promise<{ ok: boolean; error?: string }>;
+  /** Preview: at the end, compute + show the outcome instead of a thank-you. */
+  showResult?: boolean;
 }) {
-  // Language is the FIRST step (a gate), unless forced by the link.
+  // Language is the FIRST step (a gate), unless forced by the link or resumed.
   const forced = LANGS.includes(forcedLang as Lang) ? (forcedLang as Lang) : null;
-  const [lang, setLang] = useState<Lang>(forced ?? "it");
-  const [langPicked, setLangPicked] = useState<boolean>(Boolean(forced));
-  const [idx, setIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string[] | string>>({});
+  const resumedLang =
+    resumeState?.lang && LANGS.includes(resumeState.lang as Lang) ? (resumeState.lang as Lang) : null;
+  const [lang, setLang] = useState<Lang>(resumedLang ?? forced ?? "it");
+  const [langPicked, setLangPicked] = useState<boolean>(Boolean(forced) || Boolean(resumedLang));
+  const [idx, setIdx] = useState(resumeState?.currentIdx ?? 0);
+  const [answers, setAnswers] = useState<Record<string, string[] | string>>(
+    resumeState?.answers ?? {},
+  );
   const [done, setDone] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string[] | null>(null);
   const [reviewMode, setReviewMode] = useState(false);
   // Personal scratchpad — constant across questions, never submitted/saved.
   const [notes, setNotes] = useState("");
   const [notesOpen, setNotesOpen] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(resumeState?.elapsed ?? 0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
   const t = CHROME[lang];
 
-  // Persist a real exam submission, then show the thank-you screen. For
-  // test/validate (or a missing token) nothing is written — just finish.
+  // Keep the latest state in a ref for the periodic persist (avoids stale closure).
+  const stateRef = useRef<PersistState>({ answers, currentIdx: idx, lang, elapsed });
+  stateRef.current = { answers, currentIdx: idx, lang, elapsed };
+
+  // Persist on content change (debounced) + periodically (captures the clock).
+  useEffect(() => {
+    if (!onPersist || !langPicked || done) return;
+    const id = setTimeout(() => onPersist(stateRef.current), 1000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers, idx, lang, langPicked, done]);
+  useEffect(() => {
+    if (!onPersist || !langPicked || done) return;
+    const id = setInterval(() => onPersist(stateRef.current), 15000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onPersist, langPicked, done]);
+
+  // Finish: resumable session → onSubmitSession; preview → just show the result
+  // screen; legacy real exam → submitExam; test/validate without result → done.
   const finish = async () => {
-    if (mode !== "exam" || !token) {
+    if (onSubmitSession) {
+      setSubmitting(true);
+      setSubmitError(false);
+      try {
+        const r = await onSubmitSession();
+        if (r.ok) setDone(true);
+        else setSubmitError(true);
+      } catch {
+        setSubmitError(true);
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    if (showResult || mode !== "exam" || !token) {
       setDone(true);
       return;
     }
@@ -358,6 +472,55 @@ export function ExamRunner({
 
   // ── Done / empty ─────────────────────────────────────────────────────────
   if (done || total === 0) {
+    // Complete preview → show the computed outcome (objective questions).
+    if (showResult && total > 0) {
+      let gradable = 0;
+      let correct = 0;
+      let manual = 0;
+      for (const q of questions) {
+        const r = gradePreviewQuestion(q, answers[q.id]);
+        if (r === null) manual++;
+        else {
+          gradable++;
+          if (r) correct++;
+        }
+      }
+      const pct = gradable ? Math.round((correct / gradable) * 100) : 0;
+      const passed = pct >= 80;
+      const accent = passed ? "#15803d" : "#b42318";
+      return (
+        <div className="exam-public-shell">
+          <div className="exam-public-card">
+            {headerBar}
+            <div className="exam-public-thanks" {...noCopy}>
+              <h2 style={{ marginBottom: 14 }}>{t.previewTitle}</h2>
+              <div
+                style={{
+                  border: `2px solid ${accent}`,
+                  borderRadius: 12,
+                  padding: "18px 22px",
+                  margin: "0 auto 14px",
+                  maxWidth: 320,
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: accent }}>
+                  {t.previewScore}
+                </div>
+                <div style={{ fontSize: 46, fontWeight: 800, color: accent, lineHeight: 1.05, margin: "4px 0" }}>{pct}%</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: accent }}>
+                  {passed ? t.previewPassed : t.previewFailed}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)", marginTop: 8 }}>
+                  {correct}/{gradable}
+                  {manual > 0 ? ` · ${manual} ${t.previewManual}` : ""}
+                </div>
+              </div>
+              <p style={{ fontSize: 12.5, color: "var(--text-4, #9ca3af)" }}>{t.previewNote}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="exam-public-shell">
         <div className="exam-public-card">
