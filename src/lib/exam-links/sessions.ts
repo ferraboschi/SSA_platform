@@ -48,6 +48,14 @@ interface SessionRow {
   answers: Record<string, string[] | string> | null;
   elapsed_seconds: number;
   student_name: string;
+  // Present once migration 20260608120000 is applied; undefined before then.
+  session_secret?: string | null;
+  // Set at check-in from the verified token — submit builds the graded row from
+  // THESE, never re-deriving from the token (which may have expired mid-exam).
+  course_ref?: string;
+  corso_id?: number | null;
+  test_key?: string;
+  corsista_id?: number | null;
 }
 function rowToState(r: SessionRow): ExamSessionState {
   return {
@@ -58,6 +66,41 @@ function rowToState(r: SessionRow): ExamSessionState {
     elapsed: r.elapsed_seconds ?? 0,
     studentName: r.student_name,
   };
+}
+
+/**
+ * Load a session by (token, corsista) and enforce the per-session secret.
+ *
+ * The class token is shared with everyone and the roster exposes every
+ * corsista_id, so this secret — handed out ONLY at check-in — is what stops a
+ * classmate from reading/tampering with another student's session through the
+ * API. Enforced server-side: once the `session_secret` column exists, a request
+ * with a wrong/absent secret is rejected (a client can't bypass by omitting it).
+ * Before the migration the column is absent → check is skipped (degrades
+ * gracefully; there are no live exams in that window).
+ */
+async function loadOwnedSession(
+  token: string,
+  corsistaId: number,
+  secret: string | undefined,
+): Promise<{ ok: boolean; row?: SessionRow; error?: string; schema?: boolean }> {
+  const svc = getSupabaseServiceClient();
+  const { data, error } = await svc
+    .from(TABLE)
+    .select("*")
+    .eq("token", token)
+    .eq("corsista_id", corsistaId)
+    .maybeSingle();
+  if (error) {
+    if (isMissingTable(error)) return { ok: false, schema: true, error: "Sessioni esame non disponibili (migrazione mancante)." };
+    return { ok: false, error: error.message };
+  }
+  if (!data) return { ok: false, error: "Sessione non trovata." };
+  const row = data as SessionRow;
+  if (row.session_secret != null && row.session_secret !== secret) {
+    return { ok: false, error: "Sessione non valida." };
+  }
+  return { ok: true, row };
 }
 
 /** PUBLIC: the enrolled roster for the name picker (only for the real exam link). */
@@ -91,7 +134,7 @@ export async function checkInExamSessionAction(
   token: string,
   corsistaId: number,
   studentName: string,
-): Promise<{ ok: boolean; state?: ExamSessionState; error?: string; schema?: boolean }> {
+): Promise<{ ok: boolean; state?: ExamSessionState; secret?: string; error?: string; schema?: boolean }> {
   const ctx = tokenCtx(token);
   if (!ctx) return { ok: false, error: "Link non valido o scaduto." };
   if (ctx.m !== "exam") return { ok: false, error: "Disponibile solo per l'esame reale." };
@@ -116,7 +159,14 @@ export async function checkInExamSessionAction(
   if (selErr && isMissingTable(selErr)) {
     return { ok: false, schema: true, error: "Sessioni esame non disponibili (migrazione mancante)." };
   }
-  if (existing) return { ok: true, state: rowToState(existing as SessionRow) };
+  // Resume: hand back the SAME secret so a reconnecting student (who lost their
+  // localStorage) can keep saving/submitting. This is the accepted impersonation
+  // surface — a classmate re-picking your name would also get it — which is why
+  // the educator's Zoom-video admission, not the secret, is the identity gate.
+  if (existing) {
+    const row = existing as SessionRow;
+    return { ok: true, state: rowToState(row), secret: row.session_secret ?? undefined };
+  }
 
   const { data: ins, error: insErr } = await svc
     .from(TABLE)
@@ -133,34 +183,49 @@ export async function checkInExamSessionAction(
     .single();
   if (insErr) {
     if (isMissingTable(insErr)) return { ok: false, schema: true, error: "Sessioni esame non disponibili (migrazione mancante)." };
+    // A concurrent first check-in (double-click / two tabs) loses the unique
+    // (token, corsista_id) race — fetch the winner's row instead of erroring.
+    if (/duplicate key|unique|23505/i.test(insErr.message)) {
+      const { data: again } = await svc
+        .from(TABLE).select("*").eq("token", token).eq("corsista_id", corsistaId).maybeSingle();
+      if (again) {
+        const row = again as SessionRow;
+        return { ok: true, state: rowToState(row), secret: row.session_secret ?? undefined };
+      }
+    }
     return { ok: false, error: insErr.message };
   }
-  return { ok: true, state: rowToState(ins as SessionRow) };
+  const row = ins as SessionRow;
+  return { ok: true, state: rowToState(row), secret: row.session_secret ?? undefined };
 }
 
 /** PUBLIC: poll the session (waiting-room → admitted, and resume on reconnect). */
 export async function getExamSessionAction(
   token: string,
   corsistaId: number,
+  secret?: string,
 ): Promise<{ ok: boolean; state?: ExamSessionState; error?: string }> {
-  const svc = getSupabaseServiceClient();
-  const { data, error } = await svc
-    .from(TABLE)
-    .select("*")
-    .eq("token", token)
-    .eq("corsista_id", corsistaId)
-    .maybeSingle();
-  if (error) return { ok: false, error: error.message };
-  if (!data) return { ok: false, error: "Sessione non trovata." };
-  return { ok: true, state: rowToState(data as SessionRow) };
+  const r = await loadOwnedSession(token, corsistaId, secret);
+  if (!r.ok || !r.row) return { ok: false, error: r.error };
+  return { ok: true, state: rowToState(r.row) };
 }
 
 /** PUBLIC: persist progress (frequent). Never touches a submitted session. */
 export async function saveExamProgressAction(
   token: string,
   corsistaId: number,
+  secret: string | undefined,
   patch: { answers: Record<string, string[] | string>; currentIdx: number; lang?: string; elapsed?: number },
 ): Promise<{ ok: boolean }> {
+  // Verify ownership (per-session secret) before writing anything.
+  const r = await loadOwnedSession(token, corsistaId, secret);
+  if (!r.ok || !r.row) return { ok: false };
+  // Monotonic guard: never let a STALE writer overwrite newer progress. The
+  // exam clock only moves forward within a live runner, so a save whose elapsed
+  // is meaningfully BEHIND what's stored is a second/old tab or a late, reordered
+  // request — drop it rather than rewind the student's answers + position.
+  const stored = r.row.elapsed_seconds ?? 0;
+  if (patch.elapsed != null && patch.elapsed + 5 < stored) return { ok: true };
   const svc = getSupabaseServiceClient();
   await svc
     .from(TABLE)
@@ -168,11 +233,10 @@ export async function saveExamProgressAction(
       answers: patch.answers,
       current_idx: patch.currentIdx,
       lang: patch.lang ?? null,
-      elapsed_seconds: patch.elapsed ?? 0,
+      elapsed_seconds: patch.elapsed ?? stored,
       updated_at: new Date().toISOString(),
     })
-    .eq("token", token)
-    .eq("corsista_id", corsistaId)
+    .eq("id", r.row.id)
     .neq("status", "submitted");
   return { ok: true };
 }
@@ -181,20 +245,24 @@ export async function saveExamProgressAction(
 export async function submitExamSessionAction(
   token: string,
   corsistaId: number,
+  secret?: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const ctx = tokenCtx(token);
-  if (!ctx) return { ok: false, error: "Link non valido o scaduto." };
   const svc = getSupabaseServiceClient();
-  const { data: sess, error } = await svc
-    .from(TABLE)
-    .select("*")
-    .eq("token", token)
-    .eq("corsista_id", corsistaId)
-    .maybeSingle();
-  if (error) return { ok: false, error: error.message };
-  if (!sess) return { ok: false, error: "Sessione non trovata." };
-  const row = sess as SessionRow & { lang: string | null; elapsed_seconds: number };
+  const owned = await loadOwnedSession(token, corsistaId, secret);
+  if (!owned.ok || !owned.row) return { ok: false, error: owned.error || "Sessione non trovata." };
+  const row = owned.row;
   if (row.status === "submitted") return { ok: true }; // idempotent
+
+  // Claim the session ATOMICALLY first: only the update that flips a not-yet-
+  // submitted row to "submitted" wins. A concurrent/duplicate submit updates
+  // zero rows and returns ok without inserting again → no double graded row.
+  const { data: claimed } = await svc
+    .from(TABLE)
+    .update({ status: "submitted", submitted_at: new Date().toISOString() })
+    .eq("id", row.id)
+    .neq("status", "submitted")
+    .select("id");
+  if (!claimed || claimed.length === 0) return { ok: true };
 
   const all = (row.answers ?? {}) as Record<string, string[] | string>;
   const registration: Record<string, string> = {};
@@ -203,10 +271,29 @@ export async function submitExamSessionAction(
     if (k.startsWith("reg:")) registration[k.slice(4)] = Array.isArray(v) ? v.join(", ") : v;
     else answers[k] = v;
   }
+  // Make the submission self-identifying. The proctored flow knows exactly who
+  // this is (they picked their name → corsista_id), so the ENROLLED corsista is
+  // AUTHORITATIVE — it overrides anything typed, so a student can never stamp
+  // another person's email onto their submission (which would mis-route the
+  // certificate). Falls back to the picked name when the corsista row is absent.
+  let regName = row.student_name;
+  let regEmail = "";
+  if (corsistaId != null) {
+    const { data: cor } = await svc
+      .from("corsisti").select("full_name, email").eq("id", corsistaId).maybeSingle();
+    if (cor) {
+      const c = cor as { full_name: string | null; email: string | null };
+      regName = c.full_name || row.student_name;
+      regEmail = c.email || "";
+    }
+  }
+  if (regName) registration.name = regName;
+  if (regEmail) registration.email = regEmail;
+
   const subRow = {
-    corso_id: ctx.corsoId,
-    course_ref: ctx.c,
-    test_key: ctx.t,
+    corso_id: row.corso_id ?? null,
+    course_ref: row.course_ref ?? String(row.corso_id ?? ""),
+    test_key: row.test_key ?? "final",
     mode: "exam",
     lang: row.lang ?? null,
     elapsed_seconds: row.elapsed_seconds ?? null,
@@ -215,11 +302,16 @@ export async function submitExamSessionAction(
   };
   let { error: subErr } = await svc.from("exam_submissions").insert({ ...subRow, corsista_id: corsistaId });
   if (subErr && /corsista_id/i.test(subErr.message)) {
+    // Legacy schema without corsista_id column — fall back to email-keyed row.
     ({ error: subErr } = await svc.from("exam_submissions").insert(subRow));
   }
-  if (subErr) return { ok: false, error: subErr.message };
-
-  await svc.from(TABLE).update({ status: "submitted", submitted_at: new Date().toISOString() }).eq("id", row.id);
+  if (subErr) {
+    // The unique backstop fired → a graded row already exists: treat as done.
+    if (/duplicate key|unique|23505/i.test(subErr.message)) return { ok: true };
+    // Real failure → roll the claim back so the student can retry the submit.
+    await svc.from(TABLE).update({ status: "admitted", submitted_at: null }).eq("id", row.id);
+    return { ok: false, error: subErr.message };
+  }
   return { ok: true };
 }
 

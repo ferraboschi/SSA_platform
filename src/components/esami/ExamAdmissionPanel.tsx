@@ -35,12 +35,26 @@ export function ExamAdmissionPanel({
   const [sessions, setSessions] = useState<ExamSessionRow[]>([]);
   const [live, setLive] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [, startAdmit] = useTransition();
 
+  // A DB hiccup must NOT silently show "nobody waiting" while students are stuck
+  // in the sala d'attesa — surface the error so the educator knows to retry,
+  // instead of leaving a live class un-admitted.
   const load = useCallback(async () => {
-    const r = await listExamSessionsAction(courseId, testKey);
-    if (r.ok && r.sessions) setSessions(r.sessions);
-    setLoaded(true);
+    try {
+      const r = await listExamSessionsAction(courseId, testKey);
+      if (r.ok && r.sessions) {
+        setSessions(r.sessions);
+        setError(null);
+      } else {
+        setError(r.error || "Impossibile aggiornare l'elenco. Riprovo…");
+      }
+    } catch {
+      setError("Impossibile aggiornare l'elenco. Riprovo…");
+    } finally {
+      setLoaded(true);
+    }
   }, [courseId, testKey]);
 
   useEffect(() => {
@@ -92,6 +106,25 @@ export function ExamAdmissionPanel({
         su Zoom (chiedi un documento se serve) e premi <b>Ammetti</b>: solo allora
         il loro esame si sblocca.
       </div>
+
+      {error && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 12px",
+            marginBottom: 10,
+            borderRadius: 8,
+            background: "var(--danger-bg, #fef2f2)",
+            color: "var(--danger-fg, #b42318)",
+            fontSize: 12.5,
+          }}
+        >
+          <Icon name="info" size={13} />
+          {error}
+        </div>
+      )}
 
       {!loaded ? (
         <p className="text-3" style={{ fontSize: 13 }}>Caricamento…</p>

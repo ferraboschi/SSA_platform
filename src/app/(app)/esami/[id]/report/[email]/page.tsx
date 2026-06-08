@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getTranslations } from "@/lib/i18n/server";
 import { getDataSource } from "@/lib/data";
 import { EsameReport } from "@/components/esami/EsameReport";
+import { loadCourseExamResults } from "@/lib/exam-links/results";
+import type { ExamFamily, ExamResult, ExamResultStatus } from "@/lib/domain";
 
 export default async function Page({
   params,
@@ -13,18 +15,48 @@ export default async function Page({
   const [{ t }, course] = await Promise.all([getTranslations(), ds.courses.getById(id)]);
   const rv = t.esami.reportView;
 
-  const results = course?.examResults2 ?? [];
-  // Decode defensively (malformed % shouldn't 500) and match EXACTLY — no
-  // results[0] fallback, which would show another student's certificate + PII.
+  // Decode defensively (a malformed %xx must not 500).
   let decoded = email;
   try {
     decoded = decodeURIComponent(email);
   } catch {
     /* keep raw segment */
   }
-  const result = results.find((r) => r.email === decoded);
 
-  if (!course || !course.exam || !result) {
+  // The certificate is built from the REAL graded submissions (the demo-only
+  // examResults2 is never populated in production), matched EXACTLY by email —
+  // never a [0] fallback, which would leak another student's certificate + PII.
+  const family: ExamFamily | null =
+    course?.type === "certificato" ? "nihonshu" : course?.type === "shochu" ? "shochu" : null;
+
+  let result: ExamResult | null = null;
+  if (course && family) {
+    const subs = await loadCourseExamResults(id, family);
+    const low = decoded.toLowerCase();
+    const sub = subs.find((s) => s.studentEmail.toLowerCase() === low);
+    if (sub) {
+      result = {
+        email: sub.studentEmail,
+        name: sub.studentName,
+        score: sub.currentScore ?? sub.autoScore,
+        status: (sub.currentResult as ExamResultStatus | null) ?? sub.suggested,
+        completedAt: sub.submittedAt,
+        durationMin: 0,
+        sections: [],
+        wrongImportant: sub.answers
+          .filter((a) => a.ok === false)
+          .map((a) => ({
+            questionId: a.qid,
+            cat: "",
+            text: a.text,
+            wrongAnswer: a.given,
+            correctAnswer: a.correct,
+          })),
+      };
+    }
+  }
+
+  if (!course || !family || !result) {
     return (
       <div className="page">
         <div className="card" style={{ padding: 40, textAlign: "center" }}>
@@ -40,7 +72,7 @@ export default async function Page({
   return (
     <EsameReport
       result={result}
-      family={course.exam.family}
+      family={family}
       courseId={id}
       course={{
         day: course.day,

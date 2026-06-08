@@ -3,7 +3,7 @@
 // The course "Esiti" tab: live admission control + results (grade / view PDF /
 // send) on the REAL grading data. Loads lazily via a server action so it only
 // runs when the tab is opened.
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ExamAdmissionPanel } from "./ExamAdmissionPanel";
 import { ExamResultsClient } from "./ExamResultsClient";
 import {
@@ -23,7 +23,10 @@ export function EsitiTab({
   const [data, setData] = useState<CourseExamResultsData | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Re-fetch the real grading data. Embedded in a tab, a router.refresh() does
+  // NOT re-run this client action, so confirming an outcome would otherwise
+  // leave the table stale — the grading flow calls this to pull fresh data.
+  const reload = useCallback(() => {
     let alive = true;
     getCourseExamResultsAction(courseId, family)
       .then((d) => {
@@ -36,6 +39,8 @@ export function EsitiTab({
       alive = false;
     };
   }, [courseId, family]);
+
+  useEffect(() => reload(), [reload]);
 
   return (
     <div style={{ display: "grid", gap: 4 }}>
@@ -53,6 +58,7 @@ export function EsitiTab({
           feedback={data.feedback}
           adminEmail={data.adminEmail}
           embedded
+          onChanged={reload}
         />
       )}
     </div>

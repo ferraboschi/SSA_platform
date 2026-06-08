@@ -34,6 +34,7 @@ export function ExamResultsClient({
   feedback,
   adminEmail = "",
   embedded = false,
+  onChanged,
 }: {
   courseId: string;
   courseTitle: string;
@@ -43,16 +44,27 @@ export function ExamResultsClient({
   adminEmail?: string;
   /** Rendered inside a course tab: drop the page wrapper + back link. */
   embedded?: boolean;
+  /** Embedded loader callback: re-fetch the data after an outcome is confirmed
+   *  (router.refresh can't reach a tab's client-loaded data). */
+  onChanged?: () => void;
 }) {
-  // Confirmed results = graded submissions whose outcome has been confirmed.
-  const confirmed: ConfirmedResultRow[] = results
-    .filter((r) => r.currentResult)
-    .map((r) => ({
+  // Confirmed results = graded submissions whose outcome has been confirmed,
+  // DEDUPED by student (a re-submission would otherwise create a duplicate row
+  // and collide on the React key). Results are newest-first, so the first wins.
+  const confirmed: ConfirmedResultRow[] = [];
+  const seenConfirmed = new Set<string>();
+  for (const r of results) {
+    if (!r.currentResult) continue;
+    const key = (r.studentEmail || r.studentName).toLowerCase().trim();
+    if (seenConfirmed.has(key)) continue;
+    seenConfirmed.add(key);
+    confirmed.push({
       name: r.studentName,
       email: r.studentEmail,
       score: r.currentScore ?? r.autoScore,
       status: r.currentResult as string,
-    }));
+    });
+  }
   const [expanded, setExpanded] = useState<number | null>(null);
   const router = useRouter();
   const [live, setLive] = useState(true);
@@ -70,7 +82,7 @@ export function ExamResultsClient({
     return () => clearInterval(id);
   }, [live, embedded, router]);
 
-  const confirmedCount = results.filter((r) => r.currentResult).length;
+  const confirmedCount = confirmed.length;
 
   return (
     <div className={embedded ? "" : "page"}>
@@ -136,6 +148,7 @@ export function ExamResultsClient({
                   courseId={courseId}
                   expanded={expanded === r.id}
                   onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
+                  onChanged={onChanged}
                 />
               ))}
             </tbody>
@@ -189,11 +202,13 @@ function ResultRow({
   courseId,
   expanded,
   onToggle,
+  onChanged,
 }: {
   r: GradedSubmission;
   courseId: string;
   expanded: boolean;
   onToggle: () => void;
+  onChanged?: () => void;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -207,8 +222,12 @@ function ResultRow({
     setErr(null);
     start(async () => {
       const res = await gradeEnrollmentAction(r.enrollmentId!, outcome, r.autoScore, courseId);
-      if (res.ok) router.refresh();
-      else setErr(res.error || "Errore");
+      if (res.ok) {
+        // Embedded in a tab, the client-loaded data needs an explicit re-fetch;
+        // on the standalone page, router.refresh() re-runs the server load.
+        if (onChanged) onChanged();
+        else router.refresh();
+      } else setErr(res.error || "Errore");
     });
   };
 

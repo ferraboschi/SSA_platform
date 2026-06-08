@@ -44,24 +44,25 @@ export function CourseSections({
   const tr = useT();
   const t = tr.corsi.detail;
   const hasExam = Boolean(esame) || Boolean(examFamily);
+  // The Esiti tab (admission + results) needs the exam family to load anything,
+  // so it's gated on examFamily — never on hasExam alone (which can be true via
+  // `esame` with no family, leaving the tab blank).
   const requestedTab = useSearchParams().get("tab");
   const initialSection: SectionId =
-    (requestedTab === "esame" || requestedTab === "esiti") && hasExam
-      ? (requestedTab as SectionId)
-      : requestedTab === "programma"
-        ? "programma"
-        : "iscritti";
+    requestedTab === "esame" && hasExam
+      ? "esame"
+      : requestedTab === "esiti" && examFamily
+        ? "esiti"
+        : requestedTab === "programma"
+          ? "programma"
+          : "iscritti";
   const [section, setSection] = useState<SectionId>(initialSection);
 
   const tabs: { id: SectionId; label: string; n: number; accent?: boolean }[] = [
     { id: "iscritti", label: t.tabIscritti, n: enrolled },
     { id: "programma", label: t.tabProgramma, n: programSakeCount },
-    ...(hasExam
-      ? [
-          { id: "esame" as const, label: t.tabEsame, n: esame?.totalQuestions ?? 0, accent: true },
-          { id: "esiti" as const, label: "Esiti", n: 0 },
-        ]
-      : []),
+    ...(hasExam ? [{ id: "esame" as const, label: t.tabEsame, n: esame?.totalQuestions ?? 0, accent: true }] : []),
+    ...(examFamily ? [{ id: "esiti" as const, label: "Esiti", n: 0 }] : []),
   ];
 
   return (

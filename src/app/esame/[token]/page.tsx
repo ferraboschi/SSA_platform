@@ -75,7 +75,12 @@ export default async function Page({
       token={token}
       mode={mode}
       forcedLang={res.payload.l}
-      collectRegistration={res.payload.t === "final" && mode === "exam"}
+      // Proctored exams identify the student by the verified name-pick
+      // (corsista_id), so the runner must NOT also ask them to re-type their
+      // name/email — that was redundant AND let a student stamp someone else's
+      // email onto their submission (wrong certificate / PII leak). Identity is
+      // written server-side from the enrolled corsista at submit.
+      collectRegistration={false}
       reveal={mode === "validate"}
       showResult={isPreview}
       header={{

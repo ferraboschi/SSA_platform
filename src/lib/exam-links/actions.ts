@@ -178,6 +178,13 @@ export async function submitExam(
   if (error && /corsista_id/i.test(error.message)) {
     ({ error } = await svc.from("exam_submissions").insert(row));
   }
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    // This path shares the exam_submissions_proctored_uniq backstop index with
+    // the proctored flow, so a double-submit (double-click / retry) hits a
+    // duplicate-key — already recorded, so treat it as success (idempotent),
+    // never a scary error to the student.
+    if (/duplicate key|unique|23505/i.test(error.message)) return { ok: true };
+    return { ok: false, error: error.message };
+  }
   return { ok: true };
 }

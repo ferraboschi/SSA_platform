@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { submitExam } from "@/lib/exam-links/actions";
 
 export interface RunnerQuestion {
@@ -79,8 +79,10 @@ const CHROME: Record<Lang, Record<string, string>> = {
     previewTitle: "Anteprima · esito calcolato",
     previewScore: "Punteggio (domande oggettive)",
     previewPassed: "Promosso",
+    previewRetrial: "Recupero",
     previewFailed: "Non superato",
     previewManual: "domande aperte da valutare a mano",
+    previewNotGradable: "Nessuna domanda a correzione automatica in questo test.",
     previewNote: "Questa è un'anteprima: nessun esito è stato salvato.",
     waitTitle: "Sei in sala d'attesa",
     waitBody: "Attendi che l'educator ti ammetta all'esame. Resta su questa pagina.",
@@ -127,8 +129,10 @@ const CHROME: Record<Lang, Record<string, string>> = {
     previewTitle: "Preview · computed result",
     previewScore: "Score (objective questions)",
     previewPassed: "Passed",
+    previewRetrial: "Retrial",
     previewFailed: "Not passed",
     previewManual: "open questions to grade manually",
+    previewNotGradable: "No auto-gradable questions in this test.",
     previewNote: "This is a preview: no result was saved.",
     waitTitle: "You're in the waiting room",
     waitBody: "Wait for the educator to admit you to the exam. Stay on this page.",
@@ -175,8 +179,10 @@ const CHROME: Record<Lang, Record<string, string>> = {
     previewTitle: "プレビュー・計算結果",
     previewScore: "得点（客観式問題）",
     previewPassed: "合格",
+    previewRetrial: "再試験",
     previewFailed: "不合格",
     previewManual: "手動採点の記述式問題",
+    previewNotGradable: "このテストには自動採点できる問題がありません。",
     previewNote: "これはプレビューです。結果は保存されていません。",
     waitTitle: "待機室にいます",
     waitBody: "教員が試験への参加を許可するまでお待ちください。このページのままにしてください。",
@@ -300,33 +306,76 @@ export function ExamRunner({
   // Keep the latest state in a ref for the periodic persist (avoids stale closure).
   const stateRef = useRef<PersistState>({ answers, currentIdx: idx, lang, elapsed });
   stateRef.current = { answers, currentIdx: idx, lang, elapsed };
+  // Hold onPersist in a ref so the save effects DON'T depend on its identity —
+  // otherwise a parent re-render giving a new callback would restart the 15s
+  // interval from zero every time and could silently stop periodic saving.
+  const onPersistRef = useRef(onPersist);
+  onPersistRef.current = onPersist;
+  // Set synchronously the moment a submit starts, so no stray persist fires
+  // around submission (the server also guards, but this stops the spam entirely).
+  const finishingRef = useRef(false);
+  const flush = useCallback(() => {
+    if (!onPersistRef.current || !langPicked || done || finishingRef.current) return;
+    onPersistRef.current(stateRef.current);
+  }, [langPicked, done]);
 
   // Persist on content change (debounced) + periodically (captures the clock).
   useEffect(() => {
-    if (!onPersist || !langPicked || done) return;
-    const id = setTimeout(() => onPersist(stateRef.current), 1000);
+    if (!langPicked || done || finishingRef.current) return;
+    const id = setTimeout(() => onPersistRef.current?.(stateRef.current), 1000);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers, idx, lang, langPicked, done]);
   useEffect(() => {
-    if (!onPersist || !langPicked || done) return;
-    const id = setInterval(() => onPersist(stateRef.current), 15000);
+    if (!langPicked || done) return;
+    const id = setInterval(() => {
+      if (!finishingRef.current) onPersistRef.current?.(stateRef.current);
+    }, 15000);
     return () => clearInterval(id);
+  }, [langPicked, done]);
+
+  // Last-chance flush: the 1s debounce can strand the most recent answer when the
+  // tab is hidden/closed or the network drops. Saving on visibilitychange (fires
+  // BEFORE the tab is frozen on mobile) and on pagehide shrinks that loss window
+  // so a reconnect resumes from the very last edit, not up to a second earlier.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [flush]);
+
+  // Persist the instant the language is locked in (not on the 1s debounce), so a
+  // reconnect in that first second resumes the chosen language + running clock
+  // instead of dropping the student back to the language picker.
+  useEffect(() => {
+    if (langPicked) flush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onPersist, langPicked, done]);
+  }, [langPicked]);
 
   // Finish: resumable session → onSubmitSession; preview → just show the result
   // screen; legacy real exam → submitExam; test/validate without result → done.
   const finish = async () => {
     if (onSubmitSession) {
+      finishingRef.current = true; // stop autosave before the submit round-trip
       setSubmitting(true);
       setSubmitError(false);
       try {
         const r = await onSubmitSession();
         if (r.ok) setDone(true);
-        else setSubmitError(true);
+        else {
+          setSubmitError(true);
+          finishingRef.current = false; // allow autosave to resume if they retry
+        }
       } catch {
         setSubmitError(true);
+        finishingRef.current = false;
       } finally {
         setSubmitting(false);
       }
@@ -349,12 +398,13 @@ export function ExamRunner({
     }
   };
 
-  // Clock — ticks once the language is chosen.
+  // Clock — ticks once the language is chosen. Pauses on the submit-error screen
+  // so a stuck "Riprova" state doesn't keep inflating the elapsed time.
   useEffect(() => {
-    if (!langPicked || done) return;
+    if (!langPicked || done || submitError) return;
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(id);
-  }, [langPicked, done]);
+  }, [langPicked, done, submitError]);
 
   // Flatten the flow: registration fields (final exam only) + graded questions.
   const steps = useMemo<Step[]>(() => {
@@ -365,7 +415,13 @@ export function ExamRunner({
   }, [collectRegistration, questions]);
 
   const total = steps.length;
-  const step = steps[idx];
+  // Clamp a resumed/stale idx into range (defensive: the question set could have
+  // shrunk between sessions). `step` falls back so the render never reads undefined.
+  const safeIdx = total > 0 ? Math.min(Math.max(0, idx), total - 1) : 0;
+  const step = steps[safeIdx];
+  useEffect(() => {
+    if (total > 0 && idx > total - 1) setIdx(total - 1);
+  }, [total, idx]);
 
   const setAnswer = (key: string, val: string[] | string) =>
     setAnswers((a) => ({ ...a, [key]: val }));
@@ -485,9 +541,31 @@ export function ExamRunner({
           if (r) correct++;
         }
       }
-      const pct = gradable ? Math.round((correct / gradable) * 100) : 0;
-      const passed = pct >= 80;
-      const accent = passed ? "#15803d" : "#b42318";
+      // No auto-gradable questions → don't fake a 0% "failed"; show a neutral note.
+      if (gradable === 0) {
+        return (
+          <div className="exam-public-shell">
+            <div className="exam-public-card">
+              {headerBar}
+              <div className="exam-public-thanks" {...noCopy}>
+                <h2 style={{ marginBottom: 14 }}>{t.previewTitle}</h2>
+                <p style={{ fontSize: 14, color: "var(--text-2, #374151)" }}>{t.previewNotGradable}</p>
+                {manual > 0 && (
+                  <p style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", marginTop: 6 }}>
+                    {manual} {t.previewManual}
+                  </p>
+                )}
+                <p style={{ fontSize: 12.5, color: "var(--text-4, #9ca3af)", marginTop: 10 }}>{t.previewNote}</p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      const pct = Math.round((correct / gradable) * 100);
+      // Mirror the real three-tier outcome: pass ≥80, retrial ≥70, else fail.
+      const outcome = pct >= 80 ? "passed" : pct >= 70 ? "retrial" : "failed";
+      const accent = outcome === "passed" ? "#15803d" : outcome === "retrial" ? "#b45309" : "#b42318";
+      const outcomeLabel = outcome === "passed" ? t.previewPassed : outcome === "retrial" ? t.previewRetrial : t.previewFailed;
       return (
         <div className="exam-public-shell">
           <div className="exam-public-card">
@@ -507,9 +585,7 @@ export function ExamRunner({
                   {t.previewScore}
                 </div>
                 <div style={{ fontSize: 46, fontWeight: 800, color: accent, lineHeight: 1.05, margin: "4px 0" }}>{pct}%</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: accent }}>
-                  {passed ? t.previewPassed : t.previewFailed}
-                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: accent }}>{outcomeLabel}</div>
                 <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)", marginTop: 8 }}>
                   {correct}/{gradable}
                   {manual > 0 ? ` · ${manual} ${t.previewManual}` : ""}

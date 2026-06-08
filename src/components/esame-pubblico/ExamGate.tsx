@@ -5,7 +5,7 @@
 //  • Real exam → ProctoredExam: pick your name → waiting room → educator admits →
 //    runner with RESUMABLE state (logout/refresh/disconnect resumes exactly where
 //    you were, until final submission).
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ExamRunner,
   type RunnerQuestion,
@@ -44,6 +44,28 @@ interface RosterStudent {
   name: string;
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+type CheckInResult = Awaited<ReturnType<typeof checkInExamSessionAction>>;
+
+// Resume must survive a flaky network. Retry transient check-in failures a few
+// times (a dropped admitted student must NOT fall back to the picker), but bail
+// immediately on hard errors (not enrolled, expired link, missing migration).
+async function checkInWithRetry(
+  token: string,
+  id: number,
+  name: string,
+  tries = 3,
+): Promise<CheckInResult> {
+  let last = await checkInExamSessionAction(token, id, name);
+  for (let i = 1; i < tries && !(last.ok && last.state); i++) {
+    if (last.error && /non iscritt|non valid|scadut|migrazione|solo per/i.test(last.error)) break;
+    await sleep(500 * i);
+    last = await checkInExamSessionAction(token, id, name);
+  }
+  return last;
+}
+
 function ProctoredExam(props: ExamGateProps) {
   const { token } = props;
   const storeKey = `ssa-exam-${token}`;
@@ -54,6 +76,9 @@ function ProctoredExam(props: ExamGateProps) {
   const [picked, setPicked] = useState<RosterStudent | null>(null);
   const [sessionState, setSessionState] = useState<ExamSessionState | null>(null);
   const corsistaIdRef = useRef<number | null>(null);
+  // Per-session bearer secret (from check-in). Held in memory only — re-fetched
+  // via check-in on every reconnect, never persisted to disk.
+  const secretRef = useRef<string | null>(null);
 
   const routeByStatus = (s: ExamSessionState) => {
     if (s.status === "submitted") setPhase("submitted");
@@ -72,9 +97,12 @@ function ProctoredExam(props: ExamGateProps) {
     }
     (async () => {
       if (stored?.id) {
-        const r = await checkInExamSessionAction(token, stored.id, stored.name);
+        // Retry transient failures so a flaky reconnect doesn't bounce an
+        // already-admitted student back to the name picker.
+        const r = await checkInWithRetry(token, stored.id, stored.name);
         if (r.ok && r.state) {
           corsistaIdRef.current = stored.id;
+          secretRef.current = r.secret ?? null;
           setPicked(stored);
           setSessionState(r.state);
           routeByStatus(r.state);
@@ -95,13 +123,14 @@ function ProctoredExam(props: ExamGateProps) {
 
   const doCheckIn = async (student: RosterStudent) => {
     setPhase("checking");
-    const r = await checkInExamSessionAction(token, student.id, student.name);
+    const r = await checkInWithRetry(token, student.id, student.name);
     if (!r.ok || !r.state) {
       setErrorMsg(r.error || "Check-in non riuscito.");
       setPhase("error");
       return;
     }
     corsistaIdRef.current = student.id;
+    secretRef.current = r.secret ?? null;
     setPicked(student);
     try {
       localStorage.setItem(storeKey, JSON.stringify(student));
@@ -116,7 +145,7 @@ function ProctoredExam(props: ExamGateProps) {
   useEffect(() => {
     if (phase !== "waiting" || corsistaIdRef.current == null) return;
     const id = setInterval(async () => {
-      const r = await getExamSessionAction(token, corsistaIdRef.current!);
+      const r = await getExamSessionAction(token, corsistaIdRef.current!, secretRef.current ?? undefined);
       if (r.ok && r.state) {
         setSessionState(r.state);
         if (r.state.status === "admitted") setPhase("exam");
@@ -126,15 +155,28 @@ function ProctoredExam(props: ExamGateProps) {
     return () => clearInterval(id);
   }, [phase, token]);
 
-  const persist = (s: { answers: Record<string, string[] | string>; currentIdx: number; lang: string; elapsed: number }) => {
-    if (corsistaIdRef.current != null) {
-      void saveExamProgressAction(token, corsistaIdRef.current, s);
-    }
-  };
-  const submit = async () => {
+  // Memoized so the runner's save effects don't see a new callback every render
+  // (which would restart its periodic-save interval). Closes over refs only.
+  const persist = useCallback(
+    (s: { answers: Record<string, string[] | string>; currentIdx: number; lang: string; elapsed: number }) => {
+      if (corsistaIdRef.current == null) return;
+      const id = corsistaIdRef.current;
+      const secret = secretRef.current ?? undefined;
+      // Fire-and-forget, but retry ONCE on a transient failure so a single
+      // dropped request doesn't silently lose the student's latest answers.
+      // Swallow rejections (network drop) — the next debounced/15s save self-heals.
+      void saveExamProgressAction(token, id, secret, s)
+        .then((r) => {
+          if (!r?.ok) return saveExamProgressAction(token, id, secret, s);
+        })
+        .catch(() => {});
+    },
+    [token],
+  );
+  const submit = useCallback(async () => {
     if (corsistaIdRef.current == null) return { ok: false, error: "Sessione non valida." };
-    return submitExamSessionAction(token, corsistaIdRef.current);
-  };
+    return submitExamSessionAction(token, corsistaIdRef.current, secretRef.current ?? undefined);
+  }, [token]);
 
   // ── Render by phase ──────────────────────────────────────────────────────
   if (phase === "loading" || phase === "checking") {

@@ -84,7 +84,7 @@ export async function loadCourseExamResults(
   const svc = getSupabaseServiceClient();
   const { data: subs } = await svc
     .from("exam_submissions")
-    .select("id, test_key, answers, registration, created_at")
+    .select("id, test_key, answers, registration, corsista_id, created_at")
     .eq("corso_id", Number(courseId))
     .eq("mode", "exam")
     .neq("test_key", "feedback")
@@ -106,16 +106,17 @@ export async function loadCourseExamResults(
     test_key: string;
     answers: Record<string, string | string[]> | null;
     registration: Record<string, string> | null;
+    corsista_id: number | null;
     created_at: string;
   }>) {
     const reg = s.registration ?? {};
-    const email = (
+    let email = (
       reg.email || Object.values(reg).find((v) => typeof v === "string" && v.includes("@")) || ""
     )
       .toString()
       .toLowerCase()
       .trim();
-    const name = reg.name || "—";
+    let name = reg.name || "—";
     const questions = await getQuestions(s.test_key);
     const ans = s.answers ?? {};
 
@@ -173,7 +174,40 @@ export async function loadCourseExamResults(
     let enrollmentId: number | null = null;
     let currentResult: string | null = null;
     let currentScore: number | null = null;
-    if (email) {
+
+    const applyEnrollment = (e: unknown) => {
+      const row = e as { id: number; exam_result: string | null; exam_score_pct: number | null } | null;
+      if (!row) return;
+      enrollmentId = row.id;
+      currentResult = row.exam_result;
+      currentScore = row.exam_score_pct;
+    };
+
+    // PRIMARY: proctored submissions carry corsista_id → resolve the student and
+    // enrollment directly. This is the reliable tie-back even when the exam
+    // collected no registration fields (name/email would otherwise be "—").
+    if (s.corsista_id != null) {
+      const { data: cor } = await svc
+        .from("corsisti").select("full_name, email").eq("id", s.corsista_id).maybeSingle();
+      if (cor) {
+        // AUTHORITATIVE: a proctored submission is tied to the verified enrolled
+        // student, so their corsista name/email win over anything in registration
+        // — never show (or route a certificate to) a student-typed value.
+        const c = cor as { full_name: string | null; email: string | null };
+        if (c.full_name) name = c.full_name;
+        if (c.email) email = c.email.toLowerCase().trim();
+      }
+      const { data: e } = await svc
+        .from("corsi_iscrizioni")
+        .select("id, exam_result, exam_score_pct")
+        .eq("corsista_id", s.corsista_id)
+        .eq("corso_id", Number(courseId))
+        .maybeSingle();
+      applyEnrollment(e);
+    }
+
+    // FALLBACK: legacy / non-proctored submissions only have an email → match it.
+    if (enrollmentId == null && email) {
       const { data: c } = await svc.from("corsisti").select("id").eq("email", email).maybeSingle();
       if (c) {
         const { data: e } = await svc
@@ -182,12 +216,7 @@ export async function loadCourseExamResults(
           .eq("corsista_id", (c as { id: number }).id)
           .eq("corso_id", Number(courseId))
           .maybeSingle();
-        if (e) {
-          const row = e as { id: number; exam_result: string | null; exam_score_pct: number | null };
-          enrollmentId = row.id;
-          currentResult = row.exam_result;
-          currentScore = row.exam_score_pct;
-        }
+        applyEnrollment(e);
       }
     }
 

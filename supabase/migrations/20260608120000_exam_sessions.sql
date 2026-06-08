@@ -35,6 +35,43 @@ create table if not exists public.exam_sessions (
 create index if not exists exam_sessions_token_idx on public.exam_sessions (token, status);
 create index if not exists exam_sessions_course_idx on public.exam_sessions (corso_id, test_key);
 
+-- Per-session bearer secret. The class exam-link token is shared with the WHOLE
+-- class (pasted in the Zoom chat), and the roster endpoint exposes every
+-- corsista_id — so (token, corsista_id) alone is enumerable. The server hands
+-- this unguessable secret to the student ONLY at check-in; every later
+-- read/save/submit must present it. Stops a classmate from silently
+-- reading/wiping/submitting another student's in-progress session via the API.
+-- (Identity at admission is still gated by the educator on Zoom video.)
+-- Idempotent: safe to run whether or not the column already exists.
+alter table public.exam_sessions
+  add column if not exists session_secret uuid not null default gen_random_uuid();
+
 alter table public.exam_sessions enable row level security;
 -- No policies on purpose: anon/auth clients cannot touch it; the exam route and
 -- the educator admission panel both go through the service-role key.
+
+-- Backstop against a double final-submission writing two graded rows for the
+-- same student+test. The app already claims the session atomically before
+-- inserting (claim-first), so this is defense-in-depth. Created ONLY when no
+-- duplicate proctored submission already exists, so the migration can never fail
+-- on legacy data — and we NEVER delete the dupes (mai buttare dati): we just log
+-- and skip, leaving the app-level guard in charge.
+do $$
+begin
+  if exists (
+    select 1
+    from (
+      select corso_id, corsista_id, test_key, count(*) as c
+      from public.exam_submissions
+      where mode = 'exam' and corsista_id is not null
+      group by corso_id, corsista_id, test_key
+    ) d
+    where d.c > 1
+  ) then
+    raise notice 'exam_submissions: duplicate proctored rows exist — skipping unique index, app-level claim-first guards submissions.';
+  else
+    create unique index if not exists exam_submissions_proctored_uniq
+      on public.exam_submissions (corso_id, corsista_id, test_key)
+      where mode = 'exam' and corsista_id is not null;
+  end if;
+end $$;
