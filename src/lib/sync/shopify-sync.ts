@@ -63,17 +63,27 @@ function detectType(text: string): string | null {
  *  "4 Settembre 2026". Returns whatever it can find (any field may be null). */
 function parseItDate(text: string): { day: number | null; month: number | null; year: number | null } {
   const t = (text || "").toLowerCase();
-  const monthName = Object.keys(MONTHS).find((m) => t.includes(m));
+  // Pick the EARLIEST month mentioned in the text (the course date usually comes
+  // before any exam date), not the first in Jan→Dec order.
+  let monthName: string | null = null;
+  let monthPos = Infinity;
+  for (const m of Object.keys(MONTHS)) {
+    const i = t.indexOf(m);
+    if (i >= 0 && i < monthPos) {
+      monthPos = i;
+      monthName = m;
+    }
+  }
   const month = monthName ? MONTHS[monthName] : null;
   const yearMatch = t.match(/20(2[0-9]|3\d)/);
   const year = yearMatch ? Number(yearMatch[0]) : null;
-  // START day: the FIRST 1–2 digit number BEFORE the month name. Course dates are
-  // often multi-day ranges ("12, 13, 14 Giugno" / "9-10-11 Novembre") and we want
-  // the first lesson, not the last.
+  // START day: the FIRST STANDALONE 1–2 digit number before the month. Course
+  // dates are often multi-day ranges ("12, 13, 14 Giugno" → 12). The (?<!\d)…(?!\d)
+  // guard skips digits that are part of a longer number (e.g. a year "2026").
   let day: number | null = null;
   if (monthName) {
-    const prefix = t.slice(0, t.indexOf(monthName));
-    const m = prefix.match(/(\d{1,2})/);
+    const prefix = t.slice(0, monthPos);
+    const m = prefix.match(/(?<!\d)(\d{1,2})(?!\d)/);
     if (m) {
       const d = Number(m[1]);
       if (d >= 1 && d <= 31) day = d;

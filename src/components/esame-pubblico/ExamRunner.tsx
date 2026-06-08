@@ -558,9 +558,11 @@ export function ExamRunner({
             type="button"
             className="exam-public-btn"
             onClick={goFinish}
-            disabled={(reviewMode ? skippedNums.length > 0 : !atLast) || submitting}
+            disabled={
+              (reviewMode ? skippedNums.filter((n) => n !== idx).length > 0 : !atLast) || submitting
+            }
             style={
-              (reviewMode ? skippedNums.length === 0 : atLast)
+              (reviewMode ? skippedNums.filter((n) => n !== idx).length === 0 : atLast)
                 ? { background: "#f59e0b", borderColor: "#f59e0b", color: "#fff" }
                 : { opacity: 0.45 }
             }
@@ -908,6 +910,13 @@ function OrderInput({
   }, [value, options]);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
+  // Commit the displayed arrangement once, so an order question the student
+  // simply leaves as-is is still a real (submittable) answer, not "skipped".
+  useEffect(() => {
+    if (!Array.isArray(value)) onChange(order);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const move = (from: number, to: number) => {
     if (to < 0 || to >= order.length || from === to) return;
     const next = order.slice();
@@ -932,7 +941,7 @@ function OrderInput({
       <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)" }}>{hint}</div>
       {order.map((opt, i) => (
         <div
-          key={opt}
+          key={`${i}-${opt}`}
           draggable
           onDragStart={() => setDragIdx(i)}
           onDragOver={(e) => e.preventDefault()}

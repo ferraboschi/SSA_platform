@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Avatar, Badge } from "@/components/ui";
+import { EducatorSyncButton } from "./EducatorSyncButton";
 import { useT, format } from "@/lib/i18n";
 import { COURSE_TYPES, COURSE_TYPE_SHORT_LABEL, type CourseTypeKey } from "@/lib/domain";
 
@@ -65,6 +66,9 @@ export function EducatorList({
           <div className="eyebrow">{t.eyebrow}</div>
           <h1 className="page-title">{t.title}</h1>
           <p className="page-sub">{t.sub}</p>
+        </div>
+        <div className="page-actions">
+          <EducatorSyncButton />
         </div>
       </div>
 
