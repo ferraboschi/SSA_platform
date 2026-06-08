@@ -17,6 +17,7 @@ import {
   type AdminOrder,
   type AdminProduct,
 } from "@/lib/integrations/shopify/admin-client";
+import { syncEducatorActivation } from "@/lib/educators/sync-active";
 
 export interface SyncSummary {
   ranAt: string;
@@ -499,6 +500,14 @@ export async function runShopifySync(opts?: {
     );
   } catch {
     /* sync_state migration not applied yet — non-fatal */
+  }
+
+  // Align educator activation with the public "Chi siamo" page (source of truth).
+  // Best-effort: a fetch/parse hiccup must never fail the Shopify sync.
+  try {
+    await syncEducatorActivation();
+  } catch {
+    /* non-fatal */
   }
 
   return {
