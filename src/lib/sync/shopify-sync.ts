@@ -66,13 +66,18 @@ function parseItDate(text: string): { day: number | null; month: number | null; 
   const month = monthName ? MONTHS[monthName] : null;
   const yearMatch = t.match(/20(2[0-9]|3\d)/);
   const year = yearMatch ? Number(yearMatch[0]) : null;
-  // day immediately before the month name (e.g. "14 settembre"), else any 1–2 digit.
+  // START day: the FIRST 1–2 digit number BEFORE the month name. Course dates are
+  // often multi-day ranges ("12, 13, 14 Giugno" / "9-10-11 Novembre") and we want
+  // the first lesson, not the last.
   let day: number | null = null;
   if (monthName) {
-    const m = t.match(new RegExp(`(\\d{1,2})\\s*[°ºª]?\\s+${monthName}`));
-    if (m) day = Number(m[1]);
+    const prefix = t.slice(0, t.indexOf(monthName));
+    const m = prefix.match(/(\d{1,2})/);
+    if (m) {
+      const d = Number(m[1]);
+      if (d >= 1 && d <= 31) day = d;
+    }
   }
-  if (day != null && (day < 1 || day > 31)) day = null;
   return { day, month, year };
 }
 
@@ -233,6 +238,14 @@ async function syncCourses(
     let parsed = parseCourseTitle(p.title);
     if (!parsed) parsed = parseCourseFromMetafields(p.title, p.tags || "", await getMf());
     if (!parsed) continue;
+
+    // Titles carry month/year but NOT the day — pull the real START day from the
+    // event-date metafield ("🗓️ 12, 13, 14 Giugno 2026" → 12). Without this every
+    // title-parsed course defaulted to day 01.
+    if (parsed.day == null) {
+      const d = parseItDate((await getMf()).luogo_e_orari || "").day;
+      if (d != null) parsed = { ...parsed, day: d };
+    }
 
     const key = parsed.year * 12 + (parsed.month - 1);
     if (key < curKey) continue; // only future / current-month courses
