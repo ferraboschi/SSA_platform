@@ -103,6 +103,11 @@ export async function GET() {
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
     googleMaps: Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
     resend: Boolean(process.env.RESEND_API_KEY),
+    // Token-signing secrets (presence only — never the value). Exam/share links
+    // are HMAC-signed with EXAM_LINK_SECRET, falling back to SYNC_SECRET; if BOTH
+    // are false the code uses an insecure dev constant and links are forgeable.
+    examLinkSecret: Boolean(process.env.EXAM_LINK_SECRET),
+    syncSecret: Boolean(process.env.SYNC_SECRET),
     airtablePricesBaseEnv: Boolean(process.env.AIRTABLE_PRICES_BASE_ID),
     sake: { priceCodes, catalogTotal, catalogWithCost },
     rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
