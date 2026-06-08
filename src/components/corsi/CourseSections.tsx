@@ -9,14 +9,16 @@ import { CourseStat } from "./CourseStat";
 import { IscrittiSection } from "./IscrittiSection";
 import { ProgrammaEconomiaSection } from "./ProgrammaEconomiaSection";
 import { ExamLinkPanel } from "./ExamLinkPanel";
+import { EsitiTab } from "@/components/esami/EsitiTab";
 import type { EsameData, ProgrammaData, TemplateData } from "@/lib/corsi";
 import type { CourseProgramOverlay } from "@/lib/corsi/program-overlay";
 import type { Student } from "@/lib/domain";
 
-type SectionId = "iscritti" | "programma" | "esame";
+type SectionId = "iscritti" | "programma" | "esame" | "esiti";
 
 export function CourseSections({
   courseId,
+  courseTitle = "",
   enrolled,
   programSakeCount,
   students,
@@ -28,6 +30,7 @@ export function CourseSections({
   examFamily = null,
 }: {
   courseId: string;
+  courseTitle?: string;
   enrolled: number;
   programSakeCount: number;
   students: Student[];
@@ -43,8 +46,8 @@ export function CourseSections({
   const hasExam = Boolean(esame) || Boolean(examFamily);
   const requestedTab = useSearchParams().get("tab");
   const initialSection: SectionId =
-    requestedTab === "esame" && hasExam
-      ? "esame"
+    (requestedTab === "esame" || requestedTab === "esiti") && hasExam
+      ? (requestedTab as SectionId)
       : requestedTab === "programma"
         ? "programma"
         : "iscritti";
@@ -54,7 +57,10 @@ export function CourseSections({
     { id: "iscritti", label: t.tabIscritti, n: enrolled },
     { id: "programma", label: t.tabProgramma, n: programSakeCount },
     ...(hasExam
-      ? [{ id: "esame" as const, label: t.tabEsame, n: esame?.totalQuestions ?? 0, accent: true }]
+      ? [
+          { id: "esame" as const, label: t.tabEsame, n: esame?.totalQuestions ?? 0, accent: true },
+          { id: "esiti" as const, label: "Esiti", n: 0 },
+        ]
       : []),
   ];
 
@@ -84,17 +90,12 @@ export function CourseSections({
       )}
       {section === "esame" && (
         <div style={{ display: "grid", gap: 18 }}>
-          {examFamily && (
-            <div>
-              <Link className="btn btn-primary" href={`/esami/${courseId}/risultati`}>
-                <Icon name="exam" size={13} />
-                {t.examResultsLink}
-              </Link>
-            </div>
-          )}
           {esame && <EsameTabSummary courseId={courseId} esame={esame} />}
           {examFamily && <ExamLinkPanel courseId={courseId} family={examFamily} />}
         </div>
+      )}
+      {section === "esiti" && examFamily && (
+        <EsitiTab courseId={courseId} courseTitle={courseTitle} family={examFamily} />
       )}
     </>
   );

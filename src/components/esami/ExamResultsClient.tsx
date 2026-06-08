@@ -33,6 +33,7 @@ export function ExamResultsClient({
   results,
   feedback,
   adminEmail = "",
+  embedded = false,
 }: {
   courseId: string;
   courseTitle: string;
@@ -40,6 +41,8 @@ export function ExamResultsClient({
   results: GradedSubmission[];
   feedback?: FeedbackAggregateResult | null;
   adminEmail?: string;
+  /** Rendered inside a course tab: drop the page wrapper + back link. */
+  embedded?: boolean;
 }) {
   // Confirmed results = graded submissions whose outcome has been confirmed.
   const confirmed: ConfirmedResultRow[] = results
@@ -68,14 +71,16 @@ export function ExamResultsClient({
   const confirmedCount = results.filter((r) => r.currentResult).length;
 
   return (
-    <div className="page">
-      <Link className="btn btn-sm btn-ghost" href={`/esami/${courseId}`} style={{ marginBottom: 14 }}>
-        <Icon name="arrow-l" size={12} />
-        Torna all&apos;esame
-      </Link>
+    <div className={embedded ? "" : "page"}>
+      {!embedded && (
+        <Link className="btn btn-sm btn-ghost" href={`/esami/${courseId}`} style={{ marginBottom: 14 }}>
+          <Icon name="arrow-l" size={12} />
+          Torna all&apos;esame
+        </Link>
+      )}
       <PageHeader
         eyebrow="Esiti & correzione"
-        title={`Risultati esame — ${courseTitle}`}
+        title={`Risultati esame${courseTitle ? ` — ${courseTitle}` : ""}`}
         sub="Consegne reali degli studenti, corrette in automatico sulle domande oggettive. Conferma l'esito: viene scritto sul profilo del corsista."
         actions={
           hasExam ? (
