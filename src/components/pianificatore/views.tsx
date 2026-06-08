@@ -400,19 +400,62 @@ function PL_HeatmapView({ win, courses, onDropMonth, onRequestAdd, onChipClick }
 // ============================================================
 // 2) MONTHLY (timeline)
 // ============================================================
+// Week buckets within a month (by day-of-month) for the "Settimane" grouping.
+const WEEK_BUCKETS = [
+  { lo: 1, hi: 7, label: "1–7" },
+  { lo: 8, hi: 14, label: "8–14" },
+  { lo: 15, hi: 21, label: "15–21" },
+  { lo: 22, hi: 28, label: "22–28" },
+  { lo: 29, hi: 31, label: "29–31" },
+];
+function groupByWeek<T extends { day?: number | null }>(cs: T[]) {
+  return WEEK_BUCKETS.map((b) => ({
+    label: b.label,
+    items: cs.filter((c) => {
+      const d = c.day ?? 1;
+      return d >= b.lo && d <= b.hi;
+    }),
+  })).filter((g) => g.items.length > 0);
+}
+
 function PL_TimelineView({ win, courses, onDropMonth, onRequestAdd, onChipClick }: ViewProps) {
   const t = useT().pianificatore;
   const [over, setOver] = useState<string | null>(null);
+  const [byWeek, setByWeek] = useState(false);
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 0,
-        overflowX: "auto",
-        border: "1px solid var(--border-2)",
-        borderRadius: 8,
-      }}
-    >
+    <div>
+      {/* Mese / Settimane grouping toggle. */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <div style={{ display: "inline-flex", border: "1px solid var(--border-2)", borderRadius: 8, overflow: "hidden" }}>
+          {([["Mese", false], ["Settimane", true]] as const).map(([label, val]) => (
+            <button
+              key={label}
+              onClick={() => setByWeek(val)}
+              style={{
+                padding: "5px 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: "inherit",
+                border: "none",
+                cursor: "pointer",
+                background: byWeek === val ? "var(--indigo-600)" : "transparent",
+                color: byWeek === val ? "#fff" : "var(--text-3)",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: 0,
+          overflowX: "auto",
+          border: "1px solid var(--border-2)",
+          borderRadius: 8,
+        }}
+      >
       {win.map((w, i) => {
         const cs = monthCourses(courses, w.year, w.mIdx).sort(
           (a, b) => (a.day ?? 0) - (b.day ?? 0),
@@ -504,9 +547,29 @@ function PL_TimelineView({ win, courses, onDropMonth, onRequestAdd, onChipClick 
                 flex: 1,
               }}
             >
-              {cs.map((c) => (
-                <PL_AgendaCard key={c.id} c={c} onChipClick={onChipClick} />
-              ))}
+              {byWeek
+                ? groupByWeek(cs).map((g) => (
+                    <div key={g.label} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: "var(--text-4)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                          paddingTop: 2,
+                        }}
+                      >
+                        {g.label}
+                      </div>
+                      {g.items.map((c) => (
+                        <PL_AgendaCard key={c.id} c={c} onChipClick={onChipClick} />
+                      ))}
+                    </div>
+                  ))
+                : cs.map((c) => (
+                    <PL_AgendaCard key={c.id} c={c} onChipClick={onChipClick} />
+                  ))}
               <button
                 onClick={() => onRequestAdd(w.year, w.mIdx)}
                 title={format(t.views.addTip, { month: w.name, year: w.year })}
@@ -544,6 +607,7 @@ function PL_TimelineView({ win, courses, onDropMonth, onRequestAdd, onChipClick 
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
