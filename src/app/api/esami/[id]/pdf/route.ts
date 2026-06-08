@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
 import { hasRole } from "@/lib/auth/guard";
 import { renderCertificatePdf } from "@/lib/esami/certificate-pdf";
+import { loadCourseExamResults } from "@/lib/exam-links/results";
 import type { ExamFamily } from "@/lib/domain";
 
 // Per-student exam-result PDF (IT+EN), inline so it can be previewed in an iframe
@@ -21,18 +22,22 @@ export async function GET(
 
   const ds = await getDataSource();
   const course = /^\d+$/.test(id) ? await ds.courses.getById(id) : await ds.courses.getByHandle(id);
-  const result = course?.examResults2?.find((r) => r.email.toLowerCase() === email);
-  if (!course || !result) {
-    return NextResponse.json({ ok: false, error: "result not found" }, { status: 404 });
-  }
+  if (!course) return NextResponse.json({ ok: false, error: "course not found" }, { status: 404 });
+  const family: ExamFamily | null =
+    course.type === "certificato" ? "nihonshu" : course.type === "shochu" ? "shochu" : null;
+  if (!family) return NextResponse.json({ ok: false, error: "no exam" }, { status: 404 });
 
-  const family: ExamFamily = course.type === "shochu" ? "shochu" : "nihonshu";
+  // Real confirmed result from the grading flow (not the demo-only examResults2).
+  const subs = await loadCourseExamResults(course.id, family);
+  const sub = subs.find((s) => s.studentEmail.toLowerCase() === email && s.currentResult);
+  if (!sub) return NextResponse.json({ ok: false, error: "result not found" }, { status: 404 });
+
   const buf = await renderCertificatePdf({
-    name: result.name,
+    name: sub.studentName,
     family,
-    status: result.status,
-    score: result.score,
-    sections: result.sections.map((s) => ({ label: s.label, pct: s.pct })),
+    status: sub.currentResult as "passed" | "retrial" | "failed",
+    score: sub.currentScore ?? sub.autoScore,
+    sections: [],
     course: {
       day: course.day,
       month: course.month,
@@ -40,10 +45,10 @@ export async function GET(
       city: course.city,
       educatorName: course.educator.name,
     },
-    completedAt: result.completedAt,
+    completedAt: sub.submittedAt,
   });
 
-  const slug = result.name.normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
+  const slug = sub.studentName.normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
   return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/pdf",

@@ -7,10 +7,9 @@ import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
 import { gradeEnrollmentAction } from "@/lib/exam-links/grading-actions";
 import { gradeOpenAnswerAction, type GradeOpenResult } from "@/lib/esami/ai-actions";
 import { FeedbackSummary } from "./FeedbackSummary";
-import { SendResultsSection } from "./SendResultsSection";
+import { SendResultsSection, type ConfirmedResultRow } from "./SendResultsSection";
 import type { ExamOutcome, GradedSubmission } from "@/lib/exam-links/results";
 import type { FeedbackAggregateResult } from "@/lib/exam-links/feedback-results";
-import type { ExamResult } from "@/lib/domain";
 
 const OUTCOME_TONE: Record<string, BadgeTone> = {
   passed: "success",
@@ -33,7 +32,6 @@ export function ExamResultsClient({
   hasExam,
   results,
   feedback,
-  confirmedResults = [],
   adminEmail = "",
 }: {
   courseId: string;
@@ -41,9 +39,17 @@ export function ExamResultsClient({
   hasExam: boolean;
   results: GradedSubmission[];
   feedback?: FeedbackAggregateResult | null;
-  confirmedResults?: ExamResult[];
   adminEmail?: string;
 }) {
+  // Confirmed results = graded submissions whose outcome has been confirmed.
+  const confirmed: ConfirmedResultRow[] = results
+    .filter((r) => r.currentResult)
+    .map((r) => ({
+      name: r.studentName,
+      email: r.studentEmail,
+      score: r.currentScore ?? r.autoScore,
+      status: r.currentResult as string,
+    }));
   const [expanded, setExpanded] = useState<number | null>(null);
   const router = useRouter();
   const [live, setLive] = useState(true);
@@ -131,7 +137,7 @@ export function ExamResultsClient({
       )}
 
       {hasExam && (
-        <SendResultsSection courseId={courseId} results={confirmedResults} adminEmail={adminEmail} />
+        <SendResultsSection courseId={courseId} results={confirmed} adminEmail={adminEmail} />
       )}
 
       {hasExam && feedback && <FeedbackSummary data={feedback} />}

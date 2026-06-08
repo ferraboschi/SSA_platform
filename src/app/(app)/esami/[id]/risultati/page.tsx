@@ -34,7 +34,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       hasExam={!!family}
       results={results}
       feedback={feedback}
-      confirmedResults={course.examResults2 ?? []}
       adminEmail={session?.user?.email ?? ""}
     />
   );

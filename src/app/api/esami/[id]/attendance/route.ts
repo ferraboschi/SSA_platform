@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
 import { hasRole } from "@/lib/auth/guard";
 import { courseRosterStudents } from "@/lib/esami";
+import { loadCourseExamResults } from "@/lib/exam-links/results";
 import { buildAttendanceXlsx, type AttendanceRow } from "@/lib/esami/attendance-xlsx";
 
 // CSS Attendance List (.xlsx) for a course, pre-filled with what we have. The
@@ -32,10 +33,11 @@ export async function GET(
   if (!course) return NextResponse.json({ ok: false, error: "course not found" }, { status: 404 });
 
   const roster = courseRosterStudents(course).students;
-  const results = course.examResults2 ?? [];
-  const byEmail = new Map(results.map((r) => [r.email.toLowerCase(), r]));
+  const family = course.type === "certificato" ? "nihonshu" : course.type === "shochu" ? "shochu" : null;
+  const subs = family ? await loadCourseExamResults(course.id, family) : [];
+  const byEmail = new Map(subs.filter((s) => s.currentResult).map((s) => [s.studentEmail.toLowerCase(), s]));
 
-  // Union: every enrolled student + anyone with a result not on the roster.
+  // Union: every enrolled student + anyone with a confirmed result not on the roster.
   const emails = new Set<string>();
   const rows: AttendanceRow[] = [];
   const push = (name: string, email: string) => {
@@ -48,12 +50,12 @@ export async function GET(
       firstName: first,
       lastName: last,
       email,
-      score: res?.score ?? null,
-      passFail: res ? passFail(res.status) : "",
+      score: res ? res.currentScore ?? res.autoScore : null,
+      passFail: res?.currentResult ? passFail(res.currentResult) : "",
     });
   };
   for (const s of roster) push(s.name, s.email);
-  for (const r of results) push(r.name, r.email);
+  for (const s of subs) if (s.currentResult) push(s.studentName, s.studentEmail);
 
   const buf = await buildAttendanceXlsx({
     course: course.shortTitle || "Corso SSA",

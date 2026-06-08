@@ -7,6 +7,7 @@ import { getDataSource } from "@/lib/data";
 import { hasRole } from "@/lib/auth/guard";
 import { appConfig } from "@/lib/integrations/config";
 import { sendExamResultEmail } from "@/lib/alerts/emails";
+import { loadCourseExamResults } from "@/lib/exam-links/results";
 import { renderCertificatePdf } from "./certificate-pdf";
 import type { ExamFamily } from "@/lib/domain";
 
@@ -28,24 +29,33 @@ export async function sendExamResultEmailAction(
   // TEST MODE: while not operational, the caller passes toOverride to route the
   // email to staff instead of the student. Remove the override at go-live.
   const dest = opts?.toOverride?.trim() || email;
+  const lowEmail = email.toLowerCase();
   const ds = await getDataSource();
   const course = await ds.courses.getById(courseId);
-  const result = course?.examResults2?.find((r) => r.email === email);
-  if (!course || !result) return { ok: false, error: "Esito non trovato." };
+  if (!course) return { ok: false, error: "Corso non trovato." };
+  const family: ExamFamily | null =
+    course.type === "certificato" ? "nihonshu" : course.type === "shochu" ? "shochu" : null;
+  if (!family) return { ok: false, error: "Questo corso non prevede un esame." };
+
+  // Real confirmed result from the grading flow (not the demo-only examResults2).
+  const subs = await loadCourseExamResults(course.id, family);
+  const result = subs.find((s) => s.studentEmail.toLowerCase() === lowEmail && s.currentResult);
+  if (!result) return { ok: false, error: "Esito non confermato per questo studente." };
+  const outcome = result.currentResult as "passed" | "retrial" | "failed";
+  const scorePct = result.currentScore ?? result.autoScore;
 
   const base = appConfig.baseUrl.replace(/\/$/, "");
   const reportUrl = `${base}/esami/${courseId}/report/${encodeURIComponent(email)}`;
-  const family: ExamFamily = course.type === "shochu" ? "shochu" : "nihonshu";
   try {
     // Attach the IT+EN certificate PDF (JA is available via the report link).
     let pdf: { filename: string; base64: string } | undefined;
     try {
       const buf = await renderCertificatePdf({
-        name: result.name,
+        name: result.studentName,
         family,
-        status: result.status,
-        score: result.score,
-        sections: result.sections.map((s) => ({ label: s.label, pct: s.pct })),
+        status: outcome,
+        score: scorePct,
+        sections: [],
         course: {
           day: course.day,
           month: course.month,
@@ -53,9 +63,9 @@ export async function sendExamResultEmailAction(
           city: course.city,
           educatorName: course.educator.name,
         },
-        completedAt: result.completedAt,
+        completedAt: result.submittedAt,
       });
-      const slug = result.name.normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
+      const slug = result.studentName.normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
       pdf = { filename: `certificato-${slug || "esame"}.pdf`, base64: buf.toString("base64") };
     } catch (e) {
       // Don't fail the send, but surface that the certificate is missing.
@@ -64,10 +74,10 @@ export async function sendExamResultEmailAction(
 
     const res = await sendExamResultEmail({
       to: dest, // student, or the test override
-      studentName: result.name,
+      studentName: result.studentName,
       courseTitle: course.shortTitle || course.title,
-      scorePct: result.score,
-      status: result.status,
+      scorePct,
+      status: outcome,
       reportUrl,
       pdf,
     });

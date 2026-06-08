@@ -3,7 +3,14 @@
 import { useState, useTransition } from "react";
 import { Badge, Icon, type BadgeTone } from "@/components/ui";
 import { sendExamResultEmailAction } from "@/lib/esami/email-actions";
-import type { ExamResult } from "@/lib/domain";
+
+/** Minimal shape for a confirmed result (derived from the real grading data). */
+export interface ConfirmedResultRow {
+  name: string;
+  email: string;
+  score: number;
+  status: string;
+}
 
 const TONE: Record<string, BadgeTone> = { passed: "success", retrial: "warning", failed: "danger" };
 const LABEL: Record<string, string> = { passed: "Promosso", retrial: "Recupero", failed: "Bocciato" };
@@ -23,7 +30,7 @@ export function SendResultsSection({
   adminEmail,
 }: {
   courseId: string;
-  results: ExamResult[];
+  results: ConfirmedResultRow[];
   adminEmail: string;
 }) {
   const [openEmail, setOpenEmail] = useState<string | null>(null);
@@ -98,7 +105,7 @@ function ResultRow({
   onToggle,
 }: {
   courseId: string;
-  r: ExamResult;
+  r: ConfirmedResultRow;
   adminEmail: string;
   pdfUrl: string;
   open: boolean;
