@@ -69,6 +69,13 @@ const CHROME: Record<Lang, Record<string, string>> = {
     iDone: "Ho finito",
     emailInvalid: "Inserisci un'email valida",
     emptyListTitle: "Domande lasciate vuote",
+    notesTitle: "Le tue note",
+    notesHint: "Campo per le tue note: rimane costante durante tutte le risposte dell'esame e non viene salvato.",
+    skipped: "Saltate",
+    reviewing: "Revisione domande saltate",
+    allReviewed: "Hai completato tutte le domande saltate.",
+    exitReview: "Esci dalla revisione",
+    dragHint: "Trascina o usa le frecce per ordinare",
   },
   en: {
     test: "TEST MODE",
@@ -102,6 +109,13 @@ const CHROME: Record<Lang, Record<string, string>> = {
     iDone: "I'm done",
     emailInvalid: "Enter a valid email",
     emptyListTitle: "Questions left empty",
+    notesTitle: "Your notes",
+    notesHint: "A space for your notes: it stays the same across all exam questions and is not saved.",
+    skipped: "Skipped",
+    reviewing: "Reviewing skipped questions",
+    allReviewed: "You've completed all skipped questions.",
+    exitReview: "Exit review",
+    dragHint: "Drag or use the arrows to order",
   },
   ja: {
     test: "テストモード",
@@ -135,6 +149,13 @@ const CHROME: Record<Lang, Record<string, string>> = {
     iDone: "完了",
     emailInvalid: "有効なメールを入力してください",
     emptyListTitle: "未回答の問題",
+    notesTitle: "メモ",
+    notesHint: "メモ用の欄です。試験中ずっと保持され、保存されません。",
+    skipped: "スキップ",
+    reviewing: "スキップした問題の確認",
+    allReviewed: "スキップした問題をすべて完了しました。",
+    exitReview: "確認を終了",
+    dragHint: "ドラッグまたは矢印で並べ替え",
   },
 };
 
@@ -185,6 +206,10 @@ export function ExamRunner({
   const [answers, setAnswers] = useState<Record<string, string[] | string>>({});
   const [done, setDone] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string[] | null>(null);
+  const [reviewMode, setReviewMode] = useState(false);
+  // Personal scratchpad — constant across questions, never submitted/saved.
+  const [notes, setNotes] = useState("");
+  const [notesOpen, setNotesOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
@@ -360,9 +385,20 @@ export function ExamRunner({
     })
     .map(({ i }) => String(i));
 
+  // Navigation among ONLY the skipped questions (review mode).
+  const skippedNums = skippedQ.map(Number);
+  const nextSkipped = skippedNums.find((n) => n > idx);
+  const prevSkipped = [...skippedNums].reverse().find((n) => n < idx);
+
   const goFinish = () => {
     if (skippedQ.length > 0) setPendingPrompt(skippedQ);
     else void finish();
+  };
+
+  const enterReview = (target?: number) => {
+    setReviewMode(true);
+    setPendingPrompt(null);
+    if (target != null) setIdx(target);
   };
 
   // Block "Avanti" while sitting on the email step with an invalid address.
@@ -385,6 +421,73 @@ export function ExamRunner({
         <div className="exam-public-counter">
           {t.question} {idx + 1} {t.of} {total} · {idx + 1}/{total}
         </div>
+
+        {/* Skipped-question tags — jump straight to a skipped question. */}
+        {skippedQ.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 0 2px",
+              position: "sticky",
+              top: 0,
+              zIndex: 2,
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#b45309" }}>
+              {t.skipped} ({skippedQ.length}):
+            </span>
+            {skippedQ.map((si) => {
+              const n = Number(si);
+              const cur = n === idx;
+              return (
+                <button
+                  key={si}
+                  type="button"
+                  onClick={() => enterReview(n)}
+                  style={{
+                    minWidth: 30,
+                    padding: "3px 9px",
+                    borderRadius: 999,
+                    border: "1px solid #f59e0b",
+                    background: cur ? "#f59e0b" : "#fff7ed",
+                    color: cur ? "#fff" : "#b45309",
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {n + 1}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {reviewMode && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 12.5,
+              color: skippedNums.length === 0 ? "#1a7f43" : "#b45309",
+              margin: "4px 0",
+            }}
+          >
+            <span>
+              {skippedNums.length === 0 ? t.allReviewed : `${t.reviewing} · ${skippedNums.length}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setReviewMode(false)}
+              style={{ fontSize: 12, color: "var(--text-3, #6b7280)", textDecoration: "underline", cursor: "pointer", background: "none", border: "none" }}
+            >
+              {t.exitReview}
+            </button>
+          </div>
+        )}
 
         <div className="exam-public-q" {...noCopy}>
           {step.kind === "reg" ? (
@@ -413,6 +516,7 @@ export function ExamRunner({
                     value={answers[step.q.id]}
                     onChange={(v) => setAnswer(step.q.id, v)}
                     answerLabel={t.yourAnswer}
+                    dragHint={t.dragHint}
                     reveal={reveal}
                   />
                 </>
@@ -425,36 +529,89 @@ export function ExamRunner({
           <button
             type="button"
             className="exam-public-btn ghost"
-            onClick={() => setIdx((i) => Math.max(0, i - 1))}
-            disabled={idx === 0}
+            onClick={() =>
+              reviewMode && prevSkipped != null
+                ? setIdx(prevSkipped)
+                : setIdx((i) => Math.max(0, i - 1))
+            }
+            disabled={reviewMode ? prevSkipped == null : idx === 0}
           >
             {t.back}
           </button>
-          {!atLast && (
+          {(reviewMode ? nextSkipped != null : !atLast) && (
             <button
               type="button"
               className="exam-public-btn primary"
-              onClick={() => setIdx((i) => Math.min(total - 1, i + 1))}
+              onClick={() =>
+                reviewMode && nextSkipped != null
+                  ? setIdx(nextSkipped)
+                  : setIdx((i) => Math.min(total - 1, i + 1))
+              }
               disabled={emailInvalid}
             >
               {t.next}
             </button>
           )}
-          {/* "Ho finito" is always present; it turns orange + clickable on the
-              last step, regardless of how many questions are still empty. */}
+          {/* "Ho finito": active on the last step (normal) or once no skipped
+              question remains (review mode). */}
           <button
             type="button"
             className="exam-public-btn"
             onClick={goFinish}
-            disabled={!atLast || submitting}
+            disabled={(reviewMode ? skippedNums.length > 0 : !atLast) || submitting}
             style={
-              atLast
+              (reviewMode ? skippedNums.length === 0 : atLast)
                 ? { background: "#f59e0b", borderColor: "#f59e0b", color: "#fff" }
                 : { opacity: 0.45 }
             }
           >
             {submitting ? "…" : t.iDone}
           </button>
+        </div>
+
+        {/* Personal notes — constant across questions, never saved/submitted. */}
+        <div style={{ borderTop: "1px solid var(--border, #ececf1)", marginTop: 10, paddingTop: 8 }}>
+          <button
+            type="button"
+            onClick={() => setNotesOpen((o) => !o)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--text-2, #374151)",
+              padding: 0,
+            }}
+          >
+            📝 {t.notesTitle} <span aria-hidden>{notesOpen ? "▾" : "▸"}</span>
+          </button>
+          {notesOpen && (
+            <div style={{ marginTop: 8 }}>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                placeholder={t.notesTitle}
+                style={{
+                  width: "100%",
+                  resize: "vertical",
+                  borderRadius: 8,
+                  border: "1px solid var(--border, #d4d4d8)",
+                  padding: "8px 10px",
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  lineHeight: 1.5,
+                }}
+              />
+              <div style={{ fontSize: 11, color: "var(--text-4, #9ca3af)", marginTop: 4 }}>
+                {t.notesHint}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -474,10 +631,7 @@ export function ExamRunner({
                   type="button"
                   className="exam-public-btn ghost"
                   style={{ padding: "4px 11px", fontSize: 13, minWidth: 0 }}
-                  onClick={() => {
-                    setIdx(Number(si));
-                    setPendingPrompt(null);
-                  }}
+                  onClick={() => enterReview(Number(si))}
                 >
                   {t.question} {Number(si) + 1}
                 </button>
@@ -495,10 +649,7 @@ export function ExamRunner({
               </button>
               <button
                 className="exam-public-btn primary"
-                onClick={() => {
-                  setIdx(Number(pendingPrompt[0]));
-                  setPendingPrompt(null);
-                }}
+                onClick={() => enterReview(Number(pendingPrompt[0]))}
               >
                 {t.review}
               </button>
@@ -737,17 +888,95 @@ function RegInput({
   );
 }
 
+// Drag-and-drop (+ arrow) ordering for "order" questions. The answer is the
+// current arrangement of the option texts.
+function OrderInput({
+  options,
+  value,
+  onChange,
+  hint,
+}: {
+  options: string[];
+  value: string[] | string | undefined;
+  onChange: (v: string[]) => void;
+  hint: string;
+}): ReactNode {
+  const order = useMemo<string[]>(() => {
+    const v = Array.isArray(value) ? value.filter((o) => options.includes(o)) : [];
+    const missing = options.filter((o) => !v.includes(o));
+    return v.length ? [...v, ...missing] : options.slice();
+  }, [value, options]);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= order.length || from === to) return;
+    const next = order.slice();
+    const [it] = next.splice(from, 1);
+    next.splice(to, 0, it);
+    onChange(next);
+  };
+
+  const btn: React.CSSProperties = {
+    width: 28,
+    height: 24,
+    borderRadius: 6,
+    border: "1px solid var(--border, #d4d4d8)",
+    background: "var(--surface, #fff)",
+    cursor: "pointer",
+    fontSize: 11,
+    lineHeight: 1,
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)" }}>{hint}</div>
+      {order.map((opt, i) => (
+        <div
+          key={opt}
+          draggable
+          onDragStart={() => setDragIdx(i)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => {
+            if (dragIdx != null) move(dragIdx, i);
+            setDragIdx(null);
+          }}
+          onDragEnd={() => setDragIdx(null)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 12px",
+            border: "1px solid var(--border, #d4d4d8)",
+            borderRadius: 10,
+            background: dragIdx === i ? "#fff7ed" : "var(--surface, #fff)",
+            cursor: "grab",
+          }}
+        >
+          <span aria-hidden style={{ color: "var(--text-4, #9ca3af)", fontSize: 16 }}>⠿</span>
+          <span style={{ flex: 1, fontSize: 15 }}>{opt}</span>
+          <span style={{ display: "inline-flex", gap: 4 }}>
+            <button type="button" style={btn} disabled={i === 0} aria-label="su" onClick={() => move(i, i - 1)}>▲</button>
+            <button type="button" style={btn} disabled={i === order.length - 1} aria-label="giù" onClick={() => move(i, i + 1)}>▼</button>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function QuestionInput({
   q,
   value,
   onChange,
   answerLabel,
+  dragHint,
   reveal,
 }: {
   q: RunnerQuestion;
   value: string[] | string | undefined;
   onChange: (v: string[] | string) => void;
   answerLabel: string;
+  dragHint: string;
   reveal?: boolean;
 }): ReactNode {
   const multi = q.type === "multi";
@@ -782,7 +1011,13 @@ function QuestionInput({
               onClick={() => toggle(opt)}
             >
               <span className="exam-public-opt-mark" aria-hidden>
-                {selected.includes(opt) ? "●" : "○"}
+                {multi
+                  ? selected.includes(opt)
+                    ? "☑"
+                    : "☐"
+                  : selected.includes(opt)
+                    ? "●"
+                    : "○"}
               </span>
               <span>{opt}</span>
               {isCorrect && (
@@ -795,6 +1030,10 @@ function QuestionInput({
         })}
       </div>
     );
+  }
+
+  if (q.type === "order" && q.options.length > 0) {
+    return <OrderInput options={q.options} value={value} onChange={onChange} hint={dragHint} />;
   }
 
   if (q.type === "fill") {
