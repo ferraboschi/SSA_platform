@@ -27,6 +27,9 @@ export function SendResultsSection({
   adminEmail: string;
 }) {
   const [openEmail, setOpenEmail] = useState<string | null>(null);
+  // TEST MODE: always route to staff, never the student — fall back to the admin
+  // address if the session email is missing. Remove the override at go-live.
+  const testTo = adminEmail || "lorenzo@ef-ti.com";
   const xlsHref = `/api/esami/${encodeURIComponent(courseId)}/attendance`;
   const pdfHref = (email: string) =>
     `/api/esami/${encodeURIComponent(courseId)}/pdf?email=${encodeURIComponent(email)}`;
@@ -58,7 +61,7 @@ export function SendResultsSection({
           marginBottom: 14,
         }}
       >
-        ⚠️ <b>Modalità test</b>: gli invii vanno a <b>te</b> ({adminEmail || "admin"}), non allo studente.
+        ⚠️ <b>Modalità test</b>: gli invii vanno a <b>te</b> ({testTo}), non allo studente.
         Da disattivare in fase operativa.
       </div>
 
@@ -74,7 +77,7 @@ export function SendResultsSection({
               key={r.email}
               courseId={courseId}
               r={r}
-              adminEmail={adminEmail}
+              adminEmail={testTo}
               pdfUrl={pdfHref(r.email)}
               open={openEmail === r.email}
               onToggle={() => setOpenEmail((e) => (e === r.email ? null : r.email))}
@@ -107,7 +110,7 @@ function ResultRow({
   const send = () =>
     start(async () => {
       setMsg(null);
-      const res = await sendExamResultEmailAction(courseId, r.email, { toOverride: adminEmail || undefined });
+      const res = await sendExamResultEmailAction(courseId, r.email, { toOverride: adminEmail });
       if (!res.ok) setMsg(res.error || "Invio non riuscito");
       else setMsg(`Inviata a ${res.sentTo} ✓`);
       setTimeout(() => setMsg(null), 6000);
