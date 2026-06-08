@@ -55,6 +55,22 @@ export async function GET() {
     /* diagnostic best-effort */
   }
 
+  // Resumable-proctored-exam migration diagnostic (20260608120000): confirms the
+  // exam_sessions table exists AND carries the session_secret column — i.e. the
+  // migration is actually applied, so the proctored flow + per-session secret
+  // are live (not falling back to "migrazione mancante").
+  let examSessionsTable = false;
+  let sessionSecretCol = false;
+  try {
+    const svc = getSupabaseServiceClient();
+    const r1 = await svc.from("exam_sessions").select("id", { head: true }).limit(1);
+    examSessionsTable = !r1.error;
+    const r2 = await svc.from("exam_sessions").select("session_secret", { head: true }).limit(1);
+    sessionSecretCol = !r2.error;
+  } catch {
+    /* diagnostic best-effort */
+  }
+
   // Exam question-count diagnostic per family: how many exam_templates rows
   // exist, and for the latest row the final/day/feedback counts + duplicate-id
   // detection (a duplicated question bank shows up here).
@@ -112,6 +128,7 @@ export async function GET() {
     sake: { priceCodes, catalogTotal, catalogWithCost },
     rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
     examLinks: { studentLinksTable, studentLinksRows, submissionsCorsistaCol },
+    examSessions: { table: examSessionsTable, sessionSecretCol },
     exam: { shochu: shochuExam, certificato: certExam },
   });
 }
