@@ -58,15 +58,17 @@ export function ExamResultsClient({
   const [live, setLive] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
-  // LIVE monitor: re-fetch real submissions every 25s while enabled.
+  // LIVE monitor: re-fetch real submissions every 25s while enabled. Disabled
+  // when embedded in a tab (a full router.refresh there would refetch the whole
+  // course page without updating this client-loaded data).
   useEffect(() => {
-    if (!live) return;
+    if (!live || embedded) return;
     const id = setInterval(() => {
       router.refresh();
       setLastRefresh(new Date());
     }, 25000);
     return () => clearInterval(id);
-  }, [live, router]);
+  }, [live, embedded, router]);
 
   const confirmedCount = results.filter((r) => r.currentResult).length;
 
