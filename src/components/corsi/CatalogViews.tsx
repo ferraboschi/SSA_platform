@@ -23,6 +23,33 @@ const barClass = (c: CourseListItem) =>
       : "warning"
     : "azzurro";
 
+// Per-course sake-program indicator next to the title:
+//  • green  = the sake program/template has been assigned
+//  • blue   = not yet assigned, but the course is live (pubblicato) → to do
+//  • grey   = not assigned and the course isn't live (draft/past/archived)
+function ProgramDot({ c }: { c: CourseListItem }) {
+  const t = useT().corsi.catalog;
+  const d = c.hasProgram
+    ? { color: "var(--success)", title: t.programDone }
+    : c.lifecycle === "pubblicato"
+      ? { color: "var(--indigo)", title: t.programTodo }
+      : { color: "var(--text-mute)", title: t.programNone };
+  return (
+    <span
+      title={d.title}
+      aria-label={d.title}
+      style={{
+        width: 9,
+        height: 9,
+        borderRadius: "50%",
+        background: d.color,
+        flexShrink: 0,
+        display: "inline-block",
+      }}
+    />
+  );
+}
+
 // ===== Timeline =====
 
 export function TimelineView({ courses }: { courses: CourseListItem[] }) {
@@ -145,17 +172,20 @@ function CourseRow({ course: c, last }: { course: CourseListItem; last: boolean 
             {c.days > 1 ? ` · ${format(t.daysSuffix, { n: c.days })}` : ""}
           </span>
         </div>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 600,
-            color: "var(--text)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {c.shortTitle}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+          <ProgramDot c={c} />
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "var(--text)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {c.shortTitle}
+          </span>
         </div>
         <div
           style={{
@@ -268,8 +298,11 @@ function CourseCard({ course: c }: { course: CourseListItem }) {
         >
           {c.day} {fullMonth} · {c.city}
         </div>
-        <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.25, marginBottom: 6 }}>
-          {c.shortTitle}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+          <ProgramDot c={c} />
+          <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.25 }}>
+            {c.shortTitle}
+          </span>
         </div>
         <div style={{ fontSize: 12, color: "var(--text-3)" }}>{c.educatorName}</div>
       </div>
@@ -467,7 +500,12 @@ function CourseTableRow({ course: c }: { course: CourseListItem }) {
         <Badge tone={c.typeColor === "oro" ? "oro" : "azzurro"}>{c.typeShort}</Badge>
       </td>
       <td style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {c.shortTitle}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, maxWidth: "100%" }}>
+          <ProgramDot c={c} />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {c.shortTitle}
+          </span>
+        </span>
       </td>
       <td className="text-3" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {c.city}

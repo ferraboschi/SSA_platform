@@ -307,6 +307,9 @@ export const en: Dictionary = {
       viewTimeline: "Timeline",
       viewGrid: "Grid",
       viewTable: "Table",
+      programDone: "Sake program assigned",
+      programTodo: "Sake program to assign",
+      programNone: "Sake program not assigned",
       sortOptions: {
         dateAsc: "Sort · Date ↑",
         dateDesc: "Sort · Date ↓",

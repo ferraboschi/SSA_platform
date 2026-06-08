@@ -83,6 +83,10 @@ export interface CourseListItem {
   revenue: number;
   margin: number;
   examPassed: number | null;
+  /** Whether the operator has assigned a sake program/template to this course
+   *  (a saved program overlay with at least one sake). Filled by the list page;
+   *  defaults false elsewhere. */
+  hasProgram: boolean;
 }
 
 export function toCourseListItem(c: Course): CourseListItem {
@@ -111,6 +115,7 @@ export function toCourseListItem(c: Course): CourseListItem {
     revenue: c.revenue,
     margin: c.margin,
     examPassed: c.examResults?.passed ?? null,
+    hasProgram: false,
   };
 }
 

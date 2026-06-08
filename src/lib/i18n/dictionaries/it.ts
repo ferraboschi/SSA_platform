@@ -309,6 +309,9 @@ export const it = {
       viewTimeline: "Timeline",
       viewGrid: "Griglia",
       viewTable: "Tabella",
+      programDone: "Programma sake assegnato",
+      programTodo: "Programma sake da assegnare",
+      programNone: "Programma sake non assegnato",
       sortOptions: {
         dateAsc: "Ordina · Data ↑",
         dateDesc: "Ordina · Data ↓",
