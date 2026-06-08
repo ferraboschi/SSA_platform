@@ -297,7 +297,6 @@ export function ExamRunner({
   const [reviewMode, setReviewMode] = useState(false);
   // Personal scratchpad — constant across questions, never submitted/saved.
   const [notes, setNotes] = useState("");
-  const [notesOpen, setNotesOpen] = useState(false);
   const [elapsed, setElapsed] = useState(resumeState?.elapsed ?? 0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
@@ -613,8 +612,9 @@ export function ExamRunner({
 
   const pct = Math.round(((idx + 1) / total) * 100);
 
-  // Skipped GRADED questions (registration is optional, not "skipped").
-  const skippedQ = steps
+  // All unanswered GRADED questions (registration is optional, never "skipped").
+  // Drives the pre-finish warning and the review-mode navigation.
+  const unansweredNums = steps
     .map((s, i) => ({ s, i }))
     .filter(({ s }) => s.kind === "q")
     .filter(({ s }) => {
@@ -622,15 +622,23 @@ export function ExamRunner({
       const a = answers[q.id];
       return a === undefined || (Array.isArray(a) ? a.length === 0 : a === "");
     })
-    .map(({ i }) => String(i));
+    .map(({ i }) => i);
 
-  // Navigation among ONLY the skipped questions (review mode).
-  const skippedNums = skippedQ.map(Number);
-  const nextSkipped = skippedNums.find((n) => n > idx);
-  const prevSkipped = [...skippedNums].reverse().find((n) => n < idx);
+  // The chip navigator shows only questions you've actually SKIPPED — moved PAST
+  // without answering. A question ahead of you that you simply haven't reached
+  // yet is NOT skipped, so this stays empty until you skip one (instead of
+  // dumping every remaining question on screen). In review mode it lists every
+  // still-unanswered question so you can jump straight to any of them.
+  const skippedChips = (reviewMode ? unansweredNums : unansweredNums.filter((i) => i < idx)).map(
+    String,
+  );
+
+  // Review-mode navigation cycles through ALL remaining unanswered questions.
+  const nextSkipped = unansweredNums.find((n) => n > idx);
+  const prevSkipped = [...unansweredNums].reverse().find((n) => n < idx);
 
   const goFinish = () => {
-    if (skippedQ.length > 0) setPendingPrompt(skippedQ);
+    if (unansweredNums.length > 0) setPendingPrompt(unansweredNums.map(String));
     else void finish();
   };
 
@@ -661,8 +669,8 @@ export function ExamRunner({
           {t.question} {idx + 1} {t.of} {total} · {idx + 1}/{total}
         </div>
 
-        {/* Skipped-question tags — jump straight to a skipped question. */}
-        {skippedQ.length > 0 && (
+        {/* Skipped-question tags — jump straight to a question you moved past. */}
+        {skippedChips.length > 0 && (
           <div
             style={{
               display: "flex",
@@ -676,9 +684,9 @@ export function ExamRunner({
             }}
           >
             <span style={{ fontSize: 12, fontWeight: 700, color: "#b45309" }}>
-              {t.skipped} ({skippedQ.length}):
+              {t.skipped} ({skippedChips.length}):
             </span>
-            {skippedQ.map((si) => {
+            {skippedChips.map((si) => {
               const n = Number(si);
               const cur = n === idx;
               return (
@@ -711,12 +719,12 @@ export function ExamRunner({
               alignItems: "center",
               gap: 8,
               fontSize: 12.5,
-              color: skippedNums.length === 0 ? "#1a7f43" : "#b45309",
+              color: unansweredNums.length === 0 ? "#1a7f43" : "#b45309",
               margin: "4px 0",
             }}
           >
             <span>
-              {skippedNums.length === 0 ? t.allReviewed : `${t.reviewing} · ${skippedNums.length}`}
+              {unansweredNums.length === 0 ? t.allReviewed : `${t.reviewing} · ${unansweredNums.length}`}
             </span>
             <button
               type="button"
@@ -798,10 +806,10 @@ export function ExamRunner({
             className="exam-public-btn"
             onClick={goFinish}
             disabled={
-              (reviewMode ? skippedNums.filter((n) => n !== idx).length > 0 : !atLast) || submitting
+              (reviewMode ? unansweredNums.filter((n) => n !== idx).length > 0 : !atLast) || submitting
             }
             style={
-              (reviewMode ? skippedNums.filter((n) => n !== idx).length === 0 : atLast)
+              (reviewMode ? unansweredNums.filter((n) => n !== idx).length === 0 : atLast)
                 ? { background: "#f59e0b", borderColor: "#f59e0b", color: "#fff" }
                 : { opacity: 0.45 }
             }
@@ -810,49 +818,42 @@ export function ExamRunner({
           </button>
         </div>
 
-        {/* Personal notes — constant across questions, never saved/submitted. */}
+        {/* Personal notes — constant across questions, never saved/submitted.
+            Always open: it's there the instant you want to jot something down. */}
         <div style={{ borderTop: "1px solid var(--border, #ececf1)", marginTop: 10, paddingTop: 8 }}>
-          <button
-            type="button"
-            onClick={() => setNotesOpen((o) => !o)}
+          <div
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              background: "none",
-              border: "none",
-              cursor: "pointer",
               fontSize: 13,
               fontWeight: 600,
               color: "var(--text-2, #374151)",
-              padding: 0,
             }}
           >
-            📝 {t.notesTitle} <span aria-hidden>{notesOpen ? "▾" : "▸"}</span>
-          </button>
-          {notesOpen && (
-            <div style={{ marginTop: 8 }}>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-                placeholder={t.notesTitle}
-                style={{
-                  width: "100%",
-                  resize: "vertical",
-                  borderRadius: 8,
-                  border: "1px solid var(--border, #d4d4d8)",
-                  padding: "8px 10px",
-                  fontSize: 14,
-                  fontFamily: "inherit",
-                  lineHeight: 1.5,
-                }}
-              />
-              <div style={{ fontSize: 11, color: "var(--text-4, #9ca3af)", marginTop: 4 }}>
-                {t.notesHint}
-              </div>
+            📝 {t.notesTitle}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              placeholder={t.notesTitle}
+              style={{
+                width: "100%",
+                resize: "vertical",
+                borderRadius: 8,
+                border: "1px solid var(--border, #d4d4d8)",
+                padding: "8px 10px",
+                fontSize: 14,
+                fontFamily: "inherit",
+                lineHeight: 1.5,
+              }}
+            />
+            <div style={{ fontSize: 11, color: "var(--text-4, #9ca3af)", marginTop: 4 }}>
+              {t.notesHint}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
