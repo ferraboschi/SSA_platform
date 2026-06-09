@@ -28,11 +28,18 @@ export interface SidebarCourse {
   label: string;
   href: string;
   meta: string;
+  /** Sake program/template assigned to the course (green vs grey dot). */
+  hasProgram: boolean;
+  /** Missing essentials → red status dot (tooltip lists what's missing). */
+  missEducator: boolean;
+  missLocation: boolean;
+  missDate: boolean;
 }
 
 export function buildSidebarCourses(
   courses: Course[],
   now = MOCK_NOW_MS,
+  hasProgram: (id: string) => boolean = () => false,
 ): SidebarCourse[] {
   return courses
     .filter((c) => c.lifecycle === "pubblicato")
@@ -45,6 +52,10 @@ export function buildSidebarCourses(
         label: `${COURSE_TYPE_SHORT_LABEL[c.type]} · ${c.city}`,
         href: `/corsi/${c.id}`,
         meta: `i:${String(c.enrolled).padStart(2, "0")} / d:${String(days).padStart(2, "0")}`,
+        hasProgram: hasProgram(c.id),
+        missEducator: !c.educator?.id || !c.educator.name.trim(),
+        missLocation: !c.city.trim(),
+        missDate: !c.year || !c.month.trim() || !c.day,
       };
     });
 }

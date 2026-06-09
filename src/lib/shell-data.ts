@@ -12,6 +12,7 @@ import { COURSE_TYPE_SHORT_LABEL } from "@/lib/domain";
 import type { CourseTypeKey } from "@/lib/domain";
 import { isSupabaseConfigured } from "@/lib/integrations/supabase";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { loadCourseProgram } from "@/lib/corsi/program-load";
 import type { SearchIndex, SidebarCourse } from "@/lib/shell";
 
 export interface ShellData {
@@ -30,7 +31,7 @@ async function fetchShellData(): Promise<ShellData> {
   if (!isSupabaseConfigured()) return EMPTY;
   const svc = getSupabaseServiceClient();
 
-  const [coursesRes, corsistiRes, educatorsRes, iscrizioniRes, countsRes] =
+  const [coursesRes, corsistiRes, educatorsRes, iscrizioniRes, countsRes, programMap] =
     await Promise.all([
       svc
         .from("corsi")
@@ -49,7 +50,11 @@ async function fetchShellData(): Promise<ShellData> {
         svc.from("material_templates").select("*", { count: "exact", head: true }),
         svc.from("corsi").select("*", { count: "exact", head: true }).eq("lifecycle", "pubblicato"),
       ]),
+      // Per-course sake-program overlays → the green "programma assegnato" dot.
+      loadCourseProgram(),
     ]);
+  const hasSakeProgram = (id: string): boolean =>
+    !!programMap.get(id)?.days?.some((d) => (d.sakes?.length ?? 0) > 0);
 
   type CourseRow = {
     id: number;
@@ -130,6 +135,10 @@ async function fetchShellData(): Promise<ShellData> {
         label: `${COURSE_TYPE_SHORT_LABEL[c.type]} · ${c.city} (${n})`,
         href: `/corsi/${c.handle}`,
         meta: `${c.month} ${c.year}`,
+        hasProgram: hasSakeProgram(String(c.id)),
+        missEducator: !c.educator_id,
+        missLocation: !c.city || !c.city.trim(),
+        missDate: !c.year || !c.month || !c.month.trim() || !c.day,
       };
     });
 
