@@ -308,8 +308,12 @@ export const en: Dictionary = {
       viewGrid: "Grid",
       viewTable: "Table",
       programDone: "Sake program assigned",
-      programTodo: "Sake program to assign",
       programNone: "Sake program not assigned",
+      missEducator: "educator",
+      missLocation: "venue",
+      missDate: "date",
+      statusMissing: "Missing {what}",
+      statusReady: "Course ready: all assigned",
       sortOptions: {
         dateAsc: "Sort · Date ↑",
         dateDesc: "Sort · Date ↓",

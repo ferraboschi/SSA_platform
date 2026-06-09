@@ -23,30 +23,53 @@ const barClass = (c: CourseListItem) =>
       : "warning"
     : "azzurro";
 
-// Per-course sake-program indicator next to the title:
-//  • green  = the sake program/template has been assigned
-//  • blue   = not yet assigned, but the course is live (pubblicato) → to do
-//  • grey   = not assigned and the course isn't live (draft/past/archived)
-function ProgramDot({ c }: { c: CourseListItem }) {
-  const t = useT().corsi.catalog;
-  const d = c.hasProgram
-    ? { color: "var(--success)", title: t.programDone }
-    : c.lifecycle === "pubblicato"
-      ? { color: "var(--indigo)", title: t.programTodo }
-      : { color: "var(--text-mute)", title: t.programNone };
+function Dot({ color, title }: { color: string; title: string }) {
   return (
     <span
-      title={d.title}
-      aria-label={d.title}
+      title={title}
+      aria-label={title}
       style={{
         width: 9,
         height: 9,
         borderRadius: "50%",
-        background: d.color,
+        background: color,
         flexShrink: 0,
         display: "inline-block",
       }}
     />
+  );
+}
+
+// Two per-course indicators next to the title:
+//  1) Programma — 🟢 green: sake program/template assigned · ⚪ grey: not assigned
+//  2) Stato     — 🔴 red: educator / venue / date missing (a problem)
+//                 🔵 blue: EVERYTHING assigned (educator + venue + date + program)
+//                 hidden when logistics are fine but the program is still missing
+//                 (so 🟢+🔵 can co-occur, but ⚪+🔵 never does).
+function CourseDots({ c }: { c: CourseListItem }) {
+  const t = useT().corsi.catalog;
+  const program = c.hasProgram
+    ? { color: "var(--success)", title: t.programDone }
+    : { color: "var(--text-mute)", title: t.programNone };
+
+  const missing: string[] = [];
+  if (!c.educatorId || !c.educatorName.trim()) missing.push(t.missEducator);
+  if (!c.city.trim()) missing.push(t.missLocation);
+  if (!c.year || !c.month.trim() || !c.day) missing.push(t.missDate);
+  const logisticsComplete = missing.length === 0;
+
+  let status: { color: string; title: string } | null = null;
+  if (!logisticsComplete) {
+    status = { color: "var(--danger)", title: format(t.statusMissing, { what: missing.join(", ") }) };
+  } else if (c.hasProgram) {
+    status = { color: "var(--indigo)", title: t.statusReady };
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+      <Dot {...program} />
+      {status && <Dot {...status} />}
+    </span>
   );
 }
 
@@ -173,7 +196,7 @@ function CourseRow({ course: c, last }: { course: CourseListItem; last: boolean 
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-          <ProgramDot c={c} />
+          <CourseDots c={c} />
           <span
             style={{
               fontSize: 14,
@@ -299,7 +322,7 @@ function CourseCard({ course: c }: { course: CourseListItem }) {
           {c.day} {fullMonth} · {c.city}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-          <ProgramDot c={c} />
+          <CourseDots c={c} />
           <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.25 }}>
             {c.shortTitle}
           </span>
@@ -501,7 +524,7 @@ function CourseTableRow({ course: c }: { course: CourseListItem }) {
       </td>
       <td style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 7, maxWidth: "100%" }}>
-          <ProgramDot c={c} />
+          <CourseDots c={c} />
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {c.shortTitle}
           </span>

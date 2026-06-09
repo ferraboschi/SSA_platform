@@ -310,8 +310,12 @@ export const it = {
       viewGrid: "Griglia",
       viewTable: "Tabella",
       programDone: "Programma sake assegnato",
-      programTodo: "Programma sake da assegnare",
       programNone: "Programma sake non assegnato",
+      missEducator: "educator",
+      missLocation: "luogo",
+      missDate: "data",
+      statusMissing: "Manca {what}",
+      statusReady: "Corso pronto: tutto assegnato",
       sortOptions: {
         dateAsc: "Ordina · Data ↑",
         dateDesc: "Ordina · Data ↓",
