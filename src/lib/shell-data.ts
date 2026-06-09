@@ -156,8 +156,10 @@ async function fetchShellData(): Promise<ShellData> {
 /** Cache tag — revalidate this to force-refresh shell data (e.g. after a sync). */
 export const SHELL_DATA_TAG = "shell-data";
 
-/** Cached for 60s — shared across users; refreshes in the background. */
-export const getShellData = unstable_cache(fetchShellData, ["shell-data-v1"], {
+/** Cached for 60s — shared across users; refreshes in the background.
+ *  Key bumped to v2 when sidebar courses gained the program/status-dot fields,
+ *  so the new shape is recomputed instead of serving the stale cached objects. */
+export const getShellData = unstable_cache(fetchShellData, ["shell-data-v2"], {
   revalidate: 60,
   tags: [SHELL_DATA_TAG],
 });

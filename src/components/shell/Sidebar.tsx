@@ -171,7 +171,7 @@ function SbDot({ color, title }: { color: string; title: string }) {
     <span
       title={title}
       aria-label={title}
-      style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }}
+      style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }}
     />
   );
 }
