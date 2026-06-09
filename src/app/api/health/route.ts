@@ -5,6 +5,7 @@ import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
 import { ensureRagWired, ragGroundingStatus } from "@/lib/rag";
 import { getVectorStore } from "@/lib/rag/store";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { loadCourseProgram } from "@/lib/corsi/program-load";
 
 // Public, secret-free health check: reports which integrations have credentials
 // configured (booleans only — never the values). Useful to verify env wiring.
@@ -71,6 +72,35 @@ export async function GET() {
     /* diagnostic best-effort */
   }
 
+  // Sidebar/catalog course-dot diagnostic: among PUBLISHED courses, how many are
+  // missing an educator / city / date, and how many have no sake program. This is
+  // exactly what drives the two status dots — confirms whether "all grey" is real
+  // (no programs yet, logistics complete) or a detection bug.
+  const courseStatus = { published: 0, noEducator: 0, noCity: 0, noDate: 0, noProgram: 0 };
+  try {
+    const svc = getSupabaseServiceClient();
+    const { data: cs } = await svc
+      .from("corsi")
+      .select("id, city, month, year, start_date, educator_id")
+      .eq("lifecycle", "pubblicato")
+      .limit(2000);
+    const program = await loadCourseProgram();
+    const hasProg = (id: number) =>
+      !!program.get(String(id))?.days?.some((d) => (d.sakes?.length ?? 0) > 0);
+    for (const c of (cs ?? []) as Array<{
+      id: number; city: string | null; month: string | null; year: number | null;
+      start_date: string | null; educator_id: number | null;
+    }>) {
+      courseStatus.published++;
+      if (!c.educator_id) courseStatus.noEducator++;
+      if (!c.city || !c.city.trim()) courseStatus.noCity++;
+      if (!c.year || !c.month || !c.month.trim() || !c.start_date) courseStatus.noDate++;
+      if (!hasProg(c.id)) courseStatus.noProgram++;
+    }
+  } catch {
+    /* diagnostic best-effort */
+  }
+
   // Exam question-count diagnostic per family: how many exam_templates rows
   // exist, and for the latest row the final/day/feedback counts + duplicate-id
   // detection (a duplicated question bank shows up here).
@@ -129,6 +159,7 @@ export async function GET() {
     rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
     examLinks: { studentLinksTable, studentLinksRows, submissionsCorsistaCol },
     examSessions: { table: examSessionsTable, sessionSecretCol },
+    courseStatus,
     exam: { shochu: shochuExam, certificato: certExam },
   });
 }
