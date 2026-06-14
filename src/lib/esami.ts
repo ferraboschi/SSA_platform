@@ -398,14 +398,3 @@ export function courseRosterStudents(c: Course): RosterStudentsResult {
   };
 }
 
-// ===== Results (Risultati tab + report list) =====
-
-export interface ResultsSummary {
-  promossi: number;
-  riserva: number;
-  bocciati: number;
-  media: number;
-  total: number;
-  distribution: number[]; // 10 buckets 0-9 → 0-100
-  rows: ExamResult[];
-}

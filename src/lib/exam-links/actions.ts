@@ -53,21 +53,6 @@ export async function createExamLink(
   };
 }
 
-export interface PersonalExamLink {
-  corsistaId: number;
-  name: string;
-  email: string;
-  url: string;
-  expiresAt: string;
-}
-export interface CreatePersonalLinksResult {
-  ok: boolean;
-  links?: PersonalExamLink[];
-  /** False when the links couldn't be persisted (migration not applied yet). */
-  stored?: boolean;
-  error?: string;
-}
-
 export interface SubmitExamInput {
   answers: Record<string, string[] | string>;
   lang?: string;
