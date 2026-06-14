@@ -10,6 +10,7 @@ import {
   NIHONSHU_CATS,
   SHOCHU_CATS,
 } from "@/lib/domain";
+import { MONTH_NAMES_IT } from "@/lib/dates/italian-months";
 import type {
   Course,
   CourseCosts,
@@ -661,7 +662,7 @@ const EXAM_TEMPLATES: Record<ExamFamily, ExamTemplate> = {
 
 // ============ Per-course exam meta ============
 
-const MONTHS = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+const MONTHS = MONTH_NAMES_IT;
 const DOW = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
 
 function familyOf(course: Course): ExamFamily {

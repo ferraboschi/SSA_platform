@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge, Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { COURSE_TYPES, type CourseLifecycle, type CourseTypeColor, type CourseTypeKey } from "@/lib/domain";
+import { monthIndexIt } from "@/lib/dates/italian-months";
 
 export interface ArchivioCourse {
   id: string;
@@ -26,10 +27,6 @@ export interface ArchivioCourse {
 
 type GroupBy = "anno" | "citta" | "educator" | "tipo";
 
-const MONTH_ORDER = [
-  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
-];
 
 const TYPE_ORDER: CourseTypeKey[] = ["certificato", "introduttivo", "shochu", "masterclass", "mixology"];
 
@@ -421,7 +418,7 @@ function ArchivioGroups({ courses, groupBy }: { courses: ArchivioCourse[]; group
     <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
       {groups.map(([key, list]) => {
         const sorted = [...list].sort(
-          (a, b) => b.year - a.year || MONTH_ORDER.indexOf(b.month) - MONTH_ORDER.indexOf(a.month),
+          (a, b) => b.year - a.year || monthIndexIt(b.month) - monthIndexIt(a.month),
         );
         const studs = list.reduce((s, c) => s + c.enrolled, 0);
         const rev = list.reduce((s, c) => s + c.revenue, 0);

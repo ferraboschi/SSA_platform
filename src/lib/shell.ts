@@ -5,6 +5,7 @@
 import type { BadgeTone } from "@/components/ui/Badge";
 import { COURSE_TYPE_SHORT_LABEL } from "@/lib/domain";
 import type { Corsista, Course, Educator } from "@/lib/domain";
+import { monthIndexIt } from "@/lib/dates/italian-months";
 
 // The mock dataset is anchored to this instant (see the seed's NOW_MS); the
 // sidebar "days to start" is measured from here so the numbers stay coherent
@@ -13,15 +14,8 @@ export const MOCK_NOW_MS = Date.parse("2026-05-30T00:00:00Z");
 
 const DAY_MS = 86_400_000;
 
-const MONTHS_IT = [
-  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
-];
-
-const monthIndex = (month: string) => MONTHS_IT.indexOf(month);
-
 const courseStart = (c: Course) =>
-  new Date(c.year, Math.max(0, monthIndex(c.month)), c.day || 1).getTime();
+  new Date(c.year, Math.max(0, monthIndexIt(c.month)), c.day || 1).getTime();
 
 export interface SidebarCourse {
   id: string;

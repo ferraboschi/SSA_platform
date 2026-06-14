@@ -18,6 +18,7 @@ import {
   type AdminProduct,
 } from "@/lib/integrations/shopify/admin-client";
 import { syncEducatorActivation } from "@/lib/educators/sync-active";
+import { MONTH_TO_NUM, MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
 
 export interface SyncSummary {
   ranAt: string;
@@ -30,14 +31,6 @@ export interface SyncSummary {
 }
 
 const DEAD_FINANCIAL = new Set(["refunded", "voided"]);
-const MONTHS: Record<string, number> = {
-  gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6,
-  luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12,
-};
-const MONTHS_IT = [
-  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
-];
 const TYPE_LABEL: Record<string, string> = {
   certificato: "Sake Sommelier Certificato",
   introduttivo: "Corso Introduttivo al Sake",
@@ -57,39 +50,6 @@ function detectType(text: string): string | null {
   if (compact.includes("masterclass")) return "masterclass";
   if (t.includes("mixolog")) return "mixology";
   return null;
-}
-
-/** Pull day/month/year out of an Italian date string like "14 settembre" or
- *  "4 Settembre 2026". Returns whatever it can find (any field may be null). */
-function parseItDate(text: string): { day: number | null; month: number | null; year: number | null } {
-  const t = (text || "").toLowerCase();
-  // Pick the EARLIEST month mentioned in the text (the course date usually comes
-  // before any exam date), not the first in Jan→Dec order.
-  let monthName: string | null = null;
-  let monthPos = Infinity;
-  for (const m of Object.keys(MONTHS)) {
-    const i = t.indexOf(m);
-    if (i >= 0 && i < monthPos) {
-      monthPos = i;
-      monthName = m;
-    }
-  }
-  const month = monthName ? MONTHS[monthName] : null;
-  const yearMatch = t.match(/20(2[0-9]|3\d)/);
-  const year = yearMatch ? Number(yearMatch[0]) : null;
-  // START day: the FIRST STANDALONE 1–2 digit number before the month. Course
-  // dates are often multi-day ranges ("12, 13, 14 Giugno" → 12). The (?<!\d)…(?!\d)
-  // guard skips digits that are part of a longer number (e.g. a year "2026").
-  let day: number | null = null;
-  if (monthName) {
-    const prefix = t.slice(0, monthPos);
-    const m = prefix.match(/(?<!\d)(\d{1,2})(?!\d)/);
-    if (m) {
-      const d = Number(m[1]);
-      if (d >= 1 && d <= 31) day = d;
-    }
-  }
-  return { day, month, year };
 }
 
 function slug(s: string): string {
@@ -113,7 +73,7 @@ interface ParsedCourse {
 /** Parse a course-ticket title like "Corso ... - Giugno 2026, Vercelli". */
 function parseCourseTitle(title: string): ParsedCourse | null {
   const t = title.toLowerCase();
-  const month = Object.keys(MONTHS).find((m) => t.includes(m));
+  const month = Object.keys(MONTH_TO_NUM).find((m) => t.includes(m));
   const yearMatch = t.match(/20(2[6-9]|3\d)/);
   const type = detectType(t);
   if (!month || !yearMatch || !type) return null;
@@ -122,7 +82,7 @@ function parseCourseTitle(title: string): ParsedCourse | null {
     type === "masterclass" || t.includes("online") ? "online" : "in-person";
   let city = title.includes(",") ? title.split(",").pop()!.trim() : "—";
   if (city.toLowerCase() === "online") city = "Online";
-  return { month: MONTHS[month], year: Number(yearMatch[0]), day: null, type, delivery, city };
+  return { month: MONTH_TO_NUM[month], year: Number(yearMatch[0]), day: null, type, delivery, city };
 }
 
 /**
@@ -275,7 +235,7 @@ async function syncCourses(
       type_label: TYPE_LABEL[parsed.type] ?? parsed.type,
       delivery_mode: parsed.delivery,
       city: parsed.city || "—",
-      month: MONTHS_IT[parsed.month - 1],
+      month: MONTH_NAMES_IT[parsed.month - 1],
       year: parsed.year,
       start_date: `${parsed.year}-${mm}-${dd}`,
       price_cents: price,

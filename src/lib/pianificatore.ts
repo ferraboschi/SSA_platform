@@ -8,13 +8,11 @@ import {
   type CourseTypeKey,
   type DeliveryMode,
 } from "@/lib/domain";
+import { MONTH_NAMES_IT, monthIndexIt } from "@/lib/dates/italian-months";
 
 // Month names are logical keys: the UI localizes via the i18n dictionary, but
 // the planner's date math and prototype-faithful summaries use these directly.
-export const MONTHS = [
-  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
-];
+export const MONTHS = MONTH_NAMES_IT;
 export const MONTHS_SHORT = [
   "Gen", "Feb", "Mar", "Apr", "Mag", "Giu",
   "Lug", "Ago", "Set", "Ott", "Nov", "Dic",
@@ -57,7 +55,7 @@ export const ONLINE_SESSIONS: Record<CourseTypeKey, number> = {
 export const HUB_CITIES = ["Milano", "Roma"];
 export const NON_CITIES = ["Online"];
 
-export const monthIdx = (name: string) => MONTHS.indexOf(name);
+export const monthIdx = monthIndexIt;
 export const keyOf = (year: number, mIdx: number) => `${year}-${mIdx}`;
 
 export interface WindowMonth {

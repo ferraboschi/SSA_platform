@@ -13,6 +13,7 @@ import type { CourseTypeKey } from "@/lib/domain";
 import { isSupabaseConfigured } from "@/lib/integrations/supabase";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
+import { MONTH_TO_NUM } from "@/lib/dates/italian-months";
 import type { SearchIndex, SidebarCourse } from "@/lib/shell";
 
 export interface ShellData {
@@ -127,12 +128,8 @@ async function fetchShellData(): Promise<ShellData> {
     })),
   };
 
-  // Italian month → number for chronological sorting
-  const MONTH_ORDER: Record<string, number> = {
-    gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6,
-    luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12,
-  };
-  const monthNum = (m: string) => MONTH_ORDER[m.toLowerCase()] ?? 99;
+  // Italian month → number for chronological sorting (unknown months sort last).
+  const monthNum = (m: string) => MONTH_TO_NUM[m.toLowerCase()] ?? 99;
 
   const sidebarCourses: SidebarCourse[] = courses
     .filter((c) => c.lifecycle === "pubblicato")

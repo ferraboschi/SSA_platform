@@ -8,16 +8,11 @@
 
 import type { Course, CourseTypeKey, DeliveryMode } from "@/lib/domain";
 import { COURSE_TYPES } from "@/lib/domain/constants";
-import { monthIndexIt } from "@/lib/dashboard";
+import { monthIndexIt, MONTH_NAMES_IT } from "@/lib/dates/italian-months";
 
 // "Now" anchor for due/overdue maths. Kept as a constant so the page is
 // deterministic (pure) — bump it as the platform's reference date moves.
 export const ANALISI_TODAY = new Date(2026, 5, 2); // 2 Jun 2026
-
-const MONTHS_IT = [
-  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
-];
 
 /** Months elapsed between two course-dates (signed, in whole months). */
 function monthsBetween(a: Date, b: Date): number {
@@ -145,7 +140,7 @@ export function computeAnalisi(courses: Course[]): AnalisiData {
   const totalMargin = held.reduce((s, c) => s + c.margin, 0);
 
   // ---- Seasonality (per month) ----
-  const monthAgg = MONTHS_IT.map((m, idx) => ({ month: m, idx, courses: 0, enrolled: 0, fillSum: 0 }));
+  const monthAgg = MONTH_NAMES_IT.map((m, idx) => ({ month: m, idx, courses: 0, enrolled: 0, fillSum: 0 }));
   for (const c of held) {
     const idx = monthIndexIt(c.month);
     if (idx < 0) continue;
@@ -277,7 +272,7 @@ export function computeAnalisi(courses: Course[]): AnalisiData {
         }
       }
       return bestIdx >= 0
-        ? { type, label: typeLabel(type), month: MONTHS_IT[bestIdx] }
+        ? { type, label: typeLabel(type), month: MONTH_NAMES_IT[bestIdx] }
         : null;
     })
     .filter((x): x is { type: CourseTypeKey; label: string; month: string } => x !== null);
@@ -371,7 +366,7 @@ export function computeAnalisi(courses: Course[]): AnalisiData {
         type,
         typeLabel: typeLabel(type),
         mode,
-        suggestedMonth: MONTHS_IT[bestIdx],
+        suggestedMonth: MONTH_NAMES_IT[bestIdx],
         suggestedYear,
         expectedEnrolled: round(avgEnrolled),
         fillRate,

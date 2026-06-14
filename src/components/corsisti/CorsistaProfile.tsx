@@ -5,11 +5,7 @@ import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format, type Dictionary } from "@/lib/i18n";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import { COURSE_TYPES, type Corsista, type CorsistaEnrollment, type Purchase } from "@/lib/domain";
-
-const MONTH_ORDER = [
-  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
-];
+import { monthIndexIt } from "@/lib/dates/italian-months";
 
 type ProfileT = Dictionary["corsisti"]["profile"];
 
@@ -112,7 +108,7 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
 
   const certificate = s.courses.some((c) => c.examResult === "passed");
   const sorted = [...s.courses].sort(
-    (a, b) => a.year - b.year || MONTH_ORDER.indexOf(a.month) - MONTH_ORDER.indexOf(b.month),
+    (a, b) => a.year - b.year || monthIndexIt(a.month) - monthIndexIt(b.month),
   );
   const firstYear = sorted[0]?.year;
   const lastYear = sorted[sorted.length - 1]?.year;

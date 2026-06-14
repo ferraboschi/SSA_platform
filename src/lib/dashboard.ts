@@ -4,18 +4,15 @@
 
 import type { Corsista, Course, DashThresholds, Educator } from "@/lib/domain";
 import type { CourseStatus, CourseTypeColor, CourseLifecycle, CourseTypeKey } from "@/lib/domain";
+import { monthIndexIt } from "@/lib/dates/italian-months";
+
+// Re-exported for the many call sites that import it from here (and via lib/corsi).
+export { monthIndexIt };
 
 // The prototype hero/reminders anchor "today" to 25 May 2026 (Monday, week 22).
 export const DASH_TODAY = new Date(2026, 4, 25);
 export const DASH_WEEK = 22;
 const DAY_MS = 86_400_000;
-
-// Course month names are stored in Italian; index against that fixed list.
-const MONTHS_IT = [
-  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
-];
-export const monthIndexIt = (month: string) => MONTHS_IT.indexOf(month);
 
 export const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
