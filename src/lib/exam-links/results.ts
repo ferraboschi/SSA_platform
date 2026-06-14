@@ -1,23 +1,16 @@
 import "server-only";
 
-// Read + auto-grade real exam submissions for a course, and link each to the
-// student's enrollment so the operator can confirm the outcome.
+// Read real exam submissions for a course, auto-grade them via the pure grading
+// module, and link each to the student's enrollment so the operator can confirm
+// the outcome.
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { EXAM_THRESHOLDS } from "@/lib/domain/constants";
 import { loadPublicExam, type PublicRunnerQuestion } from "./load";
+import { gradeAnswers, type ExamOutcome, type GradedAnswer } from "./grading";
 import type { ExamTestKey } from "./token";
 
-export type ExamOutcome = "passed" | "retrial" | "failed";
-
-export interface GradedAnswer {
-  qid: string;
-  type: string;
-  text: string;
-  given: string;
-  correct: string;
-  ok: boolean | null; // null = manual (open/match/order)
-}
+// Re-exported so existing importers keep `from "@/lib/exam-links/results"`.
+export type { ExamOutcome, GradedAnswer };
 
 export interface GradedSubmission {
   id: number;
@@ -34,48 +27,6 @@ export interface GradedSubmission {
   currentScore: number | null;
   answers: GradedAnswer[];
 }
-
-function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
-  return a.size === b.size && [...a].every((x) => b.has(x));
-}
-
-const normStr = (s: unknown) => String(s ?? "").trim().toLowerCase();
-const asArray = (given: string | string[] | undefined): string[] =>
-  given == null ? [] : Array.isArray(given) ? given : [given];
-
-// The public runner stores the selected option TEXT (not its index). So grade
-// by comparing the given TEXTS to the correct option texts; fall back to index
-// comparison for any legacy/index-stored answers. (Comparing by index against
-// text answers is why every objective answer used to score 0%.)
-function gradeObjective(given: string | string[] | undefined, q: PublicRunnerQuestion): boolean {
-  const correctIdx = q.correct ?? [];
-  const givenSet = new Set(asArray(given).map(normStr).filter(Boolean));
-  const correctTextSet = new Set(
-    correctIdx.map((i) => normStr(q.options[Number(i)])).filter(Boolean),
-  );
-  const correctIdxSet = new Set(correctIdx.map((i) => normStr(i)));
-  return (
-    (correctTextSet.size > 0 && setsEqual(givenSet, correctTextSet)) ||
-    setsEqual(givenSet, correctIdxSet)
-  );
-}
-
-function fmtGiven(given: string | string[] | undefined, q: PublicRunnerQuestion): string {
-  if (given == null || (Array.isArray(given) && given.length === 0)) return "—";
-  const arr = asArray(given);
-  if (q.options.length) {
-    // Answers are stored as option TEXT; map any legacy numeric indices to text.
-    const labels = arr.map((v) => {
-      const n = Number(v);
-      return Number.isInteger(n) && q.options[n] != null ? q.options[n] : v;
-    });
-    return labels.join(", ");
-  }
-  return arr.join(", ");
-}
-
-const isObjective = (t: string) =>
-  t === "single" || t === "multi" || t === "truefalse" || t === "image";
 
 export async function loadCourseExamResults(
   courseId: string,
@@ -120,56 +71,8 @@ export async function loadCourseExamResults(
     const questions = await getQuestions(s.test_key);
     const ans = s.answers ?? {};
 
-    let gradable = 0;
-    let correct = 0;
-    let manual = 0;
-    const detail: GradedAnswer[] = questions.map((q) => {
-      const given = ans[q.id];
-      // FILL ("Riempi spazio"): the typed answer is matched, case-insensitive,
-      // against the accepted answers (q.correct holds the accepted STRINGS). This
-      // is deterministic → auto-graded, not sent to manual review.
-      if (q.type === "fill") {
-        const accepted = (q.correct ?? []).map((c) => normStr(c)).filter(Boolean);
-        if (accepted.length === 0) {
-          manual++;
-          return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, q), correct: "—", ok: null };
-        }
-        gradable++;
-        const givenNorm = normStr(Array.isArray(given) ? given[0] : given);
-        const ok = givenNorm !== "" && accepted.includes(givenNorm);
-        if (ok) correct++;
-        return {
-          qid: q.id,
-          type: q.type,
-          text: q.text,
-          given: fmtGiven(given, q),
-          correct: (q.correct ?? []).map(String).join(", "),
-          ok,
-        };
-      }
-      if (!isObjective(q.type) || !q.correct) {
-        manual++;
-        return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, q), correct: "—", ok: null };
-      }
-      gradable++;
-      const ok = gradeObjective(given, q);
-      if (ok) correct++;
-      return {
-        qid: q.id,
-        type: q.type,
-        text: q.text,
-        given: fmtGiven(given, q),
-        correct: q.correct.map((i) => q.options[Number(i)]).filter(Boolean).join(", "),
-        ok,
-      };
-    });
-    const autoScore = gradable ? Math.round((correct / gradable) * 100) : 0;
-    const suggested: ExamOutcome =
-      autoScore >= EXAM_THRESHOLDS.pass * 100
-        ? "passed"
-        : autoScore >= EXAM_THRESHOLDS.retrial * 100
-          ? "retrial"
-          : "failed";
+    // Auto-correction (pure, fully unit-tested in grading.test.ts).
+    const { detail, gradable, manual, autoScore, suggested } = gradeAnswers(questions, ans);
 
     let enrollmentId: number | null = null;
     let currentResult: string | null = null;
