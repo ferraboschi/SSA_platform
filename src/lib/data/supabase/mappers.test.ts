@@ -224,7 +224,7 @@ describe("profileToUser", () => {
     city: "",
     position: "",
     photo_url: null,
-    locale: "it",
+    locale: "IT",
     ...over,
   });
   it("derives name + initials from first/last", () => {
