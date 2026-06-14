@@ -250,7 +250,7 @@ export function ExamRunner({
   /** Called (debounced + periodic) to persist progress server-side. */
   onPersist?: (s: PersistState) => void;
   /** Submit override (resumable session). When set, replaces the legacy submit. */
-  onSubmitSession?: () => Promise<{ ok: boolean; error?: string }>;
+  onSubmitSession?: (final: PersistState) => Promise<{ ok: boolean; error?: string }>;
   /** Preview: at the end, compute + show the outcome instead of a thank-you. */
   showResult?: boolean;
 }) {
@@ -338,7 +338,9 @@ export function ExamRunner({
       setSubmitting(true);
       setSubmitError(false);
       try {
-        const r = await onSubmitSession();
+        // Pass the LATEST client state (not the ≤1s-debounced server copy) so the
+        // student's final answer/change is always part of the graded submission.
+        const r = await onSubmitSession(stateRef.current);
         if (r.ok) setDone(true);
         else {
           setSubmitError(true);

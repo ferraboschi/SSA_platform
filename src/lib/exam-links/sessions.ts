@@ -246,6 +246,9 @@ export async function submitExamSessionAction(
   token: string,
   corsistaId: number,
   secret?: string,
+  // The runner's FINAL client state. Used so the graded row reflects the very
+  // last edit, not just the ≤1s-debounced copy already saved to the session.
+  final?: { answers: Record<string, string[] | string>; lang?: string; elapsed?: number },
 ): Promise<{ ok: boolean; error?: string }> {
   const svc = getSupabaseServiceClient();
   const owned = await loadOwnedSession(token, corsistaId, secret);
@@ -264,7 +267,7 @@ export async function submitExamSessionAction(
     .select("id");
   if (!claimed || claimed.length === 0) return { ok: true };
 
-  const all = (row.answers ?? {}) as Record<string, string[] | string>;
+  const all = (final?.answers ?? row.answers ?? {}) as Record<string, string[] | string>;
   const registration: Record<string, string> = {};
   const answers: Record<string, string[] | string> = {};
   for (const [k, v] of Object.entries(all)) {
@@ -295,8 +298,8 @@ export async function submitExamSessionAction(
     course_ref: row.course_ref ?? String(row.corso_id ?? ""),
     test_key: row.test_key ?? "final",
     mode: "exam",
-    lang: row.lang ?? null,
-    elapsed_seconds: row.elapsed_seconds ?? null,
+    lang: final?.lang ?? row.lang ?? null,
+    elapsed_seconds: final?.elapsed ?? row.elapsed_seconds ?? null,
     answers,
     registration: Object.keys(registration).length ? registration : null,
   };

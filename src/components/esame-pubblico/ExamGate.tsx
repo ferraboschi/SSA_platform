@@ -10,6 +10,7 @@ import {
   ExamRunner,
   type RunnerQuestion,
   type RunnerHeader,
+  type PersistState,
 } from "./ExamRunner";
 import {
   getExamRosterAction,
@@ -173,9 +174,15 @@ function ProctoredExam(props: ExamGateProps) {
     },
     [token],
   );
-  const submit = useCallback(async () => {
+  const submit = useCallback(async (final: PersistState) => {
     if (corsistaIdRef.current == null) return { ok: false, error: "Sessione non valida." };
-    return submitExamSessionAction(token, corsistaIdRef.current, secretRef.current ?? undefined);
+    // Send the final client state so the graded row reflects the very last edit,
+    // not just what the ≤1s autosave happened to persist.
+    return submitExamSessionAction(token, corsistaIdRef.current, secretRef.current ?? undefined, {
+      answers: final.answers,
+      lang: final.lang,
+      elapsed: final.elapsed,
+    });
   }, [token]);
 
   // ── Render by phase ──────────────────────────────────────────────────────

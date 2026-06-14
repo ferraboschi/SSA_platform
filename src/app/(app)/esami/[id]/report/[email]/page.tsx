@@ -33,7 +33,10 @@ export default async function Page({
   if (course && family) {
     const subs = await loadCourseExamResults(id, family);
     const low = decoded.toLowerCase();
-    const sub = subs.find((s) => s.studentEmail.toLowerCase() === low);
+    // Only a CONFIRMED outcome yields a certificate — matching the email/PDF/
+    // attendance consumers. An unconfirmed submission falls through to the
+    // "unavailable" card instead of showing a provisional auto-result.
+    const sub = subs.find((s) => s.studentEmail.toLowerCase() === low && s.currentResult);
     if (sub) {
       result = {
         email: sub.studentEmail,
