@@ -63,12 +63,12 @@ export async function GET(request: NextRequest) {
   const data = (await tokenRes.json()) as { access_token?: string; scope?: string };
   const token = data.access_token;
 
-  // Print to server console so it can be copied to .env.local.
-  console.log("\n========================================");
-  console.log("✅ SHOPIFY ACCESS TOKEN OTTENUTO!");
-  console.log("Copia questa riga in .env.local:");
-  console.log(`SHOPIFY_ADMIN_TOKEN=${token}`);
-  console.log("========================================\n");
+  // NEVER log the token value — it would persist in the Render production logs,
+  // readable by anyone with log access. The token is shown once in the HTML
+  // response below, only to the admin who just completed the OAuth flow.
+  console.log(
+    `✅ Shopify access token ottenuto per ${shop} (scope: ${data.scope ?? "—"}). Copialo dalla pagina aperta nel browser in .env.local.`,
+  );
 
   return new NextResponse(
     `<html><body style="font-family:system-ui;padding:32px;max-width:600px;margin:0 auto">

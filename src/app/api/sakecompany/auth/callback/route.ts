@@ -60,11 +60,10 @@ export async function GET(request: NextRequest) {
   const data = (await tokenRes.json()) as { access_token?: string; scope?: string };
   const token = data.access_token;
 
-  console.log("\n========================================");
-  console.log("✅ SAKE COMPANY ACCESS TOKEN OTTENUTO!");
-  console.log(`SAKECOMPANY_STORE_DOMAIN=${shop}`);
-  console.log(`SAKECOMPANY_ADMIN_TOKEN=${token}`);
-  console.log("========================================\n");
+  // NEVER log the token value (it would persist in Render logs, readable by
+  // anyone with log access). Shop domain + scope are fine; the token itself is
+  // shown only in the HTML response, to the admin who just completed OAuth.
+  console.log(`✅ Sake Company access token ottenuto per ${shop} (scope: ${data.scope ?? "—"}).`);
 
   return page(
     "✅ Token Sake Company ottenuto!",
