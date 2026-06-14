@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { submitExam } from "@/lib/exam-links/actions";
+import { gradeAnswers } from "@/lib/exam-links/grading";
 
 export interface RunnerQuestion {
   id: string;
@@ -188,35 +189,6 @@ const CHROME: Record<Lang, Record<string, string>> = {
     waitBody: "教員が試験への参加を許可するまでお待ちください。このページのままにしてください。",
   },
 };
-
-// Client-side objective grading for the COMPLETE PREVIEW outcome (validate mode,
-// where `correct` is present). Returns true/false, or null when not auto-gradable
-// (open/order/rating, or no correct answer available).
-function gradePreviewQuestion(q: RunnerQuestion, given: string[] | string | undefined): boolean | null {
-  if (!q.correct || q.correct.length === 0) return null;
-  const optionTypes = ["single", "multi", "truefalse", "image"];
-  if (optionTypes.includes(q.type)) {
-    const correctTexts = new Set(
-      (q.correct.filter((c) => typeof c === "number") as number[])
-        .map((i) => q.options[i])
-        .filter((x): x is string => typeof x === "string"),
-    );
-    if (correctTexts.size === 0) return null;
-    const givenArr = Array.isArray(given) ? given : given ? [given] : [];
-    return givenArr.length === correctTexts.size && givenArr.every((g) => correctTexts.has(g));
-  }
-  if (q.type === "fill") {
-    const accepted = (q.correct.filter((c) => typeof c === "string") as string[]).map((s) =>
-      s.trim().toLowerCase(),
-    );
-    if (!accepted.length) return null;
-    const g = (typeof given === "string" ? given : Array.isArray(given) ? given[0] ?? "" : "")
-      .trim()
-      .toLowerCase();
-    return accepted.includes(g);
-  }
-  return null;
-}
 
 // Block copy/cut/paste/right-click on exam content (anti-cheat deterrent).
 const noCopy = {
@@ -527,19 +499,11 @@ export function ExamRunner({
 
   // ── Done / empty ─────────────────────────────────────────────────────────
   if (done || total === 0) {
-    // Complete preview → show the computed outcome (objective questions).
+    // Complete preview → show the computed outcome using the SAME pure grader as
+    // the real correction (exam-links/grading), so the preview can never disagree
+    // with what the operator will see in the Esiti tab.
     if (showResult && total > 0) {
-      let gradable = 0;
-      let correct = 0;
-      let manual = 0;
-      for (const q of questions) {
-        const r = gradePreviewQuestion(q, answers[q.id]);
-        if (r === null) manual++;
-        else {
-          gradable++;
-          if (r) correct++;
-        }
-      }
+      const { gradable, correct, manual } = gradeAnswers(questions, answers);
       // No auto-gradable questions → don't fake a 0% "failed"; show a neutral note.
       if (gradable === 0) {
         return (
