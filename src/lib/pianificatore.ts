@@ -125,11 +125,7 @@ export const fmtDayFull = (s: string) => {
 export const weekOfMonth = (day: number) =>
   Math.min(4, Math.floor(((day || 1) - 1) / 7));
 
-export function shopifyUrl(query?: string) {
-  const base =
-    "https://admin.shopify.com/store/sakesommelierassociation/products";
-  return query ? `${base}?query=${encodeURIComponent(query)}` : base;
-}
+export { shopifyAdminProductsUrl as shopifyUrl } from "@/lib/integrations/shopify/admin-url";
 
 let _seq = 100;
 export const nextId = () =>

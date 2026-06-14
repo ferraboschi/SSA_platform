@@ -42,8 +42,9 @@ async function fetchAll(): Promise<Map<string, ProductCost>> {
     .join("&");
   let offset: string | undefined;
   do {
+    const apiBase = process.env.AIRTABLE_API_URL || "https://api.airtable.com/v0";
     const url =
-      `https://api.airtable.com/v0/${base}/${TABLE}?pageSize=100&${fieldsParam}` +
+      `${apiBase}/${base}/${TABLE}?pageSize=100&${fieldsParam}` +
       (offset ? `&offset=${offset}` : "");
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },

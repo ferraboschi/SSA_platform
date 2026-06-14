@@ -48,7 +48,7 @@ class ResendEmailService implements EmailService {
   ) {}
 
   async send(message: EmailMessage): Promise<EmailSendResult> {
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetch(process.env.RESEND_API_URL || "https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,

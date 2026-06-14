@@ -30,7 +30,7 @@ export async function callClaude(opts: {
 }): Promise<string> {
   const key = anthropicConfig.apiKey;
   if (!key) throw new Error("ANTHROPIC_API_KEY non configurata.");
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(process.env.ANTHROPIC_API_URL || "https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,

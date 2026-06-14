@@ -15,6 +15,7 @@ import {
   type CourseSortKey,
   type SortDir,
 } from "@/lib/corsi";
+import { shopifyAdminProductsUrl } from "@/lib/integrations/shopify/admin-url";
 import { GridView, TableView, TimelineView } from "./CatalogViews";
 
 type ViewMode = "timeline" | "grid" | "table";
@@ -135,7 +136,7 @@ export function CorsiCatalog({
           </button>
           <a
             className="btn btn-primary"
-            href="https://admin.shopify.com/store/sakesommelierassociation/products"
+            href={shopifyAdminProductsUrl()}
             target="_blank"
             rel="noopener"
             title={t.newCourseTip}

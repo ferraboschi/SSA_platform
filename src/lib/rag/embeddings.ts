@@ -64,7 +64,7 @@ class OpenAiEmbeddingProvider implements EmbeddingProvider {
   }
 
   async embed(texts: string[]): Promise<EmbeddingVector[]> {
-    const res = await fetch("https://api.openai.com/v1/embeddings", {
+    const res = await fetch(process.env.OPENAI_API_URL || "https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,

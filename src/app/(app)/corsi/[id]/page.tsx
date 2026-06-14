@@ -13,6 +13,7 @@ import {
 import { loadCourseEconomics } from "@/lib/economics";
 import { EMPTY_ECON } from "@/lib/economics/types";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
+import { shopifyAdminProductsUrl } from "@/lib/integrations/shopify/admin-url";
 import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
 import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
@@ -337,7 +338,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           </div>
           <a
             className="btn btn-danger"
-            href={`https://admin.shopify.com/store/sakesommelierassociation/products?query=${encodeURIComponent(course.shortTitle)}`}
+            href={shopifyAdminProductsUrl(course.shortTitle)}
             target="_blank"
             rel="noopener"
             style={{ alignSelf: "center" }}
