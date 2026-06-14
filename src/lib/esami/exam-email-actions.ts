@@ -19,11 +19,6 @@ import {
   type ExamOutcome,
 } from "./exam-email";
 
-export async function getExamEmailTemplatesAction(): Promise<ExamEmailTemplates> {
-  await assertRole(["admin", "manager"]);
-  return loadExamEmailTemplates();
-}
-
 export async function saveExamEmailTemplatesAction(
   templates: ExamEmailTemplates,
 ): Promise<{ ok: boolean; error?: string }> {

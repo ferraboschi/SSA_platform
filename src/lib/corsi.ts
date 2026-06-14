@@ -13,7 +13,6 @@ import type {
   MaterialTemplate,
   ProgramDay,
   Sake,
-  Student,
 } from "@/lib/domain";
 import { COURSE_TYPES } from "@/lib/domain/constants";
 import { monthIndexIt } from "@/lib/dashboard";
@@ -186,57 +185,6 @@ export interface IscrittoModel {
   attendees: Attendee[];
   totalAmount: number;
   flags: { typoName: boolean; typoEmail: boolean };
-}
-
-const GIFT_NAMES_BANK = [
-  "Luca Verdi", "Emma Conti", "Filippo Marini", "Sara Romano", "Davide Greco",
-  "Alice Costa", "Matteo Galli", "Anna Bruni", "Riccardo Sala", "Beatrice Caruso",
-];
-
-const seedOf = (k: string) => {
-  let s = 0;
-  for (const ch of k) s = (s * 31 + ch.charCodeAt(0)) | 0;
-  return Math.abs(s);
-};
-
-export function buildIscrittiModel(students: Student[]): IscrittoModel[] {
-  return students.map((s, i) => {
-    const k = seedOf(s.email + i);
-    const isMulti = i > 0 && k % 11 === 0;
-    const isGift = !isMulti && i > 0 && k % 14 === 0;
-    const typoName = !isGift && k % 17 === 0;
-    const typoEmail = !isGift && !typoName && k % 19 === 0;
-    const seats = isMulti ? 2 : 1;
-    const attendees: Attendee[] = [];
-    if (isGift) {
-      attendees.push({
-        id: `att-${i}-gift`, name: "", email: "", phone: "",
-        isBuyer: false, isGift: true, confirmed: false, pending: true,
-      });
-    } else {
-      attendees.push({
-        id: `att-${i}-self`, name: s.name, email: s.email, phone: s.phone,
-        isBuyer: true, confirmed: !typoName && !typoEmail,
-        typoName, typoEmail, hasWA: s.hasWhatsApp,
-      });
-      if (isMulti) {
-        attendees.push({
-          id: `att-${i}-plus`, name: GIFT_NAMES_BANK[k % GIFT_NAMES_BANK.length],
-          email: "", phone: "", isBuyer: false, confirmed: false, pending: true,
-        });
-      }
-    }
-    return {
-      id: `isc-${i}`,
-      buyer: {
-        name: s.name, email: s.email, phone: s.phone, hasWA: s.hasWhatsApp,
-        orderNumber: s.orderNumber, amount: s.amount, discountCode: s.discountCode,
-      },
-      seats, isGift, isMulti, attendees,
-      totalAmount: s.amount * seats,
-      flags: { typoName, typoEmail },
-    };
-  });
 }
 
 // Days-to-start for the detail countdown.

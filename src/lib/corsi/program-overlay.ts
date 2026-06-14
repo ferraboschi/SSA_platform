@@ -24,5 +24,3 @@ export interface CourseProgramOverlay {
   days?: SavedDay[];
   customLines?: SavedLine[];
 }
-
-export const EMPTY_PROGRAM_OVERLAY: CourseProgramOverlay = {};

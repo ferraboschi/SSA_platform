@@ -34,43 +34,6 @@ export async function signInAction(
   redirect(safeNext(next));
 }
 
-export async function signUpAction(
-  email: string,
-  password: string,
-  firstName: string,
-  lastName: string,
-): Promise<AuthActionResult> {
-  const sb = await getSupabaseServerClient();
-  const { data, error } = await sb.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { first_name: firstName, last_name: lastName },
-    },
-  });
-  if (error) return { ok: false, error: error.message };
-
-  // If Supabase requires email confirmation, there's no session yet — surface
-  // a friendly message so the UI can switch to "check your inbox".
-  if (!data.session) {
-    return {
-      ok: true,
-      error:
-        "Account creato. Controlla l'email per confermare prima del primo login.",
-    };
-  }
-
-  // Backfill the profile row with the name fields from sign-up. The trigger
-  // already created the row (id + email), but with empty first/last names.
-  await sb
-    .from("profiles")
-    .update({ first_name: firstName, last_name: lastName })
-    .eq("id", data.session.user.id);
-
-  revalidatePath("/", "layout");
-  redirect("/dashboard");
-}
-
 export async function signOutAction(): Promise<void> {
   const sb = await getSupabaseServerClient();
   // scope "local" clears THIS device's session cookies without a network revoke

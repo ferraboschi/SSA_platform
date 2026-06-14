@@ -68,67 +68,6 @@ export interface CreatePersonalLinksResult {
   error?: string;
 }
 
-/**
- * Mint ONE personal, signed link per enrolled student for a test, embedding the
- * student id so their submission is tied back to them. Stores them in
- * exam_student_links (best-effort — if the table isn't there yet the links are
- * still returned, just not persisted). Staff-only.
- */
-export async function createPersonalExamLinks(
-  courseId: string,
-  testKey: ExamTestKey,
-  mode: ExamLinkMode = "exam",
-): Promise<CreatePersonalLinksResult> {
-  const session = await getSession();
-  const roleKey = session?.user?.roleKey;
-  if (roleKey !== "admin" && roleKey !== "manager") return { ok: false, error: "Non autorizzato." };
-  const corsoId = /^\d+$/.test(courseId) ? Number(courseId) : null;
-  if (corsoId == null) return { ok: false, error: "Corso non valido." };
-
-  const svc = getSupabaseServiceClient();
-  const { data, error } = await svc
-    .from("corsi_iscrizioni")
-    .select("corsista_id, corsisti(id, full_name, email)")
-    .eq("corso_id", corsoId);
-  if (error) return { ok: false, error: error.message };
-
-  const ttlH = EXAM_LINK_TTL_HOURS[mode];
-  const exp = Math.floor(Date.now() / 1000) + ttlH * 3600;
-  const expIso = new Date(exp * 1000).toISOString();
-  const base = appConfig.baseUrl.replace(/\/$/, "");
-
-  type CorsistaRow = { id: number; full_name: string; email: string };
-  const links: PersonalExamLink[] = [];
-  const rows: Record<string, unknown>[] = [];
-  for (const r of (data ?? []) as unknown as Array<{
-    corsista_id: number;
-    // PostgREST embeds a to-one relation as an object, but supabase-js types it
-    // as an array — accept both.
-    corsisti: CorsistaRow | CorsistaRow[] | null;
-  }>) {
-    const cor = Array.isArray(r.corsisti) ? r.corsisti[0] : r.corsisti;
-    if (!cor) continue;
-    const token = signExamToken({ c: courseId, t: testKey, m: mode, e: exp, s: String(cor.id) });
-    links.push({
-      corsistaId: cor.id,
-      name: cor.full_name,
-      email: cor.email,
-      url: `${base}/esame/${token}`,
-      expiresAt: expIso,
-    });
-    rows.push({ corso_id: corsoId, corsista_id: cor.id, test_key: testKey, mode, token, expires_at: expIso });
-  }
-
-  let stored = false;
-  if (rows.length) {
-    const { error: upErr } = await svc
-      .from("exam_student_links")
-      .upsert(rows, { onConflict: "corso_id,corsista_id,test_key,mode" });
-    stored = !upErr; // table may not exist yet → links still returned
-  }
-  return { ok: true, links, stored };
-}
-
 export interface SubmitExamInput {
   answers: Record<string, string[] | string>;
   lang?: string;

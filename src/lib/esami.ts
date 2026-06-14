@@ -409,14 +409,3 @@ export interface ResultsSummary {
   distribution: number[]; // 10 buckets 0-9 → 0-100
   rows: ExamResult[];
 }
-
-export function buildResultsSummary(results: ExamResult[]): ResultsSummary {
-  const promossi = results.filter((r) => r.status === "passed").length;
-  const riserva = results.filter((r) => r.status === "retrial").length;
-  const bocciati = results.filter((r) => r.status === "failed").length;
-  const media = results.length ? Math.round(results.reduce((s, r) => s + r.score, 0) / results.length) : 0;
-  const distribution = Array.from({ length: 10 }, (_, b) =>
-    results.filter((r) => Math.min(9, Math.floor(r.score / 10)) === b).length,
-  );
-  return { promossi, riserva, bocciati, media, total: results.length, distribution, rows: results };
-}
