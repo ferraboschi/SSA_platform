@@ -38,6 +38,7 @@ async function fetchShellData(): Promise<ShellData> {
         .select(
           "id,handle,short_title,full_title,type,city,month,year,day:start_date,lifecycle,educator_id",
         )
+        .order("start_date", { ascending: true, nullsFirst: false })
         .limit(2000),
       // Light search rows only (no enrollment join) — fast + smaller payload.
       svc.from("corsisti").select("email,full_name,city").limit(5000),
@@ -126,8 +127,25 @@ async function fetchShellData(): Promise<ShellData> {
     })),
   };
 
+  // Italian month → number for chronological sorting
+  const MONTH_ORDER: Record<string, number> = {
+    gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6,
+    luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12,
+  };
+  const monthNum = (m: string) => MONTH_ORDER[m.toLowerCase()] ?? 99;
+
   const sidebarCourses: SidebarCourse[] = courses
     .filter((c) => c.lifecycle === "pubblicato")
+    .sort((a, b) => {
+      // Primary: by start_date (already sorted by Supabase, but ensures
+      // correct order even when the DB result is unsorted or cached stale).
+      if (a.day && b.day) return a.day < b.day ? -1 : a.day > b.day ? 1 : 0;
+      if (a.day && !b.day) return -1;
+      if (!a.day && b.day) return 1;
+      // Fallback: year then month name
+      if (a.year !== b.year) return a.year - b.year;
+      return monthNum(a.month) - monthNum(b.month);
+    })
     .map((c) => {
       const n = enrolledByCourse.get(c.id) ?? 0;
       return {
