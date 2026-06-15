@@ -43,6 +43,13 @@ describe("gradeObjective — single choice", () => {
     expect(gradeObjective([], single)).toBe(false);
     expect(gradeObjective(undefined, single)).toBe(false);
   });
+  it("does NOT let a wrong numeric-text option collide with the correct index", () => {
+    // options whose TEXT is a number; correct is "5" (index 1). Picking "1" (a WRONG
+    // option's text) must not slip through the legacy index path as if it were index 1.
+    const numeric = q({ id: "n", type: "single", options: ["1", "5", "7"], correct: [1] });
+    expect(gradeObjective("5", numeric)).toBe(true); // correct option text
+    expect(gradeObjective("1", numeric)).toBe(false); // wrong text that equals the correct index
+  });
 });
 
 describe("gradeObjective — multi choice (order-independent, exact set)", () => {

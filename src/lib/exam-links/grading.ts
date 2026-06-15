@@ -52,11 +52,18 @@ export function gradeObjective(given: string | string[] | undefined, q: Gradable
   const correctIdx = q.correct ?? [];
   const givenSet = new Set(asArray(given).map(normStr).filter(Boolean));
   const correctTextSet = new Set(correctIdx.map((i) => normStr(q.options[Number(i)])).filter(Boolean));
-  const correctIdxSet = new Set(correctIdx.map((i) => normStr(i)));
-  return (
-    (correctTextSet.size > 0 && setsEqual(givenSet, correctTextSet)) ||
-    setsEqual(givenSet, correctIdxSet)
-  );
+  // The runner stores the selected option TEXT — match on that first.
+  if (correctTextSet.size > 0 && setsEqual(givenSet, correctTextSet)) return true;
+  // Legacy fallback: some old submissions stored option INDICES. Accept that reading
+  // only when the given values are NOT themselves option texts — otherwise a numeric
+  // option label (e.g. "1") could collide with a correct index and false-positive.
+  const optionTextSet = new Set(q.options.map(normStr));
+  const givenAreNotOptionTexts = [...givenSet].every((g) => !optionTextSet.has(g));
+  if (givenAreNotOptionTexts) {
+    const correctIdxSet = new Set(correctIdx.map((i) => normStr(i)));
+    return correctIdxSet.size > 0 && setsEqual(givenSet, correctIdxSet);
+  }
+  return false;
 }
 
 /** Human-readable rendering of a given answer (maps legacy indices → text). */
