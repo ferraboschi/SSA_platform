@@ -109,9 +109,11 @@ export async function loadCourseExamResults(
       applyEnrollment(e);
     }
 
-    // FALLBACK: legacy / non-proctored submissions only have an email → match it.
+    // FALLBACK: legacy / non-proctored submissions only have an email → match it
+    // case-insensitively (the stored corsista email may be mixed-case, while the
+    // submission email was lowercased above — `.eq` would miss those rows).
     if (enrollmentId == null && email) {
-      const { data: c } = await svc.from("corsisti").select("id").eq("email", email).maybeSingle();
+      const { data: c } = await svc.from("corsisti").select("id").ilike("email", email).maybeSingle();
       if (c) {
         const { data: e } = await svc
           .from("corsi_iscrizioni")
