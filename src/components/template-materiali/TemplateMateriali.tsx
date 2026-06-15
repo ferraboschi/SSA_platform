@@ -12,20 +12,6 @@ import {
 import { TemplateEditor } from "./template-editor";
 import { TemplateLibrary } from "./template-library";
 
-const SAKE_NAME_BANK = [
-  "Niwa no Uguisu", "Ginga Shizuku", "Yuki no Bosha", "Hakutsuru Sayuri", "Born Gold",
-  "Hakkaisan Tokubetsu", "Tedorigawa Yamahai", "Kikusui Funaguchi", "Tengumai Yamahai",
-  "Kamoizumi Shusen", "Dewazakura Oka", "Kubota Manju",
-];
-const SAKE_TYPE_BANK = ["Junmai Daiginjo", "Junmai Ginjo", "Junmai", "Honjozo", "Daiginjo", "Nigori", "Kimoto", "Yamahai"];
-const SAKE_KURA_BANK = ["Asahi Shuzo", "Dassai", "Tatenokawa", "Born Brewery", "Hakkaisan", "Tedorigawa", "Kikusui", "Kamoizumi"];
-
-function tmSeed(str: string): number {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  return h;
-}
-
 function tmDeepClone(t: MaterialTemplate): MaterialTemplate {
   return {
     ...t,

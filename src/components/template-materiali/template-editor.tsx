@@ -597,7 +597,6 @@ export function TemplateEditor({
   // Cost automatisms driven by the simulated enrollee count.
   const N = Math.max(0, simStudents);
   const bottlesPerSku = Math.ceil(N / 15) || (N > 0 ? 1 : 0);
-  const totalBottles = totalSakes * bottlesPerSku;
   const bottleCost = t.days.reduce(
     (s, d) =>
       s +
