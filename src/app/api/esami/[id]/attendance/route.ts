@@ -50,7 +50,7 @@ export async function GET(
       firstName: first,
       lastName: last,
       email,
-      score: res ? res.currentScore ?? res.autoScore : null,
+      score: res ? res.currentScore : null,
       passFail: res?.currentResult ? passFail(res.currentResult) : "",
     });
   };

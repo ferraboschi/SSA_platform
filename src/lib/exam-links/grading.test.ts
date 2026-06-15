@@ -5,6 +5,7 @@ import {
   scoreToOutcome,
   isObjective,
   gradeAnswers,
+  certifiedScore,
   type GradableQuestion,
 } from "./grading";
 
@@ -208,5 +209,31 @@ describe("gradeAnswers — whole submission scoring", () => {
     const r = gradeAnswers([], null);
     expect(r).toMatchObject({ gradable: 0, correct: 0, manual: 0, autoScore: 0, suggested: "failed" });
     expect(r.detail).toHaveLength(0);
+  });
+});
+
+describe("certifiedScore (the % to store/show next to the outcome)", () => {
+  it("is null when there are no auto-gradable questions (all-manual exam) — never a fake 0%", () => {
+    expect(certifiedScore(0, 0, "passed")).toBeNull();
+    expect(certifiedScore(0, 0, "retrial")).toBeNull();
+    expect(certifiedScore(0, 0, "failed")).toBeNull();
+  });
+
+  it("is the auto score when the operator confirms the auto-suggested outcome", () => {
+    expect(certifiedScore(10, 85, "passed")).toBe(85); // 85 ⇒ passed
+    expect(certifiedScore(10, 75, "retrial")).toBe(75); // 75 ⇒ retrial
+    expect(certifiedScore(10, 40, "failed")).toBe(40); // 40 ⇒ failed
+  });
+
+  it("is null when the operator overrides against the auto-suggestion — never 'Bocciato 85%'", () => {
+    expect(certifiedScore(10, 85, "failed")).toBeNull(); // would read "Bocciato 85%"
+    expect(certifiedScore(10, 40, "passed")).toBeNull(); // would read "Promosso 40%"
+    expect(certifiedScore(10, 75, "passed")).toBeNull(); // retrial-range bumped to passed
+  });
+
+  it("agrees with scoreToOutcome at the threshold boundaries", () => {
+    expect(certifiedScore(5, 80, "passed")).toBe(80); // exactly pass
+    expect(certifiedScore(5, 70, "retrial")).toBe(70); // exactly retrial
+    expect(certifiedScore(5, 69, "failed")).toBe(69); // just below retrial
   });
 });

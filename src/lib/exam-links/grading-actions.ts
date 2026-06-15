@@ -16,7 +16,7 @@ export interface GradeResult {
 export async function gradeEnrollmentAction(
   enrollmentId: number,
   result: ExamOutcome,
-  score: number,
+  score: number | null,
   courseId: string,
 ): Promise<GradeResult> {
   if (!(await hasRole(["admin", "manager"]))) {
@@ -28,7 +28,7 @@ export async function gradeEnrollmentAction(
       .from("corsi_iscrizioni")
       .update({
         exam_result: result,
-        exam_score_pct: Math.max(0, Math.min(100, Math.round(score))),
+        exam_score_pct: score == null ? null : Math.max(0, Math.min(100, Math.round(score))),
       })
       .eq("id", enrollmentId);
     if (error) throw error;

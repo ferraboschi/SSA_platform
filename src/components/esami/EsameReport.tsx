@@ -59,11 +59,16 @@ export function EsameReport({ result, family, course, courseId }: EsameReportPro
             {result.name}
           </h1>
           <div style={{ marginTop: 8, fontSize: 13, color: "var(--text-3)" }}>
-            {t.scorePrefix}{" "}
-            <strong className="num" style={{ color: statusColor }}>
-              {result.score}%
-            </strong>{" "}
-            · {statusLabel}
+            {result.score != null && (
+              <>
+                {t.scorePrefix}{" "}
+                <strong className="num" style={{ color: statusColor }}>
+                  {result.score}%
+                </strong>{" "}
+                ·{" "}
+              </>
+            )}
+            {statusLabel}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -204,19 +209,21 @@ function ReportPage({
           border: "1.5px solid " + statusBorder,
           borderRadius: 6,
           display: "flex",
-          justifyContent: "space-between",
+          justifyContent: result.score == null ? "center" : "space-between",
           alignItems: "center",
         }}
       >
-        <div>
-          <div className="mono" style={{ fontSize: 9.5 * FS, letterSpacing: "var(--ls-caps)", textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>
-            {t.score}
+        {result.score != null && (
+          <div>
+            <div className="mono" style={{ fontSize: 9.5 * FS, letterSpacing: "var(--ls-caps)", textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>
+              {t.score}
+            </div>
+            <div className="num" style={{ fontSize: 40 * FS, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.02em", color: statusFg }}>
+              {result.score}
+              <span style={{ fontSize: 20 * FS, color: "var(--text-3)", fontWeight: 500 }}>%</span>
+            </div>
           </div>
-          <div className="num" style={{ fontSize: 40 * FS, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.02em", color: statusFg }}>
-            {result.score}
-            <span style={{ fontSize: 20 * FS, color: "var(--text-3)", fontWeight: 500 }}>%</span>
-          </div>
-        </div>
+        )}
         <div style={{ fontWeight: 700, fontSize: 24 * FS, color: statusFg, letterSpacing: "-0.01em" }}>
           {isPass ? t.passedTitle : isRetrial ? t.retrialTitle : t.failedTitle}
         </div>

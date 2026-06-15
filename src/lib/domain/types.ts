@@ -251,7 +251,9 @@ export interface ExamQuestion {
 export interface ExamResult {
   email: string;
   name: string;
-  score: number;
+  /** Objective score %, or null when no number is certified (all-manual exam or
+   *  an operator override) — renderers show the outcome alone in that case. */
+  score: number | null;
   status: ExamResultStatus;
   completedAt: string;
   durationMin: number;

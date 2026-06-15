@@ -42,7 +42,9 @@ export async function sendExamResultEmailAction(
   const result = subs.find((s) => s.studentEmail.toLowerCase() === lowEmail && s.currentResult);
   if (!result) return { ok: false, error: "Esito non confermato per questo studente." };
   const outcome = result.currentResult as "passed" | "retrial" | "failed";
-  const scorePct = result.currentScore ?? result.autoScore;
+  // Null when no objective % is certified (all-manual exam / operator override):
+  // the certificate + email then show the outcome alone, no misleading number.
+  const scorePct = result.currentScore;
 
   const base = appConfig.baseUrl.replace(/\/$/, "");
   const reportUrl = `${base}/esami/${courseId}/report/${encodeURIComponent(email)}`;

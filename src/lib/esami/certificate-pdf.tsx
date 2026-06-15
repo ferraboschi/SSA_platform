@@ -41,7 +41,9 @@ export interface CertificatePdfInput {
   name: string;
   family: ExamFamily;
   status: "passed" | "retrial" | "failed";
-  score: number;
+  /** Objective score %, or null when no number is certified (all-manual exam or
+   *  operator override) — the certificate then shows the outcome alone. */
+  score: number | null;
   sections: { label: string; pct: number }[];
   course: { day: number; month: string; year: number; city: string; educatorName: string };
   completedAt: string;
@@ -117,11 +119,13 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
         {t.examDate}: {input.course.day} {input.course.month} {input.course.year} · {t.location}: {input.course.city} · {t.educator}: {input.course.educatorName}
       </Text>
 
-      <View style={[styles.scoreBox, { borderColor: sc }]}>
-        <View>
-          <Text style={[styles.scoreLabel, { color: sc }]}>{t.score}</Text>
-          <Text style={[styles.scoreNum, { color: sc }]}>{input.score}%</Text>
-        </View>
+      <View style={[styles.scoreBox, { borderColor: sc, justifyContent: input.score == null ? "center" : "space-between" }]}>
+        {input.score != null && (
+          <View>
+            <Text style={[styles.scoreLabel, { color: sc }]}>{t.score}</Text>
+            <Text style={[styles.scoreNum, { color: sc }]}>{input.score}%</Text>
+          </View>
+        )}
         <Text style={[styles.statusBig, { color: sc }]}>{title}</Text>
       </View>
 

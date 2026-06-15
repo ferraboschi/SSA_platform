@@ -82,6 +82,23 @@ export function scoreToOutcome(autoScore: number): ExamOutcome {
       : "failed";
 }
 
+/** The objective percentage to CERTIFY alongside a (possibly manual) outcome —
+ *  or `null` when no number should be stored/shown:
+ *   • `gradable === 0` → no auto-gradable questions: the outcome is a fully manual
+ *     decision and there is no objective score (avoids a meaningless "0%").
+ *   • the chosen `outcome` ≠ what the auto-score implies (operator override) → the
+ *     objective % would contradict the decision (avoids e.g. "Bocciato 85%").
+ *  Persisted into `exam_score_pct`; every consumer renders "%" only when non-null. */
+export function certifiedScore(
+  gradable: number,
+  autoScore: number,
+  outcome: ExamOutcome,
+): number | null {
+  if (gradable <= 0) return null;
+  if (scoreToOutcome(autoScore) !== outcome) return null;
+  return autoScore;
+}
+
 /** Grade a whole submission: per-question breakdown + auto score + suggestion. */
 export function gradeAnswers(
   questions: GradableQuestion[],

@@ -41,7 +41,7 @@ export default async function Page({
       result = {
         email: sub.studentEmail,
         name: sub.studentName,
-        score: sub.currentScore ?? sub.autoScore,
+        score: sub.currentScore,
         status: (sub.currentResult as ExamResultStatus | null) ?? sub.suggested,
         completedAt: sub.submittedAt,
         durationMin: 0,

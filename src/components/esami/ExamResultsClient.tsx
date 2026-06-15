@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
 import { gradeEnrollmentAction } from "@/lib/exam-links/grading-actions";
+import { certifiedScore } from "@/lib/exam-links/grading";
 import { gradeOpenAnswerAction, type GradeOpenResult } from "@/lib/esami/ai-actions";
 import { FeedbackSummary } from "./FeedbackSummary";
 import { SendResultsSection, type ConfirmedResultRow } from "./SendResultsSection";
@@ -61,7 +62,7 @@ export function ExamResultsClient({
     confirmed.push({
       name: r.studentName,
       email: r.studentEmail,
-      score: r.currentScore ?? r.autoScore,
+      score: r.currentScore,
       status: r.currentResult as string,
     });
   }
@@ -221,7 +222,11 @@ function ResultRow({
     }
     setErr(null);
     start(async () => {
-      const res = await gradeEnrollmentAction(r.enrollmentId!, outcome, r.autoScore, courseId);
+      // Persist the objective % only when it's meaningful AND matches the chosen
+      // outcome — otherwise the result certifies the outcome alone (no "0%" for an
+      // all-manual exam, no contradictory "Bocciato 85%" on an override).
+      const score = certifiedScore(r.gradable, r.autoScore, outcome);
+      const res = await gradeEnrollmentAction(r.enrollmentId!, outcome, score, courseId);
       if (res.ok) {
         // Embedded in a tab, the client-loaded data needs an explicit re-fetch;
         // on the standalone page, router.refresh() re-runs the server load.
@@ -242,8 +247,8 @@ function ResultRow({
         <td className="text-3" style={{ whiteSpace: "nowrap", fontSize: 12 }}>
           {new Date(r.submittedAt).toLocaleDateString("it-IT")}
         </td>
-        <td style={{ textAlign: "right", fontWeight: 700, color: scoreColor(r.autoScore) }}>
-          {r.autoScore}%
+        <td style={{ textAlign: "right", fontWeight: 700, color: r.gradable > 0 ? scoreColor(r.autoScore) : "var(--text-3)" }}>
+          {r.gradable > 0 ? `${r.autoScore}%` : "—"}
           {r.manualCount > 0 && (
             <div className="text-3" style={{ fontSize: 10, fontWeight: 400 }}>+{r.manualCount} aperte</div>
           )}
@@ -266,10 +271,16 @@ function ResultRow({
                 className="btn btn-xs"
                 disabled={pending || r.enrollmentId == null}
                 onClick={() => grade(o)}
-                title={r.enrollmentId == null ? "Studente non iscritto" : `Suggerito: ${OUTCOME_LABEL[r.suggested]}`}
+                title={
+                  r.enrollmentId == null
+                    ? "Studente non iscritto"
+                    : r.gradable === 0
+                      ? "Valutazione manuale — nessuna domanda a correzione automatica"
+                      : `Suggerito: ${OUTCOME_LABEL[r.suggested]}`
+                }
                 style={{
-                  borderColor: r.suggested === o ? `var(--${o === "passed" ? "success" : o === "retrial" ? "warning" : "danger"}-fg)` : undefined,
-                  fontWeight: r.suggested === o ? 700 : 400,
+                  borderColor: r.gradable > 0 && r.suggested === o ? `var(--${o === "passed" ? "success" : o === "retrial" ? "warning" : "danger"}-fg)` : undefined,
+                  fontWeight: r.gradable > 0 && r.suggested === o ? 700 : 400,
                 }}
               >
                 {OUTCOME_LABEL[o]}

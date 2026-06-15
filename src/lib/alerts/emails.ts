@@ -134,7 +134,9 @@ export interface ExamResultEmailInput {
   to: string;
   studentName: string;
   courseTitle: string;
-  scorePct: number;
+  /** Objective score %, or null when no number is certified (all-manual exam /
+   *  operator override) — the email omits the badge + score clause. */
+  scorePct: number | null;
   status: "passed" | "retrial" | "failed";
   /** Link to the printable certificate/report (student can save it as PDF). */
   reportUrl: string;

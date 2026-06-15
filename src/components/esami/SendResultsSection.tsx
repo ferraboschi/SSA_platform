@@ -8,7 +8,9 @@ import { sendExamResultEmailAction } from "@/lib/esami/email-actions";
 export interface ConfirmedResultRow {
   name: string;
   email: string;
-  score: number;
+  /** Certified objective %, or null when no number is certified (all-manual exam
+   *  or operator override) — the row then shows just the outcome badge. */
+  score: number | null;
   status: string;
 }
 
@@ -130,9 +132,11 @@ function ResultRow({
           <span style={{ display: "block", fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
           <span style={{ display: "block", fontSize: 11.5, color: "var(--text-3)" }}>{r.email}</span>
         </span>
-        <span style={{ fontSize: 15, fontWeight: 800, color: scoreColor(r.score), minWidth: 48, textAlign: "right" }}>
-          {r.score}%
-        </span>
+        {r.score != null && (
+          <span style={{ fontSize: 15, fontWeight: 800, color: scoreColor(r.score), minWidth: 48, textAlign: "right" }}>
+            {r.score}%
+          </span>
+        )}
         <Badge tone={TONE[r.status] ?? "neutral"} dot>
           {LABEL[r.status] ?? r.status}
         </Badge>

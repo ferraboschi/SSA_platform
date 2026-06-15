@@ -56,6 +56,33 @@ export const DEFAULT_EXAM_EMAIL_TEMPLATES: ExamEmailTemplates = {
   },
 };
 
+/** Body variants WITHOUT the score clause — used when no objective % is certified
+ *  (all-manual exam or operator override), so the email never reads "del null%".
+ *  Subjects don't reference the score, so they stay the staff-edited ones. */
+export const EXAM_EMAIL_BODY_NOSCORE: Record<ExamOutcome, string> = {
+  passed:
+    "Ciao {nome},\n\n" +
+    "complimenti! Hai superato l'esame del corso {corso}. È un traguardo di cui andare fieri.\n\n" +
+    "In allegato trovi il tuo certificato ufficiale. Continua il tuo percorso con gli altri corsi SSA: sarebbe un piacere riaverti in aula.\n\n" +
+    "A presto,\nSake Sommelier Association",
+  retrial:
+    "Ciao {nome},\n\n" +
+    "il tuo esame del corso {corso} si è concluso: sei ammesso al recupero. Ci sei quasi!\n\n" +
+    "Ti contatteremo a breve con le indicazioni per la prova di recupero. In allegato trovi il dettaglio del tuo esito.\n\n" +
+    "A presto,\nSake Sommelier Association",
+  failed:
+    "Ciao {nome},\n\n" +
+    "il tuo esame del corso {corso} si è concluso e non raggiunge la soglia di superamento. Non scoraggiarti: può capitare e puoi riprovare.\n\n" +
+    "Puoi ripartecipare allo stesso corso gratuitamente: scrivi a corsi@sakesommelierassociation.it e organizziamo una nuova data per te. In allegato trovi il dettaglio del tuo esito.\n\n" +
+    "Un caro saluto,\nSake Sommelier Association",
+};
+
+/** The body to render: the (staff-editable) template body when a numeric score is
+ *  shown, else the no-score variant for that outcome. */
+export function examEmailBody(tpl: ExamEmailTemplate, outcome: ExamOutcome, hasScore: boolean): string {
+  return hasScore ? tpl.body : EXAM_EMAIL_BODY_NOSCORE[outcome];
+}
+
 // Branded email assets (absolute URLs — emails can't reference local files).
 const LOGO_URL = "https://platform.sakesommelierassociation.it/ssa-logo.png";
 const COURSES_URL = "https://www.sakesommelierassociation.it/collections/tutti-i-corsi";
@@ -74,7 +101,9 @@ export interface UpcomingCourseLine {
 export interface ExamEmailVars {
   nome: string;
   corso: string;
-  punteggio: number | string;
+  /** Objective score %, or null when no number is certified — the email then omits
+   *  the score badge and uses the no-score body variant (never "del null%"). */
+  punteggio: number | string | null;
   esito: string;
 }
 
@@ -82,7 +111,7 @@ export function fillVars(s: string, v: ExamEmailVars): string {
   return s
     .split("{nome}").join(v.nome)
     .split("{corso}").join(v.corso)
-    .split("{punteggio}").join(String(v.punteggio))
+    .split("{punteggio}").join(v.punteggio == null ? "" : String(v.punteggio))
     .split("{esito}").join(v.esito);
 }
 
@@ -117,15 +146,18 @@ export function renderExamEmail(
   const subject = fillVars(tpl.subject, v);
   const outcome = opts?.outcome ?? "passed";
   const accent = ACCENT[outcome];
+  const hasScore = v.punteggio != null;
 
-  // Prominent score badge ("valorizza la numerica").
-  const scoreBadge = `<table role="presentation" width="100%" style="margin:8px 0 20px"><tr><td>
+  // Prominent score badge ("valorizza la numerica") — only when a % is certified.
+  const scoreBadge = hasScore
+    ? `<table role="presentation" width="100%" style="margin:8px 0 20px"><tr><td>
     <div style="border:2px solid ${accent};border-radius:12px;padding:18px 20px;text-align:center">
       <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${accent}">Punteggio</div>
       <div style="font-size:46px;line-height:1.05;font-weight:800;color:${accent};margin:4px 0">${v.punteggio}%</div>
       <div style="font-size:14px;font-weight:700;color:${accent}">${v.esito}</div>
     </div>
-  </td></tr></table>`;
+  </td></tr></table>`
+    : "";
 
   const certButton = opts?.reportUrl
     ? `<p style="margin:8px 0 4px"><a href="${opts.reportUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Apri il certificato</a></p>`
@@ -157,7 +189,7 @@ export function renderExamEmail(
     </div>
     <div style="padding:24px 28px;color:#1a1a1a">
       ${scoreBadge}
-      <div>${bodyToHtml(tpl.body, v)}</div>
+      <div>${bodyToHtml(examEmailBody(tpl, outcome, hasScore), v)}</div>
       ${certButton}
       ${coursesCta}
       ${privacy}

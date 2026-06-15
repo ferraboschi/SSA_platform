@@ -36,7 +36,7 @@ export async function GET(
     name: sub.studentName,
     family,
     status: sub.currentResult as "passed" | "retrial" | "failed",
-    score: sub.currentScore ?? sub.autoScore,
+    score: sub.currentScore,
     sections: [],
     course: {
       day: course.day,

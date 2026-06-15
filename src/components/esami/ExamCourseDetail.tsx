@@ -905,15 +905,16 @@ function EsameRisultati({ results, courseId }: { results: ExamResult[]; courseId
   const passed = results.filter((r) => r.status === "passed").length;
   const retrial = results.filter((r) => r.status === "retrial").length;
   const failed = results.filter((r) => r.status === "failed").length;
-  const avg = Math.round(results.reduce((s, r) => s + r.score, 0) / results.length);
+  // Demo results always carry a numeric score; coalesce to stay null-safe.
+  const avg = Math.round(results.reduce((s, r) => s + (r.score ?? 0), 0) / results.length);
   const buckets = Array(10).fill(0) as number[];
   results.forEach((r) => {
-    buckets[Math.min(9, Math.floor(r.score / 10))]++;
+    buckets[Math.min(9, Math.floor((r.score ?? 0) / 10))]++;
   });
   const maxBucket = Math.max(...buckets, 1);
-  const minScore = Math.min(...results.map((r) => r.score));
-  const maxScore = Math.max(...results.map((r) => r.score));
-  const sorted = [...results].sort((a, b) => b.score - a.score);
+  const minScore = Math.min(...results.map((r) => r.score ?? 0));
+  const maxScore = Math.max(...results.map((r) => r.score ?? 0));
+  const sorted = [...results].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
   return (
     <div>
@@ -989,13 +990,13 @@ function EsameRisultati({ results, courseId }: { results: ExamResult[]; courseId
                           color: r.status === "passed" ? "var(--success-fg)" : r.status === "retrial" ? "var(--warning-fg)" : "var(--danger-fg)",
                         }}
                       >
-                        {r.score}%
+                        {r.score ?? 0}%
                       </span>
                       <div
                         className={`bar ${r.status === "passed" ? "success" : r.status === "retrial" ? "warning" : "danger"}`}
                         style={{ width: 70 }}
                       >
-                        <i style={{ width: `${r.score}%` }} />
+                        <i style={{ width: `${r.score ?? 0}%` }} />
                       </div>
                     </div>
                   </td>
