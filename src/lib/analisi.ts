@@ -12,7 +12,7 @@ import { monthIndexIt, MONTH_NAMES_IT } from "@/lib/dates/italian-months";
 
 // "Now" anchor for due/overdue maths. Kept as a constant so the page is
 // deterministic (pure) — bump it as the platform's reference date moves.
-export const ANALISI_TODAY = new Date(2026, 5, 2); // 2 Jun 2026
+const ANALISI_TODAY = new Date(2026, 5, 2); // 2 Jun 2026
 
 /** Months elapsed between two course-dates (signed, in whole months). */
 function monthsBetween(a: Date, b: Date): number {

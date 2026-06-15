@@ -58,7 +58,7 @@ function loadGoogleMaps(): Promise<void> {
   return gmapsPromise;
 }
 
-export function GoogleAddressInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function GoogleAddressInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!GMAPS_KEY) return;

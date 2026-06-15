@@ -18,7 +18,7 @@ import { SakeRow, CostLineRow } from "./programma-rows";
 import { TemplateLibraryModal } from "./template-library-modal";
 
 /** Bottles needed per SKU: one bottle covers ~15 students. */
-export function bottlesForStudents(enrolled: number): number {
+function bottlesForStudents(enrolled: number): number {
   const n = Math.max(0, enrolled);
   return Math.ceil(n / 15) || (n > 0 ? 1 : 0);
 }

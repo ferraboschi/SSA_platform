@@ -20,7 +20,7 @@ import { monthIndexIt } from "@/lib/dashboard";
 export { monthIndexIt };
 
 // The course-detail countdown anchors "today" to 25 May 2026, like the prototype.
-export const CORSO_TODAY = new Date(2026, 4, 25);
+const CORSO_TODAY = new Date(2026, 4, 25);
 const DAY_MS = 86_400_000;
 
 // Health-status rule keys, in escalation order. The human-readable rule/detail

@@ -27,26 +27,7 @@ function dayUnitFem(n: number, t: { dayOneFem: string; dayManyFem: string }) {
   return n === 1 ? t.dayOneFem : t.dayManyFem;
 }
 
-export function SummaryLine({ label, value, last }: { label: string; value: string; last?: boolean }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "baseline",
-        padding: "5px 0",
-        borderBottom: last ? "none" : "1px dashed var(--border-2)",
-      }}
-    >
-      <span style={{ fontSize: 12, color: "var(--text-3)" }}>{label}</span>
-      <span className="num" style={{ fontSize: 13, fontWeight: 600 }}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-export function SumKpi({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "ok" | "bad" }) {
+function SumKpi({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "ok" | "bad" }) {
   const color = tone === "ok" ? "var(--success-fg)" : tone === "bad" ? "var(--danger-fg)" : "var(--text)";
   return (
     <div style={{ minWidth: 120 }}>
@@ -57,7 +38,7 @@ export function SumKpi({ label, value, sub, tone }: { label: string; value: stri
   );
 }
 
-export function CostGroupLabel({ text }: { text: string }) {
+function CostGroupLabel({ text }: { text: string }) {
   return (
     <div
       style={{
@@ -75,7 +56,7 @@ export function CostGroupLabel({ text }: { text: string }) {
   );
 }
 
-export function MaterialeRow({
+function MaterialeRow({
   icon,
   label,
   hint,
@@ -118,7 +99,7 @@ export function MaterialeRow({
   );
 }
 
-export function ExtraCostRow({
+function ExtraCostRow({
   cost: c,
   last,
   onChange,
@@ -177,7 +158,7 @@ export function ExtraCostRow({
   );
 }
 
-export function SakeField({
+function SakeField({
   label,
   value,
   onChange,
@@ -204,7 +185,7 @@ export function SakeField({
   );
 }
 
-export function TemplateSakeRow({
+function TemplateSakeRow({
   sake: s,
   catItem,
   isLast,
@@ -348,7 +329,7 @@ export function TemplateSakeRow({
   );
 }
 
-export function DayCard({
+function DayCard({
   day: d,
   canRemove,
   catBySku,

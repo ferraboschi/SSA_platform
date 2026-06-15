@@ -29,7 +29,7 @@ function Stat3({ value, label }: { value: string | number; label: string }) {
   );
 }
 
-export function LibraryCard({
+function LibraryCard({
   template: t,
   onOpen,
   onDuplicate,

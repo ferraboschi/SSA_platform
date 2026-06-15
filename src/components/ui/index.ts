@@ -12,5 +12,4 @@ export {
   type CourseStatus,
 } from "./StatusBadge";
 export { KPI, type KPIProps } from "./KPI";
-export { Crumbs, type Crumb, type CrumbsProps } from "./Crumbs";
 export { PageHeader, type PageHeaderProps } from "./PageHeader";

@@ -103,7 +103,7 @@ export function TemplateLibraryModal({
   );
 }
 
-export function TemplateCard({
+function TemplateCard({
   template: tp,
   matchType,
   expanded,
