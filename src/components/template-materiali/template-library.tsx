@@ -2,6 +2,7 @@
 
 import { Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import { COURSE_TYPES, type CourseTypeKey, type MaterialTemplate } from "@/lib/domain";
 
 function tmTypeTone(type: CourseTypeKey): "oro" | "azzurro" {
@@ -60,14 +61,14 @@ function LibraryCard({
         <div style={{ display: "flex", gap: 16, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-2)" }}>
           <Stat3 value={t.days.length} label={dayUnit(t.days.length, tm)} />
           <Stat3 value={totalSakes} label={c.sake} />
-          <Stat3 value={`${sakeCost.toLocaleString("it-IT")}€`} label={c.sakeCost} />
+          <Stat3 value={formatEuro(sakeCost)} label={c.sakeCost} />
         </div>
 
         <div style={{ marginTop: 12, fontSize: 11.5, color: "var(--text-3)", display: "flex", flexDirection: "column", gap: 3 }}>
           <span>
             <Icon name="graduation" size={11} className="text-4" /> {c.lblEducator}{" "}
-            <strong className="num">{t.materiali.educatorPerDay}€</strong>
-            {c.unitPerDay} · {c.lblMateriali} <strong className="num">{materialiPerStudent}€</strong>
+            <strong className="num">{formatEuro(t.materiali.educatorPerDay)}</strong>
+            {c.unitPerDay} · {c.lblMateriali} <strong className="num">{formatEuro(materialiPerStudent)}</strong>
             {c.unitPerStudent}
           </span>
           <span className="text-4" style={{ fontSize: 10.5 }}>

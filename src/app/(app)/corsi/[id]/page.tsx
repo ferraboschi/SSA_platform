@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Avatar, Badge, Icon, StatusBadge } from "@/components/ui";
 import { getTranslations } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n/dictionary";
+import { formatEuro } from "@/lib/format";
 import { getDataSource } from "@/lib/data";
 import {
   daysToStart,
@@ -29,7 +30,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const courseP = /^\d+$/.test(id)
     ? ds.courses.getById(id)
     : ds.courses.getByHandle(id);
-  const [{ locale, t }, course, allTemplates, allEducators] = await Promise.all([
+  const [{ t }, course, allTemplates, allEducators] = await Promise.all([
     getTranslations(),
     courseP,
     ds.materialTemplates.list(),
@@ -227,17 +228,17 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           />
           <CourseStat
             label={td.statRicavi}
-            value={`${course.revenue.toLocaleString(locale)} €`}
-            sub={format(td.listPrice, { n: course.price })}
+            value={formatEuro(course.revenue)}
+            sub={format(td.listPrice, { n: formatEuro(course.price) })}
           />
           <CourseStat
             label={td.statCosti}
-            value={`${course.totalCost.toLocaleString(locale)} €`}
+            value={formatEuro(course.totalCost)}
             sub={format(td.costItems, { n: costItems })}
           />
           <CourseStat
             label={td.statMargine}
-            value={`${course.margin >= 0 ? "+" : ""}${course.margin.toLocaleString(locale)} €`}
+            value={`${course.margin >= 0 ? "+" : ""}${formatEuro(course.margin)}`}
             sub={format(td.onRevenue, { n: marginOnRevenue })}
             tone={course.margin >= 0 ? "success" : "danger"}
             last

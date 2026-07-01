@@ -2,6 +2,7 @@
 
 import { Badge, KPI, PageHeader, type BadgeTone } from "@/components/ui";
 import { useT, format, type Dictionary } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import { monthLabel } from "@/lib/dashboard";
 import { COURSE_TYPES } from "@/lib/domain/constants";
 import type { CourseTypeKey } from "@/lib/domain";
@@ -27,7 +28,7 @@ const PRIO_TONE: Record<RecoPriority, BadgeTone> = {
   bassa: "neutral",
 };
 
-const eur = (n: number) => `€ ${n.toLocaleString("it-IT")}`;
+const eur = (n: number) => formatEuro(n);
 
 export function AnalisiClient({ data, locale }: { data: AnalisiData; locale: string }) {
   const t = useT().analisi;

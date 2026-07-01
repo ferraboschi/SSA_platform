@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import {
   StockBadge,
   LOW_STOCK,
@@ -152,7 +153,7 @@ export function SakeRow({
 
         <div style={{ textAlign: "right", minWidth: 56 }}>
           <div className="num" style={{ fontSize: 13, fontWeight: 600 }}>
-            {liveCost}€
+            {formatEuro(liveCost)}
           </div>
           <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 2 }}>
             ×{need != null && need > 0 ? need : s.qty}

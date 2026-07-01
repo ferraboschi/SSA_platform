@@ -446,7 +446,7 @@ export const it = {
       statIscritti: "Iscritti",
       thresholdReached: "soglia raggiunta",
       statRicavi: "Ricavi",
-      listPrice: "Prezzo lista {n}€",
+      listPrice: "Prezzo lista {n}",
       statCosti: "Costi",
       costItems: "{n} voci",
       statMargine: "Margine",
@@ -578,7 +578,7 @@ export const it = {
     },
     programma: {
       kpiRevenue: "Ricavi",
-      kpiAvgPrice: "{n} iscritti × €{p} medio",
+      kpiAvgPrice: "{n} iscritti × {p} € medio",
       kpiTotalCosts: "Costi totali",
       kpiSakeVariable: "Sake {s} € · Variabili {v} €",
       kpiNetMargin: "Margine netto",
@@ -1469,7 +1469,7 @@ export const it = {
     openCount: "{n} crediti aperti",
     appliedCount: "{n} crediti applicati",
     closedCount: "{n} crediti chiusi",
-    totalOpen: "Totale aperto: {v}€",
+    totalOpen: "Totale aperto: {v}",
   },
 
   archivio: {
@@ -1561,9 +1561,9 @@ export const it = {
       materialiTitle: "Materiali",
       materialiIntro: "Costi gestiti dal template — non più impostati corso per corso. Vengono applicati ai corsi che adottano questo template.",
       matEducator: "Educator · a giornata",
-      matEducatorHint: "{days} {unit} → {total} € per corso",
+      matEducatorHint: "{days} {unit} → {total} per corso",
       matGestione: "Gestione SSA · a giornata",
-      matGestioneHint: "{days} {unit} → {total} € per corso",
+      matGestioneHint: "{days} {unit} → {total} per corso",
       matDiplomi: "Diplomi",
       matLibri: "Libri di testo",
       matLocation: "Location",

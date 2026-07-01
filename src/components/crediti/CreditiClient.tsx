@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui";
 import { format, useT } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import { linkCreditoAction, setCreditoStatoAction } from "@/lib/crediti/actions";
 
 export type CreditoStato = "aperto" | "applicato" | "rimborsato" | "annullato";
@@ -42,7 +43,7 @@ const STATE_TONE: Record<CreditoStato, { fg: string; bg: string }> = {
 };
 
 function euro(n: number): string {
-  return `${Math.round(n).toLocaleString("it-IT")}€`;
+  return formatEuro(Math.round(n));
 }
 
 export function CreditiClient({
@@ -141,7 +142,7 @@ export function CreditiClient({
             title={t.openTitle}
             subtitle={t.openSubtitle}
             count={format(t.openCount, { n: open.length })}
-            extra={open.length > 0 ? format(t.totalOpen, { v: Math.round(totalOpen) }) : undefined}
+            extra={open.length > 0 ? format(t.totalOpen, { v: formatEuro(Math.round(totalOpen)) }) : undefined}
             emptyLabel={t.empty}
             items={open}
           >

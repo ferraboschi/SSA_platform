@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import type { Corsista, ExamResultStatus } from "@/lib/domain";
 
@@ -277,7 +278,7 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
                     )}
                   </td>
                   <td className="num" style={{ textAlign: "right", fontWeight: 600 }}>
-                    {s.totalSpent.toLocaleString("it-IT")}€
+                    {formatEuro(s.totalSpent)}
                   </td>
                   <td>
                     <Icon name="chevron" size={13} className="text-4" />

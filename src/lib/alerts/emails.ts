@@ -16,6 +16,7 @@ import {
   OUTCOME_LABEL_BY_LANG,
 } from "@/lib/esami/exam-email";
 import { getUpcomingCourseLines } from "@/lib/esami/upcoming-courses";
+import { formatEuro } from "@/lib/format";
 
 function loginLink(path = "/dashboard"): string {
   const base = appConfig.baseUrl.replace(/\/$/, "");
@@ -203,7 +204,7 @@ export async function sendInvoiceNoticeEmail(course: InvoiceCourse): Promise<Ema
        <tr><td style="padding:5px 0;color:#6b7280">Corso</td><td style="padding:5px 0;text-align:right;font-weight:600">${course.title}</td></tr>
        <tr><td style="padding:5px 0;color:#6b7280">Luogo / data</td><td style="padding:5px 0;text-align:right">${course.city} · ${course.month} ${course.year}</td></tr>
        <tr><td style="padding:5px 0;color:#6b7280">Iscritti</td><td style="padding:5px 0;text-align:right">${course.enrolled}</td></tr>
-       <tr><td style="padding:5px 0;color:#6b7280">Incasso netto</td><td style="padding:5px 0;text-align:right">€ ${course.revenue.toLocaleString("it-IT")}</td></tr>
+       <tr><td style="padding:5px 0;color:#6b7280">Incasso netto</td><td style="padding:5px 0;text-align:right">${formatEuro(course.revenue)}</td></tr>
      </table>`,
     { href: loginLink(`/corsi/${course.id}`), label: "Apri il corso" },
   );

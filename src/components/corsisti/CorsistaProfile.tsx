@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format, type Dictionary } from "@/lib/i18n";
+import { formatEuro, formatNumberIt } from "@/lib/format";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import { COURSE_TYPES, type Corsista, type CorsistaEnrollment, type Purchase } from "@/lib/domain";
 import { monthIndexIt } from "@/lib/dates/italian-months";
@@ -196,7 +197,7 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
         <div className="rgrid-4" style={{ borderTop: "1px solid var(--border)" }}>
           <ProfStat label={t.statCorsi} value={s.courses.length} sub={s.courses.length ? format(t.statCorsiSub, { first: firstYear, last: lastYear }) : "—"} />
           <ProfStat label={t.statEsami} value={examCount} sub={certificate ? t.statEsamiPassed : "—"} />
-          <ProfStat label={t.statSpeso} value={s.totalSpent} unit="€" />
+          <ProfStat label={t.statSpeso} value={formatNumberIt(s.totalSpent)} unit="€" />
           <ProfStat label={t.statStatus} value={status} last />
         </div>
       </section>
@@ -275,7 +276,7 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                   </td>
                   <td className="num" style={{ textAlign: "right" }}>
                     {c.amount > 0 ? (
-                      `${c.amount}€`
+                      formatEuro(c.amount)
                     ) : (
                       <span className="text-3" style={{ fontSize: 12 }}>{t.free}</span>
                     )}
@@ -343,7 +344,7 @@ function PurchasesSection({ purchases, t }: { purchases: Purchase[]; t: ProfileT
                   {p.delivery && <span className="text-4" style={{ marginLeft: 6, fontSize: 11 }}>· {p.delivery}</span>}
                 </td>
                 <td className="text-3">{p.buyerName ?? "—"}</td>
-                <td className="num" style={{ textAlign: "right" }}>{p.amount}€</td>
+                <td className="num" style={{ textAlign: "right" }}>{formatEuro(p.amount)}</td>
               </tr>
             ))}
           </tbody>

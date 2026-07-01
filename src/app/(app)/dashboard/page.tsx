@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Avatar, Badge, Icon, KPI, StatusBadge } from "@/components/ui";
 import { getTranslations } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n/dictionary";
+import { formatEuro } from "@/lib/format";
 import { getSession } from "@/lib/auth/session";
 import { getDataSource } from "@/lib/data";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
@@ -450,7 +451,7 @@ export default async function DashboardPage() {
                   style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}
                   className="num"
                 >
-                  {e.amount}€
+                  {formatEuro(e.amount)}
                 </span>
               </div>
             ))}

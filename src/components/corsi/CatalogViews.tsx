@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Avatar, Badge, Icon, StatusBadge } from "@/components/ui";
 import { useT, useLocale, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import type { CourseListItem, CourseSortKey, SortDir } from "@/lib/corsi";
 import { monthIndexIt } from "@/lib/corsi";
 import { courseSignal } from "@/lib/corsi/course-signal";
@@ -546,14 +547,14 @@ function CourseTableRow({ course: c }: { course: CourseListItem }) {
         )}
       </td>
       <td className="num" style={{ textAlign: "right" }}>
-        {c.revenue.toLocaleString(locale)} €
+        {formatEuro(c.revenue)}
       </td>
       <td
         className="num"
         style={{ textAlign: "right", color: c.margin >= 0 ? "var(--success-fg)" : "var(--danger-fg)" }}
       >
         {c.margin >= 0 ? "+" : ""}
-        {c.margin.toLocaleString(locale)} €
+        {formatEuro(c.margin)}
       </td>
       <td onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
         <Link className="btn btn-icon btn-sm btn-ghost" href={`/corsi/${c.handle}`} title={t.openDetail}>

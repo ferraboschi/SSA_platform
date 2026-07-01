@@ -10,6 +10,7 @@ import AttendanceRoster from "@/components/condividi/AttendanceRoster";
 import { loadPlannerState } from "@/lib/pianificatore-server";
 import type { PlannerSaved } from "@/lib/pianificatore";
 import { COURSE_TYPES } from "@/lib/domain/constants";
+import { formatEuro } from "@/lib/format";
 import "@/components/esame-pubblico/exam-public.css";
 
 export const metadata: Metadata = {
@@ -85,7 +86,7 @@ export default async function Page({
           <Stat label="Iscritti" value={String(course.students.filter((s) => s.kind === "corsista").length)} />
           <Stat label="Giornate" value={String(course.days.length)} />
           <Stat label="Sake totali" value={String(course.totalSakes)} />
-          <Stat label="Costo sake" value={`${Math.round(course.totalSakeCost).toLocaleString("it-IT")} €`} />
+          <Stat label="Costo sake" value={formatEuro(Math.round(course.totalSakeCost))} />
           <Stat label="Esame finale" value={course.hasExam ? "Sì" : "No"} />
         </div>
 
@@ -208,7 +209,7 @@ export default async function Page({
                               <b>{s.qty}</b> bott.
                             </div>
                           )}
-                          {s.cost > 0 && <div>{Math.round(s.cost * (s.qty || 1)).toLocaleString("it-IT")} €</div>}
+                          {s.cost > 0 && <div>{formatEuro(Math.round(s.cost * (s.qty || 1)))}</div>}
                         </div>
                       )}
                     </div>

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Icon, KPI, type BadgeTone } from "@/components/ui";
 import { useT, useLocale, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import { monthIndexIt, type ReportCourse } from "@/lib/dashboard";
 import type { CourseLifecycle } from "@/lib/domain";
 
@@ -343,7 +344,7 @@ export function MonthlyReportModal({
                           }}
                         >
                           {c.margin >= 0 ? "+" : ""}
-                          {c.margin.toLocaleString(locale)} €
+                          {formatEuro(c.margin)}
                         </td>
                       </tr>
                     );

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon, KPI, StatusBadge } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import { setQualificationsAction } from "@/lib/data/educator-actions";
 import { COURSE_TYPES, type CourseStatus, type CourseTypeColor, type CourseTypeKey, type Language } from "@/lib/domain";
 
@@ -317,7 +318,7 @@ export function EducatorDetail({ data }: { data: EducatorDetailData }) {
                       )}
                     </td>
                     <td className="num" style={{ textAlign: "right" }}>
-                      {c.revenue.toLocaleString("it-IT")}€
+                      {formatEuro(c.revenue)}
                     </td>
                   </tr>
                 ))}

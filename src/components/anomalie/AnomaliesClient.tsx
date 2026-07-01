@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui";
 import { format, useT } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import {
   resolveAnomalyAction,
   dismissEmailClusterAction,
@@ -335,7 +336,7 @@ export function AnomaliesClient({
                     >
                       <span style={{ flex: 1, minWidth: 0 }}>{co.title}</span>
                       <span className="num" style={{ color: "var(--danger-fg)", fontWeight: 600 }}>
-                        {co.paid}€
+                        {formatEuro(co.paid)}
                       </span>
                     </div>
                   ))}
@@ -458,7 +459,7 @@ export function AnomaliesClient({
                     {c.courseTitle}
                   </span>
                   <span className="num" style={{ color: "var(--danger-fg)", fontWeight: 600 }}>
-                    {c.amount}€
+                    {formatEuro(c.amount)}
                   </span>
                 </div>
               </div>
@@ -490,7 +491,7 @@ export function AnomaliesClient({
                     {c.courseTitle}
                   </span>
                   <span className="num" style={{ color: "var(--danger-fg)", fontWeight: 600 }}>
-                    {c.amount}€
+                    {formatEuro(c.amount)}
                   </span>
                 </div>
               </div>
@@ -527,7 +528,7 @@ export function AnomaliesClient({
                     {c.originCourseTitle}
                   </span>
                   <span className="num" style={{ color: "var(--warning-fg)", fontWeight: 600 }}>
-                    {c.amount}€
+                    {formatEuro(c.amount)}
                   </span>
                 </div>
               </div>

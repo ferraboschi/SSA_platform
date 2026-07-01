@@ -444,7 +444,7 @@ export const en: Dictionary = {
       statIscritti: "Enrolled",
       thresholdReached: "threshold reached",
       statRicavi: "Revenue",
-      listPrice: "List price {n}€",
+      listPrice: "List price {n}",
       statCosti: "Costs",
       costItems: "{n} items",
       statMargine: "Margin",
@@ -576,7 +576,7 @@ export const en: Dictionary = {
     },
     programma: {
       kpiRevenue: "Revenue",
-      kpiAvgPrice: "{n} enrolled × €{p} avg",
+      kpiAvgPrice: "{n} enrolled × {p} € avg",
       kpiTotalCosts: "Total costs",
       kpiSakeVariable: "Sake {s} € · Variable {v} €",
       kpiNetMargin: "Net margin",
@@ -1467,7 +1467,7 @@ export const en: Dictionary = {
     openCount: "{n} open credits",
     appliedCount: "{n} applied credits",
     closedCount: "{n} closed credits",
-    totalOpen: "Open total: €{v}",
+    totalOpen: "Open total: {v}",
   },
 
   archivio: {
@@ -1559,9 +1559,9 @@ export const en: Dictionary = {
       materialiTitle: "Materials",
       materialiIntro: "Costs managed by the template — no longer set course by course. They apply to courses that adopt this template.",
       matEducator: "Educator · per day",
-      matEducatorHint: "{days} {unit} → {total} € per course",
+      matEducatorHint: "{days} {unit} → {total} per course",
       matGestione: "SSA management · per day",
-      matGestioneHint: "{days} {unit} → {total} € per course",
+      matGestioneHint: "{days} {unit} → {total} per course",
       matDiplomi: "Diplomas",
       matLibri: "Textbooks",
       matLocation: "Location",

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { formatEuro, formatNumberIt } from "@/lib/format";
 import type { ProgrammaData, TemplateData } from "@/lib/corsi";
 import type { Sake } from "@/lib/domain";
 import {
@@ -35,8 +36,6 @@ export interface CostLine {
   source?: string;
   custom?: boolean;
 }
-
-const fmtIt = (n: number) => n.toLocaleString("it-IT");
 
 export function ProgrammaEconomiaSection({
   courseId,
@@ -375,20 +374,20 @@ export function ProgrammaEconomiaSection({
       <div className="kpi-grid cols-4" style={{ marginBottom: 20 }}>
         <KPI
           label={t.kpiRevenue}
-          value={fmtIt(data.revenue)}
+          value={formatNumberIt(data.revenue)}
           unit="€"
-          sub={format(t.kpiAvgPrice, { n: data.enrolled, p: data.price })}
+          sub={format(t.kpiAvgPrice, { n: data.enrolled, p: formatNumberIt(data.price) })}
           accent="indigo"
         />
         <KPI
           label={t.kpiTotalCosts}
-          value={fmtIt(totalCost)}
+          value={formatNumberIt(totalCost)}
           unit="€"
-          sub={format(t.kpiSakeVariable, { s: fmtIt(sakeCost), v: fmtIt(totalCustom) })}
+          sub={format(t.kpiSakeVariable, { s: formatNumberIt(sakeCost), v: formatNumberIt(totalCustom) })}
         />
         <KPI
           label={t.kpiNetMargin}
-          value={`${margin >= 0 ? "+" : ""}${fmtIt(margin)}`}
+          value={`${margin >= 0 ? "+" : ""}${formatNumberIt(margin)}`}
           unit="€"
           sub={format(t.kpiOnRevenue, { n: marginPct })}
           accent={margin >= 0 ? "green" : "danger"}
@@ -417,7 +416,7 @@ export function ProgrammaEconomiaSection({
             <div>
               <div className="eyebrow">{t.programSake}</div>
               <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 3 }}>
-                {format(t.totalSakesCost, { n: totalSakes, c: fmtIt(sakeCost) })}
+                {format(t.totalSakesCost, { n: totalSakes, c: formatNumberIt(sakeCost) })}
               </div>
             </div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -510,7 +509,7 @@ export function ProgrammaEconomiaSection({
                     <span className="mono" style={{ fontSize: 11.5, color: "var(--text-3)" }}>
                       {format(t.sakesCost, {
                         n: sec.sakes.length,
-                        c: fmtIt(sec.sakes.reduce((s, k) => s + k.cost * k.qty, 0)),
+                        c: formatNumberIt(sec.sakes.reduce((s, k) => s + k.cost * k.qty, 0)),
                       })}
                     </span>
                     {days.length > 1 && (
@@ -601,7 +600,7 @@ export function ProgrammaEconomiaSection({
                 {t.automatic}
               </div>
               <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>
-                {fmtIt(totalAuto)} €
+                {formatEuro(totalAuto)}
               </span>
             </div>
             {autoLines.map((line) => (
@@ -631,7 +630,7 @@ export function ProgrammaEconomiaSection({
                 {t.editable}
               </div>
               <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>
-                {fmtIt(totalCustom)} €
+                {formatEuro(totalCustom)}
               </span>
             </div>
             {customLines.map((line) => (
@@ -655,7 +654,7 @@ export function ProgrammaEconomiaSection({
             >
               <span style={{ fontWeight: 600, fontSize: 14 }}>{t.totalCosts}</span>
               <span className="num" style={{ fontWeight: 600, fontSize: 18, letterSpacing: "-0.01em" }}>
-                {fmtIt(totalCost)} €
+                {formatEuro(totalCost)}
               </span>
             </div>
           </div>
@@ -688,7 +687,7 @@ export function ProgrammaEconomiaSection({
                   }}
                 >
                   {margin >= 0 ? "+" : ""}
-                  {fmtIt(margin)} €
+                  {formatEuro(margin)}
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>

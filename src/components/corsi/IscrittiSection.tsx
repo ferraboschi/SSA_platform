@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import type { CourseCompanion, Student } from "@/lib/domain";
 import {
   addPartecipanteAction,
@@ -34,8 +35,7 @@ export function IscrittiSection({
   const free = students.filter((s) => s.amount === 0).length;
   const revenue = students.reduce((sum, s) => sum + s.amount, 0);
 
-  const money = (n: number) =>
-    `${n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  const money = (n: number) => formatEuro(n, { decimals: 2 });
   const fmtDate = (iso: string) => {
     if (!iso) return "—";
     const d = new Date(iso);

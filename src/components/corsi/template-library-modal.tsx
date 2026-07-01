@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import type { TemplateData } from "@/lib/corsi";
 import { COURSE_TYPES } from "@/lib/domain/constants";
 import type { CourseTypeKey } from "@/lib/domain";
@@ -11,8 +12,6 @@ const TEMPLATE_TYPE_KEYS = (Object.keys(COURSE_TYPES) as CourseTypeKey[]).map((k
   key,
   label: COURSE_TYPES[key].label,
 }));
-
-const fmtIt = (n: number) => n.toLocaleString("it-IT");
 
 export function TemplateLibraryModal({
   templates,
@@ -166,9 +165,9 @@ function TemplateCard({
           </span>
           <span>
             <strong className="num" style={{ color: "var(--text)" }}>
-              {fmtIt(totalCost)}
-            </strong>
-            € {t.cost}
+              {formatEuro(totalCost)}
+            </strong>{" "}
+            {t.cost}
           </span>
         </div>
 
@@ -205,7 +204,7 @@ function TemplateCard({
                       </span>
                     </span>
                     <span className="num" style={{ color: "var(--text-3)" }}>
-                      {s.cost}€×{s.qty}
+                      {formatEuro(s.cost)}×{s.qty}
                     </span>
                   </div>
                 ))}

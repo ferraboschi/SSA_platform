@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import { bottlesForStudents, bottleCost as computeBottleCost } from "@/lib/economics/bottles";
 import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
 import {
@@ -292,7 +293,7 @@ function TemplateSakeRow({
         </div>
         <div style={{ textAlign: "right", minWidth: 50 }}>
           <div className="num" style={{ fontSize: 13, fontWeight: 600 }}>
-            {((catItem?.cost ?? s.cost) || 0).toLocaleString("it-IT")}€
+            {formatEuro((catItem?.cost ?? s.cost) || 0)}
           </div>
           <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 2 }}>×{s.qty}</div>
         </div>
@@ -388,7 +389,7 @@ function DayCard({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="mono" style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            {d.sakes.length} {tm.card.sake} · {cost.toLocaleString("it-IT")} €
+            {d.sakes.length} {tm.card.sake} · {formatEuro(cost)}
           </span>
           {canRemove && (
             <button className="btn btn-icon btn-sm btn-ghost" title={dy.removeDay} onClick={onRemoveDay}>
@@ -664,12 +665,12 @@ export function TemplateEditor({
               style={{ height: 34 }}
             />
           </div>
-          <SumKpi label="Prezzo / persona" value={`${typePrice.toLocaleString("it-IT")} €`} sub="da Shopify (tipo corso)" />
-          <SumKpi label="Costo totale" value={`${courseTotal.toLocaleString("it-IT")} €`} sub={`di cui sake ${bottleCost.toLocaleString("it-IT")} €`} />
-          <SumKpi label="Costo / persona" value={`${costPerPerson.toLocaleString("it-IT")} €`} />
+          <SumKpi label="Prezzo / persona" value={formatEuro(typePrice)} sub="da Shopify (tipo corso)" />
+          <SumKpi label="Costo totale" value={formatEuro(courseTotal)} sub={`di cui sake ${formatEuro(bottleCost)}`} />
+          <SumKpi label="Costo / persona" value={formatEuro(costPerPerson)} />
           <SumKpi
             label="P/L corso (stima)"
-            value={`${margin >= 0 ? "+" : ""}${margin.toLocaleString("it-IT")} €`}
+            value={`${margin >= 0 ? "+" : ""}${formatEuro(margin)}`}
             sub={`${marginPct}% su ricavi`}
             tone={margin >= 0 ? "ok" : "bad"}
           />
@@ -687,7 +688,7 @@ export function TemplateEditor({
               <div className="eyebrow">{ed.daysAndSake}</div>
               <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 3 }}>
                 {t.days.length} {dayUnit(t.days.length, tm)} · {totalSakes} {tm.card.sake} · {ed.summaryCost}{" "}
-                <strong className="num">{sakeCost.toLocaleString("it-IT")} €</strong>
+                <strong className="num">{formatEuro(sakeCost)}</strong>
               </div>
             </div>
             <button className="btn btn-sm btn-primary" onClick={addDay}>
@@ -726,7 +727,7 @@ export function TemplateEditor({
             <MaterialeRow
               icon="tag"
               label="Diplomi SSA"
-              hint={`Introduttivo ${COST_RATES.diploma.introduttivo} € · Certificato/Shochu ${COST_RATES.diploma.certificato} € — applicato in automatico al tipo corso`}
+              hint={`Introduttivo ${formatEuro(COST_RATES.diploma.introduttivo)} · Certificato/Shochu ${formatEuro(COST_RATES.diploma.certificato)} — applicato in automatico al tipo corso`}
               value={t.materiali.diplomaPerStudent}
               suffix={ed.perStudentSuffix}
               onChange={(v) => setMateriali({ diplomaPerStudent: v })}
@@ -734,7 +735,7 @@ export function TemplateEditor({
             <MaterialeRow
               icon="book"
               label="Libri di testo"
-              hint={`Introduttivo ${COST_RATES.libro.introduttivo} € · Certificato/Shochu ${COST_RATES.libro.certificato} € — applicato in automatico al tipo corso`}
+              hint={`Introduttivo ${formatEuro(COST_RATES.libro.introduttivo)} · Certificato/Shochu ${formatEuro(COST_RATES.libro.certificato)} — applicato in automatico al tipo corso`}
               value={t.materiali.libroPerStudent}
               suffix={ed.perStudentSuffix}
               last={variableExtra.length === 0}
@@ -751,7 +752,7 @@ export function TemplateEditor({
             ))}
             <div style={{ fontSize: 11, color: "var(--text-3)", padding: "4px 2px 6px" }}>
               <Icon name="info" size={11} style={{ marginRight: 5, verticalAlign: "-1px" }} />
-              + il <strong>sake</strong> (auto): {bottleCost.toLocaleString("it-IT")} € su {N} iscritti
+              + il <strong>sake</strong> (auto): {formatEuro(bottleCost)} su {N} iscritti
             </div>
             <button className="btn btn-sm" style={{ width: "100%", marginTop: 6 }} onClick={() => addExtraCost("iscritto")}>
               <Icon name="plus" size={12} />
@@ -759,7 +760,7 @@ export function TemplateEditor({
             </button>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12.5 }}>
               <span className="text-3">Subtotale variabile</span>
-              <strong className="num">{variablePerStudentTotal.toLocaleString("it-IT")} €/iscritto · {(variablePerStudentTotal * N + bottleCost).toLocaleString("it-IT")} € totali</strong>
+              <strong className="num">{formatEuro(variablePerStudentTotal)}/iscritto · {formatEuro(variablePerStudentTotal * N + bottleCost)} totali</strong>
             </div>
 
             {/* ── EDUCATOR E GESTIONE SSA — per giornata ── */}
@@ -772,7 +773,7 @@ export function TemplateEditor({
               hint={format(ed.matEducatorHint, {
                 days: t.days.length,
                 unit: dayUnit(t.days.length, tm),
-                total: educatorTotal.toLocaleString("it-IT"),
+                total: formatEuro(educatorTotal),
               })}
               value={t.materiali.educatorPerDay}
               suffix={ed.perDaySuffix}
@@ -784,7 +785,7 @@ export function TemplateEditor({
               hint={format(ed.matGestioneHint, {
                 days: t.days.length,
                 unit: dayUnit(t.days.length, tm),
-                total: gestioneTotal.toLocaleString("it-IT"),
+                total: formatEuro(gestioneTotal),
               })}
               value={t.materiali.gestionePerDay}
               suffix={ed.perDaySuffix}
@@ -810,7 +811,7 @@ export function TemplateEditor({
             </button>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12.5 }}>
               <span className="text-3">Subtotale fisso</span>
-              <strong className="num">{fixedTotal.toLocaleString("it-IT")} €</strong>
+              <strong className="num">{formatEuro(fixedTotal)}</strong>
             </div>
           </div>
 

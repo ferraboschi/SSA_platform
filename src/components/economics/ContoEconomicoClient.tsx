@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, KPI, PageHeader } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { formatEuro } from "@/lib/format";
 import { monthLabel } from "@/lib/dashboard";
 import type { RoleKey } from "@/lib/domain";
 import {
@@ -63,7 +64,7 @@ export function ContoEconomicoClient({
         <KPI label={t.kpiToInvoice} value={summary.toInvoice} accent="warning" />
         <KPI label={t.kpiInvoiced} value={summary.invoiced} accent="success" />
         <KPI label={t.kpiWithCampaign} value={summary.withCampaign} />
-        <KPI label={t.kpiTotalAdv} value={`€ ${summary.totalAdv.toLocaleString(locale)}`} />
+        <KPI label={t.kpiTotalAdv} value={formatEuro(summary.totalAdv)} />
       </section>
 
       <div className="segmented" style={{ marginBottom: 14 }}>
@@ -118,7 +119,7 @@ export function ContoEconomicoClient({
                     )}
                   </td>
                   <td>
-                    <AdvCell row={r} canEdit={canEditAdv} locale={locale} t={t} />
+                    <AdvCell row={r} canEdit={canEditAdv} t={t} />
                   </td>
                   <td>
                     <InvoiceCell row={r} canEdit={canEditInvoice} t={t} />
@@ -140,12 +141,10 @@ type T = ReturnType<typeof useT>["contoEconomico"];
 function AdvCell({
   row,
   canEdit,
-  locale,
   t,
 }: {
   row: EconCourseRow;
   canEdit: boolean;
-  locale: string;
   t: T;
 }) {
   const router = useRouter();
@@ -159,7 +158,7 @@ function AdvCell({
         style={{ fontWeight: 600 }}
         title={row.econ.advBy ? `${t.advBy} ${row.econ.advBy}` : undefined}
       >
-        € {row.econ.advCost.toLocaleString(locale)}
+        {formatEuro(row.econ.advCost)}
       </span>
     ) : (
       <span className="text-3" style={{ color: "var(--text-3)", fontStyle: "italic" }}>
