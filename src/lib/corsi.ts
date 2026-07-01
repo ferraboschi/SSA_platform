@@ -33,13 +33,13 @@ export const STATUS_RULE_KEYS: CourseStatus[] = [
   "critico",
 ];
 
-// Lifecycle behind each catalog tab.
-export type CatalogTab = "attivi" | "bozze" | "archiviati" | "passati";
+// Lifecycle behind each catalog tab. The catalog is an ACTIVE view: only
+// published courses + the separate "Bozze" drafts area. Passed + cancelled
+// (+ any legacy archiviato) live in the Archivio section, not here.
+export type CatalogTab = "attivi" | "bozze";
 export const TAB_LIFECYCLE: Record<CatalogTab, CourseLifecycle> = {
   attivi: "pubblicato",
   bozze: "bozza",
-  archiviati: "archiviato",
-  passati: "passato",
 };
 
 // ── Shared lifecycle predicates (single source of truth for which surface a

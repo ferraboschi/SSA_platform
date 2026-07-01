@@ -32,6 +32,11 @@ async function fetchShellData(): Promise<ShellData> {
   if (!isSupabaseConfigured()) return EMPTY;
   const svc = getSupabaseServiceClient();
 
+  // Today's ISO date — a course only counts as genuinely upcoming when its
+  // start_date is today or later. This guards against stale past rows still
+  // flagged "pubblicato" that the read-time date flip would otherwise miss.
+  const today = new Date().toISOString().slice(0, 10);
+
   const [coursesRes, corsistiRes, educatorsRes, iscrizioniRes, countsRes, programMap] =
     await Promise.all([
       svc
@@ -50,7 +55,11 @@ async function fetchShellData(): Promise<ShellData> {
         svc.from("corsisti").select("*", { count: "exact", head: true }),
         svc.from("educators").select("*", { count: "exact", head: true }).eq("active", true),
         svc.from("material_templates").select("*", { count: "exact", head: true }),
-        svc.from("corsi").select("*", { count: "exact", head: true }).eq("lifecycle", "pubblicato"),
+        svc
+          .from("corsi")
+          .select("*", { count: "exact", head: true })
+          .eq("lifecycle", "pubblicato")
+          .gte("start_date", today),
       ]),
       // Per-course sake-program overlays → the green "programma assegnato" dot.
       loadCourseProgram(),
@@ -132,7 +141,10 @@ async function fetchShellData(): Promise<ShellData> {
   const monthNum = (m: string) => MONTH_TO_NUM[m.toLowerCase()] ?? 99;
 
   const sidebarCourses: SidebarCourse[] = courses
-    .filter((c) => c.lifecycle === "pubblicato")
+    // Only genuinely upcoming courses: published AND starting today or later
+    // (c.day is the aliased start_date). Excludes stale past rows still marked
+    // "pubblicato" that the read-time date flip hasn't caught.
+    .filter((c) => c.lifecycle === "pubblicato" && !!c.day && c.day >= today)
     .sort((a, b) => {
       // Primary: by start_date (already sorted by Supabase, but ensures
       // correct order even when the DB result is unsorted or cached stale).

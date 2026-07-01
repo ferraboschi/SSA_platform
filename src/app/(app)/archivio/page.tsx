@@ -1,13 +1,17 @@
 import { getDataSource } from "@/lib/data";
 import { CITIES } from "@/lib/domain";
+import { isArchivedCourse } from "@/lib/corsi";
 import { ArchivioClient, type ArchivioCourse } from "@/components/archivio/ArchivioClient";
 
 export default async function Page() {
   const ds = await getDataSource();
   const courses = await ds.courses.list();
 
+  // Archivio holds ONLY archived-reason courses: passato (held) + cancelled
+  // (annulled before their date). Active (pubblicato) and drafts (bozza) live in
+  // the active views / the separate Bozze area.
   const items: ArchivioCourse[] = courses
-    .filter((c) => c.lifecycle !== "bozza" && c.lifecycle !== "archiviato")
+    .filter((c) => isArchivedCourse(c.lifecycle))
     .map((c) => ({
       id: c.id,
       handle: c.handle,

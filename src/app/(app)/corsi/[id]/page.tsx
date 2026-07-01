@@ -117,6 +117,11 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                 {td.bozza}
               </Badge>
             )}
+            {course.lifecycle === "cancelled" && (
+              <Badge tone="danger" size="lg">
+                Annullato
+              </Badge>
+            )}
             <span className="eyebrow">
               {course.mode === "online" ? td.online : td.inPerson}
               {course.days > 1 ? ` · ${format(td.daysSuffix, { n: course.days })}` : ""}

@@ -31,9 +31,9 @@ export function MonthlyReportModal({
     if (lc === "archiviato") return m.lifeAnnullato;
     return lc;
   };
-  // "Annullato" = explicitly cancelled (notebook flag) OR archived lifecycle
-  // (e.g. a Shopify-archived course that never ran).
-  const isAnnullato = (c: ReportCourse) => c.cancelled || c.lifecycle === "archiviato";
+  // "Annullato" = the cancelled lifecycle (a course annulled before its date).
+  // archiviato is no longer a live lifecycle value, so don't conflate it here.
+  const isAnnullato = (c: ReportCourse) => c.lifecycle === "cancelled";
   const statusTone = (c: ReportCourse): BadgeTone => (isAnnullato(c) ? "danger" : lifeTone(c.lifecycle));
   const statusLabel = (c: ReportCourse): string => (isAnnullato(c) ? m.lifeAnnullato : lifeLabel(c.lifecycle));
 

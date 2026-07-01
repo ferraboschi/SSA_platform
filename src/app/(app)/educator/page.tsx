@@ -1,6 +1,7 @@
 import { getDataSource } from "@/lib/data";
 import { requireNavAccess } from "@/lib/auth/guard";
 import { COURSE_TYPES, type CourseTypeKey } from "@/lib/domain";
+import { isActiveCourse, isArchivedCourse } from "@/lib/corsi";
 import { EducatorList, type EducatorListItem } from "@/components/educator/EducatorList";
 
 export default async function Page() {
@@ -17,8 +18,10 @@ export default async function Page() {
   const items: EducatorListItem[] = educators
     .map((e, i) => {
       const cs = courses.filter((c) => c.educator?.id === e.id);
-      const active = cs.filter((c) => c.lifecycle === "pubblicato");
-      const past = cs.filter((c) => c.lifecycle === "passato");
+      const active = cs.filter((c) => isActiveCourse(c.lifecycle));
+      // "past" = the educator's history: held + cancelled (+ legacy archiviato),
+      // so a cancelled course stays in their record instead of vanishing.
+      const past = cs.filter((c) => isArchivedCourse(c.lifecycle));
       const totalStudents = cs.reduce((s, c) => s + c.enrolled, 0);
       const passed = past.reduce((s, c) => s + (c.examResults?.passed || 0), 0);
       const totalExam = past.reduce(

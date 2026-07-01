@@ -254,6 +254,7 @@ function CourseRow({ course: c, last }: { course: CourseListItem; last: boolean 
           <Badge tone="success">{format(t.promossi, { p: c.examPassed, e: c.enrolled })}</Badge>
         )}
         {c.lifecycle === "bozza" && <Badge tone="neutral">{t.draft}</Badge>}
+        {c.lifecycle === "cancelled" && <Badge tone="danger">{t.cancelled}</Badge>}
         {c.lifecycle === "archiviato" && <Badge tone="danger">{t.archived}</Badge>}
       </div>
       <div style={{ textAlign: "right" }}>
@@ -308,6 +309,7 @@ function CourseCard({ course: c }: { course: CourseListItem }) {
           <Badge tone={c.typeColor === "oro" ? "oro" : "azzurro"}>{c.typeShort}</Badge>
           {c.lifecycle === "pubblicato" && <StatusBadge status={c.status} label={tr.status[c.status]} />}
           {c.lifecycle === "passato" && <Badge tone="success">{t.concluso}</Badge>}
+          {c.lifecycle === "cancelled" && <Badge tone="danger">{t.cancelled}</Badge>}
         </div>
         <div
           style={{
@@ -553,6 +555,8 @@ function CourseTableRow({ course: c }: { course: CourseListItem }) {
           <Badge tone="success">{t.concluso}</Badge>
         ) : c.lifecycle === "bozza" ? (
           <Badge tone="neutral">{t.draft}</Badge>
+        ) : c.lifecycle === "cancelled" ? (
+          <Badge tone="danger">{t.cancelled}</Badge>
         ) : (
           <Badge tone="danger">{t.archived}</Badge>
         )}

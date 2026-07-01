@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDataSource } from "@/lib/data";
 import { getTranslations } from "@/lib/i18n/server";
 import { COURSE_TYPES, type CourseTypeKey } from "@/lib/domain";
+import { isActiveCourse, isArchivedCourse } from "@/lib/corsi";
 import {
   EducatorDetail,
   type EducatorDetailData,
@@ -28,8 +29,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   const quals = await ds.educators.getQualifications(id);
   const cs = courses.filter((c) => c.educator?.id === id);
-  const active = cs.filter((c) => c.lifecycle === "pubblicato");
-  const past = cs.filter((c) => c.lifecycle === "passato");
+  const active = cs.filter((c) => isActiveCourse(c.lifecycle));
+  // "past" = the educator's history: held + cancelled (+ legacy archiviato),
+  // so a cancelled course stays in their record instead of vanishing.
+  const past = cs.filter((c) => isArchivedCourse(c.lifecycle));
   const totalStudents = cs.reduce((s, c) => s + c.enrolled, 0);
   const totalRevenue = cs.reduce((s, c) => s + c.revenue, 0);
   const passed = past.reduce((s, c) => s + (c.examResults?.passed || 0), 0);

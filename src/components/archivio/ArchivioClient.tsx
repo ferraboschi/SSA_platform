@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge, Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { archiveReason } from "@/lib/corsi";
 import { COURSE_TYPES, type CourseLifecycle, type CourseTypeColor, type CourseTypeKey } from "@/lib/domain";
 import { monthIndexIt } from "@/lib/dates/italian-months";
 
@@ -462,15 +463,14 @@ function ArchivioGroups({ courses, groupBy }: { courses: ArchivioCourse[]; group
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                     <Badge tone={c.typeColor === "oro" ? "oro" : "azzurro"}>{c.typeShort}</Badge>
-                    {c.lifecycle === "passato" && (
-                      <span className="mono" style={{ fontSize: 10, color: "var(--text-4)", letterSpacing: "var(--ls-caps)" }}>
-                        {t.cardConcluso}
-                      </span>
-                    )}
-                    {c.lifecycle === "pubblicato" && (
-                      <span className="mono" style={{ fontSize: 10, color: "var(--success-fg)", letterSpacing: "var(--ls-caps)" }}>
-                        {t.cardProssimo}
-                      </span>
+                    {archiveReason(c.lifecycle) === "cancelled" ? (
+                      <Badge tone="danger" dot>
+                        {t.tagCancelled}
+                      </Badge>
+                    ) : (
+                      <Badge tone="success" dot>
+                        {t.tagPassed}
+                      </Badge>
                     )}
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.25 }}>{c.shortTitle}</div>
@@ -565,11 +565,42 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
         </div>
       </div>
 
-      <div className="kpi-grid cols-4" style={{ marginBottom: 24 }}>
+      <div className="kpi-grid cols-4" style={{ marginBottom: 12 }}>
         <KPI anim label={t.kpiCorsi} value={stats.total} sub={year === "tutti" ? t.kpiTotali : format(t.kpiInYear, { year })} />
         <KPI anim label={t.kpiStudents} value={stats.students} />
         <KPI anim label={t.kpiRevenue} value={Math.round(stats.revenue / 1000)} unit="k €" accent="indigo" />
         <KPI anim label={t.kpiCities} value={stats.cities} sub={format(t.kpiCitiesSub, { n: citiesPossible })} />
+      </div>
+
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 24,
+          fontSize: 12.5,
+          fontWeight: 500,
+          color: "var(--text-2)",
+        }}
+      >
+        <span
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--success-fg)" }}
+          aria-hidden
+        >
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} />
+          {t.tagPassed}
+        </span>
+        <span
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--danger-fg)" }}
+          aria-hidden
+        >
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--danger)" }} />
+          {t.tagCancelled}
+        </span>
+        <span style={{ color: "var(--text-4)" }}>—</span>
+        <span className="num">
+          {format(t.reasonSummary, { passed: heldInYear.length, cancelled: cancInYear.length })}
+        </span>
       </div>
 
       <YearStrip

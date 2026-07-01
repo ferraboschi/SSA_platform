@@ -47,12 +47,10 @@ export function CorsiCatalog({
   const [showLegend, setShowLegend] = useState(false);
 
   const counts: Record<CatalogTab, number> = useMemo(() => {
-    const c = { attivi: 0, bozze: 0, archiviati: 0, passati: 0 } as Record<CatalogTab, number>;
+    const c = { attivi: 0, bozze: 0 } as Record<CatalogTab, number>;
     for (const it of items) {
       if (it.lifecycle === "pubblicato") c.attivi++;
       else if (it.lifecycle === "bozza") c.bozze++;
-      else if (it.lifecycle === "archiviato") c.archiviati++;
-      else if (it.lifecycle === "passato") c.passati++;
     }
     return c;
   }, [items]);
@@ -80,8 +78,6 @@ export function CorsiCatalog({
   const tabs: { id: CatalogTab; label: string; n: number }[] = [
     { id: "attivi", label: t.tabPublished, n: counts.attivi },
     { id: "bozze", label: t.tabDrafts, n: counts.bozze },
-    { id: "archiviati", label: t.tabArchived, n: counts.archiviati },
-    { id: "passati", label: t.tabPast, n: counts.passati },
   ];
 
   return (

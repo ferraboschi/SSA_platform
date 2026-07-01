@@ -9,6 +9,7 @@ import {
   type PlannerEducator,
   type PlannerItem,
 } from "@/lib/pianificatore";
+import { isActiveCourse } from "@/lib/corsi";
 import type { CourseTypeKey } from "@/lib/domain";
 import { loadPlannerState } from "@/lib/pianificatore-server";
 import { Pianificatore } from "@/components/pianificatore/Pianificatore";
@@ -41,8 +42,7 @@ export default async function Page() {
   // top separately and are dropped once Shopify confirms the same course.
   const realItems: PlannerItem[] = courses
     .filter((c) => winKeys.has(keyOf(c.year, monthIdx(c.month))))
-    .filter((c) => !c.cancelled)
-    .filter((c) => c.lifecycle === "pubblicato")
+    .filter((c) => isActiveCourse(c.lifecycle))
     .map((c) =>
       normalizeReal({
         id: c.id,

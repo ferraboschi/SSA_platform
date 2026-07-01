@@ -3,6 +3,8 @@ import { COURSE_TYPES } from "@/lib/domain/constants";
 import type { CourseTypeKey } from "@/lib/domain";
 import {
   toCourseListItem,
+  isActiveCourse,
+  isDraftCourse,
   type CatalogFilterOptions,
 } from "@/lib/corsi";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
@@ -31,10 +33,11 @@ export default async function Page({
   const initialType = type && validTypes.includes(type) ? type : undefined;
   const backHref = from === "pianificatore" ? "/pianificatore" : undefined;
 
-  // Cancelled courses (incl. phantom drafts from unpublished Shopify products)
-  // belong in the Archivio, not the live catalog.
+  // The catalog is an ACTIVE view: only published courses (attivi tab) plus
+  // drafts (which power the Bozze tab). Passed + cancelled courses now live in
+  // the Archivio, so they're excluded here.
   const items = courses
-    .filter((c) => !c.cancelled)
+    .filter((c) => isActiveCourse(c.lifecycle) || isDraftCourse(c.lifecycle))
     .map((c) => ({ ...toCourseListItem(c), hasProgram: hasSakeProgram(c.id) }));
 
   const cities = [...new Set(items.map((c) => c.city))].sort((a, b) =>

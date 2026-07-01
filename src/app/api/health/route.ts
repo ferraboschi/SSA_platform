@@ -88,10 +88,14 @@ export async function GET() {
   const courseStatus = { published: 0, noEducator: 0, noCity: 0, noDate: 0, noProgram: 0 };
   try {
     const svc = getSupabaseServiceClient();
+    // Genuinely upcoming only: published AND starting today or later, so the
+    // diagnostic doesn't count stale past rows still flagged "pubblicato".
+    const today = new Date().toISOString().slice(0, 10);
     const { data: cs } = await svc
       .from("corsi")
       .select("id, city, month, year, start_date, educator_id")
       .eq("lifecycle", "pubblicato")
+      .gte("start_date", today)
       .limit(2000);
     const program = await loadCourseProgram();
     const hasProg = (id: number) =>
