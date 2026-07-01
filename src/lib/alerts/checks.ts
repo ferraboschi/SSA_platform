@@ -7,6 +7,7 @@
 //    once per day (deduped) so it doesn't repeat every 10 minutes.
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { netPaidCents } from "@/lib/economics/revenue";
 import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
 import {
   sendInvoiceNoticeEmail,
@@ -101,7 +102,12 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
       const enrolled = (iscr ?? []).length;
       const revenue = Math.round(
         (iscr ?? []).reduce(
-          (s, r) => s + Math.max(((r.amount_cents as number) || 0) - ((r.discount_cents as number) || 0), 0),
+          (s, r) =>
+            s +
+            netPaidCents({
+              amount_cents: r.amount_cents as number,
+              discount_cents: r.discount_cents as number,
+            }),
           0,
         ) / 100,
       );

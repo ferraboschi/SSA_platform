@@ -16,13 +16,7 @@ import "server-only";
 // into the sync.
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-
-// Mirror of index.ts:isPaidRevenue — revenue is money COLLECTED, so only fully
-// paid orders count. A null status (legacy/pre-enrichment rows) is treated as
-// paid so historical seats aren't silently skipped.
-function isPaidRevenue(financialStatus: string | null | undefined): boolean {
-  return financialStatus == null || financialStatus === "paid";
-}
+import { isPaidRevenue, netPaidCents } from "@/lib/economics/revenue";
 
 export async function generateTransferCredits(): Promise<{ created: number }> {
   try {
@@ -77,7 +71,7 @@ export async function generateTransferCredits(): Promise<{ created: number }> {
     for (const r of (iscr ?? []) as unknown as IscrRow[]) {
       if (r.historical) continue; // historical seats are already delivered/settled
       if (!isPaidRevenue(r.financial_status)) continue; // only money actually collected
-      const net = Math.max((r.amount_cents || 0) - (r.discount_cents || 0), 0);
+      const net = netPaidCents(r);
       if (net <= 0) continue; // free/transferred seats carry no credit
       rows.push({
         corsista_id: r.corsista_id,

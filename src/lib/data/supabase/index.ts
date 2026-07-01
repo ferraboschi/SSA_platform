@@ -49,6 +49,7 @@ import type {
   UserRepository,
 } from "../repository";
 import { computeNotifications } from "@/lib/notifications/registry";
+import { isPaidRevenue, netPaidEuros } from "@/lib/economics/revenue";
 import {
   getSupabaseServerClient,
   getSupabaseServiceClient,
@@ -79,15 +80,9 @@ import type {
 
 type DB = SupabaseClient;
 
-// Revenue is money COLLECTED, so it counts only fully-paid orders. Shopify's
-// `financial_status` of "paid" is the sole revenue-bearing state; pending,
-// authorized, partially_paid, partially_refunded (and refunded/voided, which
-// the sync already drops) are all excluded. When the field is null (legacy /
-// pre-enrichment rows) we treat the enrollment as paid so historical revenue
-// is not silently zeroed.
-function isPaidRevenue(financialStatus: string | null | undefined): boolean {
-  return financialStatus == null || financialStatus === "paid";
-}
+// Revenue is money COLLECTED, so it counts only fully-paid orders. The rule
+// (isPaidRevenue) and the net-paid formula (gross − discount, clamped at 0)
+// live in @/lib/economics/revenue — the single source of truth.
 
 // ============================================================================
 // Factory
@@ -738,6 +733,10 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       const c = Array.isArray(r.corsista) ? r.corsista[0] : r.corsista;
       // amount_cents is the gross line price; discount_cents is the discount
       // value. Net paid = gross − discount (clamped at 0 for 100%-off codes).
+      // NOTE: this site subtracts in EURO space (gross/discountValue are shown
+      // separately in the roster), so the net is derived from them directly to
+      // stay byte-identical — the cents-space helper (netPaidEuros) rounds
+      // differently in the sub-cent float. Same clamped rule, different order.
       const gross = (r.amount_cents || 0) / 100;
       const discountValue = (r.discount_cents || 0) / 100;
       const paid = Math.max(gross - discountValue, 0);
@@ -899,10 +898,9 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         for (const i of rows) {
           const a = agg.get(i.corso_id) ?? { n: 0, rev: 0 };
           a.n++; // headcount = all enrollments (enrolled ≠ collected)
-          // Net paid = gross − discount (mirror buildFullCourse), never negative.
-          // Revenue counts only fully-paid orders.
-          if (isPaidRevenue(i.financial_status))
-            a.rev += Math.max((i.amount_cents || 0) - (i.discount_cents || 0), 0) / 100;
+          // Net paid = gross − discount, never negative. Revenue counts only
+          // fully-paid orders.
+          if (isPaidRevenue(i.financial_status)) a.rev += netPaidEuros(i);
           agg.set(i.corso_id, a);
         }
         if (rows.length < ENR_PAGE) break;

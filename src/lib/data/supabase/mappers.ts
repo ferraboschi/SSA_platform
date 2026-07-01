@@ -15,6 +15,7 @@ import {
   SHOCHU_CATS,
   STATUS_META,
 } from "@/lib/domain";
+import { netPaidEuros } from "@/lib/economics/revenue";
 import type {
   Corsista,
   CorsistaEnrollment,
@@ -109,7 +110,7 @@ export function iscrizioneToEnrollment(row: IscrizioneRow): CorsistaEnrollment |
     status: corso.lifecycle,
     // NET paid (gross − discount). Free re-participations have a full discount,
     // so they correctly show 0 instead of a misleading gross amount.
-    amount: Math.max((row.amount_cents || 0) - (row.discount_cents || 0), 0) / 100,
+    amount: netPaidEuros(row),
     examResult: row.exam_result,
     examScorePct: row.exam_score_pct ?? null,
     historical: row.historical || undefined,
