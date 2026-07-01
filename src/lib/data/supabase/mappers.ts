@@ -270,15 +270,24 @@ export function corsoRowToDomain(
     ...costsRaw,
   };
   const totalCost = Object.values(costs).reduce((s, n) => s + (n || 0), 0);
-  const rev = revenue || enrolled * price * 0.85;
   const days = safeType === "certificato" ? 3 : 1;
   const lifecycle = deriveLifecycle(row.lifecycle, row.start_date, days);
+  const nbRaw = (row.notebook ?? {}) as Record<string, unknown>;
+  const nb = nbRaw as Partial<Notebook>;
+  // "Annullato" = pulled before it ran, from EITHER the Shopify-derived lifecycle
+  // or the legacy notebook flag. Unify both so every P&L / bucketing consumer
+  // (conto-economico, archivio, analisi, esami) agrees on what's cancelled.
+  const isCancelled = lifecycle === "cancelled" || Boolean(nbRaw.cancelled);
+  // Real collected (net) revenue is authoritative: a genuine 0 (all seats free,
+  // transferred, or unpaid) MUST stay 0 — never fabricate income from headcount
+  // (the old `revenue || enrolled*price*0.85` invented revenue for cancelled and
+  // transfer-only courses). A cancelled course is out of the P&L entirely; money
+  // already collected is a deferred liability tracked in the credit ledger.
+  const rev = isCancelled ? 0 : Math.max(revenue, 0);
   const status: CourseStatus =
     row.status && VALID_STATUS.includes(row.status as CourseStatus)
       ? (row.status as CourseStatus)
       : computeStatus(enrolled, minStud, lifecycle);
-  const nbRaw = (row.notebook ?? {}) as Record<string, unknown>;
-  const nb = nbRaw as Partial<Notebook>;
   return {
     id: String(row.id),
     handle: row.handle,
@@ -306,7 +315,7 @@ export function corsoRowToDomain(
     revenue: Math.round(rev),
     costs,
     totalCost,
-    margin: Math.round(rev - totalCost),
+    margin: isCancelled ? 0 : Math.round(rev - totalCost),
     status,
     statusLabel: STATUS_META[status].label,
     statusTone: STATUS_META[status].tone,
@@ -322,7 +331,7 @@ export function corsoRowToDomain(
       tags: nb.tags ?? [],
       reasoning: nb.reasoning ?? "",
     },
-    cancelled: Boolean(nbRaw.cancelled),
+    cancelled: isCancelled,
     cancelReason: (nbRaw.cancelReason as string | undefined) ?? null,
   };
 }

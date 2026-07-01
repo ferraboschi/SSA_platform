@@ -183,6 +183,24 @@ describe("corsoRowToDomain", () => {
     expect(c.cancelled).toBe(true);
     expect(c.cancelReason).toBe("pochi iscritti");
   });
+  it("never fabricates revenue: a genuine net-0 (all free/transferred/unpaid) stays 0", () => {
+    // 12 enrolled but 0 collected. The old `revenue || enrolled*price*0.85` invented
+    // ~9180€ of phantom income; real revenue is 0 and must read 0.
+    const c = corsoRowToDomain(corso({}), edu, 12, 0, [], []);
+    expect(c.revenue).toBe(0);
+    expect(c.margin).toBe(-c.totalCost);
+  });
+  it("a cancelled course is out of the P&L: revenue and margin forced to 0", () => {
+    // lifecycle='cancelled' with money on paper — must not count as delivered revenue.
+    const c = corsoRowToDomain(corso({ lifecycle: "cancelled" }), edu, 10, 30000, [], []);
+    expect(c.cancelled).toBe(true);
+    expect(c.revenue).toBe(0);
+    expect(c.margin).toBe(0);
+  });
+  it("unifies 'cancelled': a lifecycle-cancelled course reads cancelled even without the notebook flag", () => {
+    const c = corsoRowToDomain(corso({ lifecycle: "cancelled" }), edu, 5, 0, [], []);
+    expect(c.cancelled).toBe(true);
+  });
 });
 
 // ── examTemplateRowToDomain — bank normalization (legacy + rich) + dedup ──────
