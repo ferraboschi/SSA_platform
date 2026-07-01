@@ -201,6 +201,22 @@ describe("corsoRowToDomain", () => {
     const c = corsoRowToDomain(corso({ lifecycle: "cancelled" }), edu, 5, 0, [], []);
     expect(c.cancelled).toBe(true);
   });
+  it("recognises transfer credits only on a DELIVERED destination course", () => {
+    const past = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const future = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    // Delivered (passato): the 300€ applied credit IS recognised as revenue.
+    const delivered = corsoRowToDomain(corso({ start_date: past }), edu, 8, 0, [], [], 300);
+    expect(delivered.lifecycle).toBe("passato");
+    expect(delivered.revenue).toBe(300);
+    // Upcoming (pubblicato): the same credit is DEFERRED — not yet revenue.
+    const upcoming = corsoRowToDomain(corso({ start_date: future }), edu, 8, 0, [], [], 300);
+    expect(upcoming.lifecycle).toBe("pubblicato");
+    expect(upcoming.revenue).toBe(0);
+  });
+  it("never recognises a credit on a cancelled course (origin stays 0)", () => {
+    const c = corsoRowToDomain(corso({ lifecycle: "cancelled" }), edu, 8, 0, [], [], 300);
+    expect(c.revenue).toBe(0);
+  });
 });
 
 // ── examTemplateRowToDomain — bank normalization (legacy + rich) + dedup ──────

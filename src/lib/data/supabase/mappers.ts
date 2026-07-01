@@ -251,6 +251,12 @@ export function corsoRowToDomain(
   revenue: number,
   students: Student[],
   program: ProgramDay[],
+  // Transfer credits (deferred liability from a cancelled course) APPLIED to
+  // this course, in euros. Recognised as revenue only when this DESTINATION
+  // course is actually DELIVERED (lifecycle === "passato") — see `rev` below.
+  // Optional + defaulted so every existing 6-arg caller (and all tests) keep
+  // working unchanged.
+  recognizedCredits: number = 0,
 ): Course {
   // Guard against an off-enum `type` slipping in from imports (would crash
   // COURSE_TYPES[type].label consumers downstream).
@@ -283,7 +289,16 @@ export function corsoRowToDomain(
   // (the old `revenue || enrolled*price*0.85` invented revenue for cancelled and
   // transfer-only courses). A cancelled course is out of the P&L entirely; money
   // already collected is a deferred liability tracked in the credit ledger.
-  const rev = isCancelled ? 0 : Math.max(revenue, 0);
+  //
+  // Credit recognition: a transfer credit APPLIED to this course is recognised
+  // as revenue ONCE, and only when this destination course is actually DELIVERED
+  // (lifecycle "passato"). Until then it stays deferred (0). The cancelled origin
+  // course is always 0 (isCancelled branch), so the money is never double-counted.
+  const rev =
+    isCancelled
+      ? 0
+      : Math.max(revenue, 0) +
+        (lifecycle === "passato" ? Math.max(recognizedCredits, 0) : 0);
   const status: CourseStatus =
     row.status && VALID_STATUS.includes(row.status as CourseStatus)
       ? (row.status as CourseStatus)

@@ -813,7 +813,37 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         })),
     }));
 
-    const course = corsoRowToDomain(row, educator, students.length, revenue, students, program);
+    // Transfer credits APPLIED to this course (deferred liability from a
+    // cancelled course, moved here). Recognised as revenue only when this course
+    // is delivered — the mapper gates that on lifecycle "passato". Read via the
+    // SERVICE client: corsi_crediti is service-role only (RLS, no policy), so the
+    // request-bound `sb` would see zero rows. Degrades to 0 if the table isn't
+    // there yet (pre-migration).
+    let recognizedCredits = 0;
+    {
+      const { data: credRows, error: credErr } = await svc
+        .from("corsi_crediti")
+        .select("importo_cents")
+        .eq("corso_destinazione_id", row.id)
+        .eq("stato", "applicato");
+      if (!credErr) {
+        recognizedCredits =
+          ((credRows ?? []) as { importo_cents: number | null }[]).reduce(
+            (s, c) => s + (c.importo_cents || 0),
+            0,
+          ) / 100;
+      }
+    }
+
+    const course = corsoRowToDomain(
+      row,
+      educator,
+      students.length,
+      revenue,
+      students,
+      program,
+      recognizedCredits,
+    );
     const totalExam = examResults.passed + examResults.retrial + examResults.failed;
     if (totalExam > 0) course.examResults = examResults;
     return course;
@@ -878,6 +908,32 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         if (rows.length < ENR_PAGE) break;
       }
 
+      // Applied transfer credits per destination course (euros), fetched once via
+      // the SERVICE client (corsi_crediti is service-role only — RLS with no
+      // policy — so the request-bound `sb` would see nothing). The mapper only
+      // recognises them as revenue on a DELIVERED ("passato") destination.
+      // Degrades to an empty map if corsi_crediti is missing.
+      const creditsByCourse = new Map<number, number>();
+      {
+        const { data: credRows, error: credErr } = await svc
+          .from("corsi_crediti")
+          .select("corso_destinazione_id,importo_cents")
+          .eq("stato", "applicato")
+          .not("corso_destinazione_id", "is", null);
+        if (!credErr) {
+          for (const c of (credRows ?? []) as {
+            corso_destinazione_id: number | null;
+            importo_cents: number | null;
+          }[]) {
+            if (c.corso_destinazione_id == null) continue;
+            creditsByCourse.set(
+              c.corso_destinazione_id,
+              (creditsByCourse.get(c.corso_destinazione_id) ?? 0) + (c.importo_cents || 0),
+            );
+          }
+        }
+      }
+
       const eduMap = await loadEducatorsMap();
       let courses = corsoRows.map((r) => {
         const a = agg.get(r.id) ?? { n: 0, rev: 0 };
@@ -885,7 +941,8 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
           r.educator_id != null
             ? (eduMap.get(r.educator_id) ?? placeholderEducator())
             : placeholderEducator();
-        return corsoRowToDomain(r, edu, a.n, a.rev, [], []);
+        const credits = (creditsByCourse.get(r.id) ?? 0) / 100;
+        return corsoRowToDomain(r, edu, a.n, a.rev, [], [], credits);
       });
 
       if (filter?.status) {

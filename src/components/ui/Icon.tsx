@@ -9,7 +9,7 @@ export type IconName =
   | "globe" | "tag" | "warn" | "trending" | "filter" | "grid" | "list"
   | "timeline" | "bell" | "lightning" | "play" | "stop" | "pause" | "monitor"
   | "smartphone" | "clock" | "info" | "tablet" | "dot" | "grip" | "note"
-  | "copy" | "save" | "logout";
+  | "copy" | "save" | "logout" | "coin";
 
 export interface IconProps {
   name: IconName;
@@ -77,6 +77,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   note: <><path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10z" /><path d="M14 3v7h7" /><path d="M8 14h6M8 17h4" /></>,
   copy: <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>,
   save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v5h8" /></>,
+  coin: <><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9.5 9.2a2.5 2.5 0 0 1 2.5-1.2c1.4 0 2.5.8 2.5 1.9s-1.1 1.6-2.5 1.6-2.5.6-2.5 1.6.9 1.9 2.5 1.9a2.5 2.5 0 0 0 2.5-1.2" /></>,
 };
 
 export function Icon({ name, size = 16, className = "", style }: IconProps) {

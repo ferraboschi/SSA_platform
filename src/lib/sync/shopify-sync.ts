@@ -18,6 +18,7 @@ import {
   type AdminProduct,
 } from "@/lib/integrations/shopify/admin-client";
 import { syncEducatorActivation } from "@/lib/educators/sync-active";
+import { generateTransferCredits } from "@/lib/crediti/generate";
 import { MONTH_TO_NUM, MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
 
 export interface SyncSummary {
@@ -553,6 +554,11 @@ export async function runShopifySync(opts?: {
   } catch {
     /* non-fatal */
   }
+
+  // Generate transfer credits from newly-cancelled courses' paid seats. Runs on
+  // EVERY pull path (cron route + top-bar refresh) so the credit ledger stays
+  // current. Idempotent + self-guarding: it never throws and no-ops pre-migration.
+  await generateTransferCredits().catch(() => {});
 
   return {
     ranAt,

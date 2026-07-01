@@ -27,6 +27,7 @@ export const it = {
       corsisti: "Corsisti",
       anomalie: "Anomalie",
       educator: "Educator",
+      crediti: "Crediti",
       account: "Account",
     },
   },
@@ -1400,6 +1401,52 @@ export const it = {
       "Stesso tipo, mese, anno e modalità registrati come due corsi diversi — è probabilmente lo stesso corso (es. versione storica + '8 date Online'). Da unificare.",
     dupCount: "{n} possibili doppioni",
     dupEnrolled: "{n} iscritti",
+  },
+
+  crediti: {
+    title: "Crediti e trasferimenti",
+    subtitle:
+      "Quando un corso viene annullato, i posti già pagati diventano un credito: soldi incassati, posto ancora dovuto (una passività differita, non ricavo). Collega il credito alla nuova iscrizione della persona; il ricavo si riconosce una sola volta, quando il corso di destinazione viene erogato.",
+    notConfigured: "Supabase non configurato.",
+    migrationMissing:
+      "Funzione disponibile dopo la migrazione del database (tabella crediti non ancora creata).",
+    empty: "Nessun credito. Tutto riconciliato. 🎉",
+    // Sezioni per stato
+    openTitle: "Crediti aperti",
+    openSubtitle: "Da collegare a una nuova iscrizione (o da rimborsare / annullare).",
+    appliedTitle: "Crediti applicati",
+    appliedSubtitle:
+      "Collegati a un'iscrizione di destinazione. Il ricavo si riconosce quando quel corso viene erogato.",
+    closedTitle: "Crediti chiusi",
+    closedSubtitle: "Rimborsati o annullati — fuori dal registro.",
+    // Etichette card
+    from: "da",
+    to: "→",
+    origin: "Corso annullato",
+    destination: "Corso di destinazione",
+    noDestination: "Nessuna destinazione",
+    amount: "Importo",
+    // Stati
+    states: {
+      aperto: "Aperto",
+      applicato: "Applicato",
+      rimborsato: "Rimborsato",
+      annullato: "Annullato",
+    },
+    // Azioni
+    link: "Collega a iscrizione",
+    linkCta: "Collega",
+    pickCourse: "Scegli il corso di destinazione",
+    pickEnrollment: "Scegli l'iscrizione",
+    markRefunded: "Segna rimborsato",
+    markVoided: "Segna annullato",
+    unlink: "Scollega (riapri)",
+    cancel: "Annulla",
+    // Conteggi
+    openCount: "{n} crediti aperti",
+    appliedCount: "{n} crediti applicati",
+    closedCount: "{n} crediti chiusi",
+    totalOpen: "Totale aperto: {v}€",
   },
 
   archivio: {

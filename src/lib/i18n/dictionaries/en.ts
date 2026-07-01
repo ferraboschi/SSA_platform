@@ -25,6 +25,7 @@ export const en: Dictionary = {
       corsisti: "Students",
       anomalie: "Anomalies",
       educator: "Educators",
+      crediti: "Credits",
       account: "Account",
     },
   },
@@ -1398,6 +1399,52 @@ export const en: Dictionary = {
       "Same type, month, year and mode recorded as two different courses — likely the same course (e.g. historical version + '8 date Online'). To merge.",
     dupCount: "{n} possible duplicates",
     dupEnrolled: "{n} enrolled",
+  },
+
+  crediti: {
+    title: "Credits & transfers",
+    subtitle:
+      "When a course is cancelled, seats already paid become a credit: money collected, a seat still owed (a deferred liability, not revenue). Link the credit to the person's new enrollment; the money is recognised as revenue once, when the destination course is delivered.",
+    notConfigured: "Supabase not configured.",
+    migrationMissing:
+      "Feature available after the database migration (credits table not created yet).",
+    empty: "No credits. All reconciled. 🎉",
+    // Sections by state
+    openTitle: "Open credits",
+    openSubtitle: "To link to a new enrollment (or to refund / void).",
+    appliedTitle: "Applied credits",
+    appliedSubtitle:
+      "Linked to a destination enrollment. Revenue is recognised when that course is delivered.",
+    closedTitle: "Closed credits",
+    closedSubtitle: "Refunded or voided — out of the ledger.",
+    // Card labels
+    from: "from",
+    to: "→",
+    origin: "Cancelled course",
+    destination: "Destination course",
+    noDestination: "No destination",
+    amount: "Amount",
+    // States
+    states: {
+      aperto: "Open",
+      applicato: "Applied",
+      rimborsato: "Refunded",
+      annullato: "Voided",
+    },
+    // Actions
+    link: "Link to enrollment",
+    linkCta: "Link",
+    pickCourse: "Choose the destination course",
+    pickEnrollment: "Choose the enrollment",
+    markRefunded: "Mark refunded",
+    markVoided: "Mark voided",
+    unlink: "Unlink (reopen)",
+    cancel: "Cancel",
+    // Counts
+    openCount: "{n} open credits",
+    appliedCount: "{n} applied credits",
+    closedCount: "{n} closed credits",
+    totalOpen: "Open total: €{v}",
   },
 
   archivio: {

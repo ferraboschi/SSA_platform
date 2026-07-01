@@ -42,6 +42,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "corsisti", icon: "users", href: "/corsisti", group: "persone" },
   { id: "anomalie", icon: "warn", href: "/anomalie", group: "persone" },
   { id: "educator", icon: "graduation", href: "/educator", group: "persone" },
+  { id: "crediti", icon: "coin", href: "/crediti", group: "sistema" },
   { id: "analisi", icon: "trending", href: "/analisi", group: "sistema" },
   { id: "account", icon: "user", href: "/account", group: "sistema" },
   // NOTE: "conto-economico" is intentionally NOT listed here — it's hidden from
