@@ -2,6 +2,7 @@ import { getTranslations } from "@/lib/i18n/server";
 import { requireNavAccess } from "@/lib/auth/guard";
 import { supabaseConfig } from "@/lib/integrations/config";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { netPaidEuros } from "@/lib/economics/revenue";
 import {
   CreditiClient,
   type CreditoView,
@@ -177,7 +178,7 @@ export default async function Page() {
           id: r.id,
           corsistaId: r.corsista_id,
           name: enrName.get(r.corsista_id) ?? `#${r.corsista_id}`,
-          net: Math.max((r.amount_cents || 0) - (r.discount_cents || 0), 0) / 100,
+          net: netPaidEuros(r),
         });
       }
       for (const list of Object.values(enrollmentsByCourse)) {

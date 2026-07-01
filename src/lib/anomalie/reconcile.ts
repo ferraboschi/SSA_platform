@@ -12,13 +12,20 @@ import "server-only";
 //    to 0. logReconciliation() itself never throws into the sync.
 //  • COUNTS ONLY — no names, emails, ids or amounts are logged (no PII).
 //
-// The rule predicates mirror src/app/(app)/anomalie/page.tsx exactly.
+// The counts are the LENGTHS of the exact same arrays the anomalie PAGE renders:
+// both call the shared pure algorithms in src/lib/anomalie/rules.ts, so there is
+// ONE source of truth — this file no longer re-derives the predicates.
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-
-const isPaidRevenue = (fs: string | null | undefined) => fs == null || fs === "paid";
-const net = (amount: number | null, discount: number | null) =>
-  Math.max((amount || 0) - (discount || 0), 0);
+import {
+  missingCompanions,
+  fullDiscountCancelled,
+  cashOnCancelled,
+  type EnrRow as RuleEnrRow,
+  type CorsoLite,
+  type PurchaseCorsoRow,
+  type PartecipanteRow,
+} from "@/lib/anomalie/rules";
 
 interface EnrRow {
   id: number;
@@ -66,14 +73,33 @@ export async function computeReconciliation(): Promise<ReconciliationCounts> {
 
   const sb = getSupabaseServiceClient();
 
-  // Shared reads (base columns only → safe pre-enrichment).
+  // Shared reads (base columns only → safe pre-enrichment). Only `full_title`
+  // and `lifecycle` drive the shared rules; the other CorsoLite fields don't
+  // affect any of these three counts, so they're filled with null.
   const corsi = await loadAll<{
     id: number;
     full_title: string | null;
     lifecycle: string | null;
   }>(sb, "corsi", "id,full_title,lifecycle");
-  const corsoById = new Map(corsi.map((c) => [c.id, c]));
-  const isCancelled = (id: number) => corsoById.get(id)?.lifecycle === "cancelled";
+  const corsoById = new Map<number, CorsoLite>(
+    corsi.map((c) => [
+      c.id,
+      {
+        id: c.id,
+        short_title: null,
+        full_title: c.full_title,
+        type: "",
+        delivery_mode: null,
+        month: null,
+        year: null,
+        city: null,
+        lifecycle: c.lifecycle,
+      },
+    ]),
+  );
+  // The shared rules build human labels off a name map; counts don't depend on
+  // it, so an empty map is fine (rules fall back to `#id`).
+  const corsistaName = new Map<number, string>();
 
   // financial_status is optional (pre-enrichment). Try the rich select; on
   // error fall back to the base columns and treat every seat as paid.
@@ -89,10 +115,11 @@ export async function computeReconciliation(): Promise<ReconciliationCounts> {
       "id,corsista_id,corso_id,amount_cents,discount_cents",
     );
   }
+  const ruleEnr = enr as RuleEnrRow[];
 
   // ── Rule 1: doppio-no-2nd ──────────────────────────────────────────────
   try {
-    const purByCorsistaTitle = new Map<string, number>();
+    const purchases: PurchaseCorsoRow[] = [];
     for (let from = 0; ; from += 1000) {
       const { data, error } = await sb
         .from("purchases")
@@ -100,48 +127,35 @@ export async function computeReconciliation(): Promise<ReconciliationCounts> {
         .eq("cluster", "corso")
         .range(from, from + 999);
       if (error) throw error;
-      const rows = (data ?? []) as { corsista_id: number; product_title: string | null }[];
-      for (const p of rows) {
-        if (p.corsista_id == null || !p.product_title) continue;
-        const k = `${p.corsista_id}|${p.product_title}`;
-        purByCorsistaTitle.set(k, (purByCorsistaTitle.get(k) ?? 0) + 1);
-      }
+      const rows = (data ?? []) as PurchaseCorsoRow[];
+      purchases.push(...rows);
       if (rows.length < 1000) break;
     }
-    const companionsByIscr = new Map<number, number>();
+    const partecipanti: PartecipanteRow[] = [];
     for (let from = 0; ; from += 1000) {
       const { data, error } = await sb
         .from("corsi_partecipanti")
         .select("iscrizione_id")
         .range(from, from + 999);
       if (error) throw error; // corsi_partecipanti missing → degrade to 0
-      const rows = (data ?? []) as { iscrizione_id: number | null }[];
-      for (const p of rows) {
-        if (p.iscrizione_id == null) continue;
-        companionsByIscr.set(p.iscrizione_id, (companionsByIscr.get(p.iscrizione_id) ?? 0) + 1);
-      }
+      const rows = (data ?? []) as PartecipanteRow[];
+      partecipanti.push(...rows);
       if (rows.length < 1000) break;
     }
-    for (const e of enr) {
-      const full = corsoById.get(e.corso_id)?.full_title;
-      if (!full) continue;
-      const bought = purByCorsistaTitle.get(`${e.corsista_id}|${full}`) ?? 0;
-      if (bought < 2) continue;
-      const have = companionsByIscr.get(e.id) ?? 0;
-      if (bought - 1 - have > 0) counts.doppioNo2nd++;
-    }
+    counts.doppioNo2nd = missingCompanions(
+      ruleEnr,
+      corsoById,
+      corsistaName,
+      purchases,
+      partecipanti,
+    ).length;
   } catch {
     counts.doppioNo2nd = 0;
   }
 
   // ── Rule 2: cancelled-100off ───────────────────────────────────────────
   try {
-    for (const e of enr) {
-      if ((e.discount_cents || 0) < (e.amount_cents || 0)) continue;
-      const course = corsoById.get(e.corso_id);
-      if (course && course.lifecycle !== "cancelled") continue; // valid course → skip
-      counts.cancelled100off++;
-    }
+    counts.cancelled100off = fullDiscountCancelled(ruleEnr, corsoById, corsistaName).length;
   } catch {
     counts.cancelled100off = 0;
   }
@@ -158,19 +172,21 @@ export async function computeReconciliation(): Promise<ReconciliationCounts> {
         if (r.iscrizione_origine_id != null) creditedIscr.add(r.iscrizione_origine_id);
       }
     }
-    for (const e of enr) {
-      if (!isCancelled(e.corso_id)) continue;
-      if (net(e.amount_cents, e.discount_cents) <= 0) continue;
-      if (!isPaidRevenue(e.financial_status)) continue;
-      if (creditedIscr.has(e.id)) continue;
-      counts.cashOnCancelled++;
-    }
+    counts.cashOnCancelled = cashOnCancelled(
+      ruleEnr,
+      corsoById,
+      corsistaName,
+      creditedIscr,
+    ).length;
   } catch {
     counts.cashOnCancelled = 0;
   }
 
   // ── Rule 4: open-credits ───────────────────────────────────────────────
   try {
+    // Count only (head:true) — an exact server-side count is NOT capped by the
+    // default ~1000 row limit, so the log stays correct at any scale (the page,
+    // which needs the rows to render, uses the openCredits() rule instead).
     const { count, error } = await sb
       .from("corsi_crediti")
       .select("id", { count: "exact", head: true })
