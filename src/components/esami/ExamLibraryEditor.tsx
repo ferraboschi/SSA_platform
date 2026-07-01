@@ -32,6 +32,15 @@ const cloneTpl = (t: ExamTemplate): ExamTemplate =>
 const genId = () =>
   "q-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+// "match" is authorable in theory but the student runner has no match UI (it
+// falls through to a blank textarea → unanswerable, silently manual-graded), so
+// it must not be selectable here. Existing match data is left untouched: its
+// label stays in `esami.qt` for read-only display; it's only dropped from the
+// type PICKERS so no new match question can be created. When authoring is
+// unblocked in the runner, remove this filter.
+const AUTHORABLE_QT = (entries: [string, string][]) =>
+  entries.filter(([k]) => k !== "match");
+
 // Short "how this works" tip shown above each question type in the editor.
 const TYPE_TIPS: Record<string, string> = {
   single: "Scelta singola: lo studente sceglie UNA risposta. Tocca il cerchio per segnare la corretta. Auto-correzione.",
@@ -198,18 +207,31 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
     setQuestions(questions.map((q, x) => (x === i ? { ...q, ...patch } : q)));
   };
   const changeType = (i: number, type: ExamQuestionType) => {
-    const q: ExamQuestion = { ...questions[i], type };
-    if ((type === "single" || type === "multi" || type === "image") && !q.options) {
-      q.options = ["Opzione 1", "Opzione 2", "Opzione 3"];
-      q.correct = [0];
+    // Normalize on type change: the answer key (`correct`) and the type-specific
+    // fields of the OLD type are meaningless (and mis-grade) under the new type,
+    // so start each type from a clean shape instead of letting stale data survive.
+    const prev = questions[i];
+    const q: ExamQuestion = {
+      id: prev.id,
+      cat: prev.cat,
+      type,
+      lang: prev.lang,
+      points: prev.points,
+      important: prev.important,
+      text: prev.text,
+    };
+    if (type === "single" || type === "multi" || type === "image") {
+      q.options = prev.options ?? ["Opzione 1", "Opzione 2", "Opzione 3"];
+      q.correct = [];
     }
     if (type === "truefalse") {
       q.options = ["Vero", "Falso"];
-      q.correct = (q.correct as number[] | undefined) ?? [0];
+      q.correct = [];
     }
-    if (type === "fill" && !q.correct) q.correct = ["risposta"];
-    if (type === "match" && !q.pairs) q.pairs = [{ l: "A", r: "1" }, { l: "B", r: "2" }];
-    if (type === "order" && !q.items) q.items = ["Primo", "Secondo", "Terzo"];
+    if (type === "image") q.imageId = prev.imageId;
+    if (type === "fill") q.correct = [];
+    if (type === "match") q.pairs = prev.pairs ?? [{ l: "A", r: "1" }, { l: "B", r: "2" }];
+    if (type === "order") q.items = prev.items ?? ["Primo", "Secondo", "Terzo"];
     setQuestions(questions.map((x, xi) => (xi === i ? q : x)));
   };
 
@@ -531,7 +553,7 @@ function AddQuestionRow({ onAdd }: { onAdd: (type: ExamQuestionType) => void }) 
         onChange={(e) => setType(e.target.value as ExamQuestionType)}
         style={{ height: 30, fontSize: 11.5, flex: 1 }}
       >
-        {Object.entries(qt).map(([k, l]) => (
+        {AUTHORABLE_QT(Object.entries(qt)).map(([k, l]) => (
           <option key={k} value={k}>{l}</option>
         ))}
       </select>
@@ -602,9 +624,14 @@ function QuestionDetail({
               onChange={(e) => onChangeType(e.target.value as ExamQuestionType)}
               style={{ height: 30, width: "auto", fontSize: 12.5, fontWeight: 600 }}
             >
-              {Object.entries(qt).map(([k, l]) => (
-                <option key={k} value={k}>{l}</option>
-              ))}
+              {/* Keep the current type selectable even if it's filtered out
+                  (e.g. a legacy "match" question) so the dropdown still shows
+                  its own value; new selection of "match" stays impossible. */}
+              {AUTHORABLE_QT(Object.entries(qt))
+                .concat(q.type === "match" ? [["match", qt.match]] : [])
+                .map(([k, l]) => (
+                  <option key={k} value={k}>{l}</option>
+                ))}
             </select>
           )}
           <span className="mono" style={{ fontSize: 11, color: "var(--text-4)", display: "inline-flex", alignItems: "center", gap: 4 }}>

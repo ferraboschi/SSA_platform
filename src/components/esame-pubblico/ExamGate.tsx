@@ -20,6 +20,13 @@ import {
   submitExamSessionAction,
   type ExamSessionState,
 } from "@/lib/exam-links/sessions";
+import { CHROME, LANGS, type Lang } from "./exam-chrome";
+
+// The link's forced language drives the pre-exam/waiting/error screens (the
+// student hasn't picked a language yet at this stage). Fall back to Italian.
+function resolveGateLang(forcedLang?: string): Lang {
+  return LANGS.includes(forcedLang as Lang) ? (forcedLang as Lang) : "it";
+}
 
 export interface ExamGateProps {
   token: string;
@@ -69,6 +76,8 @@ async function checkInWithRetry(
 
 function ProctoredExam(props: ExamGateProps) {
   const { token } = props;
+  const lang = resolveGateLang(props.forcedLang);
+  const t = CHROME[lang];
   const storeKey = `ssa-exam-${token}`;
   const [phase, setPhase] = useState<Phase>("loading");
   const [errorMsg, setErrorMsg] = useState("");
@@ -112,7 +121,7 @@ function ProctoredExam(props: ExamGateProps) {
       }
       const rr = await getExamRosterAction(token);
       if (!rr.ok) {
-        setErrorMsg(rr.error || "Impossibile caricare l'elenco della classe.");
+        setErrorMsg(rr.error || t.gateRosterErr);
         setPhase("error");
         return;
       }
@@ -126,7 +135,7 @@ function ProctoredExam(props: ExamGateProps) {
     setPhase("checking");
     const r = await checkInWithRetry(token, student.id, student.name);
     if (!r.ok || !r.state) {
-      setErrorMsg(r.error || "Check-in non riuscito.");
+      setErrorMsg(r.error || t.gateCheckInErr);
       setPhase("error");
       return;
     }
@@ -189,7 +198,7 @@ function ProctoredExam(props: ExamGateProps) {
   if (phase === "loading" || phase === "checking") {
     return (
       <GateShell header={props.header}>
-        <p style={{ textAlign: "center", color: "var(--text-3,#6b7280)" }}>Un attimo…</p>
+        <p style={{ textAlign: "center", color: "var(--text-3,#6b7280)" }}>{t.gateMoment}</p>
       </GateShell>
     );
   }
@@ -208,8 +217,8 @@ function ProctoredExam(props: ExamGateProps) {
       <GateShell header={props.header}>
         <div style={{ textAlign: "center" }}>
           <div className="exam-public-thanks-check">✓</div>
-          <h2 style={{ marginTop: 8 }}>Esame già consegnato</h2>
-          <p style={{ color: "var(--text-3,#6b7280)" }}>Hai già completato e inviato questo esame.</p>
+          <h2 style={{ marginTop: 8 }}>{t.submittedTitle}</h2>
+          <p style={{ color: "var(--text-3,#6b7280)" }}>{t.submittedBody}</p>
         </div>
       </GateShell>
     );
@@ -220,14 +229,14 @@ function ProctoredExam(props: ExamGateProps) {
       : roster;
     return (
       <GateShell header={props.header}>
-        <h2 style={{ fontSize: 18, textAlign: "center", marginBottom: 4 }}>Chi sei?</h2>
+        <h2 style={{ fontSize: 18, textAlign: "center", marginBottom: 4 }}>{t.pickTitle}</h2>
         <p style={{ fontSize: 13, color: "var(--text-3,#6b7280)", textAlign: "center", marginBottom: 14 }}>
-          Seleziona il tuo nome. L&apos;educator ti ammetterà dopo averti riconosciuto su Zoom.
+          {t.pickHint}
         </p>
         {roster.length > 8 && (
           <input
             className="exam-public-input"
-            placeholder="Cerca il tuo nome…"
+            placeholder={t.pickSearch}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             style={{ marginBottom: 10 }}
@@ -235,7 +244,7 @@ function ProctoredExam(props: ExamGateProps) {
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 380, overflowY: "auto" }}>
           {filtered.length === 0 ? (
-            <p style={{ fontSize: 13, color: "var(--text-3,#6b7280)" }}>Nessun nome trovato.</p>
+            <p style={{ fontSize: 13, color: "var(--text-3,#6b7280)" }}>{t.pickNoMatch}</p>
           ) : (
             filtered.map((s) => (
               <button
@@ -258,11 +267,10 @@ function ProctoredExam(props: ExamGateProps) {
       <GateShell header={props.header}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 34 }}>⏳</div>
-          <h2 style={{ fontSize: 18, marginTop: 8 }}>Sei in sala d&apos;attesa</h2>
+          <h2 style={{ fontSize: 18, marginTop: 8 }}>{t.waitTitle}</h2>
           <p style={{ fontSize: 13.5, color: "var(--text-3,#6b7280)", lineHeight: 1.5, marginTop: 6 }}>
             {picked?.name ? <><strong>{picked.name}</strong> — </> : null}
-            attendi che l&apos;educator ti ammetta all&apos;esame. Resta su questa pagina e con la
-            videocamera accesa su Zoom.
+            {t.waitBodyZoom}
           </p>
         </div>
       </GateShell>

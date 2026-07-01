@@ -6,12 +6,21 @@ import { ensureRagWired, ragGroundingStatus } from "@/lib/rag";
 import { getVectorStore } from "@/lib/rag/store";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
+import { hasRole } from "@/lib/auth/guard";
 
-// Public, secret-free health check: reports which integrations have credentials
-// configured (booleans only — never the values). Useful to verify env wiring.
+// Liveness + admin-only diagnostics. Anonymous callers get a trivial `{ ok: true }`
+// so the endpoint stays usable as a public health probe; the detailed wiring/data
+// diagnostics (integration status, data counts, migration state, exam-question
+// samples) are gated behind the admin role and never exposed anonymously.
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // Trivial, always-public liveness. Detailed diagnostics require admin: anything
+  // below this point can leak integration wiring, data counts and exam-question
+  // text, so a non-admin (or unauthenticated) caller gets only `{ ok: true }`.
+  const isAdmin = await hasRole(["admin"]).catch(() => false);
+  if (!isAdmin) return NextResponse.json({ ok: true });
+
   // Sake cost/type merge diagnostic: confirms the Airtable "Master product list"
   // base is reachable and how many catalog items actually carry a cost (the cause
   // of empty cost/class in the template editor was an unreachable prices base).

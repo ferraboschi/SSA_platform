@@ -85,9 +85,14 @@ export function verifyExamToken(token: string): VerifyResult {
   return { ok: true, payload };
 }
 
-/** Default lifetimes (hours). Real exam links are short; previews a bit longer. */
+/** Default lifetimes (hours). We decouple link lifetime from actual exam
+ *  timing: a real link is often minted a few hours before class, and students
+ *  who disconnect may reconnect the next day to resume. A 12h TTL rejected both
+ *  (public roster/check-in/waiting-room polls hard-fail once expired). 72h (3
+ *  days) covers pre-class minting + late reconnects while staying bounded for
+ *  security (revocation is still just a short-ish TTL). Previews match. */
 export const EXAM_LINK_TTL_HOURS: Record<ExamLinkMode, number> = {
-  exam: 12,
+  exam: 72,
   test: 72,
   validate: 72,
 };
