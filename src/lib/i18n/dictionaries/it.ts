@@ -316,6 +316,18 @@ export const it = {
       missDate: "data",
       statusMissing: "Manca {what}",
       statusReady: "Corso pronto: tutto assegnato",
+      // Icone di stato a due assi (completezza + materiali) — vedi course-signal.ts
+      signalReadyTip: "Tutto pronto — educator, luogo e data assegnati",
+      signalMissingTip: "Da completare: manca {what}",
+      signalMaterialsOn: "Materiali assegnati",
+      signalMaterialsOff: "Materiali non assegnati",
+      signalLegend: {
+        title: "Legenda",
+        ready: "Tutto pronto",
+        missing: "Da completare (es. educator)",
+        materialsOn: "Materiali assegnati",
+        materialsOff: "Materiali non assegnati",
+      },
       sortOptions: {
         dateAsc: "Ordina · Data ↑",
         dateDesc: "Ordina · Data ↓",
@@ -414,6 +426,7 @@ export const it = {
       },
       excelStudents: "Excel iscritti",
       excelSake: "Excel sake",
+      excelSakeNoTemplate: "Per favore, assegnare il template della giornata per poter generare il file Excel.",
       markInvoiced: "Segna fatturato",
       invoicedYes: "Fatturato: Sì",
       invoicedNo: "Fatturato: No",

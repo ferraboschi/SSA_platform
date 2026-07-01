@@ -256,6 +256,8 @@ export function CorsiCatalog({
 
       {showLegend && <StatusRuleLegend onClose={() => setShowLegend(false)} />}
 
+      <SignalLegend />
+
       <div
         style={{
           fontSize: 12,
@@ -297,6 +299,54 @@ export function CorsiCatalog({
           <div style={{ fontSize: 13 }}>{t.emptyHint}</div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Always-visible legend for the two per-course status ICONS shown next to each
+// title (see lib/corsi/course-signal.ts). Two orthogonal axes, four states.
+function SignalLegend() {
+  const t = useT().corsi.catalog;
+  const items: { icon: "check" | "warn" | "book"; color: string; label: string }[] = [
+    { icon: "check", color: "var(--success)", label: t.signalLegend.ready },
+    { icon: "warn", color: "var(--danger)", label: t.signalLegend.missing },
+    { icon: "book", color: "var(--indigo)", label: t.signalLegend.materialsOn },
+    { icon: "book", color: "var(--text-mute)", label: t.signalLegend.materialsOff },
+  ];
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        flexWrap: "wrap",
+        padding: "9px 14px",
+        marginBottom: 14,
+        border: "1px solid var(--border-2)",
+        borderRadius: 8,
+        background: "var(--surface-2)",
+        fontSize: 12,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: "var(--ls-caps)",
+          textTransform: "uppercase",
+          color: "var(--text-4)",
+        }}
+      >
+        {t.signalLegend.title}
+      </span>
+      {items.map((it, i) => (
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--text-3)" }}>
+          <span style={{ display: "inline-flex", color: it.color }}>
+            <Icon name={it.icon} size={14} />
+          </span>
+          {it.label}
+        </span>
+      ))}
     </div>
   );
 }

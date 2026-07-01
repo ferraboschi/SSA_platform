@@ -314,6 +314,18 @@ export const en: Dictionary = {
       missDate: "date",
       statusMissing: "Missing {what}",
       statusReady: "Course ready: all assigned",
+      // Two-axis status icons (completeness + materials) — see course-signal.ts
+      signalReadyTip: "All set — educator, venue and date assigned",
+      signalMissingTip: "To complete: missing {what}",
+      signalMaterialsOn: "Materials assigned",
+      signalMaterialsOff: "Materials not assigned",
+      signalLegend: {
+        title: "Legend",
+        ready: "All set",
+        missing: "To complete (e.g. educator)",
+        materialsOn: "Materials assigned",
+        materialsOff: "Materials not assigned",
+      },
       sortOptions: {
         dateAsc: "Sort · Date ↑",
         dateDesc: "Sort · Date ↓",
@@ -412,6 +424,7 @@ export const en: Dictionary = {
       },
       excelStudents: "Excel enrolments",
       excelSake: "Excel sake",
+      excelSakeNoTemplate: "Please assign the day's template before you can generate the Excel file.",
       markInvoiced: "Mark invoiced",
       invoicedYes: "Invoiced: Yes",
       invoicedNo: "Invoiced: No",

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { courseSignal } from "@/lib/corsi/course-signal";
 import type { NavGroup, NavGroupKey } from "@/lib/auth";
 import type { User } from "@/lib/domain";
 import type { SidebarCourse } from "@/lib/shell";
@@ -166,41 +167,28 @@ function itemLabel(t: T, id: string): string {
   return items[id] ?? id;
 }
 
-function SbDot({ color, title }: { color: string; title: string }) {
-  return (
-    <span
-      title={title}
-      aria-label={title}
-      style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }}
-    />
-  );
-}
-
-// Two status dots before each sidebar course (same rules as the catalog):
-//  • Programma — 🟢 assigned · ⚪ not assigned
-//  • Stato     — 🔴 missing educator/venue/date · 🔵 everything assigned · none
+// Two status icons before each sidebar course — same two orthogonal axes as the
+// catalog (see course-signal.ts): completeness (✓ green / ⚠ red) + materials
+// (📖 blue assigned / 📖 grey not). Both always shown so state reads at a glance.
 function SidebarCourseDots({ c }: { c: SidebarCourse }) {
   const t = useT().corsi.catalog;
-  const program = c.hasProgram
-    ? { color: "var(--success)", title: t.programDone }
-    : { color: "var(--text-mute)", title: t.programNone };
+  const s = courseSignal(c);
 
-  const missing: string[] = [];
-  if (c.missEducator) missing.push(t.missEducator);
-  if (c.missLocation) missing.push(t.missLocation);
-  if (c.missDate) missing.push(t.missDate);
-
-  let status: { color: string; title: string } | null = null;
-  if (missing.length > 0) {
-    status = { color: "var(--danger)", title: format(t.statusMissing, { what: missing.join(", ") }) };
-  } else if (c.hasProgram) {
-    status = { color: "var(--indigo)", title: t.statusReady };
-  }
+  const completenessTip = s.completeness.complete
+    ? t.signalReadyTip
+    : format(t.signalMissingTip, {
+        what: s.completeness.missing.map((k) => t[k]).join(", "),
+      });
+  const materialsTip = c.hasProgram ? t.signalMaterialsOn : t.signalMaterialsOff;
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
-      <SbDot {...program} />
-      {status && <SbDot {...status} />}
+      <span title={completenessTip} aria-label={completenessTip} style={{ display: "inline-flex", color: s.completeness.color }}>
+        <Icon name={s.completeness.icon} size={13} />
+      </span>
+      <span title={materialsTip} aria-label={materialsTip} style={{ display: "inline-flex", color: s.materials.color }}>
+        <Icon name={s.materials.icon} size={13} />
+      </span>
     </span>
   );
 }

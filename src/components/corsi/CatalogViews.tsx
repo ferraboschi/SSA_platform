@@ -7,6 +7,7 @@ import { Avatar, Badge, Icon, StatusBadge } from "@/components/ui";
 import { useT, useLocale, format } from "@/lib/i18n";
 import type { CourseListItem, CourseSortKey, SortDir } from "@/lib/corsi";
 import { monthIndexIt } from "@/lib/corsi";
+import { courseSignal } from "@/lib/corsi/course-signal";
 
 const monthShort = (month: string, locale: string) => {
   const idx = monthIndexIt(month);
@@ -23,52 +24,35 @@ const barClass = (c: CourseListItem) =>
       : "warning"
     : "azzurro";
 
-function Dot({ color, title }: { color: string; title: string }) {
-  return (
-    <span
-      title={title}
-      aria-label={title}
-      style={{
-        width: 9,
-        height: 9,
-        borderRadius: "50%",
-        background: color,
-        flexShrink: 0,
-        display: "inline-block",
-      }}
-    />
-  );
-}
-
-// Two per-course indicators next to the title:
-//  1) Programma — 🟢 green: sake program/template assigned · ⚪ grey: not assigned
-//  2) Stato     — 🔴 red: educator / venue / date missing (a problem)
-//                 🔵 blue: EVERYTHING assigned (educator + venue + date + program)
-//                 hidden when logistics are fine but the program is still missing
-//                 (so 🟢+🔵 can co-occur, but ⚪+🔵 never does).
-function CourseDots({ c }: { c: CourseListItem }) {
+// Two per-course status icons next to the title — two ORTHOGONAL axes, both
+// always shown so presence/absence is instantly readable (see course-signal.ts):
+//  1) Completeness — ✓ green "Tutto pronto" · ⚠ red naming what's missing
+//  2) Materials    — 📖 blue "Materiali assegnati" · 📖 grey "non assegnati"
+function CourseSignal({ c, size = 15 }: { c: CourseListItem; size?: number }) {
   const t = useT().corsi.catalog;
-  const program = c.hasProgram
-    ? { color: "var(--success)", title: t.programDone }
-    : { color: "var(--text-mute)", title: t.programNone };
+  // Derive the shared flags from the catalog item (same predicates as before).
+  const s = courseSignal({
+    hasProgram: c.hasProgram,
+    missEducator: !c.educatorId || !c.educatorName.trim(),
+    missLocation: !c.city.trim(),
+    missDate: !c.year || !c.month.trim() || !c.day,
+  });
 
-  const missing: string[] = [];
-  if (!c.educatorId || !c.educatorName.trim()) missing.push(t.missEducator);
-  if (!c.city.trim()) missing.push(t.missLocation);
-  if (!c.year || !c.month.trim() || !c.day) missing.push(t.missDate);
-  const logisticsComplete = missing.length === 0;
-
-  let status: { color: string; title: string } | null = null;
-  if (!logisticsComplete) {
-    status = { color: "var(--danger)", title: format(t.statusMissing, { what: missing.join(", ") }) };
-  } else if (c.hasProgram) {
-    status = { color: "var(--indigo)", title: t.statusReady };
-  }
+  const completenessTip = s.completeness.complete
+    ? t.signalReadyTip
+    : format(t.signalMissingTip, {
+        what: s.completeness.missing.map((k) => t[k]).join(", "),
+      });
+  const materialsTip = c.hasProgram ? t.signalMaterialsOn : t.signalMaterialsOff;
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-      <Dot {...program} />
-      {status && <Dot {...status} />}
+      <span title={completenessTip} aria-label={completenessTip} style={{ display: "inline-flex", color: s.completeness.color }}>
+        <Icon name={s.completeness.icon} size={size} />
+      </span>
+      <span title={materialsTip} aria-label={materialsTip} style={{ display: "inline-flex", color: s.materials.color }}>
+        <Icon name={s.materials.icon} size={size} />
+      </span>
     </span>
   );
 }
@@ -196,7 +180,7 @@ function CourseRow({ course: c, last }: { course: CourseListItem; last: boolean 
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-          <CourseDots c={c} />
+          <CourseSignal c={c} />
           <span
             style={{
               fontSize: 14,
@@ -324,7 +308,7 @@ function CourseCard({ course: c }: { course: CourseListItem }) {
           {c.day} {fullMonth} · {c.city}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-          <CourseDots c={c} />
+          <CourseSignal c={c} />
           <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.25 }}>
             {c.shortTitle}
           </span>
@@ -526,7 +510,7 @@ function CourseTableRow({ course: c }: { course: CourseListItem }) {
       </td>
       <td style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 7, maxWidth: "100%" }}>
-          <CourseDots c={c} />
+          <CourseSignal c={c} />
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {c.shortTitle}
           </span>

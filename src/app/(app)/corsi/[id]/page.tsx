@@ -214,11 +214,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             )}
             <ShareEducatorButton courseId={course.id} />
             <CourseExportButtons
+              courseId={course.id}
               title={course.shortTitle}
               students={course.students}
-              program={course.program}
               labelStudents={td.excelStudents}
               labelSake={td.excelSake}
+              sakeNoTemplateMsg={td.excelSakeNoTemplate}
             />
             <div style={{ flex: 1 }} />
             <Badge tone={econ.invoiced ? "success" : "neutral"} size="lg" dot>
