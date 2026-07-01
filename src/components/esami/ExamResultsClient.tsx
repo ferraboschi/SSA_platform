@@ -34,6 +34,7 @@ export function ExamResultsClient({
   results,
   feedback,
   adminEmail = "",
+  emailsLive = false,
   embedded = false,
   onChanged,
 }: {
@@ -43,6 +44,7 @@ export function ExamResultsClient({
   results: GradedSubmission[];
   feedback?: FeedbackAggregateResult | null;
   adminEmail?: string;
+  emailsLive?: boolean;
   /** Rendered inside a course tab: drop the page wrapper + back link. */
   embedded?: boolean;
   /** Embedded loader callback: re-fetch the data after an outcome is confirmed
@@ -158,7 +160,7 @@ export function ExamResultsClient({
       )}
 
       {hasExam && (
-        <SendResultsSection courseId={courseId} results={confirmed} adminEmail={adminEmail} />
+        <SendResultsSection courseId={courseId} results={confirmed} adminEmail={adminEmail} emailsLive={emailsLive} />
       )}
 
       {hasExam && feedback && <FeedbackSummary data={feedback} />}

@@ -89,6 +89,18 @@ export const appConfig = {
   },
 };
 
+export const examEmailConfig = {
+  /**
+   * GO-LIVE SWITCH for exam-result emails. When `false` (default) a result email
+   * routes to the acting staff member instead of the student — a pre-launch safety
+   * so no test send ever reaches a real corsista. Set `EXAM_RESULT_EMAILS_LIVE=true`
+   * on the server at go-live to deliver results straight to students.
+   */
+  get live() {
+    return env("EXAM_RESULT_EMAILS_LIVE") === "true";
+  },
+};
+
 export const resendConfig = {
   get apiKey() {
     return env("RESEND_API_KEY");

@@ -5,7 +5,8 @@
 
 import { getDataSource } from "@/lib/data";
 import { hasRole } from "@/lib/auth/guard";
-import { appConfig } from "@/lib/integrations/config";
+import { getSession } from "@/lib/auth/session";
+import { appConfig, examEmailConfig } from "@/lib/integrations/config";
 import { sendExamResultEmail } from "@/lib/alerts/emails";
 import { loadCourseExamResults } from "@/lib/exam-links/results";
 import { renderCertificatePdf } from "./certificate-pdf";
@@ -23,12 +24,19 @@ export interface SendExamResultResult {
 export async function sendExamResultEmailAction(
   courseId: string,
   email: string,
-  opts?: { toOverride?: string },
 ): Promise<SendExamResultResult> {
   if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
-  // TEST MODE: while not operational, the caller passes toOverride to route the
-  // email to staff instead of the student. Remove the override at go-live.
-  const dest = opts?.toOverride?.trim() || email;
+  // GO-LIVE routing (single switch, both entry points): results reach the STUDENT
+  // only when EXAM_RESULT_EMAILS_LIVE=true. Until then they route to the acting staff
+  // member — never the student — so a pre-launch send can't hit a real corsista.
+  let dest = email;
+  if (!examEmailConfig.live) {
+    const staff = (await getSession())?.user?.email?.trim();
+    if (!staff) {
+      return { ok: false, error: "Modalità test: nessun indirizzo staff nella sessione." };
+    }
+    dest = staff;
+  }
   const lowEmail = email.toLowerCase();
   const ds = await getDataSource();
   const course = await ds.courses.getById(courseId);

@@ -30,15 +30,15 @@ export function SendResultsSection({
   courseId,
   results,
   adminEmail,
+  emailsLive,
 }: {
   courseId: string;
   results: ConfirmedResultRow[];
   adminEmail: string;
+  /** true = result emails go to the student; false = routed to staff (pre-launch). */
+  emailsLive: boolean;
 }) {
   const [openEmail, setOpenEmail] = useState<string | null>(null);
-  // TEST MODE: always route to staff, never the student — fall back to the admin
-  // address if the session email is missing. Remove the override at go-live.
-  const testTo = adminEmail || "lorenzo@ef-ti.com";
   const xlsHref = `/api/esami/${encodeURIComponent(courseId)}/attendance`;
   const pdfHref = (email: string) =>
     `/api/esami/${encodeURIComponent(courseId)}/pdf?email=${encodeURIComponent(email)}`;
@@ -57,22 +57,39 @@ export function SendResultsSection({
         </a>
       </div>
 
-      {/* TEST MODE banner — remove the override at go-live. */}
-      <div
-        style={{
-          background: "var(--warning-bg, #fef3c7)",
-          color: "var(--warning-fg, #92400e)",
-          border: "1px solid var(--warning-fg, #f59e0b)",
-          borderRadius: 8,
-          padding: "8px 12px",
-          fontSize: 12.5,
-          lineHeight: 1.5,
-          marginBottom: 14,
-        }}
-      >
-        ⚠️ <b>Modalità test</b>: gli invii vanno a <b>te</b> ({testTo}), non allo studente.
-        Da disattivare in fase operativa.
-      </div>
+      {emailsLive ? (
+        <div
+          style={{
+            background: "var(--success-bg, #dcfce7)",
+            color: "var(--success-fg, #166534)",
+            border: "1px solid var(--success-fg, #16a34a)",
+            borderRadius: 8,
+            padding: "8px 12px",
+            fontSize: 12.5,
+            lineHeight: 1.5,
+            marginBottom: 14,
+          }}
+        >
+          ✅ <b>Invio attivo</b>: gli esiti vengono inviati direttamente al corsista.
+        </div>
+      ) : (
+        <div
+          style={{
+            background: "var(--warning-bg, #fef3c7)",
+            color: "var(--warning-fg, #92400e)",
+            border: "1px solid var(--warning-fg, #f59e0b)",
+            borderRadius: 8,
+            padding: "8px 12px",
+            fontSize: 12.5,
+            lineHeight: 1.5,
+            marginBottom: 14,
+          }}
+        >
+          ⚠️ <b>Modalità test</b>: gli invii vanno a <b>te</b>{adminEmail ? ` (${adminEmail})` : ""}, non
+          allo studente. Per attivare l&apos;invio ai corsisti imposta{" "}
+          <code>EXAM_RESULT_EMAILS_LIVE=true</code> sul server.
+        </div>
+      )}
 
       {results.length === 0 ? (
         <p className="text-3" style={{ fontSize: 13 }}>
@@ -86,7 +103,6 @@ export function SendResultsSection({
               key={r.email}
               courseId={courseId}
               r={r}
-              adminEmail={testTo}
               pdfUrl={pdfHref(r.email)}
               open={openEmail === r.email}
               onToggle={() => setOpenEmail((e) => (e === r.email ? null : r.email))}
@@ -101,14 +117,12 @@ export function SendResultsSection({
 function ResultRow({
   courseId,
   r,
-  adminEmail,
   pdfUrl,
   open,
   onToggle,
 }: {
   courseId: string;
   r: ConfirmedResultRow;
-  adminEmail: string;
   pdfUrl: string;
   open: boolean;
   onToggle: () => void;
@@ -119,7 +133,7 @@ function ResultRow({
   const send = () =>
     start(async () => {
       setMsg(null);
-      const res = await sendExamResultEmailAction(courseId, r.email, { toOverride: adminEmail });
+      const res = await sendExamResultEmailAction(courseId, r.email);
       if (!res.ok) setMsg(res.error || "Invio non riuscito");
       else setMsg(`Inviata a ${res.sentTo} ✓`);
       setTimeout(() => setMsg(null), 6000);

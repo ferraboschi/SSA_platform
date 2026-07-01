@@ -57,6 +57,7 @@ export function EsitiTab({
           results={data.results}
           feedback={data.feedback}
           adminEmail={data.adminEmail}
+          emailsLive={data.emailsLive}
           embedded
           onChanged={reload}
         />

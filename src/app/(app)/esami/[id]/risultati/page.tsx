@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getDataSource } from "@/lib/data";
 import { requireNavAccess } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
+import { examEmailConfig } from "@/lib/integrations/config";
 import { loadCourseExamResults } from "@/lib/exam-links/results";
 import { loadCourseFeedbackResults } from "@/lib/exam-links/feedback-results";
 import { ExamResultsClient } from "@/components/esami/ExamResultsClient";
@@ -35,6 +36,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       results={results}
       feedback={feedback}
       adminEmail={session?.user?.email ?? ""}
+      emailsLive={examEmailConfig.live}
     />
   );
 }
