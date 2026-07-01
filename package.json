@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:conventions": "node scripts/check-conventions.mjs",
     "verify": "tsc --noEmit && eslint && vitest run"
   },
   "engines": {
