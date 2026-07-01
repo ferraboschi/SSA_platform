@@ -1399,6 +1399,29 @@ export const en: Dictionary = {
       "Same type, month, year and mode recorded as two different courses — likely the same course (e.g. historical version + '8 date Online'). To merge.",
     dupCount: "{n} possible duplicates",
     dupEnrolled: "{n} enrolled",
+    // Rule 1 — double ticket with no 2nd attendee
+    companionTitle: "Double ticket with no 2nd attendee",
+    companionSubtitle:
+      "Someone bought more than one ticket for the same course but hasn't named the companion yet. Needed for the roll call: add the second attendee's name.",
+    companionCount: "{n} enrollments to complete",
+    companionTickets: "{n} tickets",
+    companionBadge: "{n} to name",
+    // Rule 2 — 100% discount on a cancelled/missing course
+    fullDiscTitle: "100% discount on a cancelled/missing course",
+    fullDiscSubtitle:
+      "Fully-discounted enrollments (net amount 0) on a cancelled or no-longer-present course. A legitimate 100%-off transfer sits on a valid upcoming course; only the cases to review remain here.",
+    fullDiscCount: "{n} cases to review",
+    // Rule 3 — money collected on a cancelled course
+    cashCancelTitle: "Money collected on a cancelled course",
+    cashCancelSubtitle:
+      "Money collected on a course that never ran and not yet turned into a credit. Convert it into a tracked credit that can be linked to a new enrollment.",
+    cashCancelCount: "{n} amounts to turn into a credit",
+    // Rule 4 — transfer with no destination
+    openCreditTitle: "Transfer with no destination",
+    openCreditSubtitle:
+      "Open credits: people owed a seat, with no destination assigned yet.",
+    openCreditCount: "{n} open credits",
+    openCreditLink: "Go to credits",
   },
 
   crediti: {

@@ -35,17 +35,46 @@ export interface DupCourseGroup {
   label: string;
   courses: { id: string; title: string; enrolled: number }[];
 }
+export interface MissingCompanion {
+  corsistaName: string;
+  courseTitle: string;
+  ticketsBought: number;
+  missing: number;
+}
+export interface FullDiscountCancelled {
+  corsistaName: string;
+  courseTitle: string;
+  amount: number;
+}
+export interface CashOnCancelled {
+  courseTitle: string;
+  corsistaName: string;
+  amount: number;
+}
+export interface OpenCredit {
+  corsistaName: string;
+  amount: number;
+  originCourseTitle: string;
+}
 
 export function AnomaliesClient({
   items,
   emailClusters = [],
   repaidClusters = [],
   dupCourses = [],
+  missingCompanions = [],
+  fullDiscountCancelled = [],
+  cashOnCancelled = [],
+  openCredits = [],
 }: {
   items: AnomalyItem[];
   emailClusters?: EmailCluster[];
   repaidClusters?: RepaidCluster[];
   dupCourses?: DupCourseGroup[];
+  missingCompanions?: MissingCompanion[];
+  fullDiscountCancelled?: FullDiscountCancelled[];
+  cashOnCancelled?: CashOnCancelled[];
+  openCredits?: OpenCredit[];
 }) {
   const t = useT().anomalie;
   const [resolved, setResolved] = useState<Set<number>>(() => new Set());
@@ -355,6 +384,151 @@ export function AnomaliesClient({
                       <span className="text-3">{format(t.dupEnrolled, { n: co.enrolled })}</span>
                     </Link>
                   ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 5: double ticket with no 2nd attendee named ── */}
+      <div style={{ marginTop: 36 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>{t.companionTitle}</h2>
+        <p className="text-3" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 680 }}>
+          {t.companionSubtitle}
+        </p>
+        <div style={{ margin: "12px 0", fontSize: 13, color: "var(--text-2)" }}>
+          {format(t.companionCount, { n: missingCompanions.length })}
+        </div>
+        {missingCompanions.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: "center", color: "var(--text-3)" }}>
+            {t.empty}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {missingCompanions.map((c, i) => (
+              <div key={i} className="card" style={{ padding: "12px 14px" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{c.corsistaName}</div>
+                  <span style={{ flex: "1 1 200px", minWidth: 0, fontSize: 12.5 }} className="text-2">
+                    {c.courseTitle}
+                  </span>
+                  <span className="text-4" style={{ fontSize: 11 }}>
+                    {format(t.companionTickets, { n: c.ticketsBought })}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "var(--warning-fg)",
+                      background: "var(--warning-bg)",
+                      padding: "1px 8px",
+                      borderRadius: 999,
+                    }}
+                  >
+                    {format(t.companionBadge, { n: c.missing })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 6: 100% discount on a cancelled/missing course ── */}
+      <div style={{ marginTop: 36 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>{t.fullDiscTitle}</h2>
+        <p className="text-3" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 680 }}>
+          {t.fullDiscSubtitle}
+        </p>
+        <div style={{ margin: "12px 0", fontSize: 13, color: "var(--text-2)" }}>
+          {format(t.fullDiscCount, { n: fullDiscountCancelled.length })}
+        </div>
+        {fullDiscountCancelled.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: "center", color: "var(--text-3)" }}>
+            {t.empty}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {fullDiscountCancelled.map((c, i) => (
+              <div key={i} className="card" style={{ padding: "12px 14px" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{c.corsistaName}</div>
+                  <span style={{ flex: "1 1 200px", minWidth: 0, fontSize: 12.5 }} className="text-2">
+                    {c.courseTitle}
+                  </span>
+                  <span className="num" style={{ color: "var(--danger-fg)", fontWeight: 600 }}>
+                    {c.amount}€
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 7: money collected on a cancelled course, not yet a credit ── */}
+      <div style={{ marginTop: 36 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>{t.cashCancelTitle}</h2>
+        <p className="text-3" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 680 }}>
+          {t.cashCancelSubtitle}
+        </p>
+        <div style={{ margin: "12px 0", fontSize: 13, color: "var(--text-2)" }}>
+          {format(t.cashCancelCount, { n: cashOnCancelled.length })}
+        </div>
+        {cashOnCancelled.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: "center", color: "var(--text-3)" }}>
+            {t.empty}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {cashOnCancelled.map((c, i) => (
+              <div key={i} className="card" style={{ padding: "12px 14px" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{c.corsistaName}</div>
+                  <span style={{ flex: "1 1 200px", minWidth: 0, fontSize: 12.5 }} className="text-2">
+                    {c.courseTitle}
+                  </span>
+                  <span className="num" style={{ color: "var(--danger-fg)", fontWeight: 600 }}>
+                    {c.amount}€
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 8: open transfer credits with no destination yet ── */}
+      <div style={{ marginTop: 36 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>{t.openCreditTitle}</h2>
+          <Link className="link" href="/crediti" style={{ fontSize: 12.5 }}>
+            {t.openCreditLink}
+          </Link>
+        </div>
+        <p className="text-3" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 680 }}>
+          {t.openCreditSubtitle}
+        </p>
+        <div style={{ margin: "12px 0", fontSize: 13, color: "var(--text-2)" }}>
+          {format(t.openCreditCount, { n: openCredits.length })}
+        </div>
+        {openCredits.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: "center", color: "var(--text-3)" }}>
+            {t.empty}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {openCredits.map((c, i) => (
+              <div key={i} className="card" style={{ padding: "12px 14px" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{c.corsistaName}</div>
+                  <span style={{ flex: "1 1 200px", minWidth: 0, fontSize: 12.5 }} className="text-2">
+                    {c.originCourseTitle}
+                  </span>
+                  <span className="num" style={{ color: "var(--warning-fg)", fontWeight: 600 }}>
+                    {c.amount}€
+                  </span>
                 </div>
               </div>
             ))}

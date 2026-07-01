@@ -19,6 +19,7 @@ import {
 } from "@/lib/integrations/shopify/admin-client";
 import { syncEducatorActivation } from "@/lib/educators/sync-active";
 import { generateTransferCredits } from "@/lib/crediti/generate";
+import { logReconciliation } from "@/lib/anomalie/reconcile";
 import { MONTH_TO_NUM, MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
 
 export interface SyncSummary {
@@ -559,6 +560,11 @@ export async function runShopifySync(opts?: {
   // EVERY pull path (cron route + top-bar refresh) so the credit ledger stays
   // current. Idempotent + self-guarding: it never throws and no-ops pre-migration.
   await generateTransferCredits().catch(() => {});
+
+  // Reconciliation counts summary (counts only, no PII). Fully self-guarding:
+  // logReconciliation swallows its own errors, and the extra .catch keeps even
+  // an unexpected rejection from ever breaking the sync.
+  await logReconciliation().catch(() => {});
 
   return {
     ranAt,

@@ -1401,6 +1401,29 @@ export const it = {
       "Stesso tipo, mese, anno e modalità registrati come due corsi diversi — è probabilmente lo stesso corso (es. versione storica + '8 date Online'). Da unificare.",
     dupCount: "{n} possibili doppioni",
     dupEnrolled: "{n} iscritti",
+    // Rule 1 — biglietto doppio senza 2° partecipante
+    companionTitle: "Biglietto doppio senza 2° partecipante",
+    companionSubtitle:
+      "Chi ha comprato più biglietti per lo stesso corso ma non ha ancora indicato il nome dell'accompagnatore. Serve per l'appello: aggiungi il nome del secondo partecipante.",
+    companionCount: "{n} iscrizioni da completare",
+    companionTickets: "{n} biglietti",
+    companionBadge: "{n} da nominare",
+    // Rule 2 — sconto 100% su corso cancellato/inesistente
+    fullDiscTitle: "Sconto 100% su corso cancellato/inesistente",
+    fullDiscSubtitle:
+      "Iscrizioni scontate al 100% (importo netto 0) su un corso annullato o non più presente. Uno sconto totale legittimo si trova su un corso valido in programma: qui restano solo i casi da verificare.",
+    fullDiscCount: "{n} casi da verificare",
+    // Rule 3 — incasso su un corso cancellato
+    cashCancelTitle: "Incasso su un corso cancellato",
+    cashCancelSubtitle:
+      "Soldi incassati su un corso che non è mai partito e non ancora trasformati in credito. Convertili in un credito tracciato collegabile a una nuova iscrizione.",
+    cashCancelCount: "{n} incassi da trasformare in credito",
+    // Rule 4 — trasferimento senza destinazione
+    openCreditTitle: "Trasferimento senza destinazione",
+    openCreditSubtitle:
+      "Crediti aperti: persone a cui è dovuto un posto, senza ancora una destinazione assegnata.",
+    openCreditCount: "{n} crediti aperti",
+    openCreditLink: "Vai ai crediti",
   },
 
   crediti: {
