@@ -34,7 +34,6 @@ import type {
   ProgramDay,
   Sake,
   StockAlert,
-  Student,
 } from "@/lib/domain";
 import type {
   CorsistaRepository,
@@ -49,11 +48,17 @@ import type {
   UserRepository,
 } from "../repository";
 import { computeNotifications } from "@/lib/notifications/registry";
-import { isPaidRevenue, netPaidEuros } from "@/lib/economics/revenue";
 import {
   getSupabaseServerClient,
   getSupabaseServiceClient,
 } from "@/lib/integrations/supabase/server";
+import {
+  aggregateCourseEnrollments,
+  buildStudentsFromEnrollments,
+  countTicketsByCorsista,
+  groupAppliedCreditsByCourse,
+  sumAppliedCreditsForCourse,
+} from "./aggregations";
 import {
   corsistaRowToDomain,
   corsoRowToDomain,
@@ -690,15 +695,15 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
 
     // Duplicate detection ("doppio"): how many course tickets each person holds,
     // from purchases matched on the course product title.
-    const ticketCount = new Map<number, number>();
     const { data: pur } = await sb
       .from("purchases")
       .select("corsista_id")
       .eq("cluster", "corso")
       .eq("product_title", row.full_title);
-    for (const p of (pur ?? []) as { corsista_id: number }[]) {
-      ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + 1);
-    }
+    const ticketCount = countTicketsByCorsista(
+      (pur ?? []) as { corsista_id: number }[],
+      row.full_title,
+    );
 
     // Companion attendees ("doppio") per enrollment. Degrades gracefully to an
     // empty map if the corsi_partecipanti table/migration is not yet applied.
@@ -726,51 +731,14 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       }
     }
 
-    let revenue = 0;
-    const examResults = { passed: 0, retrial: 0, failed: 0 };
-    const students: Student[] = rows.map((r) => {
-      if (r.exam_result) examResults[r.exam_result]++;
-      const c = Array.isArray(r.corsista) ? r.corsista[0] : r.corsista;
-      // amount_cents is the gross line price; discount_cents is the discount
-      // value. Net paid = gross − discount (clamped at 0 for 100%-off codes).
-      // NOTE: this site subtracts in EURO space (gross/discountValue are shown
-      // separately in the roster), so the net is derived from them directly to
-      // stay byte-identical — the cents-space helper (netPaidEuros) rounds
-      // differently in the sub-cent float. Same clamped rule, different order.
-      const gross = (r.amount_cents || 0) / 100;
-      const discountValue = (r.discount_cents || 0) / 100;
-      const paid = Math.max(gross - discountValue, 0);
-      // Revenue = collected: only fully-paid orders contribute. The roster below
-      // still lists unpaid enrollments (with their amount + paymentStatus).
-      if (isPaidRevenue(r.financial_status)) revenue += paid;
-      const participant = c?.full_name ?? "—";
-      const buyer = r.buyer_name;
-      const mismatch = Boolean(
-        buyer && buyer.trim().toLowerCase() !== participant.trim().toLowerCase(),
-      );
-      const tickets = ticketCount.get(r.corsista_id) ?? 1;
-      return {
-        name: participant,
-        email: c?.email ?? "",
-        phone: c?.phone ?? "",
-        orderNumber: r.order_name ?? "",
-        orderDate: r.order_date ?? "",
-        amount: paid,
-        grossAmount: gross,
-        discountCode: r.discount_code,
-        discountValue,
-        paymentStatus: r.financial_status,
-        ticketCode: r.line_item_id != null ? String(r.line_item_id) : null,
-        buyerName: buyer,
-        isDuplicate: tickets > 1,
-        tickets,
-        iscrizioneId: r.id,
-        companions: companionsByIscr.get(r.id) ?? [],
-        hasWhatsApp: c?.has_whatsapp ?? false,
-        nameMismatch: mismatch,
-        registrationName: mismatch ? buyer : null,
-      };
-    });
+    // Roster + collected revenue + exam tally, computed from the enrollment rows.
+    // The euro-space per-student net (gross − discountValue), the isPaidRevenue
+    // gate, and each student's companions all live in the pure aggregation.
+    const { students, revenue, examResults } = buildStudentsFromEnrollments(
+      rows,
+      ticketCount,
+      companionsByIscr,
+    );
 
     // Program from days + sake.
     const { data: giorni } = await sb
@@ -826,11 +794,9 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         .eq("corso_destinazione_id", row.id)
         .eq("stato", "applicato");
       if (!credErr) {
-        recognizedCredits =
-          ((credRows ?? []) as { importo_cents: number | null }[]).reduce(
-            (s, c) => s + (c.importo_cents || 0),
-            0,
-          ) / 100;
+        recognizedCredits = sumAppliedCreditsForCourse(
+          (credRows ?? []) as { importo_cents: number | null }[],
+        );
       }
     }
 
@@ -868,7 +834,13 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       // Aggregate enrolled + revenue per course. PAGINATE — there are >6500
       // enrollments and PostgREST caps a single request (~1000 rows), so a flat
       // .limit() silently truncated totals and undercounted revenue/headcount.
-      const agg = new Map<number, { n: number; rev: number }>();
+      // Fetch every page (in order), then roll up once via the pure aggregation.
+      const enrollAggRows: {
+        corso_id: number;
+        amount_cents: number;
+        discount_cents: number | null;
+        financial_status?: string | null;
+      }[] = [];
       const ENR_PAGE = 1000;
       // `financial_status` may not exist pre-enrichment migration → fall back to
       // the base columns (revenue then treats every enrollment as paid, as it
@@ -895,23 +867,17 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
           discount_cents: number | null;
           financial_status?: string | null;
         }[];
-        for (const i of rows) {
-          const a = agg.get(i.corso_id) ?? { n: 0, rev: 0 };
-          a.n++; // headcount = all enrollments (enrolled ≠ collected)
-          // Net paid = gross − discount, never negative. Revenue counts only
-          // fully-paid orders.
-          if (isPaidRevenue(i.financial_status)) a.rev += netPaidEuros(i);
-          agg.set(i.corso_id, a);
-        }
+        for (const i of rows) enrollAggRows.push(i);
         if (rows.length < ENR_PAGE) break;
       }
+      const agg = aggregateCourseEnrollments(enrollAggRows);
 
       // Applied transfer credits per destination course (euros), fetched once via
       // the SERVICE client (corsi_crediti is service-role only — RLS with no
       // policy — so the request-bound `sb` would see nothing). The mapper only
       // recognises them as revenue on a DELIVERED ("passato") destination.
       // Degrades to an empty map if corsi_crediti is missing.
-      const creditsByCourse = new Map<number, number>();
+      let creditsByCourse = new Map<number, number>();
       {
         const { data: credRows, error: credErr } = await svc
           .from("corsi_crediti")
@@ -919,16 +885,12 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
           .eq("stato", "applicato")
           .not("corso_destinazione_id", "is", null);
         if (!credErr) {
-          for (const c of (credRows ?? []) as {
-            corso_destinazione_id: number | null;
-            importo_cents: number | null;
-          }[]) {
-            if (c.corso_destinazione_id == null) continue;
-            creditsByCourse.set(
-              c.corso_destinazione_id,
-              (creditsByCourse.get(c.corso_destinazione_id) ?? 0) + (c.importo_cents || 0),
-            );
-          }
+          creditsByCourse = groupAppliedCreditsByCourse(
+            (credRows ?? []) as {
+              corso_destinazione_id: number | null;
+              importo_cents: number | null;
+            }[],
+          );
         }
       }
 
