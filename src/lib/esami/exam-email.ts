@@ -159,9 +159,9 @@ export function renderExamEmail(
   </td></tr></table>`
     : "";
 
-  const certButton = opts?.reportUrl
-    ? `<p style="margin:8px 0 4px"><a href="${opts.reportUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Apri il certificato</a></p>`
-    : "";
+  // The certificate PDF is ATTACHED to this email. Students have no account, so we
+  // must NOT link to the staff-only report page (a dead end) — point to the file.
+  const certNote = `<p style="margin:8px 0 4px;font-size:13px;color:#6b7280">📎 Il tuo certificato ufficiale è allegato a questa email in formato PDF.</p>`;
 
   const courseList =
     opts?.courses && opts.courses.length
@@ -190,7 +190,7 @@ export function renderExamEmail(
     <div style="padding:24px 28px;color:#1a1a1a">
       ${scoreBadge}
       <div>${bodyToHtml(examEmailBody(tpl, outcome, hasScore), v)}</div>
-      ${certButton}
+      ${certNote}
       ${coursesCta}
       ${privacy}
       <p style="font-size:11px;color:#c0c4cc;margin-top:18px">Email automatica · Sake Sommelier Association</p>

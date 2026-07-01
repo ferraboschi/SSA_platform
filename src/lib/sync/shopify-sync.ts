@@ -305,9 +305,13 @@ async function resolveContacts(
     const batch = list.slice(i, i + 100);
     const { data } = await sb
       .from("corsisti")
-      .select("id, email")
+      .select("id, email, merged_into")
       .in("email", batch);
-    for (const c of data ?? []) map.set((c.email || "").toLowerCase().trim(), c.id);
+    // Follow a merged duplicate to its survivor, so a returning buyer's new orders
+    // and enrollments land on the VISIBLE record — not the hidden merged one (which
+    // would make their new purchases/seats silently disappear from every screen).
+    for (const c of data ?? [])
+      map.set((c.email || "").toLowerCase().trim(), (c.merged_into as number | null) ?? c.id);
   }
   let created = 0;
   for (const o of orders) {
