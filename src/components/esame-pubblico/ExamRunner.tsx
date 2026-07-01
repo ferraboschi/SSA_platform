@@ -58,6 +58,12 @@ function fmtClock(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** Real exams are TIMED: 60 minutes total, with a "10 minutes left" notice at 50'.
+ *  `elapsed` is persisted, so the limit survives a disconnect/resume — reloading
+ *  buys no extra time. Only the real "exam" mode is timed (not test/validate). */
+const EXAM_LIMIT_S = 60 * 60; // 60' → auto-submit + certified closing screen
+const EXAM_WARN_S = 50 * 60; // 50' → "ancora 10 minuti" notice
+
 export interface ResumeState {
   answers: Record<string, string[] | string>;
   currentIdx: number;
@@ -129,6 +135,12 @@ export function ExamRunner({
   // Personal scratchpad — constant across questions, never submitted/saved.
   const [notes, setNotes] = useState("");
   const [elapsed, setElapsed] = useState(resumeState?.elapsed ?? 0);
+  // Timed exam (real "exam" mode only). Init "already warned" when resuming past 50'
+  // so the "10 minutes left" pop-up doesn't fire late on a reconnect.
+  const timed = mode === "exam" && !showResult;
+  const resumedPastWarn = (resumeState?.elapsed ?? 0) >= EXAM_WARN_S;
+  const [warned, setWarned] = useState(resumedPastWarn);
+  const [warnAck, setWarnAck] = useState(resumedPastWarn);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
   const t = CHROME[lang];
@@ -238,6 +250,14 @@ export function ExamRunner({
     return () => clearInterval(id);
   }, [langPicked, done, submitError]);
 
+  // Timed exam: show the "10 minutes left" notice at 50', auto-submit at 60'.
+  useEffect(() => {
+    if (!timed || !langPicked || done || submitError) return;
+    if (elapsed >= EXAM_WARN_S && elapsed < EXAM_LIMIT_S && !warned) setWarned(true);
+    if (elapsed >= EXAM_LIMIT_S && !finishingRef.current) void finish();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elapsed, timed, langPicked, done, submitError, warned]);
+
   // Flatten the flow: registration fields (final exam only) + graded questions.
   const steps = useMemo<Step[]>(() => {
     const reg: Step[] = collectRegistration
@@ -270,8 +290,12 @@ export function ExamRunner({
           </span>
         )}
         {langPicked && (
-          <span className="exam-public-clock" aria-label="timer">
-            ⏱ {fmtClock(elapsed)}
+          <span
+            className="exam-public-clock"
+            aria-label="timer"
+            style={timed && elapsed >= EXAM_WARN_S ? { color: "#b42318", fontWeight: 700 } : undefined}
+          >
+            ⏱ {timed ? fmtClock(Math.max(0, EXAM_LIMIT_S - elapsed)) : fmtClock(elapsed)}
           </span>
         )}
       </div>
@@ -427,8 +451,8 @@ export function ExamRunner({
           {headerBar}
           <div className="exam-public-thanks">
             <div className="exam-public-thanks-check">✓</div>
-            <h2>{t.thanksTitle}</h2>
-            <p>{total === 0 ? t.empty : t.thanksBody}</p>
+            <h2>{timed ? t.certDoneTitle : t.thanksTitle}</h2>
+            <p>{total === 0 ? t.empty : timed ? t.certDoneBody : t.thanksBody}</p>
           </div>
         </div>
       </div>
@@ -484,6 +508,31 @@ export function ExamRunner({
 
   return (
     <div className="exam-public-shell">
+      {timed && warned && !warnAck && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 300,
+            padding: 20,
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", maxWidth: 360, textAlign: "center", boxShadow: "0 10px 40px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 34, marginBottom: 6 }} aria-hidden>⏳</div>
+            <h2 style={{ fontSize: 18, margin: "0 0 6px" }}>{t.timeWarnTitle}</h2>
+            <p style={{ fontSize: 14, color: "var(--text-3, #555)", margin: "0 0 18px" }}>{t.timeWarnBody}</p>
+            <button type="button" className="exam-public-btn primary" onClick={() => setWarnAck(true)}>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
       <div className="exam-public-card">
         {headerBar}
 

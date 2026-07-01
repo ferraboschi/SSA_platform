@@ -25,6 +25,8 @@ export interface GradedSubmission {
   enrollmentId: number | null;
   currentResult: string | null;
   currentScore: number | null;
+  /** Language the student took the exam in (for a localized result email/PDF). */
+  lang: string | null;
   answers: GradedAnswer[];
 }
 
@@ -139,6 +141,7 @@ export async function loadCourseExamResults(
       enrollmentId,
       currentResult,
       currentScore,
+      lang: s.lang ?? null,
       answers: detail,
     });
   }
