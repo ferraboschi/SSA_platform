@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "@/lib/i18n/server";
 import { getDataSource } from "@/lib/data";
+import { requireNavAccess } from "@/lib/auth/guard";
 import { EsameReport } from "@/components/esami/EsameReport";
 import { loadCourseExamResults } from "@/lib/exam-links/results";
 import type { ExamFamily, ExamResult, ExamResultStatus } from "@/lib/domain";
@@ -10,6 +11,11 @@ export default async function Page({
 }: {
   params: Promise<{ id: string; email: string }>;
 }) {
+  // Exam-access guard — same as the sibling results/editor pages. Without it any
+  // logged-in staff member (including roles blocked from exams) could read any
+  // student's certificate, score, wrong answers and personal data by URL, and
+  // enumerate students by email.
+  await requireNavAccess("esami");
   const { id, email } = await params;
   const ds = await getDataSource();
   const [{ t }, course] = await Promise.all([getTranslations(), ds.courses.getById(id)]);

@@ -382,6 +382,18 @@ export async function acceptInviteAction(
   if (idx < 0) return { ok: false, error: "Link non valido o revocato." };
   const inv = invites[idx];
 
+  // A used invite must be permanently dead. This check MUST live server-side (the
+  // page's "already used" screen can be bypassed by calling the action directly):
+  // without it, a used link stays a standing "set this account's password"
+  // credential — an account-takeover vector. Password changes go through the
+  // normal "Password dimenticata" reset flow, never the invite link.
+  if (inv.acceptedAt) {
+    return {
+      ok: false,
+      error: 'Invito già utilizzato. Per reimpostare la password usa "Password dimenticata" nella pagina di accesso.',
+    };
+  }
+
   // The link is bound to the invited address: the email typed must match.
   if (email.trim().toLowerCase() !== inv.email) {
     return { ok: false, error: "L'email non corrisponde a quella dell'invito." };
