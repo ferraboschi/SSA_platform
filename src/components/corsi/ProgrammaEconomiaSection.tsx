@@ -10,6 +10,7 @@ import {
   LOW_STOCK,
   type ScCatalogItem,
 } from "@/components/sake/SakeProductPicker";
+import { bottlesForStudents, bottleCost } from "@/lib/economics/bottles";
 import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
 import { deleteTemplateAction } from "@/lib/data/template-actions";
 import { saveCourseProgramAction } from "@/lib/corsi/program-actions";
@@ -17,11 +18,6 @@ import type { CourseProgramOverlay } from "@/lib/corsi/program-overlay";
 import { SakeRow, CostLineRow } from "./programma-rows";
 import { TemplateLibraryModal } from "./template-library-modal";
 
-/** Bottles needed per SKU: one bottle covers ~15 students. */
-function bottlesForStudents(enrolled: number): number {
-  const n = Math.max(0, enrolled);
-  return Math.ceil(n / 15) || (n > 0 ? 1 : 0);
-}
 
 export interface SakeState extends Sake {
   id: string;
@@ -189,16 +185,7 @@ export function ProgrammaEconomiaSection({
 
   // Real bottle cost: bottlesPerSku × live cost (fallback to stored cost) per SKU.
   const liveBottleCost = useMemo(
-    () =>
-      days.reduce(
-        (s, p) =>
-          s +
-          p.sakes.reduce((ss, sk) => {
-            const live = (sk.code && catBySku.get(sk.code)?.cost) || sk.cost;
-            return ss + bottlesPerSku * live;
-          }, 0),
-        0,
-      ),
+    () => bottleCost(days, catBySku, bottlesPerSku),
     [days, catBySku, bottlesPerSku],
   );
 

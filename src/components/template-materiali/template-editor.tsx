@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
+import { bottlesForStudents, bottleCost as computeBottleCost } from "@/lib/economics/bottles";
 import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
 import {
   SakeProductPicker,
@@ -577,16 +578,8 @@ export function TemplateEditor({
 
   // Cost automatisms driven by the simulated enrollee count.
   const N = Math.max(0, simStudents);
-  const bottlesPerSku = Math.ceil(N / 15) || (N > 0 ? 1 : 0);
-  const bottleCost = t.days.reduce(
-    (s, d) =>
-      s +
-      d.sakes.reduce((ss, sk) => {
-        const liveCost = (sk.code && catBySku.get(sk.code)?.cost) || sk.cost;
-        return ss + bottlesPerSku * liveCost;
-      }, 0),
-    0,
-  );
+  const bottlesPerSku = bottlesForStudents(N);
+  const bottleCost = computeBottleCost(t.days, catBySku, bottlesPerSku);
   const materialiCourse = materialiPerStudent * N + perCourseTotal;
   const courseTotal = perDayTotal + materialiCourse + bottleCost;
   const costPerPerson = N > 0 ? Math.round(courseTotal / N) : 0;
