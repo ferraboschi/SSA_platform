@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeStatus,
+  deriveLifecycle,
   iscrizioneToEnrollment,
   corsoRowToDomain,
   examTemplateRowToDomain,
@@ -25,6 +26,37 @@ describe("computeStatus", () => {
   });
   it("a zero minimum never divides by zero (treated as full)", () => {
     expect(computeStatus(0, 0, "pubblicato")).toBe("in-traiettoria");
+  });
+});
+
+// ── deriveLifecycle — a "pubblicato" course past its last day reads "passato" ──
+// Regression test for the "Vercelli course never turns off" bug: the Shopify sync
+// sets lifecycle="pubblicato" once and deliberately never revisits it, so nothing
+// ever flipped a concluded course to "passato" — it stayed "active" everywhere
+// forever. This derives the real transition from the calendar date at read time.
+describe("deriveLifecycle", () => {
+  const iso = (offsetDays: number) => new Date(Date.now() + offsetDays * 86400000).toISOString().slice(0, 10);
+
+  it("a published course whose last day has passed reads as 'passato'", () => {
+    expect(deriveLifecycle("pubblicato", iso(-10), 1)).toBe("passato");
+    // 3-day course starting 3 days ago → day 1/2/3 = 3/2/1 days ago → last day
+    // was yesterday → over.
+    expect(deriveLifecycle("pubblicato", iso(-3), 3)).toBe("passato");
+  });
+  it("a published course still upcoming or ongoing stays 'pubblicato'", () => {
+    expect(deriveLifecycle("pubblicato", iso(5), 1)).toBe("pubblicato");
+    expect(deriveLifecycle("pubblicato", iso(0), 1)).toBe("pubblicato"); // starts today
+    // 3-day course that started yesterday is still on day 2 → not over yet.
+    expect(deriveLifecycle("pubblicato", iso(-1), 3)).toBe("pubblicato");
+  });
+  it("never overrides a deliberate 'bozza'/'archiviato'/'passato' value", () => {
+    expect(deriveLifecycle("bozza", iso(-100), 1)).toBe("bozza");
+    expect(deriveLifecycle("archiviato", iso(-100), 1)).toBe("archiviato");
+    expect(deriveLifecycle("passato", iso(5), 1)).toBe("passato");
+  });
+  it("is defensive against a missing/malformed start_date", () => {
+    expect(deriveLifecycle("pubblicato", null, 1)).toBe("pubblicato");
+    expect(deriveLifecycle("pubblicato", "not-a-date", 1)).toBe("pubblicato");
   });
 });
 
@@ -115,6 +147,16 @@ describe("corsoRowToDomain", () => {
   it("falls back the start day to 1 when start_date is missing/invalid", () => {
     expect(corsoRowToDomain(corso({ start_date: null }), edu, 0, 0, [], []).day).toBe(1);
     expect(corsoRowToDomain(corso({ start_date: "not-a-date" }), edu, 0, 0, [], []).day).toBe(1);
+  });
+  it("a stored 'pubblicato' course whose date has already passed reads as 'passato' (Vercelli bug)", () => {
+    const past = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    // fixture default: min_students 10, here enrolled=8 (below minimum).
+    const c = corsoRowToDomain(corso({ lifecycle: "pubblicato", start_date: past }), edu, 8, 0, [], []);
+    expect(c.lifecycle).toBe("passato");
+    // The business status also switches to the concluded/final-tally rule instead
+    // of the still-filling-up ratio (8/10=.80 would read as "monitor" forever) —
+    // a concluded under-quota course must surface as "critico", not "monitor".
+    expect(c.status).toBe("critico");
   });
   it("guards an off-enum type by falling back to 'certificato'", () => {
     const c = corsoRowToDomain(corso({ type: "wibble" as CorsoRow["type"] }), edu, 0, 0, [], []);

@@ -174,6 +174,32 @@ export function computeStatus(
   return "critico";
 }
 
+/** `lifecycle` is set ONCE by the Shopify sync (to "pubblicato", on creation) and
+ *  deliberately never touched again — sync explicitly skips it on every later run
+ *  ("staff-managed", see shopify-sync.ts) so a manual "bozza"/"archiviato" choice
+ *  is never clobbered. But nothing ever flips a "pubblicato" course to "passato"
+ *  once it actually happens — there is no scheduled job and no UI action for it.
+ *  Left alone, a course silently stays "pubblicato" forever after its date, which
+ *  is exactly the bug: it keeps showing as active/upcoming everywhere (dashboard,
+ *  pianificatore, educator, corso detail) long after it's over.
+ *  Derive the real-world transition here, at read time, from the calendar date —
+ *  every consumer goes through this one mapper, so the fix is a single source of
+ *  truth with no backfill/migration needed. "bozza"/"archiviato"/"passato" (already
+ *  set) are never touched — only a stale "pubblicato" past its last day is corrected. */
+export function deriveLifecycle(
+  lifecycle: CourseLifecycle,
+  startDate: string | null,
+  days: number,
+): CourseLifecycle {
+  if (lifecycle !== "pubblicato" || !startDate) return lifecycle;
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) return lifecycle;
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + Math.max(days, 1) - 1);
+  end.setUTCHours(23, 59, 59, 999); // still "pubblicato" through its last day
+  return end.getTime() < Date.now() ? "passato" : lifecycle;
+}
+
 export function placeholderEducator(): Educator {
   return {
     id: "",
@@ -214,10 +240,12 @@ export function corsoRowToDomain(
   };
   const totalCost = Object.values(costs).reduce((s, n) => s + (n || 0), 0);
   const rev = revenue || enrolled * price * 0.85;
+  const days = safeType === "certificato" ? 3 : 1;
+  const lifecycle = deriveLifecycle(row.lifecycle, row.start_date, days);
   const status: CourseStatus =
     row.status && VALID_STATUS.includes(row.status as CourseStatus)
       ? (row.status as CourseStatus)
-      : computeStatus(enrolled, minStud, row.lifecycle);
+      : computeStatus(enrolled, minStud, lifecycle);
   const nbRaw = (row.notebook ?? {}) as Record<string, unknown>;
   const nb = nbRaw as Partial<Notebook>;
   return {
@@ -238,7 +266,7 @@ export function corsoRowToDomain(
       const d = new Date(row.start_date);
       return Number.isNaN(d.getTime()) ? 1 : d.getUTCDate();
     })(),
-    days: safeType === "certificato" ? 3 : 1,
+    days,
     educator,
     capacity: row.capacity || 20,
     enrolled,
@@ -251,7 +279,7 @@ export function corsoRowToDomain(
     status,
     statusLabel: STATUS_META[status].label,
     statusTone: STATUS_META[status].tone,
-    lifecycle: row.lifecycle,
+    lifecycle,
     students,
     program,
     whatsappLink: "",
