@@ -9,7 +9,12 @@ import "server-only";
 import { appConfig, alertRecipients } from "@/lib/integrations/config";
 import { getEmailService, type EmailSendResult } from "@/lib/integrations/email";
 import { loadExamEmailTemplates } from "@/lib/esami/exam-email-store";
-import { renderExamEmail, OUTCOME_LABEL_IT } from "@/lib/esami/exam-email";
+import {
+  renderExamEmail,
+  normalizeExamLang,
+  DEFAULTS_BY_LANG,
+  OUTCOME_LABEL_BY_LANG,
+} from "@/lib/esami/exam-email";
 import { getUpcomingCourseLines } from "@/lib/esami/upcoming-courses";
 
 function loginLink(path = "/dashboard"): string {
@@ -140,26 +145,33 @@ export interface ExamResultEmailInput {
   status: "passed" | "retrial" | "failed";
   /** Link to the printable certificate/report (student can save it as PDF). */
   reportUrl: string;
+  /** Student's language ("it" | "en" | "ja"); null/unknown → Italian. Selects the
+   *  localized subject/body + badge label. */
+  lang?: string | null;
   /** Optional pre-rendered PDF certificate to attach (base64). */
   pdf?: { filename: string; base64: string };
 }
 
-/** Personal exam-result email to the student. Uses the staff-editable templates
- *  (one per outcome), rendered with the student's data + certificate link. */
+/** Personal exam-result email to the student. For Italian students it uses the
+ *  staff-editable templates (one per outcome); for en/ja students it uses the
+ *  built-in localized defaults. Rendered with the student's data + certificate. */
 export async function sendExamResultEmail(input: ExamResultEmailInput): Promise<EmailSendResult> {
-  const [templates, courses] = await Promise.all([
+  const lang = normalizeExamLang(input.lang);
+  const [savedTemplates, courses] = await Promise.all([
     loadExamEmailTemplates(),
     getUpcomingCourseLines(4),
   ]);
+  // Italian = the staff-editable templates; en/ja = the built-in localized defaults.
+  const templates = lang === "it" ? savedTemplates : DEFAULTS_BY_LANG[lang];
   const { subject, html } = renderExamEmail(
     templates[input.status],
     {
       nome: input.studentName,
       corso: input.courseTitle,
       punteggio: input.scorePct,
-      esito: OUTCOME_LABEL_IT[input.status],
+      esito: OUTCOME_LABEL_BY_LANG[lang][input.status],
     },
-    { reportUrl: input.reportUrl, outcome: input.status, courses },
+    { reportUrl: input.reportUrl, outcome: input.status, courses, lang },
   );
   return getEmailService().send({
     to: input.to,

@@ -53,6 +53,40 @@ export async function loadCourseExamResults(
     return qCache.get(tk)!;
   };
 
+  type CorsistaRow = { id: number; full_name: string | null; email: string | null };
+  type EnrollmentRow = { id: number; exam_result: string | null; exam_score_pct: number | null };
+
+  // BATCH (avoid N+1): collect all corsista_ids across submissions, then fetch
+  // the corsisti rows and this course's enrollments once, keyed by corsista_id.
+  const corsistaIds = Array.from(
+    new Set(
+      (subs as Array<{ corsista_id: number | null }>)
+        .map((s) => s.corsista_id)
+        .filter((id): id is number => id != null),
+    ),
+  );
+
+  const corsistiById = new Map<number, CorsistaRow>();
+  const enrollmentByCorsistaId = new Map<number, EnrollmentRow>();
+  if (corsistaIds.length > 0) {
+    const [{ data: corRows }, { data: enrRows }] = await Promise.all([
+      svc.from("corsisti").select("id, full_name, email").in("id", corsistaIds),
+      svc
+        .from("corsi_iscrizioni")
+        .select("id, corsista_id, exam_result, exam_score_pct")
+        .eq("corso_id", Number(courseId))
+        .in("corsista_id", corsistaIds),
+    ]);
+    for (const r of (corRows ?? []) as CorsistaRow[]) corsistiById.set(r.id, r);
+    for (const r of (enrRows ?? []) as Array<EnrollmentRow & { corsista_id: number }>) {
+      enrollmentByCorsistaId.set(r.corsista_id, {
+        id: r.id,
+        exam_result: r.exam_result,
+        exam_score_pct: r.exam_score_pct,
+      });
+    }
+  }
+
   const out: GradedSubmission[] = [];
   for (const s of subs as Array<{
     id: number;
@@ -93,8 +127,7 @@ export async function loadCourseExamResults(
     // enrollment directly. This is the reliable tie-back even when the exam
     // collected no registration fields (name/email would otherwise be "—").
     if (s.corsista_id != null) {
-      const { data: cor } = await svc
-        .from("corsisti").select("full_name, email").eq("id", s.corsista_id).maybeSingle();
+      const cor = corsistiById.get(s.corsista_id) ?? null;
       if (cor) {
         // AUTHORITATIVE: a proctored submission is tied to the verified enrolled
         // student, so their corsista name/email win over anything in registration
@@ -103,27 +136,28 @@ export async function loadCourseExamResults(
         if (c.full_name) name = c.full_name;
         if (c.email) email = c.email.toLowerCase().trim();
       }
-      const { data: e } = await svc
-        .from("corsi_iscrizioni")
-        .select("id, exam_result, exam_score_pct")
-        .eq("corsista_id", s.corsista_id)
-        .eq("corso_id", Number(courseId))
-        .maybeSingle();
-      applyEnrollment(e);
+      applyEnrollment(enrollmentByCorsistaId.get(s.corsista_id) ?? null);
     }
 
     // FALLBACK: legacy / non-proctored submissions only have an email → match it
     // case-insensitively (the stored corsista email may be mixed-case, while the
-    // submission email was lowercased above — `.eq` would miss those rows).
+    // submission email was lowercased above — `.eq` would miss those rows). This
+    // path is rare (only rows with no corsista_id), so it stays per-row; the
+    // enrollment lookup still reuses the pre-fetched course-enrollment Map.
     if (enrollmentId == null && email) {
       const { data: c } = await svc.from("corsisti").select("id").ilike("email", email).maybeSingle();
       if (c) {
-        const { data: e } = await svc
-          .from("corsi_iscrizioni")
-          .select("id, exam_result, exam_score_pct")
-          .eq("corsista_id", (c as { id: number }).id)
-          .eq("corso_id", Number(courseId))
-          .maybeSingle();
+        const cid = (c as { id: number }).id;
+        let e = enrollmentByCorsistaId.get(cid) ?? null;
+        if (!e) {
+          const { data: eRow } = await svc
+            .from("corsi_iscrizioni")
+            .select("id, exam_result, exam_score_pct")
+            .eq("corsista_id", cid)
+            .eq("corso_id", Number(courseId))
+            .maybeSingle();
+          e = (eRow as EnrollmentRow | null) ?? null;
+        }
         applyEnrollment(e);
       }
     }

@@ -78,6 +78,16 @@ import type {
 
 type DB = SupabaseClient;
 
+// Revenue is money COLLECTED, so it counts only fully-paid orders. Shopify's
+// `financial_status` of "paid" is the sole revenue-bearing state; pending,
+// authorized, partially_paid, partially_refunded (and refunded/voided, which
+// the sync already drops) are all excluded. When the field is null (legacy /
+// pre-enrichment rows) we treat the enrollment as paid so historical revenue
+// is not silently zeroed.
+function isPaidRevenue(financialStatus: string | null | undefined): boolean {
+  return financialStatus == null || financialStatus === "paid";
+}
+
 // ============================================================================
 // Factory
 // ============================================================================
@@ -314,26 +324,38 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         .select("*")
         .order("full_name");
       if (e1) throw e1;
-      let { data: iscrData, error: e2 } = await sb
-        .from("corsi_iscrizioni")
-        .select(enrollmentSelect);
-      if (e2) {
-        // pre-migration: retry without exam_score_pct
-        ({ data: iscrData, error: e2 } = await sb
-          .from("corsi_iscrizioni")
-          .select(enrollmentSelectBase));
-      }
-      if (e2) throw e2;
 
+      // PAGINATE — PostgREST caps a single request (~1000 rows) and there are
+      // >6500 enrollments; a flat select silently truncated the per-corsista
+      // enrollment lists (and their spend totals). Page in 1000-row batches.
       const certMap = await loadCertMap();
       const enrollByCorsista = new Map<number, CorsistaEnrollment[]>();
-      for (const i of (iscrData ?? []) as IscrizioneRow[]) {
-        const e = iscrizioneToEnrollment(i);
-        if (!e) continue;
-        e.certificateUrl = certMap.get(`${i.corsista_id}-${i.corso_id}`) ?? null;
-        const list = enrollByCorsista.get(i.corsista_id) ?? [];
-        list.push(e);
-        enrollByCorsista.set(i.corsista_id, list);
+      const ISCR_PAGE = 1000;
+      let iscrSelect = enrollmentSelect; // drops to base if exam_score_pct absent
+      for (let from = 0; ; from += ISCR_PAGE) {
+        let { data: page, error: e2 } = await sb
+          .from("corsi_iscrizioni")
+          .select(iscrSelect)
+          .range(from, from + ISCR_PAGE - 1);
+        if (e2 && iscrSelect === enrollmentSelect) {
+          // pre-migration: retry without exam_score_pct
+          iscrSelect = enrollmentSelectBase;
+          ({ data: page, error: e2 } = await sb
+            .from("corsi_iscrizioni")
+            .select(iscrSelect)
+            .range(from, from + ISCR_PAGE - 1));
+        }
+        if (e2) throw e2;
+        const rows = (page ?? []) as unknown as IscrizioneRow[];
+        for (const i of rows) {
+          const e = iscrizioneToEnrollment(i);
+          if (!e) continue;
+          e.certificateUrl = certMap.get(`${i.corsista_id}-${i.corso_id}`) ?? null;
+          const list = enrollByCorsista.get(i.corsista_id) ?? [];
+          list.push(e);
+          enrollByCorsista.set(i.corsista_id, list);
+        }
+        if (rows.length < ISCR_PAGE) break;
       }
 
       return (corsistiData as CorsistaRow[])
@@ -691,7 +713,9 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       const gross = (r.amount_cents || 0) / 100;
       const discountValue = (r.discount_cents || 0) / 100;
       const paid = Math.max(gross - discountValue, 0);
-      revenue += paid;
+      // Revenue = collected: only fully-paid orders contribute. The roster below
+      // still lists unpaid enrollments (with their amount + paymentStatus).
+      if (isPaidRevenue(r.financial_status)) revenue += paid;
       const participant = c?.full_name ?? "—";
       const buyer = r.buyer_name;
       const mismatch = Boolean(
@@ -787,22 +811,38 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       // .limit() silently truncated totals and undercounted revenue/headcount.
       const agg = new Map<number, { n: number; rev: number }>();
       const ENR_PAGE = 1000;
+      // `financial_status` may not exist pre-enrichment migration → fall back to
+      // the base columns (revenue then treats every enrollment as paid, as it
+      // did before the paid-only rule was introduced).
+      const AGG_RICH = "corso_id,amount_cents,discount_cents,financial_status";
+      const AGG_BASE = "corso_id,amount_cents,discount_cents";
+      let aggSelect = AGG_RICH;
       for (let from = 0; ; from += ENR_PAGE) {
-        const { data: page, error: pErr } = await sb
+        let { data: page, error: pErr } = await sb
           .from("corsi_iscrizioni")
-          .select("corso_id,amount_cents,discount_cents")
+          .select(aggSelect)
           .range(from, from + ENR_PAGE - 1);
+        if (pErr && aggSelect === AGG_RICH) {
+          aggSelect = AGG_BASE;
+          ({ data: page, error: pErr } = await sb
+            .from("corsi_iscrizioni")
+            .select(aggSelect)
+            .range(from, from + ENR_PAGE - 1));
+        }
         if (pErr) throw pErr;
-        const rows = (page ?? []) as {
+        const rows = (page ?? []) as unknown as {
           corso_id: number;
           amount_cents: number;
           discount_cents: number | null;
+          financial_status?: string | null;
         }[];
         for (const i of rows) {
           const a = agg.get(i.corso_id) ?? { n: 0, rev: 0 };
-          a.n++;
+          a.n++; // headcount = all enrollments (enrolled ≠ collected)
           // Net paid = gross − discount (mirror buildFullCourse), never negative.
-          a.rev += Math.max((i.amount_cents || 0) - (i.discount_cents || 0), 0) / 100;
+          // Revenue counts only fully-paid orders.
+          if (isPaidRevenue(i.financial_status))
+            a.rev += Math.max((i.amount_cents || 0) - (i.discount_cents || 0), 0) / 100;
           agg.set(i.corso_id, a);
         }
         if (rows.length < ENR_PAGE) break;

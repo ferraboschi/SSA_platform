@@ -11,6 +11,7 @@ import { sendExamResultEmail } from "@/lib/alerts/emails";
 import { loadCourseExamResults } from "@/lib/exam-links/results";
 import { renderCertificatePdf } from "./certificate-pdf";
 import type { ExamFamily } from "@/lib/domain";
+import type { ReportLang } from "@/lib/i18n/report";
 
 export interface SendExamResultResult {
   ok: boolean;
@@ -53,28 +54,37 @@ export async function sendExamResultEmailAction(
   // Null when no objective % is certified (all-manual exam / operator override):
   // the certificate + email then show the outcome alone, no misleading number.
   const scorePct = result.currentScore;
+  // Student's language ("it" | "en" | "ja" | null) — localizes the result email
+  // and the certificate PDF. Null/unknown falls back to Italian downstream.
+  const lang = result.lang;
 
   const base = appConfig.baseUrl.replace(/\/$/, "");
   const reportUrl = `${base}/esami/${courseId}/report/${encodeURIComponent(email)}`;
   try {
-    // Attach the IT+EN certificate PDF (JA is available via the report link).
+    // Certificate language(s): render in the student's own language. Italian keeps
+    // the historical IT+EN pages; en/ja students get a single page in their language.
+    const certLangs: ReportLang[] =
+      lang === "en" ? ["en"] : lang === "ja" ? ["ja"] : ["it", "en"];
     let pdf: { filename: string; base64: string } | undefined;
     try {
-      const buf = await renderCertificatePdf({
-        name: result.studentName,
-        family,
-        status: outcome,
-        score: scorePct,
-        sections: [],
-        course: {
-          day: course.day,
-          month: course.month,
-          year: course.year,
-          city: course.city,
-          educatorName: course.educator.name,
+      const buf = await renderCertificatePdf(
+        {
+          name: result.studentName,
+          family,
+          status: outcome,
+          score: scorePct,
+          sections: [],
+          course: {
+            day: course.day,
+            month: course.month,
+            year: course.year,
+            city: course.city,
+            educatorName: course.educator.name,
+          },
+          completedAt: result.submittedAt,
         },
-        completedAt: result.submittedAt,
-      });
+        certLangs,
+      );
       const slug = result.studentName.normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
       pdf = { filename: `certificato-${slug || "esame"}.pdf`, base64: buf.toString("base64") };
     } catch (e) {
@@ -89,6 +99,7 @@ export async function sendExamResultEmailAction(
       scorePct,
       status: outcome,
       reportUrl,
+      lang,
       pdf,
     });
     const status = !pdf && res.status === "sent" ? "sent_without_attachment" : res.status;

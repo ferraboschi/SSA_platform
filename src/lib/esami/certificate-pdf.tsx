@@ -1,10 +1,9 @@
 import "server-only";
 
 // Server-side PDF certificate (one page per language) for emailing as an
-// attachment. Uses @react-pdf built-in Helvetica → reliable for IT/EN with no
-// font fetch. Japanese is intentionally NOT rendered here (CJK needs a bundled
-// font); the result email also links to the on-screen report, which prints JA
-// via the browser's system fonts.
+// attachment. IT/EN use @react-pdf's built-in Helvetica → reliable, no font
+// fetch. Japanese needs a CJK font: we register Noto Sans JP (see JA_FONT below)
+// and render a true Japanese page — never tofu/blank.
 
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -14,11 +13,45 @@ import {
   Text,
   View,
   Image,
+  Font,
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { REPORT_I18N, type ReportLang } from "@/lib/i18n/report";
 import type { ExamFamily } from "@/lib/domain";
+
+// CJK font for the Japanese certificate page. Static (non-variable) Noto Sans JP
+// subset (JP only) from Google's canonical noto-cjk repo, served over jsDelivr.
+// Verified to embed real Japanese glyphs in @react-pdf v4 (fontkit renders the
+// OpenType/CFF outlines). react-pdf can't decode variable-weight or WOFF2 files,
+// so this static OTF is the correct format. If the fetch ever fails at render
+// time, the JA branch below falls back to the English page so we never ship a
+// blank/tofu certificate.
+const JA_FONT_FAMILY = "NotoSansJP";
+const JA_FONT_URL =
+  "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/SubsetOTF/JP/NotoSansJP-Regular.otf";
+
+let jaFontReady = false;
+function ensureJaFont(): boolean {
+  if (jaFontReady) return true;
+  try {
+    // Register the single upright weight for BOTH normal and italic styles: Noto
+    // Sans JP has no italic face, and react-pdf throws if a requested (style) face
+    // isn't registered. Mapping italic → the same src avoids that while keeping
+    // CJK glyphs (faux-italic on CJK is meaningless anyway).
+    Font.register({
+      family: JA_FONT_FAMILY,
+      fonts: [
+        { src: JA_FONT_URL, fontWeight: 400, fontStyle: "normal" },
+        { src: JA_FONT_URL, fontWeight: 400, fontStyle: "italic" },
+      ],
+    });
+    jaFontReady = true;
+  } catch {
+    jaFontReady = false;
+  }
+  return jaFontReady;
+}
 
 // SSA logo loaded once as a data URI for the PDF header (falls back to a text
 // mark if the asset can't be read).
@@ -99,59 +132,70 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
     lang === "it" ? "it-IT" : lang === "en" ? "en-GB" : "ja-JP",
     { day: "numeric", month: "long", year: "numeric" },
   );
+
+  // For the Japanese page, swap the Helvetica base to the registered CJK font so
+  // the glyphs actually render. Noto Sans JP is a single weight, so both regular
+  // and bold text use the same family (react-pdf synthesises no faux-bold, which
+  // is fine — the layout is unchanged). IT/EN keep undefined overrides ⇒ the base
+  // Helvetica styles pass through byte-identically.
+  // Empty (not undefined) for it/en so the base Helvetica styles pass through
+  // byte-identically while keeping the style arrays free of undefined elements.
+  const jaFont: { fontFamily?: string } =
+    lang === "ja" ? { fontFamily: JA_FONT_FAMILY } : {};
+
   return (
-    <Page size="A4" style={styles.page}>
+    <Page size="A4" style={[styles.page, jaFont]}>
       <View style={styles.headRow}>
         <View>
-          <Text style={styles.brand}>Sake Sommelier Association</Text>
-          <Text style={styles.certWord}>{t.cert}</Text>
+          <Text style={[styles.brand, jaFont]}>Sake Sommelier Association</Text>
+          <Text style={[styles.certWord, jaFont]}>{t.cert}</Text>
         </View>
         {LOGO_DATA_URI ? (
           <Image src={LOGO_DATA_URI} style={styles.logo} />
         ) : (
-          <Text style={styles.mark}>S</Text>
+          <Text style={[styles.mark, jaFont]}>S</Text>
         )}
       </View>
 
-      <Text style={styles.family}>{t.family[input.family]}</Text>
-      <Text style={styles.name}>{input.name}</Text>
-      <Text style={styles.meta}>
+      <Text style={[styles.family, jaFont]}>{t.family[input.family]}</Text>
+      <Text style={[styles.name, jaFont]}>{input.name}</Text>
+      <Text style={[styles.meta, jaFont]}>
         {t.examDate}: {input.course.day} {input.course.month} {input.course.year} · {t.location}: {input.course.city} · {t.educator}: {input.course.educatorName}
       </Text>
 
       <View style={[styles.scoreBox, { borderColor: sc, justifyContent: input.score == null ? "center" : "space-between" }]}>
         {input.score != null && (
           <View>
-            <Text style={[styles.scoreLabel, { color: sc }]}>{t.score}</Text>
-            <Text style={[styles.scoreNum, { color: sc }]}>{input.score}%</Text>
+            <Text style={[styles.scoreLabel, jaFont, { color: sc }]}>{t.score}</Text>
+            <Text style={[styles.scoreNum, jaFont, { color: sc }]}>{input.score}%</Text>
           </View>
         )}
-        <Text style={[styles.statusBig, { color: sc }]}>{title}</Text>
+        <Text style={[styles.statusBig, jaFont, { color: sc }]}>{title}</Text>
       </View>
 
-      <Text style={styles.sectionTitle}>{t.aiSummary}</Text>
-      <Text style={styles.advice}>{t.advice[input.status]}</Text>
+      <Text style={[styles.sectionTitle, jaFont]}>{t.aiSummary}</Text>
+      <Text style={[styles.advice, jaFont]}>{t.advice[input.status]}</Text>
 
       {input.sections.length > 0 && (
         <>
-          <Text style={styles.sectionTitle}>{t.breakdown}</Text>
+          <Text style={[styles.sectionTitle, jaFont]}>{t.breakdown}</Text>
           {input.sections.map((s, i) => (
             <View key={i} style={styles.barRow}>
-              <Text style={styles.barLabel}>{s.label}</Text>
+              <Text style={[styles.barLabel, jaFont]}>{s.label}</Text>
               <View style={styles.barTrack}>
                 <View style={{ width: `${Math.max(0, Math.min(100, s.pct))}%`, height: 5, backgroundColor: barColor(s.pct), borderRadius: 2 }} />
               </View>
-              <Text style={[styles.barPct, { color: barColor(s.pct) }]}>{Math.round(s.pct)}%</Text>
+              <Text style={[styles.barPct, jaFont, { color: barColor(s.pct) }]}>{Math.round(s.pct)}%</Text>
             </View>
           ))}
         </>
       )}
 
-      <Text style={styles.privacy}>{PRIVACY_NOTE[lang]}</Text>
+      <Text style={[styles.privacy, jaFont]}>{PRIVACY_NOTE[lang]}</Text>
 
       <View style={styles.footer}>
-        <Text>{t.issued}: {issued}</Text>
-        <Text>{t.footer}</Text>
+        <Text style={jaFont}>{t.issued}: {issued}</Text>
+        <Text style={jaFont}>{t.footer}</Text>
       </View>
     </Page>
   );
@@ -162,10 +206,17 @@ export async function renderCertificatePdf(
   input: CertificatePdfInput,
   langs: ReportLang[] = ["it", "en"],
 ): Promise<Buffer> {
+  // Resolve the pages to render. If a Japanese page is requested we must have the
+  // CJK font registered; if that fails, degrade JA → EN so we never emit a blank
+  // or tofu page (the localized email is the primary win regardless).
+  const pages: ReportLang[] = langs.map((l) => {
+    if (l !== "ja") return l;
+    return ensureJaFont() ? "ja" : "en";
+  });
   const doc = (
     <Document>
-      {langs.map((l) => (
-        <CertPage key={l} input={input} lang={l} />
+      {pages.map((l, i) => (
+        <CertPage key={`${l}-${i}`} input={input} lang={l} />
       ))}
     </Document>
   );

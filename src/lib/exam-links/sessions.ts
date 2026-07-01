@@ -12,6 +12,58 @@ import { verifyExamToken } from "./token";
 
 const TABLE = "exam_sessions";
 
+// ── Rate limiting (PER-INSTANCE, in-memory) ──────────────────────────────────
+// The public runner actions below are unauthenticated: gated only by a shared,
+// signed class token — a scrape/DoS surface at a global launch. This is a
+// pragmatic fixed-window limiter keyed by the exam TOKEN (the argument every
+// action already receives; it identifies the class/link). We do NOT read IP —
+// it isn't reliably available in a server action.
+//
+// IMPORTANT: this Map lives in a single Node process. On a multi-instance
+// deploy each instance limits independently, so it's best-effort only. The
+// hardened version would use a shared store (Supabase/Redis) with an atomic
+// increment. Date.now() is fine here — this is app code, not a workflow script.
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT_POLL = 40; // getExamSession — the ~3s waiting-room poll
+const RATE_LIMIT_SAVE = 60; // saveExamProgress — frequent debounced writes
+const RATE_LIMIT_ROSTER = 20; // getExamRoster + checkIn
+const RATE_LIMIT_SUBMIT = 10; // submit — finalize
+
+// key = `${bucket}:${token}` → timestamps (ms) of hits inside the current window.
+const rateHits = new Map<string, number[]>();
+
+/** Returns true when this (bucket, token) is OVER the limit for the window. */
+function isRateLimited(bucket: string, token: string, limit: number): boolean {
+  const now = Date.now();
+  const key = `${bucket}:${token}`;
+  const cutoff = now - RATE_WINDOW_MS;
+  // Prune timestamps outside the window so each array (and the Map) can't grow
+  // unbounded.
+  const recent = (rateHits.get(key) ?? []).filter((ts) => ts > cutoff);
+  if (recent.length >= limit) {
+    rateHits.set(key, recent); // keep the pruned window; do not record this hit
+    return true;
+  }
+  recent.push(now);
+  rateHits.set(key, recent);
+  // Opportunistically evict fully-expired keys so abandoned tokens (a class
+  // that has finished) don't linger in the Map forever. Cheap: capped scan.
+  pruneRateHits(cutoff);
+  return false;
+}
+
+// Bound the sweep so a large launch never turns a single request into an O(n)
+// scan of every token ever seen.
+const RATE_PRUNE_SCAN = 50;
+/** Drop keys whose entire window has expired (best-effort, capped scan). */
+function pruneRateHits(cutoff: number): void {
+  let scanned = 0;
+  for (const [k, ts] of rateHits) {
+    if (scanned++ >= RATE_PRUNE_SCAN) break;
+    if (ts.length === 0 || ts[ts.length - 1] <= cutoff) rateHits.delete(k);
+  }
+}
+
 export type ExamSessionStatus = "checked_in" | "admitted" | "submitted";
 
 export interface ExamSessionState {
@@ -111,6 +163,7 @@ export async function getExamRosterAction(
   if (!ctx) return { ok: false, error: "Link non valido o scaduto." };
   if (ctx.m !== "exam") return { ok: false, error: "Disponibile solo per l'esame reale." };
   if (ctx.corsoId == null) return { ok: false, error: "Corso non valido." };
+  if (isRateLimited("roster", token, RATE_LIMIT_ROSTER)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
   const svc = getSupabaseServiceClient();
   const { data, error } = await svc
     .from("corsi_iscrizioni")
@@ -139,6 +192,7 @@ export async function checkInExamSessionAction(
   if (!ctx) return { ok: false, error: "Link non valido o scaduto." };
   if (ctx.m !== "exam") return { ok: false, error: "Disponibile solo per l'esame reale." };
   if (ctx.corsoId == null) return { ok: false, error: "Corso non valido." };
+  if (isRateLimited("roster", token, RATE_LIMIT_ROSTER)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
   const svc = getSupabaseServiceClient();
 
   // The picked student must be enrolled in this course.
@@ -205,6 +259,7 @@ export async function getExamSessionAction(
   corsistaId: number,
   secret?: string,
 ): Promise<{ ok: boolean; state?: ExamSessionState; error?: string }> {
+  if (isRateLimited("poll", token, RATE_LIMIT_POLL)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
   const r = await loadOwnedSession(token, corsistaId, secret);
   if (!r.ok || !r.row) return { ok: false, error: r.error };
   return { ok: true, state: rowToState(r.row) };
@@ -217,6 +272,9 @@ export async function saveExamProgressAction(
   secret: string | undefined,
   patch: { answers: Record<string, string[] | string>; currentIdx: number; lang?: string; elapsed?: number },
 ): Promise<{ ok: boolean }> {
+  // Save has no error channel — over the limit we just decline this write; the
+  // runner keeps the answers in memory and retries on the next debounce tick.
+  if (isRateLimited("save", token, RATE_LIMIT_SAVE)) return { ok: false };
   // Verify ownership (per-session secret) before writing anything.
   const r = await loadOwnedSession(token, corsistaId, secret);
   if (!r.ok || !r.row) return { ok: false };
@@ -250,6 +308,7 @@ export async function submitExamSessionAction(
   // last edit, not just the ≤1s-debounced copy already saved to the session.
   final?: { answers: Record<string, string[] | string>; lang?: string; elapsed?: number },
 ): Promise<{ ok: boolean; error?: string }> {
+  if (isRateLimited("submit", token, RATE_LIMIT_SUBMIT)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
   const svc = getSupabaseServiceClient();
   const owned = await loadOwnedSession(token, corsistaId, secret);
   if (!owned.ok || !owned.row) return { ok: false, error: owned.error || "Sessione non trovata." };
