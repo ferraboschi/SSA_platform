@@ -84,6 +84,7 @@ export default async function Page({
           <Stat label="Iscritti" value={String(course.students.length)} />
           <Stat label="Giornate" value={String(course.days.length)} />
           <Stat label="Sake totali" value={String(course.totalSakes)} />
+          <Stat label="Costo sake" value={`${Math.round(course.totalSakeCost).toLocaleString("it-IT")} €`} />
           <Stat label="Esame finale" value={course.hasExam ? "Sì" : "No"} />
         </div>
 
@@ -216,11 +217,62 @@ export default async function Page({
                         i === d.sakes.length - 1 ? "none" : "1px solid var(--border-2, #f0f1f3)",
                     }}
                   >
-                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{s.name}</div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-3, #6b7280)", marginTop: 2 }}>
-                      {[s.type, s.sakagura, s.size ? `${s.size}ml` : "", s.code]
-                        .filter(Boolean)
-                        .join(" · ")}
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      {s.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={s.image}
+                          alt=""
+                          width={42}
+                          height={42}
+                          style={{ borderRadius: 6, objectFit: "cover", flexShrink: 0, background: "var(--surface-2, #f3f4f6)" }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            width: 42,
+                            height: 42,
+                            borderRadius: 6,
+                            background: "var(--surface-2, #f3f4f6)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 9,
+                            color: "var(--text-4, #9ca3af)",
+                            flexShrink: 0,
+                            textAlign: "center",
+                            padding: 2,
+                          }}
+                        >
+                          {s.code || "—"}
+                        </span>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600 }}>
+                          {s.url ? (
+                            <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>
+                              {s.name}
+                            </a>
+                          ) : (
+                            s.name
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-3, #6b7280)", marginTop: 2 }}>
+                          {[s.type, s.sakagura, s.size ? `${s.size}ml` : "", s.code]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                      </div>
+                      {(s.qty > 0 || s.cost > 0) && (
+                        <div style={{ textAlign: "right", flexShrink: 0, fontSize: 11.5, color: "var(--text-3, #6b7280)" }}>
+                          {s.qty > 0 && (
+                            <div>
+                              <b>{s.qty}</b> bott.
+                            </div>
+                          )}
+                          {s.cost > 0 && <div>{Math.round(s.cost * (s.qty || 1)).toLocaleString("it-IT")} €</div>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))
