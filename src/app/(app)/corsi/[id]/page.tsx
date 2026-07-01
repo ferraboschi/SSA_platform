@@ -17,6 +17,7 @@ import { shopifyAdminProductsUrl } from "@/lib/integrations/shopify/admin-url";
 import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
 import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
+import { ShareEnrolButton } from "@/components/corsi/ShareEnrolButton";
 import { CourseExportButtons } from "@/components/corsi/CourseExportButtons";
 import { EducatorAssign } from "@/components/corsi/EducatorAssign";
 
@@ -194,24 +195,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             )}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {course.whatsappLink ? (
-              <a className="btn" href={course.whatsappLink} target="_blank" rel="noopener noreferrer">
-                <Icon name="whatsapp" size={13} />
-                {td.whatsappGroup}
-              </a>
-            ) : (
-              <a
-                className="btn"
-                href={`https://wa.me/?text=${encodeURIComponent(
-                  `${course.shortTitle} · ${course.day} ${course.month} ${course.year} · ${course.city}`,
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Icon name="whatsapp" size={13} />
-                {td.whatsappShare}
-              </a>
-            )}
+            <ShareEnrolButton enrolUrl={course.enrolUrl} title={course.shortTitle} />
             <ShareEducatorButton courseId={course.id} />
             <CourseExportButtons
               courseId={course.id}

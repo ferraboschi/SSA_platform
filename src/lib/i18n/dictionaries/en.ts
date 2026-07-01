@@ -422,6 +422,16 @@ export const en: Dictionary = {
         expires: "Expires on",
         error: "Couldn't generate the link.",
       },
+      enrol: {
+        button: "Enrolment link",
+        title: "Course enrolment link",
+        hint: "The public course signup link. Send it to prospective students and use it to build the WhatsApp group.",
+        copy: "Copy link",
+        copied: "Copied!",
+        sendWhatsapp: "Send on WhatsApp",
+        open: "Open page",
+        unavailable: "Link available after the course is published/synced.",
+      },
       excelStudents: "Excel enrolments",
       excelSake: "Excel sake",
       excelSakeNoTemplate: "Please assign the day's template before you can generate the Excel file.",
@@ -1544,5 +1554,18 @@ export const en: Dictionary = {
     newDayName: "Day {n}",
     duplicateSuffix: " (copy)",
     confirmDelete: "Delete the template \"{name}\"?",
+  },
+
+  // Public educator share link (/condividi/[token]) — roll-call attendance.
+  condividi: {
+    appello: {
+      title: "Roll call",
+      hint: "Mark attendance for each day. Changes save automatically.",
+      present: "Present",
+      day: "D{n}",
+      empty: "No enrolled students yet.",
+      readonly: "Roll call not available yet.",
+      saveError: "Save failed, please retry.",
+    },
   },
 };

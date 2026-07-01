@@ -65,6 +65,9 @@ export interface Course {
   program: ProgramDay[];
   whatsappLink: string;
   shareLink: string;
+  /** Public enrolment (signup) URL — <storefront>/products/<real-handle>. Empty
+   *  string when the course hasn't been synced from Shopify yet. */
+  enrolUrl: string;
   notebook: Notebook;
   /** Planned but never held (a planning error). Excluded from "done" lists. */
   cancelled?: boolean;

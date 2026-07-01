@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import { verifyShareToken } from "@/lib/share-links/token";
 import { loadSharedCourse } from "@/lib/share-links/load";
+import AttendanceRoster from "@/components/condividi/AttendanceRoster";
 import { loadPlannerState } from "@/lib/pianificatore-server";
 import type { PlannerSaved } from "@/lib/pianificatore";
 import { COURSE_TYPES } from "@/lib/domain/constants";
@@ -88,73 +89,10 @@ export default async function Page({
           <Stat label="Esame finale" value={course.hasExam ? "Sì" : "No"} />
         </div>
 
-        {/* Enrolled students roster */}
-        <h2 style={{ fontSize: 15, margin: "0 0 12px" }}>Iscritti</h2>
-        {course.students.length === 0 ? (
-          <p style={{ color: "var(--text-3)", fontSize: 13, fontStyle: "italic", marginBottom: 20 }}>
-            Nessun iscritto al momento.
-          </p>
-        ) : (
-          <div
-            style={{
-              border: "1px solid var(--border, #e5e7eb)",
-              borderRadius: 12,
-              overflow: "hidden",
-              marginBottom: 24,
-            }}
-          >
-            {course.students.map((s, i) => (
-              <div
-                key={`${s.email}-${i}`}
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "10px 14px",
-                  borderBottom:
-                    i === course.students.length - 1 ? "none" : "1px solid var(--border-2, #f0f1f3)",
-                }}
-              >
-                <span
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 999,
-                    background: "var(--surface-2, #f4f5f7)",
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "var(--text-3, #6b7280)",
-                    flexShrink: 0,
-                  }}
-                >
-                  {i + 1}
-                </span>
-                <span style={{ fontSize: 13.5, fontWeight: 600, flex: "1 1 160px", minWidth: 0 }}>
-                  {s.name || "—"}
-                </span>
-                {s.email && (
-                  <a
-                    href={`mailto:${s.email}`}
-                    style={{ fontSize: 12, color: "var(--indigo-600, #4f46e5)", textDecoration: "none", flex: "1 1 200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  >
-                    {s.email}
-                  </a>
-                )}
-                {s.phone && (
-                  <a
-                    href={`tel:${s.phone}`}
-                    style={{ fontSize: 12, color: "var(--text-2, #374151)", textDecoration: "none", flexShrink: 0 }}
-                  >
-                    {s.phone}
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Enrolled students roster + roll-call (appello). The client component
+            gets ONLY the signed token — it derives the course + writes via
+            token-verified server actions (never a service client / raw id). */}
+        <AttendanceRoster token={token} students={course.students} dayCount={course.dayCount} />
 
         {/* Program */}
         <h2 style={{ fontSize: 15, margin: "0 0 12px" }}>Programma & sake</h2>

@@ -424,6 +424,16 @@ export const it = {
         expires: "Scade il",
         error: "Impossibile generare il link.",
       },
+      enrol: {
+        button: "Link iscrizione",
+        title: "Link di iscrizione al corso",
+        hint: "Il link pubblico di iscrizione al corso. Invialo ai potenziali iscritti e usalo per creare il gruppo WhatsApp.",
+        copy: "Copia link",
+        copied: "Copiato!",
+        sendWhatsapp: "Invia su WhatsApp",
+        open: "Apri pagina",
+        unavailable: "Link disponibile dopo la pubblicazione/sync del corso.",
+      },
       excelStudents: "Excel iscritti",
       excelSake: "Excel sake",
       excelSakeNoTemplate: "Per favore, assegnare il template della giornata per poter generare il file Excel.",
@@ -1546,5 +1556,18 @@ export const it = {
     newDayName: "Giornata {n}",
     duplicateSuffix: " (copia)",
     confirmDelete: "Eliminare il template \"{name}\"?",
+  },
+
+  // Public educator share link (/condividi/[token]) — roll-call attendance.
+  condividi: {
+    appello: {
+      title: "Appello",
+      hint: "Segna le presenze per ogni giornata. Le modifiche si salvano da sole.",
+      present: "Presente",
+      day: "G{n}",
+      empty: "Nessun iscritto al momento.",
+      readonly: "Appello non ancora disponibile.",
+      saveError: "Salvataggio non riuscito, riprova.",
+    },
   },
 };

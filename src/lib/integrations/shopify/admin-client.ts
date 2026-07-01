@@ -16,6 +16,9 @@ export interface AdminProductVariant {
 export interface AdminProduct {
   id: number;
   title: string;
+  // Real Shopify storefront handle (public product slug) — the enrol URL is
+  // <storefrontBase>/products/<handle>. Not the app's re-slugged `corsi.handle`.
+  handle: string;
   product_type: string | null;
   status: "active" | "draft" | "archived";
   tags: string;
@@ -94,7 +97,7 @@ async function adminGet(
 /** All products (paginated). Only `limit` may accompany `page_info`. */
 export async function listAllProducts(): Promise<AdminProduct[]> {
   const out: AdminProduct[] = [];
-  const fields = "id,title,product_type,status,tags,variants";
+  const fields = "id,title,handle,product_type,status,tags,variants";
   let path: string | null = `products.json?limit=250&fields=${fields}`;
   while (path) {
     const { body, link } = await adminGet(path);

@@ -265,6 +265,9 @@ async function syncCourses(
     const syncOwned = {
       external_id: String(p.id),
       handle: slug(p.title).slice(0, 80),
+      // Real Shopify storefront handle (for the public enrol URL). Distinct from
+      // `handle` above, which is the app's readable /corsi/<slug> routing key.
+      product_handle: p.handle,
       short_title: p.title.slice(0, 80),
       full_title: p.title,
       type: parsed.type,

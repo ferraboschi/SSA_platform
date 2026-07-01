@@ -215,6 +215,22 @@ export function deriveLifecycle(
   return lifecycle;
 }
 
+/** Public storefront origin for building a course's enrolment (signup) URL:
+ *  `<STOREFRONT_BASE>/products/<product_handle>`. The SSA public site — distinct
+ *  from the admin (myshopify) domain in SHOPIFY_STORE_DOMAIN. Env-overridable with
+ *  a fallback to the real endpoint, per project convention. */
+const STOREFRONT_BASE = (
+  process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_URL ||
+  "https://www.sakesommelierassociation.it"
+).replace(/\/+$/, "");
+
+/** Public enrolment URL from the REAL Shopify handle, or "" if not synced yet
+ *  (draft/pre-sync course) — the UI degrades gracefully on an empty value. */
+function buildEnrolUrl(productHandle: string | null): string {
+  const h = (productHandle ?? "").trim();
+  return h ? `${STOREFRONT_BASE}/products/${h}` : "";
+}
+
 export function placeholderEducator(): Educator {
   return {
     id: "",
@@ -299,6 +315,7 @@ export function corsoRowToDomain(
     program,
     whatsappLink: "",
     shareLink: "",
+    enrolUrl: buildEnrolUrl(row.product_handle),
     notebook: {
       adminNotes: nb.adminNotes ?? [],
       plannedAction: nb.plannedAction ?? null,

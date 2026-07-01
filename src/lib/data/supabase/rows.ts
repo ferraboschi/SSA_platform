@@ -114,6 +114,9 @@ export interface CorsoRow {
   id: number;
   external_id: string | null;
   handle: string;
+  /** Real Shopify storefront product handle (public enrol URL); null until a sync
+   *  backfills it. Distinct from `handle` (the app's readable routing slug). */
+  product_handle: string | null;
   short_title: string;
   full_title: string;
   type: CourseTypeKey;

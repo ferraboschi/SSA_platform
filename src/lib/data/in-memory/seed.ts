@@ -255,6 +255,7 @@ function buildCourse(args: BuildCourseArgs): Course {
     program: makeProgram(handle, resolvedDays),
     whatsappLink: `https://chat.whatsapp.com/SSAGroup${id}`,
     shareLink: `https://corsi.sakesommelierassociation.it/share/${id}abc123`,
+    enrolUrl: `https://www.sakesommelierassociation.it/products/${handle}`,
     notebook,
     examResults: examResults || undefined,
   };

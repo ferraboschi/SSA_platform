@@ -119,6 +119,7 @@ const corso = (over: Partial<CorsoRow>): CorsoRow => ({
   id: 42,
   external_id: "ext-42",
   handle: "cert-roma-nov-2026",
+  product_handle: null,
   short_title: "Cert. Roma",
   full_title: "Corso Certificato Roma",
   type: "certificato",
