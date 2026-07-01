@@ -30,6 +30,7 @@
 // an arbitrary person. Every server-side check is enumerated inline.
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyShareToken } from "./token";
 
 const TABLE = "corsi_presenze";
@@ -40,42 +41,14 @@ const PART_TABLE = "corsi_partecipanti";
 // surface. Pragmatic fixed-window limiter keyed by the TOKEN (identifies the
 // link/course). We do NOT read IP (not reliable in a server action). Best-effort
 // only: the Map lives in one Node process, so a multi-instance deploy limits
-// independently. (Replicated from exam-links/sessions.ts.)
+// independently. (Shared implementation: src/lib/rate-limit.ts.)
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT_READ = 30; // getAttendanceAction — hydrate on mount / refresh
 const RATE_LIMIT_WRITE = 120; // setAttendanceAction — one per checkbox toggle
 const RATE_LIMIT_ADD = 10; // addPartecipanteFromLinkAction — creating a companion
 
-// key = `${bucket}:${token}` → timestamps (ms) of hits inside the current window.
-const rateHits = new Map<string, number[]>();
-
-/** Returns true when this (bucket, token) is OVER the limit for the window. */
-function isRateLimited(bucket: string, token: string, limit: number): boolean {
-  const now = Date.now();
-  const key = `${bucket}:${token}`;
-  const cutoff = now - RATE_WINDOW_MS;
-  const recent = (rateHits.get(key) ?? []).filter((ts) => ts > cutoff);
-  if (recent.length >= limit) {
-    rateHits.set(key, recent); // keep the pruned window; do not record this hit
-    return true;
-  }
-  recent.push(now);
-  rateHits.set(key, recent);
-  pruneRateHits(cutoff);
-  return false;
-}
-
-// Bound the sweep so a large launch never turns a single request into an O(n)
-// scan of every token ever seen.
-const RATE_PRUNE_SCAN = 50;
-/** Drop keys whose entire window has expired (best-effort, capped scan). */
-function pruneRateHits(cutoff: number): void {
-  let scanned = 0;
-  for (const [k, ts] of rateHits) {
-    if (scanned++ >= RATE_PRUNE_SCAN) break;
-    if (ts.length === 0 || ts[ts.length - 1] <= cutoff) rateHits.delete(k);
-  }
-}
+// Isolated fixed-window limiter, keyed by `${bucket}:${token}`.
+const limiter = createFixedWindowLimiter(RATE_WINDOW_MS);
 
 /** Verify the signed token and return the numeric course id it grants, or null. */
 function courseIdFromToken(token: string): number | null {
@@ -132,7 +105,7 @@ export async function getAttendanceAction(
 ): Promise<{ ok: boolean; attendance?: AttendanceMap; error?: string; schema?: boolean }> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
-  if (isRateLimited("read", token, RATE_LIMIT_READ)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  if (limiter.isLimited("read", token, RATE_LIMIT_READ)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
 
   const svc = getSupabaseServiceClient();
   // Select partecipante_id too; on a pre-migration DB this column is missing and
@@ -178,7 +151,7 @@ export async function setAttendanceAction(
 ): Promise<{ ok: boolean; error?: string; schema?: boolean }> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
-  if (isRateLimited("write", token, RATE_LIMIT_WRITE)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  if (limiter.isLimited("write", token, RATE_LIMIT_WRITE)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
 
   // Coerce + sanity-check the client inputs before any DB work.
   const kind = subject?.kind;
@@ -271,7 +244,7 @@ export async function addPartecipanteFromLinkAction(
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
   // (2) rate-limit the write.
-  if (isRateLimited("add", token, RATE_LIMIT_ADD)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  if (limiter.isLimited("add", token, RATE_LIMIT_ADD)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
 
   const iscrId = Number(iscrizioneId);
   if (!Number.isInteger(iscrId) || iscrId <= 0) return { ok: false, error: "Iscrizione non valida." };
