@@ -352,7 +352,7 @@ export function ExamRunner({
     // the real correction (exam-links/grading), so the preview can never disagree
     // with what the operator will see in the Esiti tab.
     if (showResult && total > 0) {
-      const { gradable, correct, manual } = gradeAnswers(questions, answers);
+      const { gradable, correct, manual } = gradeAnswers(questions, answers, lang);
       // No auto-gradable questions → don't fake a 0% "failed"; show a neutral note.
       if (gradable === 0) {
         return (

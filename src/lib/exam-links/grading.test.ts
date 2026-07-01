@@ -244,3 +244,71 @@ describe("certifiedScore (the % to store/show next to the outcome)", () => {
     expect(certifiedScore(5, 69, "failed")).toBe(69); // just below retrial
   });
 });
+
+describe("gradeAnswers — multilingual (student graded in the language they SAW)", () => {
+  // The runner stores the student's answer as the TRANSLATED option text, so a
+  // correct EN/JA submission must score 100% — not 0% against the Italian key.
+  const multilingual = [
+    q({
+      id: "tf",
+      type: "truefalse",
+      options: ["Vero", "Falso"],
+      correct: [0],
+      i18n: { en: { text: "T/F", options: ["True", "False"] }, ja: { text: "?", options: ["正しい", "誤り"] } },
+    }),
+    q({
+      id: "m",
+      type: "multi",
+      options: ["Acidità", "Dolcezza", "Umami"],
+      correct: [0, 2],
+      i18n: {
+        en: { text: "", options: ["Acidity", "Sweetness", "Umami"] },
+        ja: { text: "", options: ["酸味", "甘味", "うま味"] },
+      },
+    }),
+  ];
+
+  it("scores 100% for a correct ENGLISH submission (answers stored in English)", () => {
+    const r = gradeAnswers(multilingual, { tf: ["True"], m: ["Acidity", "Umami"] }, "en");
+    expect(r.gradable).toBe(2);
+    expect(r.correct).toBe(2);
+    expect(r.autoScore).toBe(100);
+    expect(r.suggested).toBe("passed");
+  });
+
+  it("scores 100% for a correct JAPANESE submission", () => {
+    const r = gradeAnswers(multilingual, { tf: ["正しい"], m: ["酸味", "うま味"] }, "ja");
+    expect(r.autoScore).toBe(100);
+    expect(r.suggested).toBe("passed");
+  });
+
+  it("still scores a correct Italian submission 100% (no lang / 'it')", () => {
+    expect(gradeAnswers(multilingual, { tf: ["Vero"], m: ["Acidità", "Umami"] }, "it").autoScore).toBe(100);
+    expect(gradeAnswers(multilingual, { tf: ["Vero"], m: ["Acidità", "Umami"] }).autoScore).toBe(100);
+  });
+
+  it("marks a WRONG English answer wrong (no false 100%)", () => {
+    const r = gradeAnswers(multilingual, { tf: ["False"], m: ["Acidity"] }, "en");
+    expect(r.correct).toBe(0);
+  });
+
+  it("falls back to Italian options when a translation is missing for that question", () => {
+    const partial = [q({ id: "x", type: "single", options: ["Sì", "No"], correct: [0] })]; // no i18n
+    // student in 'en' but saw Italian (no translation) → their answer is Italian
+    expect(gradeAnswers(partial, { x: ["Sì"] }, "en").autoScore).toBe(100);
+  });
+
+  it("routes a TRANSLATED fill question to manual (no localized answer key)", () => {
+    const fillQ = [q({ id: "f", type: "fill", options: [], correct: ["junmai"], i18n: { en: { text: "type", options: [] } } })];
+    const r = gradeAnswers(fillQ, { f: "junmai" }, "en");
+    expect(r.gradable).toBe(0);
+    expect(r.manual).toBe(1);
+  });
+
+  it("still auto-grades an Italian fill question", () => {
+    const fillQ = [q({ id: "f", type: "fill", options: [], correct: ["junmai"] })];
+    const r = gradeAnswers(fillQ, { f: "Junmai" }, "it");
+    expect(r.gradable).toBe(1);
+    expect(r.correct).toBe(1);
+  });
+});

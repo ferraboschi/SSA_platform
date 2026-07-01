@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Milano Sake Challenge — Risultati</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --border:#e9ebef; --shadow:0 1px 2px rgba(16,24,40,.05);
+    --ink:#101828; --sec:#667085; --micro:#8a93a3;
+    --indigo:#4f46e5; --deep:#312e81; --tint:#eef2ff;
+    --track:#eef0f3;
+    --s-nihonshu:#4f46e5; --s-shochu:#c2740c; --s-design:#7c3aed; --s-cibo:#16a34a;
+    --m-platino:#94a3b8; --m-doppiooro:#e08a1e; --m-oro:#d2a02b; --m-argento:#9aa3ad;
+    --m-bestdesign:#3b5fc0; --m-gooddesign:#6b8ae0; --m-bestwith:#14b8a6; --m-goodwith:#22c55e;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    background:var(--bg); color:var(--ink);
+    -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.45;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:0 16px 64px}
+
+  /* Header */
+  header.bar{
+    background:#fff; border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:30;
+  }
+  .bar-in{max-width:980px; margin:0 auto; padding:14px 16px; display:flex; align-items:center; justify-content:center; gap:0}
+  .wordmark{
+    font-weight:800; letter-spacing:.04em; font-size:15px; color:var(--ink);
+    display:flex; align-items:center; gap:8px; text-transform:uppercase;
+  }
+  .wordmark .kanji{font-weight:700; color:var(--indigo); font-size:18px; letter-spacing:0}
+  @media(max-width:430px){ .wordmark{font-size:12.5px} .wordmark .kanji{font-size:16px} }
+
+  /* Filter panel */
+  .panel{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    box-shadow:var(--shadow); margin-top:18px; overflow:hidden;
+  }
+  .panel-pad{padding:18px}
+  @media(max-width:430px){ .panel-pad{padding:14px} .wrap{padding:0 12px 56px} }
+
+  /* Search + prefecture row (persistent) */
+  .toprow{display:grid; grid-template-columns:1fr 220px; gap:10px}
+  @media(max-width:560px){ .toprow{grid-template-columns:1fr} }
+  .field{position:relative}
+  .field i{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--micro); font-size:15px; pointer-events:none}
+  .field input{
+    width:100%; height:42px; border:1px solid var(--border); border-radius:11px;
+    padding:0 12px 0 36px; font:inherit; color:var(--ink); background:#fff; outline:none;
+  }
+  .field input::placeholder{color:var(--micro)}
+  .field input:focus{border-color:#c7c9f5; box-shadow:0 0 0 3px rgba(79,70,229,.10)}
+
+  /* Section label */
+  .micro{
+    font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--micro); margin:0 0 9px;
+  }
+
+  /* Stepper header / breadcrumb */
+  .step-head{display:flex; align-items:center; gap:10px; margin:18px 0 10px}
+  .crumbs{display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:13px}
+  .crumb{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 10px;
+    border-radius:9px; border:1px solid var(--border); background:#fff; color:var(--sec);
+    font-weight:600; cursor:pointer; white-space:nowrap; transition:.15s;
+  }
+  .crumb .dot{width:9px; height:9px; border-radius:50%}
+  .crumb.is-step{background:var(--tint); border-color:#dfe1fb; color:var(--deep)}
+  .crumb:hover{background:#f3f4f7}
+  .crumb.is-step:hover{background:#e7e9fb}
+  .crumb-sep{color:var(--micro); font-size:14px}
+  .step-pill{
+    margin-left:auto; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--micro); background:var(--track); border:1px solid var(--border);
+    border-radius:999px; padding:4px 10px; white-space:nowrap;
+  }
+  @media(max-width:430px){ .step-pill{display:none} }
+
+  /* STEP 1 — Sessione cards */
+  .sessions{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
+  @media(max-width:680px){ .sessions{grid-template-columns:repeat(2,1fr)} }
+  .scard{
+    position:relative; text-align:left; cursor:pointer; background:#fff;
+    border:1px solid var(--border); border-radius:14px; padding:14px 13px 13px;
+    transition:.18s ease; outline:none;
+  }
+  .scard:hover{border-color:#d6d9e0; transform:translateY(-1px); box-shadow:0 4px 12px rgba(16,24,40,.06)}
+  .scard .sicon{
+    width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-size:18px; margin-bottom:11px; color:#fff;
+  }
+  .scard .sname{font-weight:700; font-size:14px; color:var(--ink); line-height:1.2}
+  .scard .scount{font-size:12px; color:var(--sec); margin-top:3px}
+  .scard .sgo{
+    position:absolute; top:13px; right:13px; color:var(--micro); font-size:16px; transition:.18s;
+  }
+  .scard:hover .sgo{transform:translateX(2px); color:var(--ink)}
+  .scard.active{border-color:transparent; box-shadow:0 0 0 2px var(--accent), 0 4px 14px rgba(16,24,40,.07)}
+
+  /* STEP 2 — filter groups reveal */
+  .reveal{animation:reveal .28s cubic-bezier(.2,.7,.2,1) both}
+  @keyframes reveal{from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none}}
+  .group{margin-top:16px}
+  .group:first-child{margin-top:6px}
+
+  /* gray-track chip groups */
+  .track{
+    display:flex; flex-wrap:wrap; gap:4px; background:var(--track);
+    border:1px solid var(--border); border-radius:12px; padding:4px;
+  }
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 11px;
+    border-radius:9px; border:1px solid transparent; background:transparent;
+    color:var(--sec); font:inherit; font-weight:600; font-size:13px; cursor:pointer;
+    transition:.14s; white-space:nowrap;
+  }
+  .chip:hover{color:var(--ink)}
+  .chip .swatch{width:10px; height:10px; border-radius:3px; flex:none}
+  .chip.active{
+    background:#fff; color:var(--accent,var(--ink));
+    box-shadow:0 1px 2px rgba(16,24,40,.10); border-color:#fff;
+  }
+  .chip.active .x{
+    display:inline-flex; align-items:center; justify-content:center; font-size:13px; opacity:.8; margin-left:1px;
+  }
+  .chip .x{display:none}
+  .chip.dim{opacity:.45; pointer-events:none}
+
+  /* category track: scroll-free, wraps; cap height feel with looser gap */
+  .track.cats{gap:5px}
+
+  /* Active filter tokens summary */
+  .tokens{display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:14px}
+  .token{
+    display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 6px 0 11px;
+    background:#fff; border:1px solid var(--border); border-radius:999px;
+    font-size:12.5px; font-weight:600; color:var(--ink);
+  }
+  .token .tdot{width:8px; height:8px; border-radius:50%; flex:none}
+  .token button{
+    border:none; background:#f1f2f5; color:var(--sec); width:18px; height:18px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:12px; padding:0;
+  }
+  .token button:hover{background:#e6e7ec; color:var(--ink)}
+  .clearall{
+    border:none; background:none; color:var(--indigo); font:inherit; font-weight:600; font-size:12.5px;
+    cursor:pointer; padding:4px 6px; border-radius:8px;
+  }
+  .clearall:hover{background:var(--tint)}
+
+  /* Results */
+  .results{margin-top:24px}
+  .results-head{display:flex; align-items:baseline; gap:10px; margin:0 0 4px}
+  .results-head h2{font-size:16px; font-weight:700; margin:0}
+  .results-head .count{font-size:13px; color:var(--sec)}
+  .tier{margin-top:18px}
+  .tier-label{
+    display:flex; align-items:center; gap:9px; margin:0 0 8px;
+    font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--micro);
+  }
+  .tier-label .medal{width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; font-weight:800}
+  .tier-label .line{flex:1; height:1px; background:var(--border)}
+  .rows{display:flex; flex-direction:column; gap:8px}
+  .row{
+    display:flex; align-items:center; gap:13px; background:var(--card);
+    border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow);
+    padding:12px 14px;
+  }
+  .row .rmedal{
+    width:34px; height:34px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:800; font-size:12px;
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,.45);
+  }
+  .row .rbody{min-width:0; flex:1}
+  .row .rprod{font-weight:700; font-size:14px; color:var(--ink); line-height:1.25}
+  .row .rsaka{font-size:12.5px; color:var(--sec); margin-top:1px}
+  .row .rmeta{font-size:12px; color:var(--micro); margin-top:5px; display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+  .row .rmeta .sep{opacity:.5}
+  .row .rmeta .ss{font-weight:700}
+  @media(max-width:430px){
+    .row{padding:11px 12px; gap:11px}
+    .row .rmedal{width:30px; height:30px; font-size:11px}
+    .row .rprod{font-size:13.5px}
+  }
+
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .hide{display:none !important}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-in">
+    <div class="wordmark">MILANO <span class="kanji">酒</span> SAKE CHALLENGE</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1 class="sr-only">Risultati Milano Sake Challenge — filtro guidato a step</h1>
+
+  <section class="panel">
+    <div class="panel-pad">
+
+      <!-- Persistent search + prefecture -->
+      <div class="toprow">
+        <div class="field">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input type="text" placeholder="Cerca per nome prodotto o sakagura…" aria-label="Ricerca libera">
+        </div>
+        <div class="field">
+          <i class="ti ti-map-pin" aria-hidden="true"></i>
+          <input type="text" placeholder="Prefettura" aria-label="Prefettura" value="">
+        </div>
+      </div>
+
+      <!-- Stepper breadcrumb -->
+      <div class="step-head">
+        <nav class="crumbs" aria-label="Percorso filtro">
+          <span class="crumb is-step" data-goto="1" title="Torna alla scelta della sessione">
+            <span class="dot" id="crumb-dot" style="background:var(--s-design)"></span>
+            <span id="crumb-session">Design</span>
+            <i class="ti ti-chevron-right" aria-hidden="true" style="font-size:14px;opacity:.6"></i>
+          </span>
+          <span class="crumb-sep" aria-hidden="true"><i class="ti ti-chevron-right" style="font-size:13px"></i></span>
+          <span class="crumb" style="cursor:default" aria-current="step">Medaglia &amp; categoria</span>
+        </nav>
+        <span class="step-pill">Step 2 di 2</span>
+      </div>
+
+      <!-- STEP 1 (hidden in this default state, shown when stepping back) -->
+      <div id="step1" class="hide">
+        <p class="micro">Passo 1 · Scegli una sessione</p>
+        <div class="sessions">
+          <button class="scard" data-session="nihonshu" style="--accent:var(--s-nihonshu)">
+            <span class="sicon" style="background:var(--s-nihonshu)"><i class="ti ti-bottle" aria-hidden="true"></i></span>
+            <span class="sgo" aria-hidden="true"><i class="ti ti-arrow-right"></i></span>
+            <div class="sname">Nihonshu</div>
+            <div class="scount">15 categorie · 4 medaglie</div>
+          </button>
+          <button class="scard" data-session="shochu" style="--accent:var(--s-shochu)">
+            <span class="sicon" style="background:var(--s-shochu)"><i class="ti ti-flame" aria-hidden="true"></i></span>
+            <span class="sgo" aria-hidden="true"><i class="ti ti-arrow-right"></i></span>
+            <div class="sname">Shochu</div>
+            <div class="scount">6 categorie · 4 medaglie</div>
+          </button>
+          <button class="scard active" data-session="design" style="--accent:var(--s-design)">
+            <span class="sicon" style="background:var(--s-design)"><i class="ti ti-palette" aria-hidden="true"></i></span>
+            <span class="sgo" aria-hidden="true"><i class="ti ti-arrow-right"></i></span>
+            <div class="sname">Design</div>
+            <div class="scount">21 categorie · 2 medaglie</div>
+          </button>
+          <button class="scard" data-session="cibo" style="--accent:var(--s-cibo)">
+            <span class="sicon" style="background:var(--s-cibo)"><i class="ti ti-tools-kitchen-2" aria-hidden="true"></i></span>
+            <span class="sgo" aria-hidden="true"><i class="ti ti-arrow-right"></i></span>
+            <div class="sname">Abbinamento Cibo</div>
+            <div class="scount">5 categorie · 2 medaglie</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 2 — relevant medals + categories for chosen session (Design shown) -->
+      <div id="step2" class="reveal">
+
+        <div class="group" style="--accent:var(--s-design)">
+          <p class="micro">Medaglia</p>
+          <div class="track" role="group" aria-label="Filtra per medaglia">
+            <button class="chip active" style="--accent:var(--m-bestdesign)">
+              <span class="swatch" style="background:var(--m-bestdesign)"></span>Best Design
+              <span class="x" aria-hidden="true"><i class="ti ti-x"></i></span>
+            </button>
+            <button class="chip" style="--accent:var(--m-gooddesign)">
+              <span class="swatch" style="background:var(--m-gooddesign)"></span>Good Design
+              <span class="x" aria-hidden="true"><i class="ti ti-x"></i></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="group" style="--accent:var(--s-design)">
+          <p class="micro">Categoria — Design <span style="color:var(--micro);font-weight:600;letter-spacing:0;text-transform:none">(21)</span></p>
+          <div class="track cats" role="group" aria-label="Filtra per categoria">
+            <button class="chip active" style="--accent:var(--s-design)">Junmai Daiginjo (&lt;35%)<span class="x" aria-hidden="true"><i class="ti ti-x"></i></span></button>
+            <button class="chip">Daiginjo</button>
+            <button class="chip">Junmai Daiginjo (≥35%)</button>
+            <button class="chip">Junmai Ginjo</button>
+            <button class="chip">Ginjo</button>
+            <button class="chip">Junmai</button>
+            <button class="chip">Honjozo</button>
+            <button class="chip">Futsushu</button>
+            <button class="chip">Nigori</button>
+            <button class="chip">Sparkling</button>
+            <button class="chip">Koshu</button>
+            <button class="chip">Umeshu</button>
+            <button class="chip">Yuzushu</button>
+            <button class="chip">Liqueur</button>
+            <button class="chip">Special Methods</button>
+            <button class="chip">Imo (Sweet Potato)</button>
+            <button class="chip">Mugi (Barley)</button>
+            <button class="chip">Kome (Rice)</button>
+            <button class="chip">Awamori</button>
+            <button class="chip">Aged Honkaku</button>
+            <button class="chip">Special Shochu</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Active filters as removable tokens -->
+      <div class="tokens" id="tokens">
+        <span class="token"><span class="tdot" style="background:var(--s-design)"></span>Design<button aria-label="Rimuovi sessione Design"><i class="ti ti-x"></i></button></span>
+        <span class="token"><span class="tdot" style="background:var(--m-bestdesign)"></span>Best Design<button aria-label="Rimuovi medaglia Best Design"><i class="ti ti-x"></i></button></span>
+        <span class="token"><span class="tdot" style="background:var(--s-design)"></span>Junmai Daiginjo (&lt;35%)<button aria-label="Rimuovi categoria"><i class="ti ti-x"></i></button></span>
+        <button class="clearall">Azzera tutto</button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="results" aria-label="Risultati">
+    <div class="results-head">
+      <h2>Risultati</h2>
+      <span class="count">6 sake premiati</span>
+    </div>
+
+    <!-- BEST DESIGN tier -->
+    <div class="tier">
+      <div class="tier-label">
+        <span class="medal" style="background:var(--m-bestdesign)"><i class="ti ti-award" style="font-size:11px"></i></span>
+        Best Design
+        <span class="line"></span>
+      </div>
+      <div class="rows">
+        <div class="row">
+          <div class="rmedal" style="background:var(--m-bestdesign)"><i class="ti ti-award"></i></div>
+          <div class="rbody">
+            <div class="rprod">Tonoike AUTHENTIC Junmai Daiginjo</div>
+            <div class="rsaka">Tonoikeshuzouten</div>
+            <div class="rmeta"><span class="ss" style="color:var(--s-design)">Design</span><span class="sep">·</span>Junmai Daiginjo (&lt;35%)<span class="sep">·</span>Tochigi<span class="sep">·</span>Kanto</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="rmedal" style="background:var(--m-bestdesign)"><i class="ti ti-award"></i></div>
+          <div class="rbody">
+            <div class="rprod">Hourai Junmai Daiginjo Shinpaku18</div>
+            <div class="rsaka">Watanabe Shuzouten</div>
+            <div class="rmeta"><span class="ss" style="color:var(--s-design)">Design</span><span class="sep">·</span>Junmai Daiginjo (&lt;35%)<span class="sep">·</span>Gifu<span class="sep">·</span>Chubu</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- preview of GOOD DESIGN tier (dimmed-ish to suggest more below) -->
+    <div class="tier">
+      <div class="tier-label">
+        <span class="medal" style="background:var(--m-gooddesign)"><i class="ti ti-award" style="font-size:11px"></i></span>
+        Good Design
+        <span class="line"></span>
+      </div>
+      <div class="rows">
+        <div class="row">
+          <div class="rmedal" style="background:var(--m-gooddesign)"><i class="ti ti-award"></i></div>
+          <div class="rbody">
+            <div class="rprod">Kid Daiginjo</div>
+            <div class="rsaka">Heiwa Shuzou Co., Ltd</div>
+            <div class="rmeta"><span class="ss" style="color:var(--s-design)">Design</span><span class="sep">·</span>Junmai Daiginjo (&lt;35%)<span class="sep">·</span>Wakayama<span class="sep">·</span>Kinki</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function(){
+  var step1=document.getElementById('step1');
+  var step2=document.getElementById('step2');
+  var crumbSession=document.getElementById('crumb-session');
+  var crumbDot=document.getElementById('crumb-dot');
+  var stepPill=document.querySelector('.step-pill');
+  var stepHeadCrumbs=document.querySelector('.crumbs');
+
+  var SESS={
+    nihonshu:{name:'Nihonshu',color:'var(--s-nihonshu)'},
+    shochu:{name:'Shochu',color:'var(--s-shochu)'},
+    design:{name:'Design',color:'var(--s-design)'},
+    cibo:{name:'Abbinamento Cibo',color:'var(--s-cibo)'}
+  };
+
+  function goStep1(){
+    step2.classList.add('hide');
+    step1.classList.remove('hide');
+    step1.classList.add('reveal');
+    setTimeout(function(){step1.classList.remove('reveal');},320);
+    stepPill.textContent='Step 1 di 2';
+    // collapse breadcrumb to just the prompt
+    stepHeadCrumbs.querySelectorAll('.crumb,.crumb-sep').forEach(function(el,i){
+      if(i>0) el.style.display='none';
+    });
+    var first=stepHeadCrumbs.querySelector('.crumb');
+    first.querySelector('.ti-chevron-right')?.style.setProperty('display','none');
+  }
+
+  function goStep2(key){
+    var s=SESS[key];
+    crumbSession.textContent=s.name;
+    crumbDot.style.background=s.color;
+    step1.classList.add('hide');
+    step2.classList.remove('hide');
+    step2.classList.add('reveal');
+    setTimeout(function(){step2.classList.remove('reveal');},320);
+    stepPill.textContent='Step 2 di 2';
+    stepHeadCrumbs.querySelectorAll('.crumb,.crumb-sep').forEach(function(el){el.style.display='';});
+    var first=stepHeadCrumbs.querySelector('.crumb');
+    first.querySelector('.ti-chevron-right')?.style.setProperty('display','');
+    // sync active session card
+    document.querySelectorAll('.scard').forEach(function(c){c.classList.toggle('active',c.dataset.session===key);});
+  }
+
+  // crumb back to step 1
+  document.querySelectorAll('[data-goto="1"]').forEach(function(el){
+    el.addEventListener('click',goStep1);
+  });
+  // session card -> step 2
+  document.querySelectorAll('.scard').forEach(function(c){
+    c.addEventListener('click',function(){ goStep2(c.dataset.session); });
+  });
+
+  // chip toggling (within a track)
+  document.querySelectorAll('.track .chip').forEach(function(chip){
+    chip.addEventListener('click',function(){
+      chip.classList.toggle('active');
+    });
+  });
+
+  // token remove (visual)
+  document.querySelectorAll('.token button').forEach(function(b){
+    b.addEventListener('click',function(){ b.parentElement.remove(); });
+  });
+})();
+</script>
+
+</body>
+</html>

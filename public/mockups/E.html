@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Milano Sake Challenge 2026 — Medagliere</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Zen+Old+Mincho:wght@400;500;700&family=Spline+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#1c1a16;
+    --ink-soft:#4a463e;
+    --muted:#8d8576;
+    --faint:#b6ad9c;
+    --line:#ddd5c5;
+    --line-soft:#e9e3d6;
+    --paper:#f6f1e7;
+    --paper-2:#fbf8f1;
+    --card:#fffdf8;
+    --gold:#9a7b32;
+    --gold-deep:#7a5e22;
+    --crimson:#8b2f33;
+    --ink-blue:#26303a;
+    --shadow-1:0 1px 2px rgba(40,34,22,.06);
+    --serif:"Cormorant Garamond", Georgia, serif;
+    --mincho:"Zen Old Mincho", serif;
+    --sans:"Spline Sans", system-ui, sans-serif;
+    --maxw:1180px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(154,123,50,.06), transparent 60%),
+      radial-gradient(900px 500px at -10% 5%, rgba(139,47,51,.04), transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-weight:300;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    line-height:1.5;
+  }
+  ::selection{background:rgba(154,123,50,.22);}
+
+  /* ---------- MASTHEAD ---------- */
+  .masthead{
+    position:relative;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, var(--paper-2), var(--paper));
+    overflow:hidden;
+  }
+  .masthead::after{
+    content:"";
+    position:absolute;left:0;right:0;bottom:0;height:3px;
+    background:linear-gradient(90deg, transparent, var(--gold) 18%, var(--crimson) 50%, var(--gold) 82%, transparent);
+    opacity:.55;
+  }
+  .seal-ghost{
+    position:absolute;right:-90px;top:-70px;
+    width:380px;height:380px;border-radius:50%;
+    border:1px solid rgba(154,123,50,.18);
+    box-shadow:inset 0 0 0 14px rgba(154,123,50,.05), inset 0 0 0 15px rgba(154,123,50,.10);
+    pointer-events:none;
+  }
+  .seal-ghost::before{
+    content:"";position:absolute;inset:46px;border-radius:50%;
+    border:1px dashed rgba(154,123,50,.16);
+  }
+  .mast-inner{
+    max-width:var(--maxw);margin:0 auto;
+    padding:30px 28px 26px;
+    position:relative;z-index:2;
+  }
+  .mast-top{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:20px;
+  }
+  .kicker{
+    font-family:var(--sans);
+    font-size:11px;letter-spacing:.42em;text-transform:uppercase;
+    color:var(--gold-deep);font-weight:500;
+    display:flex;align-items:center;gap:12px;
+  }
+  .kicker .dot{width:5px;height:5px;border-radius:50%;background:var(--crimson);display:inline-block;}
+  .lang{
+    display:flex;gap:2px;align-items:center;
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--muted);
+  }
+  .lang button{
+    font:inherit;letter-spacing:inherit;text-transform:inherit;
+    background:none;border:none;color:var(--muted);
+    padding:5px 9px;border-radius:999px;cursor:pointer;transition:.2s;
+  }
+  .lang button.is-active{color:var(--ink);background:rgba(154,123,50,.12);font-weight:500;}
+  .lang button:hover{color:var(--ink);}
+  .lang .sep{color:var(--faint);}
+
+  .wordmark{
+    margin:18px 0 0;
+    font-family:var(--serif);
+    font-weight:500;
+    font-size:clamp(40px, 6.4vw, 76px);
+    line-height:.96;
+    letter-spacing:-.012em;
+    color:var(--ink);
+  }
+  .wordmark em{font-style:italic;color:var(--crimson);font-weight:500;}
+  .mast-sub{
+    margin-top:14px;
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    color:var(--ink-soft);
+  }
+  .mast-sub .jp{font-family:var(--mincho);font-size:17px;letter-spacing:.12em;color:var(--ink-soft);}
+  .mast-sub .rule{flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent);min-width:40px;}
+  .mast-sub .tag{
+    font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted);font-weight:400;
+  }
+
+  /* ---------- STICKY FILTER BAR ---------- */
+  .filterbar{
+    position:sticky;top:0;z-index:40;
+    background:rgba(251,248,241,.86);
+    backdrop-filter:saturate(140%) blur(12px);
+    -webkit-backdrop-filter:saturate(140%) blur(12px);
+    border-bottom:1px solid var(--line);
+    box-shadow:0 8px 24px -18px rgba(40,34,22,.5);
+  }
+  .filter-inner{
+    max-width:var(--maxw);margin:0 auto;
+    padding:14px 28px;
+    display:grid;
+    grid-template-columns:minmax(220px, 1.4fr) minmax(180px, 1fr) auto auto;
+    gap:14px;align-items:center;
+  }
+  .field{position:relative;display:flex;flex-direction:column;gap:4px;}
+  .field > label{
+    font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold-deep);
+    font-weight:500;padding-left:2px;
+  }
+  .ctrl{
+    display:flex;align-items:center;gap:10px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:9px 13px;
+    transition:.2s;
+    box-shadow:var(--shadow-1);
+  }
+  .ctrl:focus-within{border-color:var(--gold);box-shadow:0 0 0 3px rgba(154,123,50,.13);}
+  .ctrl svg{flex:none;color:var(--muted);}
+  .ctrl input, .ctrl select{
+    border:none;outline:none;background:none;
+    font-family:var(--sans);font-size:15px;color:var(--ink);width:100%;
+    font-weight:400;
+  }
+  .ctrl select{cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:14px;}
+  .ctrl.select-ctrl{position:relative;}
+  .ctrl.select-ctrl::after{
+    content:"";position:absolute;right:13px;top:50%;width:7px;height:7px;
+    border-right:1.4px solid var(--muted);border-bottom:1.4px solid var(--muted);
+    transform:translateY(-65%) rotate(45deg);pointer-events:none;
+  }
+  .ctrl input::placeholder{color:var(--faint);}
+
+  .pillrow{display:flex;flex-direction:column;gap:4px;}
+  .pillrow > label{
+    font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold-deep);
+    font-weight:500;padding-left:2px;
+  }
+  .pills{display:flex;gap:6px;flex-wrap:wrap;}
+  .pill{
+    font-family:var(--sans);font-size:12px;letter-spacing:.04em;
+    border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
+    padding:8px 13px;border-radius:999px;cursor:pointer;transition:.18s;font-weight:400;
+    box-shadow:var(--shadow-1);white-space:nowrap;
+  }
+  .pill:hover{border-color:var(--faint);color:var(--ink);}
+  .pill.is-active{background:var(--ink);color:var(--paper-2);border-color:var(--ink);}
+
+  .share-btn{
+    align-self:end;
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:var(--sans);font-size:13px;letter-spacing:.05em;font-weight:500;
+    color:var(--paper-2);
+    background:linear-gradient(180deg, var(--crimson), #762a2d);
+    border:1px solid #6b2528;
+    padding:11px 18px;border-radius:12px;cursor:pointer;transition:.2s;
+    box-shadow:0 6px 16px -8px rgba(139,47,51,.7);
+    white-space:nowrap;height:fit-content;
+  }
+  .share-btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px -10px rgba(139,47,51,.75);}
+  .share-btn svg{flex:none;}
+
+  /* ---------- ALMANAC BODY ---------- */
+  .almanac{max-width:var(--maxw);margin:0 auto;padding:40px 28px 90px;}
+
+  .preamble{
+    display:flex;justify-content:space-between;align-items:flex-end;gap:24px;
+    padding-bottom:22px;margin-bottom:8px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap;
+  }
+  .preamble p{
+    margin:0;max-width:620px;font-family:var(--serif);font-size:19px;font-style:italic;
+    color:var(--ink-soft);line-height:1.45;font-weight:400;
+  }
+  .tier-legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;}
+  .legend-item{display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+  .legend-swatch{width:12px;height:12px;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07);}
+  .sw-plat{background:linear-gradient(135deg,#e9eaee,#aab0bb);}
+  .sw-dg{background:linear-gradient(135deg,#f4e2a8,#caa53e);}
+  .sw-gold{background:linear-gradient(135deg,#f2d98a,#c79a35);}
+  .sw-silver{background:linear-gradient(135deg,#e7e7ea,#b7bac2);}
+  .sw-design{background:linear-gradient(135deg,#d9cdef,#8c6bbf);}
+
+  /* ----- REGION DIVIDER (signature) ----- */
+  .region{margin-top:54px;}
+  .region:first-of-type{margin-top:30px;}
+  .region-head{
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    align-items:center;gap:22px;
+    padding-bottom:14px;
+    border-bottom:2px solid var(--ink);
+    position:relative;
+  }
+  .region-index{
+    display:flex;align-items:baseline;gap:14px;
+  }
+  .region-num{
+    font-family:var(--mincho);font-weight:700;font-size:13px;
+    color:var(--paper-2);background:var(--ink);
+    width:30px;height:30px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;letter-spacing:0;
+    flex:none;
+  }
+  .region-titles{display:flex;flex-direction:column;gap:2px;}
+  .region-jp{font-family:var(--mincho);font-size:16px;letter-spacing:.16em;color:var(--crimson);line-height:1;}
+  .region-romaji{
+    font-family:var(--serif);font-size:30px;font-weight:600;letter-spacing:.005em;line-height:1.02;color:var(--ink);
+  }
+  .region-locator{
+    flex:none;
+  }
+  /* tiny stylized Japan locator */
+  .jp-map{width:54px;height:auto;display:block;opacity:.9;}
+  .jp-map .land{fill:none;stroke:var(--faint);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round;}
+  .jp-map .here{fill:var(--crimson);stroke:var(--paper-2);stroke-width:1.6;}
+  .jp-map .pulse{fill:rgba(139,47,51,.16);}
+  .region-count{
+    font-family:var(--sans);font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--muted);text-align:right;display:flex;flex-direction:column;gap:3px;align-items:flex-end;
+  }
+  .region-count b{font-family:var(--serif);font-size:30px;font-weight:600;color:var(--ink);letter-spacing:0;line-height:.9;}
+  .region-share{
+    background:none;border:none;cursor:pointer;color:var(--muted);
+    display:inline-flex;align-items:center;gap:6px;font-family:var(--sans);
+    font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;transition:.2s;padding:0;
+  }
+  .region-share:hover{color:var(--crimson);}
+
+  /* ----- TIER GROUP ----- */
+  .tier{margin-top:26px;}
+  .tier-label{
+    display:flex;align-items:center;gap:12px;margin:0 0 4px;
+  }
+  .tier-name{
+    font-family:var(--sans);font-size:11px;letter-spacing:.3em;text-transform:uppercase;
+    font-weight:600;color:var(--gold-deep);
+  }
+  .tier-name.is-plat{color:#5b6472;}
+  .tier-name.is-silver{color:#7f828b;}
+  .tier-name.is-design{color:#6f54a0;}
+  .tier-bead{width:7px;height:7px;border-radius:50%;flex:none;}
+  .bead-plat{background:#9aa1ad;}
+  .bead-dg{background:#caa53e;}
+  .bead-gold{background:#c79a35;}
+  .bead-silver{background:#b7bac2;}
+  .bead-design{background:#8c6bbf;}
+  .tier-rule{flex:1;height:1px;background:repeating-linear-gradient(90deg,var(--line) 0 5px, transparent 5px 9px);}
+
+  /* ----- PRODUCT ROW ----- */
+  .roll{display:flex;flex-direction:column;}
+  .entry{
+    display:grid;
+    grid-template-columns:74px 1fr auto;
+    gap:20px;align-items:center;
+    padding:14px 12px;
+    border-bottom:1px solid var(--line-soft);
+    cursor:pointer;
+    transition:background .22s ease, box-shadow .22s ease, transform .22s ease;
+    border-radius:10px;
+    position:relative;
+  }
+  .entry:hover{
+    background:var(--card);
+    box-shadow:0 14px 34px -22px rgba(40,34,22,.5);
+    transform:translateY(-1px);
+  }
+  .entry:hover .medal-wrap{transform:translateY(-2px) rotate(-1.2deg);}
+  .entry:hover .entry-name{color:var(--crimson);}
+
+  /* THE MEDAL — the star, treated as a photographed object */
+  .medal-wrap{
+    width:74px;height:99px; /* ~3:4 */
+    transition:transform .3s cubic-bezier(.2,.8,.2,1);
+    position:relative;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .medal-wrap::after{
+    content:"";position:absolute;left:8%;right:8%;bottom:-6px;height:14px;
+    background:radial-gradient(ellipse at center, rgba(40,34,22,.30), transparent 72%);
+    filter:blur(2px);z-index:0;
+  }
+  .medal-wrap img{
+    position:relative;z-index:1;
+    width:100%;height:100%;object-fit:contain;
+    filter:drop-shadow(0 6px 10px rgba(40,34,22,.26)) drop-shadow(0 1px 1px rgba(40,34,22,.18));
+  }
+
+  .entry-main{min-width:0;}
+  .entry-name{
+    font-family:var(--serif);font-weight:600;font-size:24px;line-height:1.12;
+    color:var(--ink);letter-spacing:.002em;transition:color .2s;margin:0;
+  }
+  .entry-meta{
+    margin-top:5px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:400;
+  }
+  .entry-meta .sakagura{color:var(--ink-soft);font-weight:500;letter-spacing:.08em;}
+  .entry-meta .sep{width:3px;height:3px;border-radius:50%;background:var(--faint);flex:none;}
+  .entry-meta .cat{color:var(--muted);}
+  .entry-meta .pref{color:var(--gold-deep);}
+
+  .entry-aside{
+    display:flex;align-items:center;gap:14px;justify-content:flex-end;
+  }
+  .pref-jp{
+    font-family:var(--mincho);font-size:13px;color:var(--faint);letter-spacing:.1em;
+    text-align:right;line-height:1.3;max-width:140px;
+  }
+  .entry-cta{
+    display:inline-flex;align-items:center;gap:7px;
+    font-family:var(--sans);font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:500;
+    color:var(--ink-soft);
+    border:1px solid var(--line);border-radius:999px;padding:8px 14px;background:var(--card);
+    transition:.2s;white-space:nowrap;
+  }
+  .entry:hover .entry-cta{border-color:var(--gold);color:var(--gold-deep);}
+  .entry-cta .chev{transition:transform .25s;}
+  .entry.is-open .entry-cta .chev{transform:rotate(90deg);}
+
+  /* ----- EXPANDED TECH SHEET ----- */
+  .sheet{
+    grid-column:1 / -1;
+    overflow:hidden;
+    max-height:0;opacity:0;
+    transition:max-height .4s ease, opacity .3s ease, margin .3s ease;
+  }
+  .entry.is-open{
+    background:var(--card);
+    box-shadow:0 24px 60px -34px rgba(40,34,22,.6);
+    cursor:default;
+  }
+  .entry.is-open .sheet{max-height:760px;opacity:1;margin-top:14px;}
+  .sheet-inner{
+    border-top:1px dashed var(--line);
+    padding-top:22px;margin-top:4px;
+    display:grid;grid-template-columns:120px 1fr;gap:30px;
+  }
+  .sheet-medal{position:relative;}
+  .sheet-medal img{
+    width:120px;height:160px;object-fit:contain;
+    filter:drop-shadow(0 14px 20px rgba(40,34,22,.30)) drop-shadow(0 2px 3px rgba(40,34,22,.2));
+  }
+  .sheet-medal::after{
+    content:"";position:absolute;left:10%;right:10%;bottom:-8px;height:18px;
+    background:radial-gradient(ellipse at center, rgba(40,34,22,.32), transparent 72%);filter:blur(3px);
+  }
+  .sheet-caption{
+    margin-top:18px;font-family:var(--sans);font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--muted);text-align:center;line-height:1.7;
+  }
+  .sheet-caption b{display:block;font-family:var(--serif);font-size:16px;letter-spacing:.04em;color:var(--gold-deep);text-transform:none;font-weight:600;}
+
+  .sheet-body h3{
+    margin:0 0 2px;font-family:var(--serif);font-weight:600;font-size:28px;color:var(--ink);line-height:1.1;
+  }
+  .sheet-jp{font-family:var(--mincho);font-size:15px;color:var(--ink-soft);letter-spacing:.1em;}
+  .sheet-sub{
+    margin-top:4px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  }
+  .sheet-sub b{color:var(--ink-soft);font-weight:600;}
+
+  .spec-grid{
+    margin-top:20px;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+    background:var(--line-soft);border:1px solid var(--line-soft);border-radius:12px;overflow:hidden;
+  }
+  .spec{background:var(--paper-2);padding:13px 15px;}
+  .spec dt{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0 0 5px;font-weight:400;}
+  .spec dd{margin:0;font-family:var(--serif);font-size:21px;font-weight:600;color:var(--ink);line-height:1;}
+  .spec dd small{font-family:var(--sans);font-size:11px;color:var(--muted);font-weight:400;letter-spacing:.02em;margin-left:2px;}
+
+  .sheet-foot{
+    margin-top:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+    font-family:var(--sans);font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;
+    padding:11px 18px;border-radius:11px;transition:.2s;text-decoration:none;
+  }
+  .btn-primary{
+    color:var(--paper-2);background:linear-gradient(180deg,#2c333c,#1c222a);border:1px solid #161b22;
+    box-shadow:0 8px 18px -10px rgba(38,48,58,.7);
+  }
+  .btn-primary:hover{transform:translateY(-1px);}
+  .btn-ghost{color:var(--ink-soft);background:var(--card);border:1px solid var(--line);}
+  .btn-ghost:hover{border-color:var(--gold);color:var(--gold-deep);}
+  .sheet-note{font-size:11px;letter-spacing:.06em;color:var(--faint);margin-left:auto;font-family:var(--sans);}
+
+  /* ---------- FOOTER ---------- */
+  .colophon{
+    border-top:1px solid var(--line);
+    background:linear-gradient(180deg,var(--paper),var(--paper-2));
+    margin-top:40px;
+  }
+  .colophon-inner{
+    max-width:var(--maxw);margin:0 auto;padding:36px 28px 56px;
+    display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;
+  }
+  .colophon .mk{font-family:var(--serif);font-size:24px;font-weight:600;color:var(--ink);}
+  .colophon .mk em{font-style:italic;color:var(--crimson);}
+  .colophon p{margin:6px 0 0;font-size:12px;letter-spacing:.06em;color:var(--muted);max-width:440px;line-height:1.6;}
+  .colophon .meta{font-family:var(--mincho);font-size:13px;letter-spacing:.16em;color:var(--faint);text-align:right;}
+
+  /* ---------- TOAST ---------- */
+  .toast{
+    position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:var(--paper-2);
+    font-family:var(--sans);font-size:13px;letter-spacing:.04em;
+    padding:13px 22px;border-radius:999px;
+    box-shadow:0 18px 40px -16px rgba(0,0,0,.6);
+    opacity:0;pointer-events:none;transition:.3s;z-index:80;
+    display:flex;align-items:center;gap:10px;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast svg{color:var(--gold);}
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width:880px){
+    .filter-inner{grid-template-columns:1fr 1fr;gap:12px;}
+    .filter-inner .pillrow{grid-column:1 / -1;}
+    .share-btn{grid-column:1 / -1;justify-content:center;}
+    .spec-grid{grid-template-columns:repeat(2,1fr);}
+  }
+
+  @media (max-width:560px){
+    .mast-inner{padding:24px 18px 22px;}
+    .seal-ghost{width:240px;height:240px;right:-70px;top:-50px;}
+    .filter-inner{padding:12px 16px;grid-template-columns:1fr;}
+    .almanac{padding:30px 16px 70px;}
+    .preamble p{font-size:17px;}
+    .tier-legend{display:none;}
+
+    .region-head{grid-template-columns:auto 1fr;gap:12px;row-gap:8px;}
+    .region-locator{display:none;}
+    .region-count{grid-column:2;flex-direction:row;align-items:baseline;gap:8px;justify-content:flex-start;}
+    .region-romaji{font-size:23px;}
+    .region-count b{font-size:22px;}
+
+    /* keep medal presence on mobile */
+    .entry{grid-template-columns:62px 1fr;gap:14px;padding:13px 8px;align-items:flex-start;}
+    .medal-wrap{width:62px;height:83px;}
+    .entry-name{font-size:19px;}
+    .entry-meta{font-size:11px;gap:7px;}
+    .entry-aside{
+      grid-column:2;justify-content:flex-start;margin-top:8px;gap:10px;flex-wrap:wrap;
+    }
+    .pref-jp{display:none;}
+    .entry-cta{padding:7px 12px;font-size:10px;}
+
+    .sheet-inner{grid-template-columns:1fr;gap:18px;}
+    .sheet-medal{display:flex;flex-direction:column;align-items:center;}
+    .sheet-medal img{width:104px;height:139px;}
+    .spec-grid{grid-template-columns:1fr 1fr;}
+    .sheet-foot{flex-direction:column;align-items:stretch;}
+    .sheet-note{margin-left:0;text-align:center;margin-top:4px;}
+    .btn{justify-content:center;}
+    .wordmark{font-size:clamp(34px,11vw,52px);}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ MASTHEAD ============ -->
+<header class="masthead">
+  <div class="seal-ghost" aria-hidden="true"></div>
+  <div class="mast-inner">
+    <div class="mast-top">
+      <div class="kicker"><span class="dot"></span> Palmarès Ufficiale · Edizione MMXXVI</div>
+      <div class="lang" role="group" aria-label="Lingua">
+        <button class="is-active">IT</button><span class="sep">·</span>
+        <button>EN</button><span class="sep">·</span>
+        <button>JA</button>
+      </div>
+    </div>
+    <h1 class="wordmark">Milano Sake Challenge<br><em>Medagliere</em></h1>
+    <div class="mast-sub">
+      <span class="jp">ミラノ・サケ・チャレンジ 受賞蔵元一覧</span>
+      <span class="rule" aria-hidden="true"></span>
+      <span class="tag">Almanacco delle Sakagura premiate</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ STICKY FILTERS ============ -->
+<nav class="filterbar" aria-label="Filtri">
+  <div class="filter-inner">
+    <div class="field">
+      <label for="q">Cerca Sakagura</label>
+      <div class="ctrl">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="q" type="search" placeholder="es. Ichinokura, Watanabe, Konishi…" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="region">Regione</label>
+      <div class="ctrl select-ctrl">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>
+        <select id="region">
+          <option value="">Tutte le regioni · 全国</option>
+          <option>Hokkaido &amp; Tōhoku</option>
+          <option>Kantō</option>
+          <option>Chūbu &amp; Hokuriku</option>
+          <option>Kansai</option>
+          <option>Chūgoku &amp; Shikoku</option>
+          <option>Kyūshū &amp; Okinawa</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="pillrow">
+      <label>Sessione</label>
+      <div class="pills">
+        <button class="pill is-active">Tutte</button>
+        <button class="pill">Nihonshu</button>
+        <button class="pill">Shochu</button>
+        <button class="pill">Design</button>
+        <button class="pill">Pairing</button>
+      </div>
+    </div>
+
+    <button class="share-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+      Condividi
+    </button>
+  </div>
+</nav>
+
+<!-- ============ ALMANAC ============ -->
+<main class="almanac">
+
+  <div class="preamble">
+    <p>Le sakagura premiate alla Milano Sake Challenge 2026, ordinate per regione del Giappone e per tipologia di medaglia. All'interno di ogni riconoscimento i prodotti sono elencati in ordine alfabetico.</p>
+    <div class="tier-legend" aria-hidden="true">
+      <span class="legend-item"><span class="legend-swatch sw-plat"></span>Platino</span>
+      <span class="legend-item"><span class="legend-swatch sw-dg"></span>Doppio Oro</span>
+      <span class="legend-item"><span class="legend-swatch sw-gold"></span>Oro</span>
+      <span class="legend-item"><span class="legend-swatch sw-silver"></span>Argento</span>
+      <span class="legend-item"><span class="legend-swatch sw-design"></span>Design</span>
+    </div>
+  </div>
+
+  <!-- ================= REGION 01 · Hokkaido & Tōhoku ================= -->
+  <section class="region">
+    <div class="region-head">
+      <div class="region-index">
+        <span class="region-num">壱</span>
+        <div class="region-titles">
+          <span class="region-jp">北海道・東北</span>
+          <span class="region-romaji">Hokkaidō &amp; Tōhoku</span>
+        </div>
+      </div>
+      <div class="region-locator" aria-hidden="true">
+        <svg class="jp-map" viewBox="0 0 80 110">
+          <path class="land" d="M58 14c5-3 9 2 7 7-2 4-7 6-6 11M30 30c8-6 18-4 21 4 2 6-3 11-1 17 2 5 8 7 7 13-1 6-9 7-11 13-2 7 3 13-1 19-4 5-12 3-17 7-5 3-7 11-13 11-5 0-7-6-5-11 2-6 9-9 9-15 0-7-7-11-6-18 1-6 8-8 10-14 2-7-3-15 2-21 2-3 6-3 8-6"/>
+          <circle class="pulse" cx="56" cy="24" r="11"/><circle class="here" cx="56" cy="24" r="4.5"/>
+        </svg>
+      </div>
+      <div class="region-count">
+        <span><b>1</b></span>
+        <span>Sakagura premiata</span>
+        <button class="region-share" data-share="Hokkaidō & Tōhoku">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+          Condividi regione
+        </button>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-silver"></span><span class="tier-name is-silver">Argento · Nihonshu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/nihonshu_argento.png" alt="Medaglia d'Argento" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Ichinokura Tokubetsu Junmai Yamahai-Shikomi</h2>
+            <div class="entry-meta"><span class="sakagura">ICHINOKURA</span><span class="sep"></span><span class="cat">Junmai</span><span class="sep"></span><span class="pref">Miyagi 宮城</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">株式会社 一ノ蔵</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-design"></span><span class="tier-name is-design">Good With · Pairing</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/pairing_goodwith_PR.png" alt="Pairing Good With" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Ichinokura Tokubetsu Junmai</h2>
+            <div class="entry-meta"><span class="sakagura">ICHINOKURA</span><span class="sep"></span><span class="cat">Parmigiano Reggiano</span><span class="sep"></span><span class="pref">Miyagi 宮城</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">株式会社 一ノ蔵</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REGION 02 · Kantō ================= -->
+  <section class="region">
+    <div class="region-head">
+      <div class="region-index">
+        <span class="region-num">弐</span>
+        <div class="region-titles">
+          <span class="region-jp">関東</span>
+          <span class="region-romaji">Kantō</span>
+        </div>
+      </div>
+      <div class="region-locator" aria-hidden="true">
+        <svg class="jp-map" viewBox="0 0 80 110">
+          <path class="land" d="M58 14c5-3 9 2 7 7-2 4-7 6-6 11M30 30c8-6 18-4 21 4 2 6-3 11-1 17 2 5 8 7 7 13-1 6-9 7-11 13-2 7 3 13-1 19-4 5-12 3-17 7-5 3-7 11-13 11-5 0-7-6-5-11 2-6 9-9 9-15 0-7-7-11-6-18 1-6 8-8 10-14 2-7-3-15 2-21 2-3 6-3 8-6"/>
+          <circle class="pulse" cx="50" cy="58" r="11"/><circle class="here" cx="50" cy="58" r="4.5"/>
+        </svg>
+      </div>
+      <div class="region-count">
+        <span><b>2</b></span>
+        <span>Sakagura premiate</span>
+        <button class="region-share" data-share="Kantō">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+          Condividi regione
+        </button>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-design"></span><span class="tier-name is-design">Best Design</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/best_design_JDU.png" alt="Best Design" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Tonoike AUTHENTIC Junmai Daiginjo</h2>
+            <div class="entry-meta"><span class="sakagura">Tonoikeshuzouten Co., Ltd</span><span class="sep"></span><span class="cat">Junmai Daiginjo (&lt;35%)</span><span class="sep"></span><span class="pref">Tochigi 栃木</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">株式会社外池酒造店</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-design"></span><span class="tier-name is-design">Good Design</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/good_design.png" alt="Good Design" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Shikisakura Tochiginohoshi Junmai</h2>
+            <div class="entry-meta"><span class="sakagura">Utsunomiya Shuzo Co., Ltd.</span><span class="sep"></span><span class="cat">Junmai</span><span class="sep"></span><span class="pref">Tochigi 栃木</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">宇都宮酒造株式会社</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REGION 03 · Chūbu & Hokuriku ================= -->
+  <section class="region">
+    <div class="region-head">
+      <div class="region-index">
+        <span class="region-num">参</span>
+        <div class="region-titles">
+          <span class="region-jp">中部・北陸</span>
+          <span class="region-romaji">Chūbu &amp; Hokuriku</span>
+        </div>
+      </div>
+      <div class="region-locator" aria-hidden="true">
+        <svg class="jp-map" viewBox="0 0 80 110">
+          <path class="land" d="M58 14c5-3 9 2 7 7-2 4-7 6-6 11M30 30c8-6 18-4 21 4 2 6-3 11-1 17 2 5 8 7 7 13-1 6-9 7-11 13-2 7 3 13-1 19-4 5-12 3-17 7-5 3-7 11-13 11-5 0-7-6-5-11 2-6 9-9 9-15 0-7-7-11-6-18 1-6 8-8 10-14 2-7-3-15 2-21 2-3 6-3 8-6"/>
+          <circle class="pulse" cx="42" cy="56" r="11"/><circle class="here" cx="42" cy="56" r="4.5"/>
+        </svg>
+      </div>
+      <div class="region-count">
+        <span><b>2</b></span>
+        <span>Sakagura premiate</span>
+        <button class="region-share" data-share="Chūbu & Hokuriku">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+          Condividi regione
+        </button>
+      </div>
+    </div>
+
+    <!-- PLATINO -->
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-plat"></span><span class="tier-name is-plat">Platino · Nihonshu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <!-- OPENED ENTRY (tech sheet shown) -->
+        <article class="entry is-open">
+          <div class="medal-wrap"><img src="/medals/nihonshu_platino.png" alt="Medaglia di Platino" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Hourai Junmai Daiginjo Shinpaku18</h2>
+            <div class="entry-meta"><span class="sakagura">Watanabe Shuzouten Co, Ltd.</span><span class="sep"></span><span class="cat">Junmai Daiginjo (&lt;35%)</span><span class="sep"></span><span class="pref">Gifu 岐阜</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">有限会社渡辺酒造店</div>
+            <span class="entry-cta">Chiudi <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+
+          <!-- TECH SHEET -->
+          <div class="sheet">
+            <div class="sheet-inner">
+              <div class="sheet-medal">
+                <img src="/medals/nihonshu_platino.png" alt="Medaglia di Platino — Milano Sake Challenge 2026" />
+                <div class="sheet-caption"><b>Platino</b>Milano Sake Challenge<br>2026 · Nihonshu</div>
+              </div>
+              <div class="sheet-body">
+                <h3>Hourai Junmai Daiginjo Shinpaku18</h3>
+                <div class="sheet-jp">蓬莱 純米大吟醸 心白18</div>
+                <div class="sheet-sub">Sakagura <b>Watanabe Shuzouten Co, Ltd.</b> · 有限会社渡辺酒造店 · Gifu, Chūbu &amp; Hokuriku</div>
+
+                <dl class="spec-grid">
+                  <div class="spec"><dt>Tipologia</dt><dd>Junmai Daiginjo</dd></div>
+                  <div class="spec"><dt>Riso · Kome</dt><dd>Yamadanishiki</dd></div>
+                  <div class="spec"><dt>Raffinazione</dt><dd>18<small>%</small></dd></div>
+                  <div class="spec"><dt>SMV · Nihonshu-do</dt><dd>±0</dd></div>
+                  <div class="spec"><dt>Alcol</dt><dd>16<small>% vol</small></dd></div>
+                  <div class="spec"><dt>Lievito · Kōbo</dt><dd>M310</dd></div>
+                  <div class="spec"><dt>Kōji</dt><dd>Yellow</dd></div>
+                  <div class="spec"><dt>Prezzo</dt><dd>¥18.850</dd></div>
+                </dl>
+
+                <div class="sheet-foot">
+                  <a class="btn btn-primary" href="https://www.sake-hourai.co.jp/" target="_blank" rel="noopener">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 17 17 7M9 7h8v8"/></svg>
+                    Vai al sito
+                  </a>
+                  <button class="btn btn-ghost" data-share="Hourai Junmai Daiginjo Shinpaku18">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+                    Condividi prodotto
+                  </button>
+                  <span class="sheet-note">Riconoscimento conferito dalla giuria MSC 2026 · Milano</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- ORO -->
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-gold"></span><span class="tier-name">Oro · Nihonshu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/nihonshu_oro.png" alt="Medaglia d'Oro" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Hayashi Jyunmai Ginjyo Gohyakumangoku</h2>
+            <div class="entry-meta"><span class="sakagura">Hayashi Shuzo</span><span class="sep"></span><span class="cat">Junmai Ginjo</span><span class="sep"></span><span class="pref">Toyama 富山</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">林酒造場 · est. 1626</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REGION 04 · Kansai ================= -->
+  <section class="region">
+    <div class="region-head">
+      <div class="region-index">
+        <span class="region-num">肆</span>
+        <div class="region-titles">
+          <span class="region-jp">関西</span>
+          <span class="region-romaji">Kansai</span>
+        </div>
+      </div>
+      <div class="region-locator" aria-hidden="true">
+        <svg class="jp-map" viewBox="0 0 80 110">
+          <path class="land" d="M58 14c5-3 9 2 7 7-2 4-7 6-6 11M30 30c8-6 18-4 21 4 2 6-3 11-1 17 2 5 8 7 7 13-1 6-9 7-11 13-2 7 3 13-1 19-4 5-12 3-17 7-5 3-7 11-13 11-5 0-7-6-5-11 2-6 9-9 9-15 0-7-7-11-6-18 1-6 8-8 10-14 2-7-3-15 2-21 2-3 6-3 8-6"/>
+          <circle class="pulse" cx="33" cy="64" r="11"/><circle class="here" cx="33" cy="64" r="4.5"/>
+        </svg>
+      </div>
+      <div class="region-count">
+        <span><b>2</b></span>
+        <span>Sakagura premiate</span>
+        <button class="region-share" data-share="Kansai">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+          Condividi regione
+        </button>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-plat"></span><span class="tier-name is-plat">Platino · Nihonshu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/nihonshu_platino.png" alt="Medaglia di Platino" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">SHIRAYUKI Tanba Densho</h2>
+            <div class="entry-meta"><span class="sakagura">Konishi Brewing Co., Ltd.</span><span class="sep"></span><span class="cat">Futsushu</span><span class="sep"></span><span class="pref">Hyogo 兵庫</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">小西酒造株式会社</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-dg"></span><span class="tier-name">Doppio Oro · Nihonshu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/nihonshu_doppio_oro.png" alt="Medaglia Doppio Oro" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Harushika Junmai Nara no Yae Sakura</h2>
+            <div class="entry-meta"><span class="sakagura">S. Imanishi Co., Ltd.</span><span class="sep"></span><span class="cat">Junmai</span><span class="sep"></span><span class="pref">Nara 奈良</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">株式会社今西清兵衛商店</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REGION 05 · Chūgoku & Shikoku ================= -->
+  <section class="region">
+    <div class="region-head">
+      <div class="region-index">
+        <span class="region-num">伍</span>
+        <div class="region-titles">
+          <span class="region-jp">中国・四国</span>
+          <span class="region-romaji">Chūgoku &amp; Shikoku</span>
+        </div>
+      </div>
+      <div class="region-locator" aria-hidden="true">
+        <svg class="jp-map" viewBox="0 0 80 110">
+          <path class="land" d="M58 14c5-3 9 2 7 7-2 4-7 6-6 11M30 30c8-6 18-4 21 4 2 6-3 11-1 17 2 5 8 7 7 13-1 6-9 7-11 13-2 7 3 13-1 19-4 5-12 3-17 7-5 3-7 11-13 11-5 0-7-6-5-11 2-6 9-9 9-15 0-7-7-11-6-18 1-6 8-8 10-14 2-7-3-15 2-21 2-3 6-3 8-6"/>
+          <circle class="pulse" cx="22" cy="70" r="11"/><circle class="here" cx="22" cy="70" r="4.5"/>
+        </svg>
+      </div>
+      <div class="region-count">
+        <span><b>1</b></span>
+        <span>Sakagura premiata</span>
+        <button class="region-share" data-share="Chūgoku & Shikoku">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+          Condividi regione
+        </button>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-gold"></span><span class="tier-name">Oro · Nihonshu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/nihonshu_oro.png" alt="Medaglia d'Oro" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Gokyo Junmai Daiginjo 50%</h2>
+            <div class="entry-meta"><span class="sakagura">Sakaishuzo Co., Ltd.</span><span class="sep"></span><span class="cat">Junmai Daiginjo (≥35%)</span><span class="sep"></span><span class="pref">Yamaguchi 山口</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">酒井酒造株式会社 · est. 1871</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REGION 06 · Kyūshū & Okinawa ================= -->
+  <section class="region">
+    <div class="region-head">
+      <div class="region-index">
+        <span class="region-num">陸</span>
+        <div class="region-titles">
+          <span class="region-jp">九州・沖縄</span>
+          <span class="region-romaji">Kyūshū &amp; Okinawa</span>
+        </div>
+      </div>
+      <div class="region-locator" aria-hidden="true">
+        <svg class="jp-map" viewBox="0 0 80 110">
+          <path class="land" d="M58 14c5-3 9 2 7 7-2 4-7 6-6 11M30 30c8-6 18-4 21 4 2 6-3 11-1 17 2 5 8 7 7 13-1 6-9 7-11 13-2 7 3 13-1 19-4 5-12 3-17 7-5 3-7 11-13 11-5 0-7-6-5-11 2-6 9-9 9-15 0-7-7-11-6-18 1-6 8-8 10-14 2-7-3-15 2-21 2-3 6-3 8-6"/>
+          <circle class="pulse" cx="14" cy="86" r="11"/><circle class="here" cx="14" cy="86" r="4.5"/>
+        </svg>
+      </div>
+      <div class="region-count">
+        <span><b>2</b></span>
+        <span>Sakagura premiate</span>
+        <button class="region-share" data-share="Kyūshū & Okinawa">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+          Condividi regione
+        </button>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-plat"></span><span class="tier-name is-plat">Platino · Shochu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/shochu_platino.png" alt="Medaglia di Platino" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">Joraku Wine Yeast Brewed</h2>
+            <div class="entry-meta"><span class="sakagura">Joraku Shuzo Co., Ltd</span><span class="sep"></span><span class="cat">Kome · Rice</span><span class="sep"></span><span class="pref">Kumamoto 熊本</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">常楽酒造株式会社 · est. 1912</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-dg"></span><span class="tier-name">Doppio Oro · Shochu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/shochu_doppio_oro.png" alt="Medaglia Doppio Oro" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">AKANEKAZE 43</h2>
+            <div class="entry-meta"><span class="sakagura">Hombo Shuzo Co., Ltd.</span><span class="sep"></span><span class="cat">Imo · Sweet Potato</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">本坊酒造株式会社</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-label"><span class="tier-bead bead-gold"></span><span class="tier-name">Oro · Shochu</span><span class="tier-rule"></span></div>
+      <div class="roll">
+        <article class="entry">
+          <div class="medal-wrap"><img src="/medals/shochu_oro.png" alt="Medaglia d'Oro" /></div>
+          <div class="entry-main">
+            <h2 class="entry-name">FORTUNA</h2>
+            <div class="entry-meta"><span class="sakagura">Izumi Syuzou Co., Ltd.</span><span class="sep"></span><span class="cat">Imo · Sweet Potato</span><span class="sep"></span><span class="pref">Kagoshima 鹿児島</span></div>
+          </div>
+          <div class="entry-aside">
+            <div class="pref-jp">出水酒造株式会社 · est. 1950</div>
+            <span class="entry-cta">Scheda tecnica <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ COLOPHON ============ -->
+<footer class="colophon">
+  <div class="colophon-inner">
+    <div>
+      <div class="mk">Milano Sake Challenge <em>2026</em></div>
+      <p>Medagliere ufficiale · I nomi dei prodotti e delle sakagura sono riportati nella lingua originale. Nessun punteggio è reso pubblico: il merito è la medaglia.</p>
+    </div>
+    <div class="meta">ミラノ・サケ・チャレンジ<br>MMXXVI · Milano</div>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+  <span id="toast-text">Link copiato negli appunti</span>
+</div>
+
+<script>
+  // expand / collapse tech sheets
+  document.querySelectorAll('.entry').forEach(function(entry){
+    entry.addEventListener('click', function(e){
+      if (e.target.closest('a, button')) return; // let links/buttons act
+      entry.classList.toggle('is-open');
+      var cta = entry.querySelector('.entry-cta');
+      if (cta){
+        var hasSheet = entry.querySelector('.sheet');
+        if (hasSheet){
+          cta.childNodes[0].nodeValue = entry.classList.contains('is-open') ? 'Chiudi ' : 'Scheda tecnica ';
+        }
+      }
+    });
+  });
+
+  // share -> toast
+  var toast = document.getElementById('toast');
+  var toastText = document.getElementById('toast-text');
+  var toastTimer;
+  function showToast(msg){
+    toastText.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toast.classList.remove('show'); }, 2200);
+  }
+  document.querySelectorAll('[data-share]').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var label = btn.getAttribute('data-share');
+      showToast('Link copiato · ' + label);
+    });
+  });
+  document.querySelector('.share-btn').addEventListener('click', function(){
+    showToast('Link del medagliere copiato negli appunti');
+  });
+
+  // session pills (visual toggle only in mockup)
+  document.querySelectorAll('.pills .pill').forEach(function(p){
+    p.addEventListener('click', function(){
+      document.querySelectorAll('.pills .pill').forEach(function(x){ x.classList.remove('is-active'); });
+      p.classList.add('is-active');
+    });
+  });
+</script>
+</body>
+</html>

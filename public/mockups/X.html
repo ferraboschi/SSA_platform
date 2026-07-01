@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Milano Sake Challenge 2026 — Medagliere · Campo comando</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#f6f7f9;
+    --card:#ffffff;
+    --line:#e9ebef;
+    --line-2:#dfe2e8;
+    --track:#eef0f3;
+    --ink:#101828;
+    --ink-2:#667085;
+    --micro:#8a93a3;
+    --indigo:#4f46e5;
+    --indigo-deep:#312e81;
+    --indigo-tint:#eef2ff;
+    --shadow-card:0 1px 2px rgba(16,24,40,.05);
+    --shadow-pop:0 12px 32px rgba(16,24,40,.12), 0 2px 6px rgba(16,24,40,.06);
+    --shadow-chip:0 1px 2px rgba(16,24,40,.10), 0 1px 1px rgba(16,24,40,.06);
+    --r-card:16px;
+    --r-pill:12px;
+    --r-chip:9px;
+
+    --s-nihonshu:#4f46e5;
+    --s-shochu:#c2740c;
+    --s-design:#7c3aed;
+    --s-pairing:#16a34a;
+
+    --m-platino:#94a3b8;
+    --m-doppiooro:#e08a1e;
+    --m-oro:#d2a02b;
+    --m-argento:#9aa3ad;
+    --m-bestdesign:#3b5fc0;
+    --m-gooddesign:#6b8ae0;
+    --m-bestwith:#14b8a6;
+    --m-goodwith:#22c55e;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Inter",system-ui,-apple-system,sans-serif;
+    font-size:15px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  }
+  ::selection{background:var(--indigo-tint);color:var(--indigo-deep);}
+  button{font-family:inherit;}
+
+  /* ===== header ===== */
+  .appbar{
+    background:var(--card);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:60;
+  }
+  .appbar-inner{
+    max-width:1180px;margin:0 auto;padding:14px clamp(16px,4vw,40px);
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+  }
+  .wordmark{display:flex;align-items:center;gap:10px;min-width:0;}
+  .wordmark .kanji{
+    color:var(--indigo);font-size:20px;font-weight:700;line-height:1;flex:0 0 auto;
+  }
+  .wordmark .wm-text{display:flex;flex-direction:column;line-height:1.1;min-width:0;}
+  .wordmark .wm-1{
+    font-size:13px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .wordmark .wm-2{font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--micro);}
+  .appbar .yr{
+    font-size:11px;font-weight:700;letter-spacing:.10em;color:var(--indigo);
+    background:var(--indigo-tint);padding:5px 11px;border-radius:40px;white-space:nowrap;flex:0 0 auto;
+  }
+
+  /* ===== page wrap ===== */
+  .wrap{max-width:1180px;margin:0 auto;padding:clamp(18px,3vw,28px) clamp(16px,4vw,40px) 80px;}
+
+  .lede{margin:0 0 18px;}
+  .lede h1{font-size:clamp(22px,3.2vw,30px);font-weight:700;letter-spacing:-.01em;margin:0 0 5px;}
+  .lede p{margin:0;color:var(--ink-2);font-size:14px;max-width:560px;}
+
+  /* ===== command card ===== */
+  .cmd-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
+    box-shadow:var(--shadow-card);padding:14px;position:relative;z-index:30;
+  }
+  .micro{
+    font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--micro);
+  }
+  .cmd-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+  .cmd-clear{
+    border:0;background:none;color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;
+    padding:4px 6px;border-radius:7px;display:inline-flex;align-items:center;gap:5px;
+  }
+  .cmd-clear:hover{color:var(--indigo);background:var(--indigo-tint);}
+
+  /* combo input */
+  .combo{position:relative;}
+  .combo-input{
+    display:flex;align-items:center;gap:10px;
+    background:var(--bg);border:1.5px solid var(--line-2);border-radius:var(--r-pill);
+    padding:0 12px;height:50px;transition:border-color .15s, box-shadow .15s, background .15s;
+  }
+  .combo-input.focused{border-color:var(--indigo);background:var(--card);box-shadow:0 0 0 4px rgba(79,70,229,.12);}
+  .combo-input .ic{color:var(--micro);flex:0 0 auto;display:flex;}
+  .combo-input.focused .ic{color:var(--indigo);}
+  .combo-input input{
+    flex:1;min-width:0;border:0;background:none;outline:none;
+    font-family:inherit;font-size:16px;color:var(--ink);padding:0;height:100%;
+  }
+  .combo-input input::placeholder{color:var(--micro);}
+  .kbd{
+    flex:0 0 auto;font-size:11px;font-weight:600;color:var(--ink-2);
+    border:1px solid var(--line-2);background:var(--card);border-radius:6px;padding:2px 7px;
+  }
+
+  /* token row */
+  .tokens{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;align-items:center;}
+  .tokens-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--micro);margin-right:1px;}
+  .token{
+    display:inline-flex;align-items:center;gap:7px;
+    background:var(--card);border:1px solid var(--line);border-radius:40px;
+    padding:5px 6px 5px 11px;font-size:13px;font-weight:600;color:var(--ink);
+    box-shadow:var(--shadow-chip);max-width:100%;
+  }
+  .token .tk-dim{font-weight:500;color:var(--ink-2);font-size:11px;letter-spacing:.02em;}
+  .token .tk-val{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .token .swatch{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+  .token .tk-x{
+    border:0;background:none;cursor:pointer;color:var(--ink-2);
+    width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+    transition:.15s;
+  }
+  .token .tk-x:hover{background:#f1f3f6;color:var(--ink);}
+  .token.is-session{border-color:color-mix(in srgb, var(--tkc) 35%, var(--line));}
+  .tokens-empty{font-size:13px;color:var(--micro);font-style:normal;}
+
+  /* ===== dropdown ===== */
+  .menu{
+    position:absolute;left:0;right:0;top:calc(100% + 8px);z-index:50;
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    box-shadow:var(--shadow-pop);overflow:hidden;display:none;
+  }
+  .menu.open{display:block;}
+  .menu-scroll{max-height:min(58vh,440px);overflow-y:auto;overscroll-behavior:contain;padding:6px;}
+  .grp{padding:6px 4px 2px;}
+  .grp + .grp{border-top:1px solid var(--line);margin-top:4px;padding-top:8px;}
+  .grp-head{
+    display:flex;align-items:center;gap:8px;padding:2px 8px 7px;
+  }
+  .grp-head .micro{flex:0 0 auto;}
+  .grp-head .rule{flex:1;height:1px;background:var(--line);}
+  .grp-head .hint{font-size:11px;color:var(--micro);font-weight:500;flex:0 0 auto;}
+  .grp-chips{display:flex;flex-wrap:wrap;gap:6px;}
+
+  /* option as gray-track style pill button */
+  .opt{
+    display:inline-flex;align-items:center;gap:8px;
+    border:1px solid var(--line);background:var(--card);
+    border-radius:var(--r-pill);padding:8px 12px;
+    font-size:13.5px;font-weight:600;color:var(--ink);cursor:pointer;text-align:left;
+    transition:background .12s,border-color .12s,color .12s;max-width:100%;
+  }
+  .opt .swatch{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+  .opt .opt-sub{font-size:11px;font-weight:500;color:var(--ink-2);}
+  .opt:hover,.opt.cursor{background:var(--indigo-tint);border-color:#cfd4f7;color:var(--indigo-deep);}
+  .opt.added{background:var(--indigo-tint);border-color:transparent;color:var(--indigo-deep);}
+  .opt.added::after{content:"✓";font-size:12px;color:var(--indigo);margin-left:2px;}
+  .opt[hidden]{display:none;}
+  /* sakagura/list rows render full width */
+  .opt.row{width:100%;justify-content:flex-start;border-radius:10px;}
+  .opt.row .opt-meta{margin-left:auto;font-size:11px;font-weight:500;color:var(--micro);white-space:nowrap;}
+  .opt mark{background:rgba(79,70,229,.16);color:inherit;border-radius:3px;padding:0 1px;}
+
+  .grp[hidden]{display:none;}
+  .menu-empty{padding:26px 16px;text-align:center;color:var(--ink-2);font-size:14px;display:none;}
+  .menu-empty.show{display:block;}
+  .menu-empty .em-kanji{font-size:22px;color:var(--line-2);display:block;margin-bottom:6px;}
+
+  .menu-foot{
+    border-top:1px solid var(--line);padding:9px 14px;display:flex;align-items:center;gap:14px;
+    font-size:11.5px;color:var(--ink-2);background:#fbfbfc;flex-wrap:wrap;
+  }
+  .menu-foot .ff{display:inline-flex;align-items:center;gap:6px;}
+  .menu-foot .kbd{padding:1px 6px;}
+
+  /* scrim for mobile dropdown focus */
+  .scrim{position:fixed;inset:0;background:rgba(16,24,40,.18);z-index:25;display:none;}
+  .scrim.on{display:block;}
+
+  /* ===== results ===== */
+  .results-bar{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    margin:24px 2px 12px;flex-wrap:wrap;
+  }
+  .results-bar .count{font-size:13px;color:var(--ink-2);}
+  .results-bar .count b{color:var(--ink);font-weight:700;}
+  .sortbtn{
+    display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);
+    border-radius:40px;padding:7px 13px;font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:pointer;
+    box-shadow:var(--shadow-card);
+  }
+  .sortbtn:hover{color:var(--indigo);border-color:#cfd4f7;}
+
+  .tier-block{margin-bottom:26px;}
+  .tier-row{display:flex;align-items:center;gap:10px;margin:0 2px 10px;}
+  .tier-row .badge{
+    font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    color:#fff;padding:4px 10px;border-radius:40px;white-space:nowrap;
+  }
+  .tier-row .tally{font-size:12px;color:var(--micro);font-weight:600;}
+  .tier-row .rule{flex:1;height:1px;background:var(--line);}
+
+  .table{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden;}
+  .rowitem{
+    display:grid;grid-template-columns:46px 1fr auto;gap:14px;align-items:center;
+    padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s;
+  }
+  .rowitem:last-child{border-bottom:0;}
+  .rowitem:hover{background:#fafbfc;}
+  .rowitem .medal{
+    width:46px;height:46px;border-radius:10px;background:var(--bg);
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;overflow:hidden;border:1px solid var(--line);
+  }
+  .rowitem .medal img{width:100%;height:100%;object-fit:contain;display:block;}
+  .rowitem .info{min-width:0;}
+  .rowitem .name{font-size:14.5px;font-weight:600;color:var(--ink);line-height:1.25;}
+  .rowitem .kura{font-size:12.5px;color:var(--ink-2);margin-top:1px;}
+  .rowitem .crumb{
+    display:flex;flex-wrap:wrap;gap:5px 7px;margin-top:6px;font-size:11px;color:var(--micro);align-items:center;
+  }
+  .rowitem .crumb .sess{display:inline-flex;align-items:center;gap:5px;font-weight:600;}
+  .rowitem .crumb .sess .swatch{width:7px;height:7px;border-radius:50%;}
+  .rowitem .crumb .sep{opacity:.6;}
+  .rowitem .go{color:var(--micro);flex:0 0 auto;display:flex;}
+  .rowitem:hover .go{color:var(--indigo);}
+
+  .noresults{
+    background:var(--card);border:1px dashed var(--line-2);border-radius:var(--r-card);
+    padding:46px 20px;text-align:center;color:var(--ink-2);display:none;
+  }
+  .noresults.show{display:block;}
+  .noresults .nk{font-size:26px;color:var(--line-2);display:block;margin-bottom:8px;}
+
+  /* ===== responsive ===== */
+  @media (max-width:560px){
+    body{font-size:14px;}
+    .wordmark .wm-2{display:none;}
+    .lede h1{font-size:21px;}
+    .cmd-card{padding:12px;border-radius:14px;}
+    .combo-input{height:48px;}
+    .combo-input input{font-size:16px;}
+    .kbd{display:none;}
+    .menu-foot{display:none;}
+    .grp-head .hint{display:none;}
+    .opt{padding:9px 12px;font-size:14px;}
+    .rowitem{grid-template-columns:42px 1fr;gap:12px;padding:12px 13px;}
+    .rowitem .medal{width:42px;height:42px;}
+    .rowitem .go{display:none;}
+    .menu{left:-6px;right:-6px;}
+  }
+  @media (max-width:390px){
+    .wrap{padding-left:14px;padding-right:14px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="wordmark">
+      <span class="kanji">酒</span>
+      <span class="wm-text">
+        <span class="wm-1">Milano Sake Challenge</span>
+        <span class="wm-2">Medagliere ufficiale</span>
+      </span>
+    </div>
+    <span class="yr">2026</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="lede">
+    <h1>Medagliere</h1>
+    <p>Cerca e filtra tutti i sake e shōchū premiati. Digita una medaglia, una sessione, una categoria, una prefettura o il nome di una sakagura.</p>
+  </div>
+
+  <!-- ============ COMMAND CARD ============ -->
+  <div class="cmd-card">
+    <div class="cmd-head">
+      <span class="micro">Filtra</span>
+      <button class="cmd-clear" id="clearAll" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
+        Azzera filtri
+      </button>
+    </div>
+
+    <div class="combo">
+      <div class="combo-input" id="comboInput">
+        <span class="ic">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <input id="q" type="text" autocomplete="off" spellcheck="false"
+          placeholder="Filtra medaglie, sessioni, categorie, sakagura, prefetture…" />
+        <span class="kbd">↑↓ ↵</span>
+      </div>
+
+      <!-- DROPDOWN -->
+      <div class="menu" id="menu" role="listbox" aria-label="Opzioni filtro">
+        <div class="menu-scroll" id="menuScroll"></div>
+        <div class="menu-empty" id="menuEmpty">
+          <span class="em-kanji">無</span>
+          Nessuna opzione corrisponde a “<span id="emQ"></span>”.<br>
+          <span style="font-size:12px;color:var(--micro)">Prova con un nome di sakagura o una prefettura.</span>
+        </div>
+        <div class="menu-foot">
+          <span class="ff"><span class="kbd">↑↓</span> naviga</span>
+          <span class="ff"><span class="kbd">↵</span> aggiungi</span>
+          <span class="ff"><span class="kbd">esc</span> chiudi</span>
+          <span class="ff" style="margin-left:auto;color:var(--micro)">Le categorie dipendono dalla sessione scelta</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOKENS -->
+    <div class="tokens" id="tokens"></div>
+  </div>
+
+  <!-- ============ RESULTS ============ -->
+  <div class="results-bar">
+    <div class="count" id="count"></div>
+    <button class="sortbtn" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+      Per medaglia
+    </button>
+  </div>
+
+  <div id="results"></div>
+  <div class="noresults" id="noresults">
+    <span class="nk">空</span>
+    Nessun premio corrisponde ai filtri scelti.
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<script>
+/* ---------------- data dictionaries ---------------- */
+const SESSIONS = [
+  {key:"nihonshu", label:"Nihonshu",         color:"#4f46e5"},
+  {key:"shochu",   label:"Shochu",           color:"#c2740c"},
+  {key:"design",   label:"Design",           color:"#7c3aed"},
+  {key:"pairing",  label:"Abbinamento Cibo", color:"#16a34a"},
+];
+const SESS = Object.fromEntries(SESSIONS.map(s=>[s.key,s]));
+
+const MEDALS = [
+  {key:"platino",     label:"Platino",     color:"#94a3b8", sessions:["nihonshu","shochu"]},
+  {key:"doppiooro",   label:"Doppio Oro",  color:"#e08a1e", sessions:["nihonshu","shochu"]},
+  {key:"oro",         label:"Oro",         color:"#d2a02b", sessions:["nihonshu","shochu"]},
+  {key:"argento",     label:"Argento",     color:"#9aa3ad", sessions:["nihonshu","shochu"]},
+  {key:"best_design", label:"Best Design", color:"#3b5fc0", sessions:["design"]},
+  {key:"good_design", label:"Good Design", color:"#6b8ae0", sessions:["design"]},
+  {key:"best_with",   label:"Best With",   color:"#14b8a6", sessions:["pairing"]},
+  {key:"good_with",   label:"Good With",   color:"#22c55e", sessions:["pairing"]},
+];
+const MED = Object.fromEntries(MEDALS.map(m=>[m.key,m]));
+
+const CATS = {
+  nihonshu:["Daiginjo","Junmai Daiginjo (<35%)","Junmai Daiginjo (≥35%)","Junmai Ginjo","Ginjo","Junmai","Honjozo","Futsushu","Nigori","Sparkling","Koshu","Umeshu","Yuzushu","Liqueur","Special Methods"],
+  shochu:["Imo (Sweet Potato)","Mugi (Barley)","Kome (Rice)","Awamori","Aged Honkaku","Special Shochu"],
+  pairing:["Lasagne","Parmigiano Reggiano","San Daniele","Tartufo","Gelato alla Fragola"],
+};
+CATS.design = [...new Set([...CATS.nihonshu, ...CATS.shochu])];
+
+const PREFS = ["Aichi","Akita","Aomori","Chiba","Ehime","Estero","Fukui","Fukuoka","Fukushima","Gifu","Gunma","Hiroshima","Hokkaido","Hyogo","Ibaraki","Ishikawa","Iwate","Kagawa","Kagoshima","Kanagawa","Kochi","Kumamoto","Kyoto","Mie","Miyagi","Miyazaki","Nagano","Nagasaki","Nara","Niigata","Oita","Okayama","Okinawa","Osaka","Saga","Saitama","Shiga","Shimane","Shizuoka","Tochigi","Tokushima","Tokyo","Tottori","Toyama","Wakayama","Yamagata","Yamaguchi","Yamanashi"];
+
+/* sakagura pulled from result rows below */
+/* ---------------- result rows (sample) ---------------- */
+const ROWS = [
+  {name:"Kid Daiginjo", kura:"Heiwa Shuzou Co., Ltd", session:"nihonshu", cat:"Daiginjo", pref:"Wakayama", region:"Kinki", medal:"platino", img:"/medals/magnifica_tasting_nihonshu_D.png"},
+  {name:"Hourai Junmai Daiginjo Shinpaku18", kura:"Watanabe Shuzouten", session:"nihonshu", cat:"Junmai Daiginjo (<35%)", pref:"Gifu", region:"Chubu", medal:"platino", img:"/medals/magnifica_tasting_nihonshu_JDU.png"},
+  {name:"Aokage", kura:"Yanagita Distillery", session:"shochu", cat:"Mugi (Barley)", pref:"Estero", region:"", medal:"platino", img:"/medals/magnifica_tasting_shochu_BA.png"},
+  {name:"DAIYAKIKU Junmaigijo", kura:"TODA SAKE BREWERY", session:"nihonshu", cat:"Junmai Ginjo", pref:"Nagano", region:"Chubu", medal:"doppiooro", img:"/medals/nihonshu_doppio_oro.png"},
+  {name:"Gokyo Junmai Daiginjo 50%", kura:"Sakaishuzo Co., Ltd.", session:"nihonshu", cat:"Junmai Daiginjo (≥35%)", pref:"Yamaguchi", region:"Chugoku", medal:"oro", img:"/medals/nihonshu_oro.png"},
+  {name:"Hayashi Junmai Ginjo Gohyakumangoku", kura:"Hayashi Shuzo", session:"nihonshu", cat:"Junmai Ginjo", pref:"Toyama", region:"Chubu", medal:"oro", img:"/medals/nihonshu_oro.png"},
+  {name:"Ichinokura Tokubetsu Junmai", kura:"ICHINOKURA", session:"nihonshu", cat:"Junmai", pref:"Miyagi", region:"Tohoku", medal:"argento", img:"/medals/nihonshu_argento.png"},
+  {name:"Tonoike AUTHENTIC Junmai Daiginjo", kura:"Tonoikeshuzouten", session:"design", cat:"Junmai Daiginjo (<35%)", pref:"Tochigi", region:"Kanto", medal:"best_design", img:"/medals/best_design_JDU.png"},
+  {name:"Shikisakura Tochiginohoshi Junmai", kura:"Utsunomiya Shuzo Co., Ltd.", session:"design", cat:"Junmai", pref:"Tochigi", region:"Kanto", medal:"good_design", img:"/medals/good_design.png"},
+  {name:"GINTEN RYUOU", kura:"Odagiri Shoji", session:"pairing", cat:"Parmigiano Reggiano", pref:"Tokyo", region:"Kanto", medal:"best_with", img:"/medals/pairing_magnifica_PR.png"},
+  {name:"Ichinokura Junmai (San Daniele)", kura:"ICHINOKURA", session:"pairing", cat:"San Daniele", pref:"Miyagi", region:"Tohoku", medal:"good_with", img:"/medals/pairing_goodwith_SD.png"},
+];
+const KURAS = [...new Set(ROWS.map(r=>r.kura))].sort((a,b)=>a.localeCompare(b));
+
+/* tier display order + label/color */
+const TIER_ORDER = ["platino","doppiooro","oro","argento","best_design","good_design","best_with","good_with"];
+const TIER_LABEL = {platino:"Platino",doppiooro:"Doppio Oro",oro:"Oro",argento:"Argento",best_design:"Best Design",good_design:"Good Design",best_with:"Best With",good_with:"Good With"};
+
+/* ---------------- state ---------------- */
+/* a filter = {dim, key, label, color?} ; dims: session, medal, category, prefecture, sakagura */
+const state = {
+  filters:[
+    {dim:"session",  key:"design",                 label:"Design",                  color:SESS.design.color},
+    {dim:"category", key:"Junmai Daiginjo (<35%)", label:"Junmai Daiginjo (<35%)"},
+  ],
+  q:"", cursor:-1, openMenu:false,
+};
+const DIM_LABEL = {session:"Sessione",medal:"Medaglia",category:"Categoria",prefecture:"Prefettura",sakagura:"Sakagura"};
+
+function activeSession(){ const f=state.filters.find(f=>f.dim==="session"); return f?f.key:null; }
+function hasFilter(dim,key){ return state.filters.some(f=>f.dim===dim && f.key===key); }
+function norm(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
+
+/* ---------------- DOM refs ---------------- */
+const elInput   = document.getElementById("q");
+const elCombo   = document.getElementById("comboInput");
+const elMenu    = document.getElementById("menu");
+const elScroll  = document.getElementById("menuScroll");
+const elEmpty   = document.getElementById("menuEmpty");
+const elTokens  = document.getElementById("tokens");
+const elResults = document.getElementById("results");
+const elNo      = document.getElementById("noresults");
+const elCount   = document.getElementById("count");
+const elScrim   = document.getElementById("scrim");
+
+/* ---------------- build candidate option list (depends on session) ---------------- */
+function buildGroups(){
+  const sess = activeSession();
+  const groups = [];
+
+  /* Sessioni */
+  groups.push({ dim:"session", title:"Sessioni",
+    items: SESSIONS.map(s=>({dim:"session", key:s.key, label:s.label, color:s.color})) });
+
+  /* Medaglie — restrict to the active session's medal set when a session is chosen */
+  const meds = MEDALS.filter(m=> !sess || m.sessions.includes(sess));
+  groups.push({ dim:"medal", title:"Medaglie",
+    hint: sess? `per ${SESS[sess].label}` : "",
+    items: meds.map(m=>({dim:"medal", key:m.key, label:m.label, color:m.color})) });
+
+  /* Categorie — depend on session */
+  if(sess){
+    groups.push({ dim:"category", title:"Categorie",
+      hint:`per ${SESS[sess].label}`,
+      items: CATS[sess].map(c=>({dim:"category", key:c, label:c})) });
+  }else{
+    groups.push({ dim:"category", title:"Categorie",
+      hint:"scegli prima una sessione",
+      items: [], locked:true });
+  }
+
+  /* Prefetture */
+  groups.push({ dim:"prefecture", title:"Prefetture",
+    items: PREFS.map(p=>({dim:"prefecture", key:p, label:p})), row:true });
+
+  /* Sakagura */
+  groups.push({ dim:"sakagura", title:"Sakagura",
+    items: KURAS.map(k=>({dim:"sakagura", key:k, label:k})), row:true });
+
+  return groups;
+}
+
+/* highlight matched substring */
+function hl(label, q){
+  if(!q) return label;
+  const i = norm(label).indexOf(norm(q));
+  if(i<0) return label;
+  return label.slice(0,i)+"<mark>"+label.slice(i,i+q.length)+"</mark>"+label.slice(i+q.length);
+}
+
+/* ---------------- render dropdown ---------------- */
+let flatOpts = []; /* for keyboard nav */
+function renderMenu(){
+  const q = state.q.trim();
+  const nq = norm(q);
+  const groups = buildGroups();
+  elScroll.innerHTML = "";
+  flatOpts = [];
+
+  /* when empty input: show only the most useful suggestions (sessions + medals) */
+  const EMPTY = q==="";
+
+  let anyShown = false;
+
+  groups.forEach(g=>{
+    /* category locked state (no session yet) */
+    if(g.locked){
+      if(EMPTY || (nq && "categorie categoria".includes(nq))){
+        const wrap = document.createElement("div"); wrap.className="grp";
+        wrap.innerHTML = `<div class="grp-head"><span class="micro">${g.title}</span><span class="rule"></span><span class="hint">${g.hint}</span></div>
+          <div class="grp-chips"><span style="font-size:12.5px;color:var(--micro);padding:4px 2px">Scegli una sessione per vedere le categorie.</span></div>`;
+        elScroll.appendChild(wrap); anyShown = true;
+      }
+      return;
+    }
+
+    /* on empty input, only Sessioni + Medaglie surface */
+    if(EMPTY && !(g.dim==="session" || g.dim==="medal")) return;
+
+    /* filter items by query */
+    let items = g.items;
+    if(q){
+      items = items.filter(o=> norm(o.label).includes(nq));
+      /* also match by dimension name e.g. "med" -> show all medals */
+      if(items.length===0 && norm(DIM_LABEL[g.dim]+" "+g.title).includes(nq)){
+        items = g.items;
+      }
+    }
+    if(items.length===0) return;
+
+    /* sakagura/prefecture lists get capped for length */
+    let capped = items, more = 0;
+    if((g.row) && !q && items.length>6){ capped = items.slice(0,6); more = items.length-6; }
+    if((g.row) && q && items.length>8){ capped = items.slice(0,8); more = items.length-8; }
+
+    const wrap = document.createElement("div"); wrap.className="grp";
+    const head = document.createElement("div"); head.className="grp-head";
+    head.innerHTML = `<span class="micro">${g.title}</span><span class="rule"></span>${g.hint?`<span class="hint">${g.hint}</span>`:""}`;
+    wrap.appendChild(head);
+
+    const chips = document.createElement("div"); chips.className="grp-chips";
+    capped.forEach(o=>{
+      const added = hasFilter(o.dim,o.key);
+      const b = document.createElement("button");
+      b.type="button";
+      b.className = "opt"+(g.row?" row":"")+(added?" added":"");
+      b.dataset.dim=o.dim; b.dataset.key=o.key;
+      let inner = "";
+      if(o.color) inner += `<span class="swatch" style="background:${o.color}"></span>`;
+      inner += `<span class="opt-lab">${hl(o.label,q)}</span>`;
+      if(g.dim==="sakagura"){ const n = ROWS.filter(r=>r.kura===o.key).length; inner += `<span class="opt-meta">${n} prem.</span>`; }
+      b.innerHTML = inner;
+      b.addEventListener("click",()=>addFilter(o));
+      chips.appendChild(b);
+      flatOpts.push(b);
+    });
+    if(more>0){
+      const m = document.createElement("span");
+      m.style.cssText="font-size:11.5px;color:var(--micro);font-weight:600;align-self:center;padding:0 4px;";
+      m.textContent = `+${more} altre`;
+      chips.appendChild(m);
+    }
+    wrap.appendChild(chips);
+    elScroll.appendChild(wrap);
+    anyShown = true;
+  });
+
+  /* empty-state */
+  const showEmpty = q!=="" && !anyShown;
+  elEmpty.classList.toggle("show", showEmpty);
+  if(showEmpty) document.getElementById("emQ").textContent = q;
+
+  /* clamp cursor */
+  if(state.cursor >= flatOpts.length) state.cursor = flatOpts.length-1;
+  paintCursor();
+}
+
+function paintCursor(){
+  flatOpts.forEach((b,i)=>b.classList.toggle("cursor", i===state.cursor));
+  if(state.cursor>=0 && flatOpts[state.cursor]) flatOpts[state.cursor].scrollIntoView({block:"nearest"});
+}
+
+/* ---------------- add / remove filters ---------------- */
+function addFilter(o){
+  if(o.dim==="session"){
+    /* single session: replace existing; clearing a category/medal that no longer fits */
+    state.filters = state.filters.filter(f=>f.dim!=="session");
+    state.filters.push({dim:"session", key:o.key, label:o.label, color:o.color});
+    /* drop category not valid for the new session */
+    state.filters = state.filters.filter(f=>{
+      if(f.dim==="category") return CATS[o.key].includes(f.key);
+      if(f.dim==="medal")    return MED[f.key].sessions.includes(o.key);
+      return true;
+    });
+  } else if(o.dim==="medal" || o.dim==="session"){
+    if(!hasFilter(o.dim,o.key)) state.filters.push({...o});
+  } else {
+    if(!hasFilter(o.dim,o.key)) state.filters.push({...o});
+  }
+  state.q=""; elInput.value=""; state.cursor=-1;
+  renderTokens(); renderMenu(); renderResults();
+  elInput.focus();
+}
+
+function removeFilter(dim,key){
+  state.filters = state.filters.filter(f=>!(f.dim===dim && f.key===key));
+  renderTokens(); renderMenu(); renderResults();
+}
+
+function renderTokens(){
+  elTokens.innerHTML = "";
+  if(state.filters.length===0){
+    elTokens.innerHTML = `<span class="tokens-empty">Nessun filtro attivo — digita o scegli qui sopra.</span>`;
+    return;
+  }
+  const lbl = document.createElement("span"); lbl.className="tokens-label"; lbl.textContent="Attivi"; elTokens.appendChild(lbl);
+  /* order: session, medal, category, prefecture, sakagura */
+  const order = {session:0,medal:1,category:2,prefecture:3,sakagura:4};
+  [...state.filters].sort((a,b)=>order[a.dim]-order[b.dim]).forEach(f=>{
+    const t = document.createElement("span");
+    t.className = "token"+(f.dim==="session"?" is-session":"");
+    if(f.color) t.style.setProperty("--tkc", f.color);
+    let sw = f.color? `<span class="swatch" style="background:${f.color}"></span>` : "";
+    t.innerHTML = `${sw}<span class="tk-dim">${DIM_LABEL[f.dim]}:</span><span class="tk-val">${f.label}</span>
+      <button class="tk-x" type="button" aria-label="Rimuovi ${f.label}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>`;
+    t.querySelector(".tk-x").addEventListener("click",()=>removeFilter(f.dim,f.key));
+    elTokens.appendChild(t);
+  });
+}
+
+/* ---------------- results filtering & render ---------------- */
+function matches(r){
+  for(const f of state.filters){
+    if(f.dim==="session"   && r.session!==f.key) return false;
+    if(f.dim==="medal"     && r.medal!==f.key)   return false;
+    if(f.dim==="category"  && r.cat!==f.key)     return false;
+    if(f.dim==="prefecture"&& r.pref!==f.key)    return false;
+    if(f.dim==="sakagura"  && r.kura!==f.key)    return false;
+  }
+  return true;
+}
+
+function renderResults(){
+  const data = ROWS.filter(matches);
+  elNo.classList.toggle("show", data.length===0);
+  const nKura = new Set(data.map(r=>r.kura)).size;
+  elCount.innerHTML = `<b>${data.length}</b> ${data.length===1?"premio":"premi"} · <b>${nKura}</b> sakagura`;
+
+  elResults.innerHTML = "";
+  TIER_ORDER.forEach(tier=>{
+    const items = data.filter(r=>r.medal===tier).sort((a,b)=>a.name.localeCompare(b.name,"en",{sensitivity:"base"}));
+    if(!items.length) return;
+    const m = MED[tier];
+
+    const block = document.createElement("section"); block.className="tier-block";
+    const head = document.createElement("div"); head.className="tier-row";
+    head.innerHTML = `<span class="badge" style="background:${m.color}">${TIER_LABEL[tier].toUpperCase()}</span>
+      <span class="tally">${items.length} ${items.length===1?"premio":"premi"}</span><span class="rule"></span>`;
+    block.appendChild(head);
+
+    const table = document.createElement("div"); table.className="table";
+    items.forEach(r=>{
+      const sc = SESS[r.session];
+      const crumbBits = [
+        `<span class="sess"><span class="swatch" style="background:${sc.color}"></span>${sc.label}</span>`,
+        `<span class="sep">·</span><span>${r.cat}</span>`,
+        `<span class="sep">·</span><span>${r.pref}</span>`,
+      ];
+      if(r.region) crumbBits.push(`<span class="sep">·</span><span>${r.region}</span>`);
+      const row = document.createElement("article"); row.className="rowitem";
+      row.innerHTML = `
+        <div class="medal"><img src="${r.img}" alt="${TIER_LABEL[tier]}" loading="lazy" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=&quot;font-size:18px;color:${m.color}&quot;>◆</span>'"/></div>
+        <div class="info">
+          <div class="name">${r.name}</div>
+          <div class="kura">${r.kura}</div>
+          <div class="crumb">${crumbBits.join("")}</div>
+        </div>
+        <span class="go"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></span>`;
+      table.appendChild(row);
+    });
+    block.appendChild(table);
+    elResults.appendChild(block);
+  });
+}
+
+/* ---------------- menu open/close ---------------- */
+function openMenu(){ state.openMenu=true; elMenu.classList.add("open"); elCombo.classList.add("focused");
+  if(window.matchMedia("(max-width:560px)").matches) elScrim.classList.add("on"); }
+function closeMenu(){ state.openMenu=false; elMenu.classList.remove("open"); elCombo.classList.remove("focused");
+  elScrim.classList.remove("on"); state.cursor=-1; }
+
+elInput.addEventListener("focus",()=>{ openMenu(); renderMenu(); });
+elInput.addEventListener("input",e=>{ state.q=e.target.value; state.cursor=-1; if(!state.openMenu) openMenu(); renderMenu(); });
+elScrim.addEventListener("click",()=>{ closeMenu(); elInput.blur(); });
+
+document.addEventListener("click",e=>{
+  if(!elMenu.contains(e.target) && !elCombo.contains(e.target)) closeMenu();
+});
+
+elInput.addEventListener("keydown",e=>{
+  if(e.key==="ArrowDown"){ e.preventDefault(); if(!state.openMenu){openMenu();renderMenu();} state.cursor=Math.min(state.cursor+1, flatOpts.length-1); paintCursor(); }
+  else if(e.key==="ArrowUp"){ e.preventDefault(); state.cursor=Math.max(state.cursor-1, 0); paintCursor(); }
+  else if(e.key==="Enter"){ e.preventDefault();
+    if(state.cursor>=0 && flatOpts[state.cursor]) flatOpts[state.cursor].click();
+    else if(flatOpts.length===1) flatOpts[0].click();
+  }
+  else if(e.key==="Escape"){ closeMenu(); }
+  else if(e.key==="Backspace" && state.q==="" && state.filters.length){
+    const last = state.filters[state.filters.length-1];
+    removeFilter(last.dim,last.key);
+  }
+});
+
+document.getElementById("clearAll").addEventListener("click",()=>{
+  state.filters=[]; state.q=""; elInput.value="";
+  renderTokens(); renderMenu(); renderResults();
+});
+
+/* ---------------- init ---------------- */
+renderTokens();
+renderResults();
+renderMenu();
+</script>
+</body>
+</html>

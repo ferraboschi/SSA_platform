@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Milano Sake Challenge 2026 — Medagliere</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#1a1613;
+    --ink-soft:#4a423b;
+    --ink-faint:#8a7f73;
+    --paper:#f6f1e7;
+    --paper-2:#efe8da;
+    --paper-card:#fcf9f2;
+    --line:#d8cdb8;
+    --line-soft:#e5dcca;
+    --bordeaux:#6e1226;
+    --bordeaux-deep:#530d1d;
+    --bordeaux-tint:#f0e3df;
+    --gold:#9a7b35;
+    --serif:"Fraunces", Georgia, serif;
+    --body:"Spectral", Georgia, serif;
+    --ui:"Inter", system-ui, sans-serif;
+    --shadow-medal:0 2px 4px rgba(40,28,20,.10), 0 14px 30px rgba(60,40,25,.18), 0 30px 60px rgba(60,40,25,.10);
+    --shadow-medal-hover:0 4px 8px rgba(40,28,20,.14), 0 26px 50px rgba(60,40,25,.26), 0 50px 90px rgba(60,40,25,.14);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:17px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    background-image:
+      radial-gradient(1200px 600px at 80% -10%, rgba(110,18,38,.04), transparent 60%),
+      radial-gradient(900px 500px at -5% 100%, rgba(154,123,53,.05), transparent 55%);
+  }
+  ::selection{background:var(--bordeaux);color:#fff;}
+  a{color:inherit;}
+
+  /* ===== top utility bar ===== */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:11px clamp(18px,4vw,56px);
+    font-family:var(--ui);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-faint);
+    border-bottom:1px solid var(--line-soft);
+    background:rgba(246,241,231,.7);
+  }
+  .topbar .edition{color:var(--bordeaux);font-weight:600;}
+  .lang{display:flex;gap:2px;}
+  .lang button{
+    font:inherit;letter-spacing:.12em;border:0;background:none;cursor:pointer;
+    color:var(--ink-faint);padding:3px 9px;border-radius:2px;transition:.2s;
+  }
+  .lang button.on{color:var(--ink);background:var(--paper-2);}
+  .lang button:hover{color:var(--bordeaux);}
+
+  /* ===== masthead ===== */
+  .masthead{
+    text-align:center;
+    padding:clamp(34px,6vw,72px) clamp(18px,4vw,56px) clamp(22px,3.4vw,40px);
+    position:relative;
+  }
+  .crest{
+    font-family:var(--ui);font-size:11px;letter-spacing:.42em;text-transform:uppercase;
+    color:var(--bordeaux);margin-bottom:18px;font-weight:600;
+    display:inline-flex;align-items:center;gap:14px;
+  }
+  .crest::before,.crest::after{content:"";width:30px;height:1px;background:var(--bordeaux);opacity:.5;}
+  .masthead h1{
+    font-family:var(--serif);
+    font-weight:500;
+    font-optical-sizing:auto;
+    font-size:clamp(46px,9vw,118px);
+    line-height:.92;
+    letter-spacing:-.02em;
+    margin:0;
+    color:var(--ink);
+  }
+  .masthead h1 em{
+    font-style:italic;font-weight:400;color:var(--bordeaux);
+  }
+  .masthead .sub{
+    margin:22px auto 0;max-width:660px;
+    font-family:var(--body);font-style:italic;font-size:clamp(15px,2vw,19px);
+    color:var(--ink-soft);line-height:1.55;
+  }
+  .masthead .deck{
+    margin-top:18px;font-family:var(--ui);font-size:11px;letter-spacing:.3em;
+    text-transform:uppercase;color:var(--ink-faint);
+  }
+  .masthead .deck b{color:var(--ink);font-weight:600;}
+  .ruleline{
+    max-width:1180px;margin:clamp(24px,3vw,40px) auto 0;
+    border:0;border-top:1px solid var(--line);height:0;position:relative;
+  }
+  .ruleline::after{
+    content:"酒";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    background:var(--paper);padding:0 18px;font-family:var(--serif);color:var(--bordeaux);
+    font-size:20px;
+  }
+
+  /* ===== filter bar ===== */
+  .filters{
+    position:sticky;top:0;z-index:40;
+    background:rgba(246,241,231,.93);
+    backdrop-filter:saturate(140%) blur(10px);
+    -webkit-backdrop-filter:saturate(140%) blur(10px);
+    border-top:1px solid var(--line-soft);
+    border-bottom:1px solid var(--line);
+    padding:14px clamp(18px,4vw,56px);
+  }
+  .filters-inner{max-width:1280px;margin:0 auto;display:flex;gap:clamp(14px,2vw,30px);align-items:flex-end;flex-wrap:wrap;}
+  .field{display:flex;flex-direction:column;gap:6px;}
+  .field--grow{flex:1 1 280px;min-width:0;}
+  .field label{
+    font-family:var(--ui);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--ink-faint);font-weight:600;padding-left:2px;
+  }
+  .search{position:relative;}
+  .search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-faint);}
+  .search input{
+    width:100%;font-family:var(--body);font-size:18px;color:var(--ink);
+    background:var(--paper-card);border:1px solid var(--line);border-radius:3px;
+    padding:11px 14px 11px 42px;transition:.22s;
+  }
+  .search input::placeholder{color:var(--ink-faint);font-style:italic;}
+  .search input:focus{outline:none;border-color:var(--bordeaux);box-shadow:0 0 0 3px var(--bordeaux-tint);}
+  select.sel{
+    font-family:var(--body);font-size:16px;color:var(--ink);background:var(--paper-card);
+    border:1px solid var(--line);border-radius:3px;padding:11px 38px 11px 14px;cursor:pointer;
+    appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a7f73' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 13px center;transition:.22s;min-width:178px;
+  }
+  select.sel:focus{outline:none;border-color:var(--bordeaux);box-shadow:0 0 0 3px var(--bordeaux-tint);}
+  .tier-chips{display:flex;gap:7px;flex-wrap:wrap;}
+  .chip{
+    font-family:var(--ui);font-size:11px;letter-spacing:.07em;text-transform:uppercase;font-weight:500;
+    border:1px solid var(--line);background:var(--paper-card);color:var(--ink-soft);
+    padding:9px 14px;border-radius:40px;cursor:pointer;transition:.2s;white-space:nowrap;
+  }
+  .chip:hover{border-color:var(--bordeaux);color:var(--bordeaux);}
+  .chip.on{background:var(--bordeaux);border-color:var(--bordeaux);color:#fff;}
+  .filters-meta{
+    max-width:1280px;margin:12px auto 0;display:flex;justify-content:space-between;align-items:center;gap:14px;
+    font-family:var(--ui);font-size:11.5px;letter-spacing:.04em;color:var(--ink-faint);flex-wrap:wrap;
+  }
+  .filters-meta .count b{color:var(--ink);font-weight:600;}
+  .share-top{
+    font-family:var(--ui);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;
+    color:var(--bordeaux);border:1px solid var(--bordeaux);background:none;border-radius:40px;
+    padding:7px 16px;cursor:pointer;display:inline-flex;gap:7px;align-items:center;transition:.2s;
+  }
+  .share-top:hover{background:var(--bordeaux);color:#fff;}
+
+  /* ===== main ===== */
+  main{max-width:1280px;margin:0 auto;padding:clamp(30px,5vw,64px) clamp(18px,4vw,56px) 80px;}
+
+  /* tier section header */
+  .tier{margin-bottom:clamp(48px,7vw,92px);}
+  .tier-head{
+    display:flex;align-items:baseline;gap:18px;margin-bottom:26px;
+    border-bottom:2px solid var(--ink);padding-bottom:14px;position:relative;
+  }
+  .tier-head .roman{
+    font-family:var(--serif);font-style:italic;font-weight:400;font-size:clamp(20px,3vw,30px);
+    color:var(--bordeaux);line-height:1;flex:0 0 auto;
+  }
+  .tier-head h2{
+    font-family:var(--serif);font-weight:500;font-size:clamp(26px,4.2vw,46px);
+    letter-spacing:-.01em;margin:0;line-height:1;color:var(--ink);
+  }
+  .tier-head .jp{font-family:var(--serif);font-size:clamp(15px,2vw,21px);color:var(--ink-faint);}
+  .tier-head .tally{
+    margin-left:auto;font-family:var(--ui);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--ink-faint);align-self:flex-end;white-space:nowrap;
+  }
+  .tier-head .tally b{color:var(--bordeaux);font-weight:600;}
+
+  /* grid of laureate cards */
+  .roll{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(330px,1fr));
+    gap:clamp(20px,2.6vw,40px) clamp(24px,3vw,48px);
+  }
+
+  .laureate{
+    display:grid;grid-template-columns:128px 1fr;gap:22px;align-items:start;
+    padding:6px 6px 22px;border-bottom:1px solid var(--line-soft);
+    cursor:pointer;transition:border-color .3s;position:relative;
+  }
+  .laureate:hover{border-color:var(--bordeaux);}
+  .laureate:hover .medal-shell img{transform:translateY(-5px) rotate(-.4deg);box-shadow:var(--shadow-medal-hover);}
+  .laureate:hover .l-name{color:var(--bordeaux);}
+
+  .medal-shell{position:relative;align-self:start;}
+  .medal-shell img{
+    width:100%;display:block;border-radius:4px;
+    box-shadow:var(--shadow-medal);
+    transition:transform .42s cubic-bezier(.2,.8,.2,1), box-shadow .42s;
+    background:var(--paper-card);
+  }
+  .medal-shell::after{
+    content:"";position:absolute;left:8%;right:8%;bottom:-12px;height:14px;border-radius:50%;
+    background:radial-gradient(ellipse,rgba(60,40,25,.22),transparent 72%);
+    filter:blur(2px);z-index:-1;
+  }
+
+  .l-body{padding-top:4px;min-width:0;}
+  .l-cat{
+    font-family:var(--ui);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-faint);font-weight:600;margin-bottom:7px;
+  }
+  .l-name{
+    font-family:var(--serif);font-weight:500;font-size:21px;line-height:1.14;letter-spacing:-.005em;
+    margin:0 0 8px;color:var(--ink);transition:color .25s;
+    overflow-wrap:break-word;
+  }
+  .l-kura{
+    font-family:var(--body);font-size:15.5px;line-height:1.3;color:var(--ink-soft);margin:0;
+  }
+  .l-kura .jp{display:block;font-size:13px;color:var(--ink-faint);margin-top:2px;}
+  .l-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:13px;}
+  .tag{
+    font-family:var(--ui);font-size:10.5px;letter-spacing:.07em;
+    color:var(--ink-soft);border:1px solid var(--line);border-radius:40px;
+    padding:4px 11px;display:inline-flex;gap:5px;align-items:center;background:rgba(255,255,255,.35);
+  }
+  .tag .dot{width:5px;height:5px;border-radius:50%;background:var(--bordeaux);opacity:.6;}
+  .l-open{
+    margin-top:14px;font-family:var(--ui);font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--bordeaux);font-weight:600;display:inline-flex;align-items:center;gap:7px;opacity:.85;transition:.2s;
+  }
+  .laureate:hover .l-open{gap:11px;opacity:1;}
+
+  /* ===== expanded / tech sheet ===== */
+  .sheet{
+    grid-column:1/-1;
+    background:var(--paper-card);
+    border:1px solid var(--line);
+    border-top:3px solid var(--bordeaux);
+    border-radius:5px;
+    box-shadow:0 22px 60px rgba(60,40,25,.16);
+    padding:clamp(24px,3.4vw,44px);
+    margin:8px 0 22px;
+    display:grid;grid-template-columns:200px 1fr;gap:clamp(28px,4vw,56px);
+    position:relative;animation:reveal .4s ease;
+  }
+  @keyframes reveal{from{opacity:0;transform:translateY(-8px);}to{opacity:1;transform:none;}}
+  .sheet .medal-shell img{box-shadow:var(--shadow-medal-hover);}
+  .sheet-close{
+    position:absolute;top:16px;right:18px;border:1px solid var(--line);background:var(--paper);
+    width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--ink-soft);
+    display:flex;align-items:center;justify-content:center;transition:.2s;
+  }
+  .sheet-close:hover{border-color:var(--bordeaux);color:var(--bordeaux);transform:rotate(90deg);}
+  .sheet-eyebrow{
+    font-family:var(--ui);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--bordeaux);font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:10px;
+  }
+  .sheet-eyebrow::after{content:"";flex:1;height:1px;background:var(--line);}
+  .sheet h3{
+    font-family:var(--serif);font-weight:500;font-size:clamp(28px,3.6vw,40px);line-height:1.05;
+    letter-spacing:-.01em;margin:0 0 10px;color:var(--ink);
+  }
+  .sheet .kura-line{font-family:var(--body);font-size:18px;color:var(--ink-soft);margin:0 0 4px;}
+  .sheet .kura-line .jp{color:var(--ink-faint);margin-left:8px;font-size:15px;}
+  .sheet .origin{
+    font-family:var(--ui);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-faint);margin:4px 0 0;
+  }
+  .specs{
+    margin-top:26px;border-top:1px solid var(--line);
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  }
+  .spec{padding:15px 18px 15px 0;border-bottom:1px solid var(--line-soft);}
+  .spec dt{
+    font-family:var(--ui);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-faint);font-weight:600;margin-bottom:5px;
+  }
+  .spec dd{margin:0;font-family:var(--serif);font-size:21px;font-weight:500;color:var(--ink);line-height:1.1;}
+  .spec dd small{font-family:var(--body);font-size:13px;color:var(--ink-faint);font-weight:400;}
+  .sheet-actions{margin-top:28px;display:flex;gap:12px;flex-wrap:wrap;}
+  .btn{
+    font-family:var(--ui);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;
+    border-radius:40px;padding:12px 22px;cursor:pointer;transition:.22s;display:inline-flex;align-items:center;gap:9px;
+    text-decoration:none;
+  }
+  .btn-primary{background:var(--bordeaux);color:#fff;border:1px solid var(--bordeaux);}
+  .btn-primary:hover{background:var(--bordeaux-deep);transform:translateY(-1px);box-shadow:0 8px 20px rgba(110,18,38,.28);}
+  .btn-ghost{background:none;color:var(--ink);border:1px solid var(--ink);}
+  .btn-ghost:hover{background:var(--ink);color:var(--paper);}
+
+  /* ===== share modal ===== */
+  .scrim{
+    position:fixed;inset:0;background:rgba(26,22,19,.55);z-index:100;
+    display:none;align-items:center;justify-content:center;padding:24px;
+    backdrop-filter:blur(3px);
+  }
+  .scrim.on{display:flex;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal{
+    background:var(--paper-card);border-radius:6px;max-width:460px;width:100%;
+    border-top:3px solid var(--bordeaux);box-shadow:0 40px 80px rgba(0,0,0,.4);
+    padding:34px 34px 30px;position:relative;animation:reveal .3s ease;
+  }
+  .modal h4{font-family:var(--serif);font-weight:500;font-size:27px;margin:0 0 6px;letter-spacing:-.01em;}
+  .modal p{font-family:var(--body);font-style:italic;color:var(--ink-soft);margin:0 0 22px;font-size:15.5px;}
+  .share-row{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 0;border-top:1px solid var(--line-soft);
+  }
+  .share-row:last-of-type{border-bottom:1px solid var(--line-soft);}
+  .share-row .lbl{display:flex;align-items:center;gap:13px;}
+  .share-row .lbl .ic{
+    width:36px;height:36px;border-radius:50%;background:var(--bordeaux-tint);color:var(--bordeaux);
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+  }
+  .share-row .lbl b{font-family:var(--ui);font-size:13.5px;font-weight:600;display:block;color:var(--ink);}
+  .share-row .lbl span{font-family:var(--ui);font-size:11px;color:var(--ink-faint);}
+  .copy-btn{
+    font-family:var(--ui);font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
+    border:1px solid var(--line);background:var(--paper);color:var(--bordeaux);border-radius:40px;
+    padding:8px 15px;cursor:pointer;transition:.2s;white-space:nowrap;
+  }
+  .copy-btn:hover{background:var(--bordeaux);color:#fff;border-color:var(--bordeaux);}
+  .modal-close{
+    position:absolute;top:16px;right:18px;border:0;background:none;cursor:pointer;color:var(--ink-faint);
+    width:30px;height:30px;display:flex;align-items:center;justify-content:center;transition:.2s;
+  }
+  .modal-close:hover{color:var(--bordeaux);transform:rotate(90deg);}
+
+  /* empty */
+  .empty{text-align:center;padding:80px 20px;color:var(--ink-faint);font-style:italic;font-size:19px;display:none;}
+
+  /* ===== footer ===== */
+  footer{
+    border-top:1px solid var(--line);background:var(--paper-2);
+    padding:clamp(36px,5vw,60px) clamp(18px,4vw,56px);
+    text-align:center;
+  }
+  footer .seal{font-family:var(--serif);color:var(--bordeaux);font-size:26px;margin-bottom:12px;}
+  footer h5{font-family:var(--serif);font-weight:500;font-size:20px;margin:0 0 6px;letter-spacing:-.01em;}
+  footer p{font-family:var(--body);font-style:italic;color:var(--ink-soft);max-width:560px;margin:0 auto 18px;font-size:15px;}
+  footer .meta{font-family:var(--ui);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint);}
+  footer .meta a{color:var(--bordeaux);text-decoration:none;}
+
+  /* ===== responsive ===== */
+  @media (max-width:780px){
+    .roll{grid-template-columns:1fr;}
+    .sheet{grid-template-columns:1fr;gap:24px;}
+    .sheet .medal-shell{max-width:200px;}
+    .filters-inner{gap:14px;}
+    .field--grow{flex:1 1 100%;}
+    select.sel{min-width:0;width:100%;}
+    .field{flex:1 1 calc(50% - 7px);}
+  }
+  @media (max-width:480px){
+    body{font-size:16px;}
+    .topbar{padding:9px 16px;font-size:10px;letter-spacing:.1em;}
+    .topbar .edition span{display:none;}
+    .masthead{padding:28px 16px 18px;}
+    .crest{letter-spacing:.28em;font-size:10px;}
+    .masthead h1{font-size:clamp(38px,13vw,56px);}
+    main{padding:26px 16px 60px;}
+    .filters{padding:12px 16px;}
+    .field{flex:1 1 100%;}
+    .tier-chips{gap:6px;}
+    .chip{padding:8px 12px;font-size:10.5px;}
+    .laureate{grid-template-columns:96px 1fr;gap:16px;}
+    .l-name{font-size:18.5px;}
+    .l-kura{font-size:14px;}
+    .tier-head{flex-wrap:wrap;gap:8px 14px;}
+    .tier-head .tally{margin-left:0;width:100%;}
+    .sheet{padding:22px 18px 26px;}
+    .sheet .medal-shell{max-width:160px;margin:0 auto;}
+    .specs{grid-template-columns:1fr 1fr;}
+    .modal{padding:28px 22px 24px;}
+    .share-top{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="edition">Milano Sake Challenge <span>· Palmarès Ufficiale</span> 2026</div>
+  <nav class="lang" aria-label="Lingua">
+    <button class="on">IT</button><button>EN</button><button>JA</button>
+  </nav>
+</div>
+
+<header class="masthead">
+  <div class="crest">Albo d'Onore</div>
+  <h1>Il&nbsp;<em>Medagliere</em></h1>
+  <p class="sub">Il palmarès ufficiale dei sake e degli shōchū premiati alla terza edizione del concorso internazionale di Milano, giudicati alla cieca da sommelier e professionisti del gusto.</p>
+  <div class="deck">Edizione <b>2026</b> &nbsp;·&nbsp; <b>Milano, Italia</b> &nbsp;·&nbsp; ミラノ酒チャレンジ</div>
+  <hr class="ruleline" />
+</header>
+
+<div class="filters">
+  <div class="filters-inner">
+    <div class="field field--grow">
+      <label for="q">Cerca sakagura o prodotto</label>
+      <div class="search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="q" type="search" placeholder="es. Ichinokura, Hourai, Watanabe…" autocomplete="off" />
+      </div>
+    </div>
+    <div class="field">
+      <label for="region">Regione</label>
+      <select id="region" class="sel">
+        <option value="">Tutte le regioni</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="session">Sessione</label>
+      <select id="session" class="sel">
+        <option value="">Tutte le sessioni</option>
+        <option value="nihonshu">Nihonshu (Sake)</option>
+        <option value="shochu">Shōchū</option>
+        <option value="design">Design</option>
+        <option value="pairing">Abbinamento</option>
+      </select>
+    </div>
+    <div class="field" style="flex:1 1 100%;">
+      <label>Riconoscimento</label>
+      <div class="tier-chips" id="tierChips"></div>
+    </div>
+  </div>
+  <div class="filters-meta">
+    <div class="count" id="count"></div>
+    <button class="share-top" onclick="openShare('selezione corrente','—')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5 8.6 10.5"/></svg>
+      Condividi questa selezione
+    </button>
+  </div>
+</div>
+
+<main id="main"></main>
+<div class="empty" id="empty">Nessun premio corrisponde ai filtri scelti.</div>
+
+<footer>
+  <div class="seal">酒</div>
+  <h5>Milano Sake Challenge</h5>
+  <p>Ogni medaglia rappresenta un giudizio espresso a Milano da una giuria di sommelier qualificati. I nomi dei prodotti e delle sakagura sono riportati nella lingua originale.</p>
+  <div class="meta">© 2026 Milano Sake Challenge &nbsp;·&nbsp; <a href="https://www.milanosakechallenge.com">milanosakechallenge.com</a></div>
+</footer>
+
+<div class="scrim" id="scrim" onclick="if(event.target===this)closeShare()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="shTitle">
+    <button class="modal-close" onclick="closeShare()" aria-label="Chiudi">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <h4 id="shTitle">Condividi</h4>
+    <p id="shSub">Diffondi il palmarès e celebra il riconoscimento.</p>
+    <div class="share-row">
+      <div class="lbl">
+        <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21V8l-7-5-7 5v13"/><path d="M9 21v-7h6v7"/></svg></span>
+        <div><b>Per sakagura</b><span id="shKura">link alla cantina premiata</span></div>
+      </div>
+      <button class="copy-btn" onclick="copyLink(this)">Copia link</button>
+    </div>
+    <div class="share-row">
+      <div class="lbl">
+        <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-5.3-9-10a5 5 0 0 1 9-2 5 5 0 0 1 9 2c-2 4.7-9 10-9 10Z"/></svg></span>
+        <div><b>Per prodotto</b><span id="shProd">scheda del prodotto premiato</span></div>
+      </div>
+      <button class="copy-btn" onclick="copyLink(this)">Copia link</button>
+    </div>
+    <div class="share-row">
+      <div class="lbl">
+        <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
+        <div><b>Per regione</b><span id="shReg">tutti i premiati della regione</span></div>
+      </div>
+      <button class="copy-btn" onclick="copyLink(this)">Copia link</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  {"name":"Hourai Junmai Daiginjo Shinpaku18","sakagura":"Watanabe Shuzouten Co, Ltd.","sakagura_jp":"有限会社渡辺酒造店","session":"nihonshu","category":"Junmai Daiginjo (<35%)","medal":"platinum","medal_img":"/medals/nihonshu_platino.png","prefecture":"Gifu","region":"Chūbu & Hokuriku","polishing_rate":18,"smv":0,"alcohol":16,"price":18850,"rice":"Yamadanishiki","yeast":"M310","koji":"yellow","brewery_website":"https://www.sake-hourai.co.jp/","product_type":"Sake"},
+  {"name":"HARUSHIKA JUNMAI NARA NO YAE SAKURA","sakagura":"S. Imanishi Co., Ltd.","sakagura_jp":"株式会社今西清兵衛商店","session":"nihonshu","category":"Junmai","medal":"double_gold","medal_img":"/medals/nihonshu_doppio_oro.png","prefecture":"Nara","region":"Kansai","polishing_rate":60,"smv":-19,"alcohol":14,"price":1800,"rice":"Hinohikari","yeast":"Flower Kobo","koji":"yellow","brewery_website":"https://www.harushika.com/","product_type":"Sake"},
+  {"name":"Hayashi Jyunmai Ginjyo Gohyakumangoku","sakagura":"Hayashi Shuzo","sakagura_jp":"林酒造場","session":"nihonshu","category":"Junmai Ginjo","medal":"gold","medal_img":"/medals/nihonshu_oro.png","prefecture":"Toyama","region":"Chūbu & Hokuriku","polishing_rate":55,"smv":0,"alcohol":16,"price":3900,"rice":"Gohyakumangoku","yeast":"Kyokai 9","koji":"yellow","brewery_founded":1626,"brewery_website":"https://www.hayashisyuzo.com/","product_type":"Sake"},
+  {"name":"Ichinokura Tokubetsu Junmai Yamahai-Shikomi","sakagura":"ICHINOKURA","sakagura_jp":"株式会社 一ノ蔵","session":"nihonshu","category":"Junmai","medal":"silver","medal_img":"/medals/nihonshu_argento.png","prefecture":"Miyagi","region":"Hokkaido & Tōhoku","polishing_rate":60,"smv":2,"alcohol":15,"price":1463,"rice":"Sasanishiki","yeast":"Kyokai 7/9","koji":"yellow","brewery_founded":1973,"brewery_website":"https://ichinokura.co.jp/","product_type":"Sake"},
+  {"name":"Joraku Wine Yeast Brewed","sakagura":"Joraku Shuzo Co.,LTD","sakagura_jp":"常楽酒造株式会社","session":"shochu","category":"Kome (Rice)","medal":"platinum","medal_img":"/medals/shochu_platino.png","prefecture":"Kumamoto","region":"Kyūshū & Okinawa","price":1522,"brewery_founded":1912,"brewery_website":"https://joraku.co.jp/","product_type":"Shochu"},
+  {"name":"FORTUNA","sakagura":"Izumi Syuzou Co.,Ltd.","sakagura_jp":"出水酒造株式会社","session":"shochu","category":"Imo (Sweet Potato)","medal":"gold","medal_img":"/medals/shochu_oro.png","prefecture":"Kagoshima","region":"Kyūshū & Okinawa","price":15000,"brewery_founded":1950,"brewery_website":"https://www.izumi-syuzou.co.jp/","product_type":"Shochu"},
+  {"name":"AKANEKAZE 43","sakagura":"Hombo Shuzo Co., Ltd.","sakagura_jp":"本坊酒造株式会社","session":"shochu","category":"Imo (Sweet Potato)","medal":"double_gold","medal_img":"/medals/shochu_doppio_oro.png","price":5940,"product_type":"Shochu"},
+  {"name":"Tonoike AUTHENTIC JunmaiDaiginjo","sakagura":"Tonoikeshuzouten CO., LTD","sakagura_jp":"株式会社外池酒造店","session":"design","category":"Junmai Daiginjo (<35%)","medal":"best_design","medal_img":"/medals/best_design_JDU.png","prefecture":"Tochigi","region":"Kantō","polishing_rate":38,"smv":-3,"alcohol":16,"price":10909,"koji":"yellow","brewery_founded":1937,"brewery_website":"https://tonoike.jp/","product_type":"Sake"},
+  {"name":"Shikisakura Tochiginohoshi Junmai","sakagura":"Utsunomiya Shuzo Co., Ltd.","sakagura_jp":"宇都宮酒造株式会社","session":"design","category":"Junmai","medal":"good_design","medal_img":"/medals/good_design.png","prefecture":"Tochigi","region":"Kantō","polishing_rate":65,"smv":2,"alcohol":17,"price":1500,"rice":"Tochigi-no-hoshi","yeast":"Tochigi T-S","koji":"yellow","brewery_founded":1947,"brewery_website":"http://www.shikisakura.co.jp/","product_type":"Sake"},
+  {"name":"SHIRAYUKI Tanba Densho","sakagura":"Konishi Brewing Co.,Ltd.","sakagura_jp":"小西酒造株式会社","session":"nihonshu","category":"Futsushu","medal":"platinum","medal_img":"/medals/nihonshu_platino.png","prefecture":"Hyogo","region":"Kansai","polishing_rate":75,"smv":1,"alcohol":14.5,"price":1684,"rice":"Kokusanmai","yeast":"Kyokai 7","koji":"yellow","brewery_website":"https://www.konishi.co.jp/","product_type":"Sake"},
+  {"name":"Gokyo Junmai Daiginjo 50%","sakagura":"Sakaishuzo Co., Ltd.","sakagura_jp":"酒井酒造株式会社","session":"nihonshu","category":"Junmai Daiginjo (≥35%)","medal":"gold","medal_img":"/medals/nihonshu_oro.png","prefecture":"Yamaguchi","region":"Chūgoku & Shikoku","polishing_rate":50,"smv":-1.5,"alcohol":15.5,"price":3300,"rice":"Yamadanishiki","yeast":"Kyokai 18","koji":"yellow","brewery_founded":1871,"brewery_website":"https://gokyo-sake.co.jp/","product_type":"Sake"},
+  {"name":"Ichinokura Tokubetsu Junmai (Parmigiano)","sakagura":"ICHINOKURA","sakagura_jp":"株式会社 一ノ蔵","session":"pairing","category":"Parmigiano Reggiano","medal":"good_with","medal_img":"/medals/pairing_goodwith_PR.png","prefecture":"Miyagi","region":"Hokkaido & Tōhoku","rice":"Sasanishiki","brewery_founded":1973,"brewery_website":"https://ichinokura.co.jp/","product_type":"Sake"}
+];
+
+const TIERS = [
+  {key:"platinum",    label:"Platino",      it:"Medaglia di Platino", jp:"プラチナ", roman:"I"},
+  {key:"double_gold", label:"Doppio Oro",   it:"Doppio Oro",          jp:"ダブルゴールド", roman:"II"},
+  {key:"gold",        label:"Oro",          it:"Medaglia d'Oro",      jp:"金賞", roman:"III"},
+  {key:"silver",      label:"Argento",      it:"Medaglia d'Argento",  jp:"銀賞", roman:"IV"},
+  {key:"best_design", label:"Best Design",  it:"Best Design",         jp:"ベストデザイン", roman:"V"},
+  {key:"good_design", label:"Good Design",  it:"Good Design",         jp:"グッドデザイン", roman:"VI"},
+  {key:"good_with",   label:"Good With",    it:"Abbinamento — Good With", jp:"相性賞", roman:"VII"}
+];
+const TIER_MAP = Object.fromEntries(TIERS.map(t=>[t.key,t]));
+const SESSION_LABEL = {nihonshu:"Nihonshu",shochu:"Shōchū",design:"Design",pairing:"Abbinamento"};
+const yen = n => "¥" + n.toLocaleString("ja-JP");
+
+let state = {q:"", region:"", session:"", tier:"", open:null};
+
+/* ---- build region dropdown + tier chips ---- */
+const regions = [...new Set(DATA.map(d=>d.region).filter(Boolean))].sort();
+const regSel = document.getElementById("region");
+regions.forEach(r=>{const o=document.createElement("option");o.value=r;o.textContent=r;regSel.appendChild(o);});
+
+const chipWrap = document.getElementById("tierChips");
+const allChip = mkChip("Tutti i premi","");
+allChip.classList.add("on");
+chipWrap.appendChild(allChip);
+TIERS.forEach(t=>chipWrap.appendChild(mkChip(t.label,t.key)));
+function mkChip(text,key){
+  const b=document.createElement("button");b.className="chip";b.textContent=text;b.dataset.tier=key;
+  b.onclick=()=>{state.tier=key;[...chipWrap.children].forEach(c=>c.classList.toggle("on",c.dataset.tier===key));render();};
+  return b;
+}
+
+/* ---- filters ---- */
+document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value.trim().toLowerCase();render();});
+regSel.addEventListener("change",e=>{state.region=e.target.value;render();});
+document.getElementById("session").addEventListener("change",e=>{state.session=e.target.value;render();});
+
+function filtered(){
+  return DATA.filter(d=>{
+    if(state.region && d.region!==state.region) return false;
+    if(state.session && d.session!==state.session) return false;
+    if(state.tier && d.medal!==state.tier) return false;
+    if(state.q){
+      const hay=(d.sakagura+" "+d.name+" "+(d.sakagura_jp||"")+" "+(d.prefecture||"")).toLowerCase();
+      if(!hay.includes(state.q)) return false;
+    }
+    return true;
+  });
+}
+
+function specsHTML(d){
+  const rows=[];
+  const add=(label,val)=>{if(val!==undefined&&val!==null&&val!=="")rows.push(`<div class="spec"><dt>${label}</dt><dd>${val}</dd></div>`);};
+  add("Tipologia", d.product_type);
+  add("Categoria", d.category);
+  if(d.polishing_rate!=null) add("Seimaibuai", d.polishing_rate+'<small>%</small>');
+  if(d.smv!=null) add("Nihonshu-do (SMV)", (d.smv>0?"+":"")+d.smv);
+  if(d.alcohol!=null) add("Gradazione", d.alcohol+'<small>% vol</small>');
+  add("Riso", d.rice);
+  add("Lievito", d.yeast);
+  if(d.koji) add("Kōji", d.koji.charAt(0).toUpperCase()+d.koji.slice(1));
+  if(d.brewery_founded) add("Fondazione", d.brewery_founded);
+  if(d.price!=null) add("Prezzo indicativo", yen(d.price));
+  return rows.join("");
+}
+
+function render(){
+  const main=document.getElementById("main");
+  const data=filtered();
+  document.getElementById("empty").style.display = data.length? "none":"block";
+  document.getElementById("count").innerHTML =
+    `<b>${data.length}</b> riconoscimenti · <b>${new Set(data.map(d=>d.sakagura)).size}</b> sakagura · <b>${new Set(data.map(d=>d.region).filter(Boolean)).size}</b> regioni`;
+
+  main.innerHTML="";
+  TIERS.forEach(t=>{
+    let items=data.filter(d=>d.medal===t.key);
+    if(!items.length) return;
+    items.sort((a,b)=>a.name.localeCompare(b.name,"en",{sensitivity:"base"}));
+
+    const sec=document.createElement("section");sec.className="tier";
+    sec.innerHTML=`
+      <div class="tier-head">
+        <span class="roman">${t.roman}</span>
+        <h2>${t.it}</h2>
+        <span class="jp">${t.jp}</span>
+        <span class="tally"><b>${items.length}</b> ${items.length===1?"premiato":"premiati"}</span>
+      </div>
+      <div class="roll"></div>`;
+    const roll=sec.querySelector(".roll");
+
+    items.forEach(d=>{
+      const id=d.sakagura+"|"+d.name;
+      if(state.open===id){roll.appendChild(sheetEl(d));return;}
+      const card=document.createElement("article");
+      card.className="laureate";
+      card.onclick=()=>{state.open=id;render();};
+      const tags=[];
+      if(d.region) tags.push(`<span class="tag"><span class="dot"></span>${d.region}</span>`);
+      if(d.prefecture) tags.push(`<span class="tag">${d.prefecture}</span>`);
+      tags.push(`<span class="tag">${SESSION_LABEL[d.session]}</span>`);
+      card.innerHTML=`
+        <div class="medal-shell"><img src="${d.medal_img}" alt="${t.label} — Milano Sake Challenge 2026" loading="lazy"/></div>
+        <div class="l-body">
+          <div class="l-cat">${d.category||SESSION_LABEL[d.session]}</div>
+          <h3 class="l-name">${d.name}</h3>
+          <p class="l-kura">${d.sakagura}${d.sakagura_jp?`<span class="jp">${d.sakagura_jp}</span>`:""}</p>
+          <div class="l-tags">${tags.join("")}</div>
+          <span class="l-open">Scheda tecnica
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </span>
+        </div>`;
+      roll.appendChild(card);
+    });
+    main.appendChild(sec);
+  });
+}
+
+function sheetEl(d){
+  const t=TIER_MAP[d.medal];
+  const wrap=document.createElement("article");
+  wrap.className="sheet";
+  const site = d.brewery_website
+    ? `<a class="btn btn-ghost" href="${d.brewery_website}" target="_blank" rel="noopener">Vai al sito
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>` : "";
+  wrap.innerHTML=`
+    <button class="sheet-close" onclick="event.stopPropagation();state.open=null;render();" aria-label="Chiudi scheda">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <div class="medal-shell"><img src="${d.medal_img}" alt="${t.it}"/></div>
+    <div>
+      <div class="sheet-eyebrow">${t.it} · ${t.jp}</div>
+      <h3>${d.name}</h3>
+      <p class="kura-line">${d.sakagura}${d.sakagura_jp?`<span class="jp">${d.sakagura_jp}</span>`:""}</p>
+      <p class="origin">${[d.prefecture,d.region].filter(Boolean).join(" — ")} · ${SESSION_LABEL[d.session]}</p>
+      <dl class="specs">${specsHTML(d)}</dl>
+      <div class="sheet-actions">
+        ${site}
+        <button class="btn btn-primary" onclick="event.stopPropagation();openShare('${d.name.replace(/'/g,"\\'")}','${d.sakagura.replace(/'/g,"\\'")}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5 8.6 10.5"/></svg>
+          Condividi
+        </button>
+      </div>
+    </div>`;
+  return wrap;
+}
+
+/* ---- share modal ---- */
+function openShare(name,kura){
+  document.getElementById("shTitle").textContent = name==="selezione corrente" ? "Condividi il palmarès" : "Condividi";
+  document.getElementById("shSub").textContent = kura==="—"
+    ? "Diffondi la selezione attuale di medaglie."
+    : "Diffondi il riconoscimento e celebra la sakagura.";
+  document.getElementById("shKura").textContent = kura==="—" ? "link alla cantina premiata" : kura;
+  document.getElementById("shProd").textContent = name==="selezione corrente" ? "scheda del prodotto premiato" : name;
+  document.getElementById("scrim").classList.add("on");
+}
+function closeShare(){document.getElementById("scrim").classList.remove("on");}
+function copyLink(btn){const o=btn.textContent;btn.textContent="Copiato ✓";setTimeout(()=>btn.textContent=o,1600);}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeShare();if(state.open){state.open=null;render();}}});
+
+render();
+</script>
+<script>window.addEventListener('load',()=>{state.open='Watanabe Shuzouten Co, Ltd.|Hourai Junmai Daiginjo Shinpaku18';render();requestAnimationFrame(()=>{setTimeout(()=>{const s=document.querySelector('.sheet');const y=s.getBoundingClientRect().top+window.scrollY-120;window.scrollTo(0,y+260);},500);});});</script>
+</body>
+</html>

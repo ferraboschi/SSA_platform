@@ -12,8 +12,24 @@ export interface GradableQuestion {
   type: string;
   text: string;
   options: string[];
+  /** Stored EN/JA translations. A student who took the exam in another language
+   *  stored their answers as the TRANSLATED option text, so we must grade against
+   *  the options in the language they actually saw — not the Italian original. */
+  i18n?: Partial<Record<"en" | "ja", { text: string; options: string[] }>>;
   /** Option INDICES for choice questions, accepted STRINGS for "fill". */
   correct?: Array<number | string>;
+}
+
+/** The options the student ACTUALLY SAW, in their exam language — falling back to
+ *  the original Italian when a translation is missing (exactly what the runner
+ *  shows via localizeQ). Grading and the answer breakdown use these so a correct
+ *  answer typed/picked in EN/JA is not compared against the Italian key. */
+function seenOptions(q: GradableQuestion, lang?: string): string[] {
+  if (lang === "en" || lang === "ja") {
+    const tr = q.i18n?.[lang];
+    if (tr?.options?.length) return tr.options;
+  }
+  return q.options;
 }
 
 export interface GradedAnswer {
@@ -110,6 +126,10 @@ export function certifiedScore(
 export function gradeAnswers(
   questions: GradableQuestion[],
   answers: Record<string, string | string[]> | null | undefined,
+  /** The language the student took the exam in ("it" | "en" | "ja"). Their answers
+   *  were stored in this language, so each question is graded against the options
+   *  they actually saw. Omit / "it" for the Italian original. */
+  lang?: string,
 ): GradeResult {
   const ans = answers ?? {};
   let gradable = 0;
@@ -118,15 +138,21 @@ export function gradeAnswers(
 
   const detail: GradedAnswer[] = questions.map((q) => {
     const given = ans[q.id];
+    // Grade against the version the student SAW (their language), so an answer
+    // stored as translated option text matches the (translated) correct option.
+    const localized: GradableQuestion = { ...q, options: seenOptions(q, lang) };
 
     // FILL ("Riempi spazio"): the typed answer is matched, case-insensitive,
     // against the accepted strings (q.correct). Deterministic → auto-graded.
-    // With no accepted answers it falls back to manual review.
     if (q.type === "fill") {
       const accepted = (q.correct ?? []).map((c) => normStr(c)).filter(Boolean);
-      if (accepted.length === 0) {
+      // Accepted answers exist in Italian only. If the student saw a TRANSLATED
+      // version of this question there is no localized key to compare against →
+      // route to manual review (never auto-fail a correct EN/JA answer vs the IT key).
+      const sawTranslated = (lang === "en" || lang === "ja") && !!q.i18n?.[lang];
+      if (accepted.length === 0 || sawTranslated) {
         manual++;
-        return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, q), correct: "—", ok: null };
+        return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: "—", ok: null };
       }
       gradable++;
       const givenNorm = normStr(Array.isArray(given) ? given[0] : given);
@@ -136,7 +162,7 @@ export function gradeAnswers(
         qid: q.id,
         type: q.type,
         text: q.text,
-        given: fmtGiven(given, q),
+        given: fmtGiven(given, localized),
         correct: (q.correct ?? []).map(String).join(", "),
         ok,
       };
@@ -145,19 +171,19 @@ export function gradeAnswers(
     // Open / match / order (or a choice question with no answer key) → manual.
     if (!isObjective(q.type) || !q.correct) {
       manual++;
-      return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, q), correct: "—", ok: null };
+      return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: "—", ok: null };
     }
 
-    // Objective choice question → auto-graded.
+    // Objective choice question → auto-graded, in the student's language.
     gradable++;
-    const ok = gradeObjective(given, q);
+    const ok = gradeObjective(given, localized);
     if (ok) correct++;
     return {
       qid: q.id,
       type: q.type,
       text: q.text,
-      given: fmtGiven(given, q),
-      correct: q.correct.map((i) => q.options[Number(i)]).filter(Boolean).join(", "),
+      given: fmtGiven(given, localized),
+      correct: q.correct.map((i) => localized.options[Number(i)]).filter(Boolean).join(", "),
       ok,
     };
   });

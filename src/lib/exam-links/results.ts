@@ -35,7 +35,7 @@ export async function loadCourseExamResults(
   const svc = getSupabaseServiceClient();
   const { data: subs } = await svc
     .from("exam_submissions")
-    .select("id, test_key, answers, registration, corsista_id, created_at")
+    .select("id, test_key, answers, registration, corsista_id, created_at, lang")
     .eq("corso_id", Number(courseId))
     .eq("mode", "exam")
     .neq("test_key", "feedback")
@@ -59,6 +59,7 @@ export async function loadCourseExamResults(
     registration: Record<string, string> | null;
     corsista_id: number | null;
     created_at: string;
+    lang: string | null;
   }>) {
     const reg = s.registration ?? {};
     let email = (
@@ -72,7 +73,7 @@ export async function loadCourseExamResults(
     const ans = s.answers ?? {};
 
     // Auto-correction (pure, fully unit-tested in grading.test.ts).
-    const { detail, gradable, manual, autoScore, suggested } = gradeAnswers(questions, ans);
+    const { detail, gradable, manual, autoScore, suggested } = gradeAnswers(questions, ans, s.lang ?? undefined);
 
     let enrollmentId: number | null = null;
     let currentResult: string | null = null;

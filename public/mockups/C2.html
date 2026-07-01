@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Milano Sake Challenge 2026 — Medagliere</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+JP:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#f6f7f9;
+  --card:#ffffff;
+  --line:#e9ebef;
+  --line-2:#dfe2e8;
+  --ink:#101828;
+  --ink-2:#344054;
+  --sec:#667085;
+  --micro:#8a93a3;
+  --indigo:#4f46e5;
+  --indigo-deep:#312e81;
+  --indigo-tint:#eef2ff;
+  --track:#eef0f3;
+  --shadow-card:0 1px 2px rgba(16,24,40,.05);
+  --shadow-pop:0 18px 48px -12px rgba(16,24,40,.30), 0 4px 12px -4px rgba(16,24,40,.14);
+  --shadow-chip:0 1px 2px rgba(16,24,40,.10), 0 1px 1px rgba(16,24,40,.04);
+  --r:14px;
+  --sans:"Inter", system-ui, -apple-system, sans-serif;
+  --jp:"Noto Serif JP", serif;
+
+  /* session accents */
+  --s-nihonshu:#4f46e5;
+  --s-shochu:#c2740c;
+  --s-design:#7c3aed;
+  --s-pairing:#16a34a;
+
+  /* medal colors */
+  --m-platino:#94a3b8;
+  --m-doppio:#e08a1e;
+  --m-oro:#d2a02b;
+  --m-argento:#9aa3ad;
+  --m-bestdesign:#3b5fc0;
+  --m-gooddesign:#6b8ae0;
+  --m-bestwith:#14b8a6;
+  --m-goodwith:#22c55e;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+.micro{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--micro)}
+
+/* ============ HEADER ============ */
+.appbar{position:sticky;top:0;z-index:50;background:var(--card);border-bottom:1px solid var(--line)}
+.appbar .wrap{display:flex;align-items:center;justify-content:space-between;height:60px;gap:16px}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:var(--ink)}
+.brand .word{font-weight:700;letter-spacing:.10em;font-size:14px;display:flex;align-items:center;gap:7px;white-space:nowrap}
+.brand .kanji{font-family:var(--jp);color:var(--indigo);font-size:17px;font-weight:600}
+.brand .yr{color:var(--sec);font-weight:600;letter-spacing:.06em;margin-left:2px}
+.lang{display:flex;gap:2px;background:var(--track);border:1px solid var(--line);border-radius:10px;padding:3px}
+.lang button{border:0;background:transparent;color:var(--sec);font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.04em;padding:5px 10px;border-radius:8px;cursor:pointer}
+.lang button.on{background:#fff;color:var(--indigo);box-shadow:var(--shadow-chip)}
+
+/* ============ INTRO ============ */
+.intro{padding:26px 0 4px}
+.intro h1{font-size:26px;font-weight:700;letter-spacing:-.01em;margin:0 0 4px}
+.intro p{margin:0;color:var(--sec);font-size:14px;max-width:560px}
+
+/* ============ COMPACT FILTER BAR ============ */
+.barwrap{position:sticky;top:60px;z-index:40;background:var(--bg);padding-top:16px;padding-bottom:14px}
+.bar{display:flex;align-items:center;gap:10px}
+.search{position:relative;flex:1;min-width:0}
+.search .si{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--micro);pointer-events:none}
+.search input{
+  width:100%;height:44px;background:var(--card);border:1px solid var(--line);
+  color:var(--ink);font-family:var(--sans);font-size:14px;
+  padding:0 14px 0 40px;border-radius:12px;outline:none;box-shadow:var(--shadow-card);transition:.18s;
+}
+.search input::placeholder{color:var(--micro)}
+.search input:focus{border-color:var(--indigo);box-shadow:0 0 0 4px rgba(79,70,229,.12)}
+.filt-btn{
+  position:relative;display:inline-flex;align-items:center;gap:8px;height:44px;flex:none;
+  background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:0 15px;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--ink-2);
+  cursor:pointer;box-shadow:var(--shadow-card);transition:.16s;white-space:nowrap;
+}
+.filt-btn:hover{border-color:var(--line-2)}
+.filt-btn .ic{width:17px;height:17px;color:var(--ink-2)}
+.filt-btn .cnt{
+  min-width:20px;height:20px;padding:0 6px;border-radius:999px;
+  background:var(--indigo);color:#fff;font-size:11px;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.filt-btn.is-open{border-color:var(--indigo);color:var(--indigo);box-shadow:0 0 0 4px rgba(79,70,229,.12)}
+
+/* active token strip */
+.tokens{display:flex;gap:8px;overflow-x:auto;padding:12px 0 2px;scrollbar-width:none;-ms-overflow-style:none}
+.tokens::-webkit-scrollbar{display:none}
+.tokens:empty{display:none}
+.token{
+  display:inline-flex;align-items:center;gap:7px;flex:none;
+  height:32px;padding:0 7px 0 11px;border-radius:9px;
+  background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-chip);
+  font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:default;white-space:nowrap;
+}
+.token .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.token .lbl-k{color:var(--micro);font-weight:700;font-size:10px;letter-spacing:.04em;text-transform:uppercase;margin-right:-2px}
+.token .x{
+  width:18px;height:18px;border-radius:6px;border:0;background:transparent;color:var(--micro);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none;font-size:13px;line-height:1;
+}
+.token .x:hover{background:var(--track);color:var(--ink)}
+.token.clear-all{color:var(--indigo);font-weight:600;border-color:var(--line);background:#fff}
+.token.clear-all:hover{background:var(--indigo-tint)}
+.token.clear-all{cursor:pointer;padding:0 13px}
+
+/* ============ RESULTS ============ */
+main{padding:6px 0 80px}
+.result-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 18px}
+.result-meta .n{font-size:13.5px;color:var(--sec)}
+.result-meta .n b{color:var(--ink);font-weight:700}
+.result-meta .sort{font-size:12.5px;color:var(--micro);font-weight:600;display:inline-flex;align-items:center;gap:5px}
+
+.tier{margin-bottom:30px}
+.tier-head{display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:0 2px}
+.tier-head .badge{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:5px 11px 5px 9px;border-radius:999px;
+}
+.tier-head .badge .pip{width:9px;height:9px;border-radius:3px;flex:none}
+.tier-head .line{flex:1;height:1px;background:var(--line)}
+.tier-head .n{font-size:12px;color:var(--micro);font-weight:600}
+
+.rows{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-card);overflow:hidden}
+.row{display:flex;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--line);transition:background .14s}
+.row:last-child{border-bottom:0}
+.row:hover{background:#fbfbfd}
+.row .medal{width:42px;height:42px;flex:none;border-radius:9px;background:var(--bg);border:1px solid var(--line);display:grid;place-items:center;overflow:hidden}
+.row .medal img{width:100%;height:100%;object-fit:contain}
+.row .body{min-width:0;flex:1}
+.row .pname{font-size:14.5px;font-weight:600;color:var(--ink);line-height:1.25;margin:0 0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .sak{font-size:12.5px;color:var(--sec);margin:0 0 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:11.5px;color:var(--micro)}
+.row .crumbs .sess{font-weight:700}
+.row .crumbs .sep{color:var(--line-2)}
+.row .arrow{flex:none;color:var(--line-2)}
+
+/* ============ SCRIM + PANEL ============ */
+.scrim{position:absolute;inset:0;background:rgba(16,24,40,.42);opacity:0;pointer-events:none;transition:opacity .22s;z-index:60}
+.scrim.show{opacity:1;pointer-events:auto}
+
+/* desktop popover */
+.panel{
+  position:fixed;z-index:70;width:560px;max-width:calc(100vw - 36px);
+  display:flex;flex-direction:column;max-height:calc(100vh - 24px);
+  background:var(--card);border:1px solid var(--line);border-radius:18px;
+  box-shadow:var(--shadow-pop);overflow:hidden;
+  opacity:0;transform:translateY(-6px) scale(.99);pointer-events:none;transition:.2s;
+}
+.panel.show{opacity:1;transform:none;pointer-events:auto}
+.panel-grip{display:none}
+.panel-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px 12px}
+.panel-head h2{margin:0;font-size:16px;font-weight:700}
+.panel-head .reset{border:0;background:transparent;color:var(--indigo);font-size:13px;font-weight:600;cursor:pointer;padding:6px 8px;border-radius:8px}
+.panel-head .reset:hover{background:var(--indigo-tint)}
+.panel-head .close{border:1px solid var(--line);background:#fff;color:var(--sec);width:32px;height:32px;border-radius:9px;display:none;align-items:center;justify-content:center;cursor:pointer}
+.panel-body{padding:0 18px;flex:1 1 auto;min-height:0;overflow-y:auto}
+
+/* accordion */
+.acc{border-top:1px solid var(--line)}
+.acc:first-child{border-top:0}
+.acc-head{
+  width:100%;display:flex;align-items:center;gap:12px;
+  background:transparent;border:0;cursor:pointer;
+  padding:15px 2px;font-family:var(--sans);text-align:left;color:var(--ink);
+}
+.acc-head .ico{width:18px;height:18px;color:var(--sec);flex:none}
+.acc-head .t{font-size:14px;font-weight:600;flex:1}
+.acc-head .sel{font-size:12px;color:var(--indigo);font-weight:600}
+.acc-head .sel.none{color:var(--micro);font-weight:500}
+.acc-head .chev{width:18px;height:18px;color:var(--micro);transition:transform .2s;flex:none}
+.acc.open .acc-head .chev{transform:rotate(180deg)}
+.acc-panel{display:none;padding:0 2px 16px}
+.acc.open .acc-panel{display:block}
+.context-note{font-size:12px;color:var(--sec);background:var(--indigo-tint);border:1px solid #e0e3ff;border-radius:9px;padding:8px 11px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.context-note .cdot{width:8px;height:8px;border-radius:50%;background:var(--indigo);flex:none}
+
+/* facet chips inside accordion */
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{
+  display:inline-flex;align-items:center;gap:8px;
+  height:36px;padding:0 13px;border-radius:10px;
+  background:var(--card);border:1px solid var(--line);
+  font-size:13px;font-weight:500;color:var(--ink-2);cursor:pointer;transition:.14s;white-space:nowrap;
+}
+.opt:hover{border-color:var(--line-2);background:#fcfcfd}
+.opt .swatch{width:10px;height:10px;border-radius:3px;flex:none}
+.opt .swatch.round{border-radius:50%}
+.opt.on{background:var(--indigo-tint);border-color:var(--indigo);color:var(--indigo-deep);font-weight:600}
+.opt.on .check{color:var(--indigo)}
+.opt .check{width:15px;height:15px;margin-left:-2px;display:none}
+.opt.on .check{display:inline-block}
+.opt.dim{opacity:.42;pointer-events:none}
+
+/* prefecture search within accordion */
+.pref-search{position:relative;margin-bottom:10px}
+.pref-search input{width:100%;height:38px;border:1px solid var(--line);border-radius:10px;padding:0 12px 0 34px;font-family:var(--sans);font-size:13px;outline:none}
+.pref-search input:focus{border-color:var(--indigo);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+.pref-search .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--micro)}
+
+.panel-foot{flex:none;display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--line);background:var(--card)}
+.panel-foot .ghost{flex:none}
+.btn{
+  height:44px;border-radius:11px;font-family:var(--sans);font-size:14px;font-weight:600;
+  cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink-2);padding:0 18px;transition:.15s;
+}
+.btn:hover{border-color:var(--line-2)}
+.btn.primary{flex:1;background:var(--indigo);border-color:var(--indigo);color:#fff}
+.btn.primary:hover{background:#4338ca}
+
+@media (max-width:680px){
+  .wrap{padding:0 16px}
+  .appbar .wrap{height:54px}
+  .barwrap{top:54px}
+  .brand .word{font-size:12px;letter-spacing:.06em}
+  .intro{padding:18px 0 2px}
+  .intro h1{font-size:21px}
+  .filt-btn span.lbl{display:none}
+  .filt-btn{padding:0 13px}
+
+  /* mobile bottom-sheet */
+  .panel{
+    position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;max-width:100%;
+    max-height:90vh;border-radius:20px 20px 0 0;border-bottom:0;
+    transform:translateY(100%);transition:transform .26s cubic-bezier(.2,.8,.2,1),opacity .2s;
+    opacity:1;
+  }
+  .panel.show{transform:translateY(0)}
+  .panel-grip{flex:none;display:block;width:38px;height:4px;border-radius:999px;background:var(--line-2);margin:8px auto 0}
+  .panel-head{padding:8px 18px 10px}
+  .panel-head .close{display:inline-flex}
+  .row .crumbs{font-size:11px}
+}
+</style>
+</head>
+<body>
+<h2 class="sr-only">Medagliere Milano Sake Challenge 2026 con barra di ricerca compatta e pannello filtri a fisarmonica per sessione, medaglia, categoria e prefettura.</h2>
+
+<!-- HEADER -->
+<header class="appbar">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <span class="word">MILANO <span class="kanji">酒</span> SAKE CHALLENGE</span>
+      <span class="yr">2026</span>
+    </a>
+    <div class="lang" role="tablist" aria-label="Lingua">
+      <button class="on">IT</button><button>EN</button><button>JA</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="intro" id="top">
+    <h1>Medagliere ufficiale</h1>
+    <p>I sake e gli shōchū premiati dalla giuria internazionale. Cerca, filtra e scopri i vincitori per sessione, medaglia, categoria e prefettura.</p>
+  </section>
+</div>
+
+<!-- COMPACT BAR -->
+<div class="barwrap">
+  <div class="wrap">
+    <div class="bar">
+      <div class="search">
+        <span class="si" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </span>
+        <input id="q" type="text" placeholder="Cerca sakagura o prodotto…" aria-label="Cerca per sakagura o prodotto" />
+      </div>
+      <button class="filt-btn" id="filtBtn" aria-haspopup="dialog" aria-expanded="false">
+        <span class="ic" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M6 12h12M10 19h4"/></svg>
+        </span>
+        <span class="lbl">Filtri</span>
+        <span class="cnt" id="filtCount">3</span>
+      </button>
+    </div>
+    <div class="tokens" id="tokens" aria-label="Filtri attivi"></div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<main>
+  <div class="wrap">
+    <div class="result-meta">
+      <div class="n"><b id="cnt">6</b> <span id="cntword">prodotti premiati</span></div>
+      <div class="sort"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h12M3 12h9M3 18h6"/></svg> A → Z per medaglia</div>
+    </div>
+    <div id="roll"></div>
+  </div>
+</main>
+
+<!-- SCRIM + PANEL -->
+<div class="scrim" id="scrim"></div>
+<section class="panel" id="panel" role="dialog" aria-modal="true" aria-label="Filtri">
+  <div class="panel-grip" aria-hidden="true"></div>
+  <div class="panel-head">
+    <h2>Filtri</h2>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button class="reset" id="resetTop">Azzera tutto</button>
+      <button class="close" id="closeBtn" aria-label="Chiudi filtri">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+  <div class="panel-foot">
+    <button class="btn ghost" id="resetFoot">Azzera</button>
+    <button class="btn primary" id="applyBtn"><span id="applyLabel">Mostra 6 risultati</span></button>
+  </div>
+</section>
+
+<script>
+/* ---------- model ---------- */
+const SESSIONS = [
+  {key:"nihonshu", label:"Nihonshu", color:"var(--s-nihonshu)"},
+  {key:"shochu",   label:"Shōchū",   color:"var(--s-shochu)"},
+  {key:"design",   label:"Design",   color:"var(--s-design)"},
+  {key:"pairing",  label:"Abbinamento Cibo", color:"var(--s-pairing)"},
+];
+
+const MEDALS = {
+  platino:    {label:"Platino",      color:"var(--m-platino)",    sessions:["nihonshu","shochu"]},
+  doppio_oro: {label:"Doppio Oro",   color:"var(--m-doppio)",     sessions:["nihonshu","shochu"]},
+  oro:        {label:"Oro",          color:"var(--m-oro)",        sessions:["nihonshu","shochu"]},
+  argento:    {label:"Argento",      color:"var(--m-argento)",    sessions:["nihonshu","shochu"]},
+  best_design:{label:"Best Design",  color:"var(--m-bestdesign)", sessions:["design"]},
+  good_design:{label:"Good Design",  color:"var(--m-gooddesign)", sessions:["design"]},
+  best_with:  {label:"Best With",    color:"var(--m-bestwith)",   sessions:["pairing"]},
+  good_with:  {label:"Good With",    color:"var(--m-goodwith)",   sessions:["pairing"]},
+};
+const MEDAL_ORDER = ["platino","doppio_oro","oro","argento","best_design","good_design","best_with","good_with"];
+
+const CAT_NIHONSHU = ["Daiginjo","Junmai Daiginjo (<35%)","Junmai Daiginjo (≥35%)","Junmai Ginjo","Ginjo","Junmai","Honjozo","Futsushu","Nigori","Sparkling","Koshu","Umeshu","Yuzushu","Liqueur","Special Methods"];
+const CAT_SHOCHU = ["Imo (Sweet Potato)","Mugi (Barley)","Kome (Rice)","Awamori","Aged Honkaku","Special Shochu"];
+const CAT_DESIGN = [...new Set([...CAT_NIHONSHU,...CAT_SHOCHU])];
+const CAT_PAIRING = ["Lasagne","Parmigiano Reggiano","San Daniele","Tartufo","Gelato alla Fragola"];
+function catsFor(sess){
+  if(sess.length===0) return [];
+  if(sess.length===1){
+    return sess[0]==="nihonshu"?CAT_NIHONSHU:sess[0]==="shochu"?CAT_SHOCHU:sess[0]==="design"?CAT_DESIGN:CAT_PAIRING;
+  }
+  const set=[];
+  sess.forEach(s=>{(s==="nihonshu"?CAT_NIHONSHU:s==="shochu"?CAT_SHOCHU:s==="design"?CAT_DESIGN:CAT_PAIRING).forEach(c=>{if(!set.includes(c))set.push(c)})});
+  return set;
+}
+
+const PREFS = ["Aichi","Akita","Aomori","Chiba","Ehime","Estero","Fukui","Fukuoka","Fukushima","Gifu","Gunma","Hiroshima","Hokkaido","Hyogo","Ibaraki","Ishikawa","Iwate","Kagawa","Kagoshima","Kanagawa","Kochi","Kumamoto","Kyoto","Mie","Miyagi","Miyazaki","Nagano","Nagasaki","Nara","Niigata","Oita","Okayama","Okinawa","Osaka","Saga","Saitama","Shiga","Shimane","Shizuoka","Tochigi","Tokushima","Tokyo","Tottori","Toyama","Wakayama","Yamagata","Yamaguchi","Yamanashi"];
+
+const DATA = [
+  {name:"Kid Daiginjo", sak:"Heiwa Shuzou Co., Ltd", session:"nihonshu", cat:"Daiginjo", pref:"Wakayama", region:"Kinki", medal:"platino", img:"/medals/nihonshu_platino.png"},
+  {name:"Hourai Junmai Daiginjo Shinpaku18", sak:"Watanabe Shuzouten", session:"nihonshu", cat:"Junmai Daiginjo (<35%)", pref:"Gifu", region:"Chubu", medal:"platino", img:"/medals/nihonshu_platino.png"},
+  {name:"DAIYAKIKU Junmaigijo", sak:"TODA SAKE BREWERY", session:"nihonshu", cat:"Junmai Ginjo", pref:"Nagano", region:"Chubu", medal:"doppio_oro", img:"/medals/nihonshu_doppio_oro.png"},
+  {name:"Aokage", sak:"Yanagita Distillery", session:"shochu", cat:"Mugi (Barley)", pref:"Estero", region:"", medal:"platino", img:"/medals/shochu_platino.png"},
+  {name:"Tonoike AUTHENTIC Junmai Daiginjo", sak:"Tonoikeshuzouten", session:"design", cat:"Junmai Daiginjo (<35%)", pref:"Tochigi", region:"Kanto", medal:"best_design", img:"/medals/best_design_JDU.png"},
+  {name:"GINTEN RYUOU", sak:"Odagiri Shoji", session:"pairing", cat:"Parmigiano Reggiano", pref:"Tokyo", region:"Kanto", medal:"best_with", img:"/medals/pairing_magnifica_PR.png"},
+  {name:"Gokyo Junmai Daiginjo 50%", sak:"Sakaishuzo Co., Ltd.", session:"nihonshu", cat:"Junmai Daiginjo (≥35%)", pref:"Yamaguchi", region:"Chugoku", medal:"oro", img:"/medals/nihonshu_oro.png"},
+  {name:"Ichinokura Tokubetsu Junmai Yamahai", sak:"ICHINOKURA", session:"nihonshu", cat:"Junmai", pref:"Miyagi", region:"Tohoku", medal:"argento", img:"/medals/nihonshu_argento.png"},
+  {name:"FORTUNA", sak:"Izumi Syuzou Co.,Ltd.", session:"shochu", cat:"Imo (Sweet Potato)", pref:"Kagoshima", region:"Kyushu", medal:"oro", img:"/medals/shochu_oro.png"},
+  {name:"Shikisakura Tochiginohoshi Junmai", sak:"Utsunomiya Shuzo Co., Ltd.", session:"design", cat:"Junmai", pref:"Tochigi", region:"Kanto", medal:"good_design", img:"/medals/good_design.png"},
+];
+
+/* ---------- state (pre-seeded: a couple active filters) ---------- */
+const state = { q:"", sessions:["nihonshu"], medals:["platino","oro"], cats:[], pref:"", prefQ:"" };
+
+const SESS_LABEL = Object.fromEntries(SESSIONS.map(s=>[s.key,s.label]));
+const SESS_COLOR = Object.fromEntries(SESSIONS.map(s=>[s.key,s.color]));
+const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- filtering ---------- */
+function matches(p){
+  if(state.sessions.length && !state.sessions.includes(p.session)) return false;
+  if(state.medals.length && !state.medals.includes(p.medal)) return false;
+  if(state.cats.length && !state.cats.includes(p.cat)) return false;
+  if(state.pref && p.pref!==state.pref) return false;
+  if(state.q){
+    const q=state.q.toLowerCase();
+    if(!(p.name.toLowerCase().includes(q)||p.sak.toLowerCase().includes(q))) return false;
+  }
+  return true;
+}
+function filtered(){ return DATA.filter(matches); }
+function activeCount(){
+  return state.sessions.length + state.medals.length + state.cats.length + (state.pref?1:0) + (state.q?1:0);
+}
+
+/* ---------- tokens strip ---------- */
+function renderTokens(){
+  const el=document.getElementById("tokens");
+  const t=[];
+  if(state.q){
+    t.push(tok("cerca","ricerca", esc('"'+state.q+'"'), null, ()=>{state.q="";document.getElementById("q").value="";}));
+  }
+  state.sessions.forEach(s=>t.push(tok("sessione",null,SESS_LABEL[s],SESS_COLOR[s],()=>{state.sessions=state.sessions.filter(x=>x!==s);pruneCats();})));
+  state.medals.forEach(m=>t.push(tok("medaglia",null,MEDALS[m].label,MEDALS[m].color,()=>{state.medals=state.medals.filter(x=>x!==m);})));
+  state.cats.forEach(c=>t.push(tok("categoria",null,c,null,()=>{state.cats=state.cats.filter(x=>x!==c);})));
+  if(state.pref) t.push(tok("prefettura",null,state.pref,null,()=>{state.pref="";}));
+
+  el.innerHTML = t.join("");
+  if(activeCount()>0){
+    el.insertAdjacentHTML("beforeend",`<button class="token clear-all" id="clrAll">Azzera tutti</button>`);
+    document.getElementById("clrAll").onclick = clearAll;
+  }
+  el.querySelectorAll("[data-rm]").forEach((b,i)=>{ b.onclick = removers[i]; });
+}
+let removers=[];
+function tok(kindLabel,kindKey,label,color,onRemove){
+  removers.push(()=>{onRemove();syncAll();});
+  const dot = color?`<span class="dot" style="background:${color}"></span>`:"";
+  return `<span class="token">${dot}<span class="lbl-k">${kindLabel}</span>${label}<button class="x" data-rm aria-label="Rimuovi filtro ${label}">&times;</button></span>`;
+}
+
+/* ---------- results ---------- */
+function renderResults(){
+  const items=filtered();
+  document.getElementById("cnt").textContent=items.length;
+  document.getElementById("cntword").textContent = items.length===1 ? "prodotto premiato" : "prodotti premiati";
+  let html="";
+  for(const m of MEDAL_ORDER){
+    const inTier=items.filter(p=>p.medal===m).sort((a,b)=>a.name.localeCompare(b.name,"en",{sensitivity:"base"}));
+    if(!inTier.length) continue;
+    const md=MEDALS[m];
+    html+=`<section class="tier">
+      <div class="tier-head">
+        <span class="badge" style="background:${tint(md.color)};color:${md.color}"><span class="pip" style="background:${md.color}"></span>${md.label.toUpperCase()}</span>
+        <span class="line"></span><span class="n">${inTier.length}</span>
+      </div>
+      <div class="rows">${inTier.map(rowHTML).join("")}</div>
+    </section>`;
+  }
+  if(!items.length){
+    html=`<div style="text-align:center;padding:60px 0;color:var(--sec)">
+      <div style="font-size:15px;font-weight:600;color:var(--ink);margin-bottom:6px">Nessun premio corrisponde ai filtri</div>
+      <div style="font-size:13px">Prova a rimuovere qualche filtro o ad allargare la ricerca.</div></div>`;
+  }
+  document.getElementById("roll").innerHTML=html;
+}
+function rowHTML(p){
+  const crumb=[`<span class="sess" style="color:${SESS_COLOR[p.session]}">${SESS_LABEL[p.session]}</span>`,esc(p.cat),esc(p.pref)];
+  if(p.region) crumb.push(esc(p.region));
+  return `<div class="row">
+    <div class="medal"><img src="${p.img}" alt="${MEDALS[p.medal].label}" loading="lazy" onerror="this.style.display='none'"/></div>
+    <div class="body">
+      <p class="pname">${esc(p.name)}</p>
+      <p class="sak">${esc(p.sak)}</p>
+      <div class="crumbs">${crumb.join('<span class="sep">·</span>')}</div>
+    </div>
+    <span class="arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></span>
+  </div>`;
+}
+function tint(c){
+  const map={
+    "var(--m-platino)":"#eef1f5","var(--m-doppio)":"#fdf0dd","var(--m-oro)":"#faf2dc",
+    "var(--m-argento)":"#eef0f3","var(--m-bestdesign)":"#e9eefb","var(--m-gooddesign)":"#eef2fc",
+    "var(--m-bestwith)":"#e0f7f3","var(--m-goodwith)":"#e7f9ec"
+  };
+  return map[c]||"#eef0f3";
+}
+
+/* ---------- panel (accordions) ---------- */
+const accOpen = {sessione:true, medaglia:true, categoria:true, prefettura:false};
+function renderPanel(){
+  const body=document.getElementById("panelBody");
+  const availMedals = MEDAL_ORDER.filter(m=>!state.sessions.length || MEDALS[m].sessions.some(s=>state.sessions.includes(s)));
+  const cats = catsFor(state.sessions);
+  const sessNames = state.sessions.length ? state.sessions.map(s=>SESS_LABEL[s]).join(", ") : null;
+
+  body.innerHTML = `
+  ${accBlock("sessione","Sessione",sessIcon(), state.sessions.length?state.sessions.length+" selez.":"", `
+    <div class="opts" id="optSession">
+      ${SESSIONS.map(s=>optHTML("sess",s.key,s.label,s.color,"round",state.sessions.includes(s.key),false)).join("")}
+    </div>`)}
+
+  ${accBlock("medaglia","Medaglia",medalIcon(), state.medals.length?state.medals.length+" selez.":"", `
+    <div class="opts" id="optMedal">
+      ${MEDAL_ORDER.map(m=>{
+        const dim=!availMedals.includes(m);
+        return optHTML("medal",m,MEDALS[m].label,MEDALS[m].color,"",state.medals.includes(m),dim);
+      }).join("")}
+    </div>`)}
+
+  ${accBlock("categoria","Categoria",catIcon(), state.cats.length?state.cats.length+" selez.":"", `
+    ${sessNames?`<div class="context-note"><span class="cdot"></span>Categorie della sessione <strong style="margin:0 3px">${esc(sessNames)}</strong></div>`:`<div class="context-note"><span class="cdot"></span>Seleziona una sessione per filtrare le categorie pertinenti</div>`}
+    <div class="opts" id="optCat">
+      ${cats.map(c=>optHTML("cat",c,c,null,"",state.cats.includes(c),false)).join("")}
+    </div>`)}
+
+  ${accBlock("prefettura","Prefettura",pinIcon(), state.pref?state.pref:"", `
+    <div class="pref-search">
+      <span class="si" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+      <input id="prefInput" type="text" placeholder="Cerca prefettura…" value="${esc(state.prefQ)}" />
+    </div>
+    <div class="opts" id="optPref">
+      ${PREFS.filter(p=>!state.prefQ||p.toLowerCase().includes(state.prefQ.toLowerCase())).map(p=>optHTML("pref",p,p,null,"",state.pref===p,false)).join("")}
+    </div>`)}
+  `;
+  wirePanel();
+  const n=filtered().length;
+  document.getElementById("applyLabel").textContent = n===1 ? "Mostra 1 risultato" : ("Mostra "+n+" risultati");
+}
+function accBlock(key,title,icon,sel,inner){
+  const open=accOpen[key];
+  const selHTML = sel? `<span class="sel">${esc(sel)}</span>` : `<span class="sel none">Tutte</span>`;
+  return `<div class="acc ${open?'open':''}" data-acc="${key}">
+    <button class="acc-head" data-acctoggle="${key}">
+      <span class="ico" aria-hidden="true">${icon}</span>
+      <span class="t">${title}</span>${selHTML}
+      <span class="chev" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span>
+    </button>
+    <div class="acc-panel">${inner}</div>
+  </div>`;
+}
+function optHTML(group,val,label,color,shape,on,dim){
+  const sw = color?`<span class="swatch ${shape}" style="background:${color}"></span>`:"";
+  return `<button class="opt ${on?'on':''} ${dim?'dim':''}" data-group="${group}" data-val="${esc(val)}" ${dim?'aria-disabled="true"':''}>
+    ${sw}${esc(label)}
+    <span class="check" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l4 4 10-10"/></svg></span>
+  </button>`;
+}
+function sessIcon(){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>';}
+function medalIcon(){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="15" r="6"/><path d="M9 3l3 6 3-6"/></svg>';}
+function catIcon(){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';}
+function pinIcon(){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-5.5 7-11a7 7 0 0 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';}
+
+function wirePanel(){
+  document.querySelectorAll("[data-acctoggle]").forEach(b=>{
+    b.onclick=()=>{const k=b.dataset.acctoggle;accOpen[k]=!accOpen[k];b.closest(".acc").classList.toggle("open",accOpen[k]);};
+  });
+  document.querySelectorAll(".opt[data-group]").forEach(b=>{
+    b.onclick=()=>{
+      const g=b.dataset.group, v=b.dataset.val;
+      if(g==="sess"){ toggle(state.sessions,v); pruneCats(); }
+      else if(g==="medal"){ toggle(state.medals,v); }
+      else if(g==="cat"){ toggle(state.cats,v); }
+      else if(g==="pref"){ state.pref = state.pref===v ? "" : v; }
+      syncAll(); renderPanel();
+    };
+  });
+  const pi=document.getElementById("prefInput");
+  if(pi){
+    pi.oninput=()=>{ state.prefQ=pi.value; renderPanel(); const x=document.getElementById("prefInput"); x.focus(); x.setSelectionRange(x.value.length,x.value.length); };
+  }
+}
+function toggle(arr,v){ const i=arr.indexOf(v); if(i>=0)arr.splice(i,1); else arr.push(v); }
+function pruneCats(){
+  const valid=catsFor(state.sessions);
+  if(state.sessions.length) state.cats=state.cats.filter(c=>valid.includes(c));
+}
+
+/* ---------- open/close ---------- */
+const panel=document.getElementById("panel"), scrim=document.getElementById("scrim"), filtBtn=document.getElementById("filtBtn");
+function positionPanel(){
+  if(window.innerWidth<=680){ panel.style.top=""; panel.style.left=""; return; }
+  const r=filtBtn.getBoundingClientRect();
+  let left=Math.max(12, r.right-panel.offsetWidth);
+  let top=r.bottom+10;
+  const maxTop=window.innerHeight-panel.offsetHeight-12;
+  if(top>maxTop) top=Math.max(12,maxTop);
+  panel.style.left=left+"px";
+  panel.style.top=top+"px";
+}
+function openPanel(){
+  renderPanel();
+  panel.classList.add("show"); scrim.classList.add("show");
+  filtBtn.classList.add("is-open"); filtBtn.setAttribute("aria-expanded","true");
+  positionPanel();
+}
+function closePanel(){
+  panel.classList.remove("show"); scrim.classList.remove("show");
+  filtBtn.classList.remove("is-open"); filtBtn.setAttribute("aria-expanded","false");
+}
+filtBtn.onclick=()=>{ panel.classList.contains("show")?closePanel():openPanel(); };
+scrim.onclick=closePanel;
+document.getElementById("closeBtn").onclick=closePanel;
+document.getElementById("applyBtn").onclick=closePanel;
+window.addEventListener("resize",()=>{ if(panel.classList.contains("show")) positionPanel(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&panel.classList.contains("show")) closePanel(); });
+
+function clearAll(){ state.q=""; document.getElementById("q").value=""; state.sessions=[]; state.medals=[]; state.cats=[]; state.pref=""; state.prefQ=""; syncAll(); if(panel.classList.contains("show")) renderPanel(); }
+document.getElementById("resetTop").onclick=()=>{clearAll();renderPanel();};
+document.getElementById("resetFoot").onclick=()=>{clearAll();renderPanel();};
+
+document.getElementById("q").addEventListener("input",e=>{ state.q=e.target.value.trim(); syncAll(); });
+
+/* ---------- sync ---------- */
+function syncAll(){
+  removers=[];
+  document.getElementById("filtCount").textContent=activeCount();
+  document.getElementById("filtCount").style.display=activeCount()?"inline-flex":"none";
+  renderTokens();
+  renderResults();
+}
+
+/* init */
+syncAll();
+/* show the bottom-sheet open in the mobile screenshot */
+if(window.innerWidth<=680){ openPanel(); }
+</script>
+</body>
+</html>

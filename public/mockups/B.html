@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Risultati · Milano Sake Challenge 2026 — Filtro Kura</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#f6f7f9;
+    --card:#ffffff;
+    --border:#e9ebef;
+    --border-strong:#dfe2e8;
+    --track:#eef0f3;
+    --ink:#101828;
+    --sec:#667085;
+    --micro:#8a93a3;
+    --indigo:#4f46e5;
+    --indigo-deep:#312e81;
+    --indigo-tint:#eef2ff;
+
+    /* session accents */
+    --s-nihonshu:#4f46e5;
+    --s-shochu:#c2740c;
+    --s-design:#7c3aed;
+    --s-cibo:#16a34a;
+
+    /* medals */
+    --m-platino:#94a3b8;
+    --m-doppiooro:#e08a1e;
+    --m-oro:#d2a02b;
+    --m-argento:#9aa3ad;
+    --m-bestdesign:#3b5fc0;
+    --m-gooddesign:#6b8ae0;
+    --m-bestwith:#14b8a6;
+    --m-goodwith:#22c55e;
+
+    --shadow-card:0 1px 2px rgba(16,24,40,.05);
+    --shadow-pop:0 12px 32px -12px rgba(16,24,40,.22), 0 2px 6px rgba(16,24,40,.06);
+    --shadow-chip:0 1px 2px rgba(16,24,40,.10), 0 1px 1px rgba(16,24,40,.04);
+    --r-card:16px;
+    --r-block:14px;
+    --maxw:1080px;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    background:var(--bg);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  img{ display:block; max-width:100%; }
+  button{ font-family:inherit; cursor:pointer; }
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+
+  /* ============ HEADER ============ */
+  .appbar{
+    background:var(--card);
+    border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:60;
+  }
+  .appbar__in{
+    max-width:var(--maxw); margin:0 auto; padding:0 20px;
+    height:60px; display:flex; align-items:center; gap:14px;
+  }
+  .wordmark{ display:flex; align-items:center; gap:11px; min-width:0; }
+  .wordmark__seal{
+    width:30px; height:30px; border-radius:8px;
+    background:var(--indigo-deep);
+    color:#fff; display:grid; place-items:center;
+    font-size:15px; font-weight:700; flex:none;
+  }
+  .wordmark__txt{
+    font-size:13px; font-weight:800; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ink); white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  .wordmark__txt .jp{ color:var(--indigo); margin:0 .28em; font-weight:700; }
+  .appbar__spacer{ flex:1; }
+  .appbar__edition{
+    font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--micro); white-space:nowrap;
+  }
+  @media (max-width:520px){ .appbar__edition{ display:none; } }
+
+  /* ============ PAGE SHELL ============ */
+  .wrap{ max-width:var(--maxw); margin:0 auto; padding:22px 20px 80px; }
+
+  .page-head{ margin:6px 2px 18px; }
+  .page-head h1{
+    margin:0; font-size:clamp(22px,3vw,28px); font-weight:800; letter-spacing:-.01em;
+    color:var(--ink);
+  }
+  .page-head p{
+    margin:6px 0 0; font-size:14px; color:var(--sec); max-width:60ch; line-height:1.5;
+  }
+
+  /* ============ FILTER PANEL (tall) ============ */
+  .filterpanel{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--r-card);
+    box-shadow:var(--shadow-card);
+    overflow:hidden;
+  }
+  .fblock{ padding:20px 22px; border-top:1px solid var(--border); }
+  .fblock:first-child{ border-top:0; }
+  @media (max-width:480px){ .fblock{ padding:18px 16px; } }
+
+  .fblock__head{
+    display:flex; align-items:baseline; gap:10px; margin-bottom:13px;
+  }
+  .micro{
+    font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--micro);
+  }
+  .fblock__hint{ font-size:12px; color:var(--sec); }
+  .fblock__count{
+    margin-left:auto; font-size:12px; font-weight:600; color:var(--indigo);
+    background:var(--indigo-tint); padding:2px 9px; border-radius:999px;
+  }
+
+  /* --- SESSIONE: 4 big choices --- */
+  .sessgrid{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:10px;
+  }
+  @media (max-width:760px){ .sessgrid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:380px){ .sessgrid{ grid-template-columns:1fr; } }
+  .sesscard{
+    position:relative; text-align:left;
+    background:var(--card); border:1.5px solid var(--border);
+    border-radius:13px; padding:13px 14px 14px;
+    display:flex; flex-direction:column; gap:9px; min-height:78px;
+    transition:border-color .15s, background .15s, box-shadow .15s, transform .05s;
+  }
+  .sesscard:hover{ border-color:var(--border-strong); }
+  .sesscard:active{ transform:translateY(1px); }
+  .sesscard__top{ display:flex; align-items:center; gap:9px; }
+  .sesscard__dot{
+    width:11px; height:11px; border-radius:50%; flex:none;
+    background:var(--accent);
+  }
+  .sesscard__jp{
+    margin-left:auto; font-size:13px; color:var(--micro); font-weight:600;
+  }
+  .sesscard__name{ font-size:14px; font-weight:700; color:var(--ink); line-height:1.2; }
+  .sesscard__meta{ font-size:12px; color:var(--sec); }
+  .sesscard.is-on{
+    border-color:var(--accent);
+    background:var(--accent-tint);
+    box-shadow:var(--shadow-card);
+  }
+  .sesscard.is-on .sesscard__name{ color:var(--accent-ink); }
+  .sesscard__check{
+    position:absolute; top:11px; right:11px; width:18px; height:18px; border-radius:50%;
+    background:var(--accent); color:#fff; display:none; place-items:center;
+    font-size:11px; font-weight:800;
+  }
+  .sesscard.is-on .sesscard__check{ display:grid; }
+  .sesscard.is-on .sesscard__jp{ display:none; }
+
+  /* --- gray-track chip groups (Medaglia) --- */
+  .track{
+    display:inline-flex; flex-wrap:wrap; gap:4px;
+    background:var(--track); border:1px solid var(--border);
+    border-radius:12px; padding:4px; max-width:100%;
+  }
+  .chip{
+    border:0; background:transparent; color:var(--sec);
+    font-size:13px; font-weight:600; line-height:1;
+    padding:8px 12px; border-radius:9px;
+    display:inline-flex; align-items:center; gap:7px;
+    transition:background .15s, color .15s, box-shadow .15s, opacity .15s;
+    white-space:nowrap;
+  }
+  .chip:hover{ color:var(--ink); }
+  .chip__dot{ width:8px; height:8px; border-radius:50%; background:var(--cdot,currentColor); flex:none; }
+  .chip.is-on{
+    background:var(--card); box-shadow:var(--shadow-chip);
+    color:var(--con,var(--indigo-deep));
+  }
+  .chip.is-on .chip__x{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:15px; height:15px; margin:-1px -3px -1px 1px; border-radius:50%;
+    font-size:11px; color:var(--sec);
+  }
+  .chip .chip__x{ display:none; }
+  .chip.is-dim{ opacity:.42; }
+
+  /* --- CATEGORIA: multi-row wrapped buttons --- */
+  .catwrap{ display:flex; flex-wrap:wrap; gap:8px; }
+  .catbtn{
+    border:1px solid var(--border); background:var(--card);
+    color:var(--ink); font-size:13px; font-weight:600;
+    padding:8px 13px; border-radius:10px; line-height:1.1;
+    display:inline-flex; align-items:center; gap:7px;
+    transition:border-color .15s, background .15s, color .15s, box-shadow .15s;
+  }
+  .catbtn:hover{ border-color:var(--accent); color:var(--accent-ink); }
+  .catbtn .catbtn__c{ font-size:11px; font-weight:700; color:var(--micro); }
+  .catbtn.is-on{
+    border-color:var(--accent); background:var(--accent-tint);
+    color:var(--accent-ink); box-shadow:var(--shadow-card);
+  }
+  .catbtn.is-on .catbtn__c{ color:var(--accent-ink); opacity:.8; }
+  .catbtn.is-on .catbtn__x{
+    margin:-2px -4px -2px 2px; font-size:12px; opacity:.7;
+  }
+  .catbtn .catbtn__x{ display:none; }
+  .catbtn.is-on .catbtn__x{ display:inline; }
+  .catnote{
+    margin-top:11px; font-size:12px; color:var(--sec);
+    display:inline-flex; align-items:center; gap:7px;
+  }
+  .catnote .dotmini{ width:7px;height:7px;border-radius:50%; background:var(--accent); flex:none; }
+
+  /* --- Prefettura + Ricerca row --- */
+  .fduo{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:680px){ .fduo{ grid-template-columns:1fr; gap:18px; } }
+  .field{ position:relative; }
+  .field__ico{
+    position:absolute; left:13px; top:50%; transform:translateY(-50%);
+    color:var(--micro); font-size:15px; pointer-events:none; line-height:1;
+  }
+  .input{
+    width:100%; height:44px; border:1px solid var(--border);
+    background:var(--card); border-radius:11px;
+    padding:0 14px 0 38px; font:inherit; font-size:14px; color:var(--ink);
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .input::placeholder{ color:var(--micro); }
+  .input:focus{ outline:none; border-color:var(--indigo); box-shadow:0 0 0 3px rgba(79,70,229,.14); }
+  .pref-tokens{ display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+  .token{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--indigo-tint); color:var(--indigo-deep);
+    border:1px solid #dfe0fb; border-radius:999px;
+    font-size:12px; font-weight:600; padding:4px 6px 4px 10px;
+  }
+  .token__x{
+    width:15px; height:15px; border-radius:50%; background:rgba(49,46,129,.10);
+    color:var(--indigo-deep); display:grid; place-items:center; font-size:11px; border:0;
+  }
+  .suggest{
+    margin-top:9px; font-size:12px; color:var(--sec);
+  }
+  .suggest b{ color:var(--ink); font-weight:600; }
+
+  /* --- panel footer actions --- */
+  .panel-foot{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:15px 22px; border-top:1px solid var(--border);
+    background:#fbfbfd;
+  }
+  @media (max-width:480px){ .panel-foot{ padding:14px 16px; } }
+  .activecount{ font-size:13px; color:var(--sec); }
+  .activecount b{ color:var(--ink); font-weight:700; }
+  .panel-foot__sp{ flex:1; }
+  .btn-clear{
+    border:1px solid var(--border); background:var(--card); color:var(--sec);
+    font-size:13px; font-weight:600; padding:9px 14px; border-radius:10px;
+  }
+  .btn-clear:hover{ color:var(--ink); border-color:var(--border-strong); }
+  .btn-apply{
+    border:0; background:var(--indigo); color:#fff;
+    font-size:13px; font-weight:700; padding:10px 18px; border-radius:10px;
+    box-shadow:0 1px 2px rgba(49,46,129,.25);
+  }
+  .btn-apply:hover{ background:#4338ca; }
+
+  /* ============ STICKY SUMMARY BAR ============ */
+  .summary{
+    position:sticky; top:60px; z-index:50;
+    margin:14px 0 0;
+    background:rgba(255,255,255,.86);
+    backdrop-filter:saturate(180%) blur(10px);
+    -webkit-backdrop-filter:saturate(180%) blur(10px);
+    border:1px solid var(--border);
+    border-radius:13px;
+    box-shadow:var(--shadow-card);
+    display:flex; align-items:center; gap:10px;
+    padding:9px 10px 9px 14px;
+  }
+  .summary__crumbs{
+    display:flex; align-items:center; gap:7px; min-width:0; flex-wrap:wrap;
+    font-size:13px;
+  }
+  .summary__pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-weight:600; color:var(--ink);
+    background:var(--track); border:1px solid var(--border);
+    border-radius:999px; padding:3px 11px; font-size:12.5px;
+  }
+  .summary__pill .sdot{ width:8px;height:8px;border-radius:50%; background:var(--sc,var(--indigo)); }
+  .summary__res{
+    font-size:12.5px; color:var(--sec); white-space:nowrap;
+  }
+  .summary__res b{ color:var(--ink); font-weight:700; }
+  .summary__sp{ flex:1; }
+  .summary__edit{
+    border:1px solid var(--border); background:var(--card);
+    color:var(--indigo); font-size:12.5px; font-weight:700;
+    padding:7px 12px; border-radius:9px; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .summary__edit:hover{ background:var(--indigo-tint); border-color:#dfe0fb; }
+  @media (max-width:560px){
+    .summary__res{ display:none; }
+    .summary{ padding:8px 8px 8px 12px; }
+  }
+
+  /* ============ RESULTS ============ */
+  .results{ margin-top:24px; }
+  .results__head{
+    display:flex; align-items:baseline; gap:10px; margin:0 2px 14px;
+  }
+  .results__head h2{
+    margin:0; font-size:16px; font-weight:800; letter-spacing:.02em;
+    text-transform:uppercase; color:var(--ink);
+  }
+  .results__head .n{ font-size:13px; color:var(--sec); font-weight:600; }
+
+  .tier{ margin-bottom:26px; }
+  .tier__head{
+    display:flex; align-items:center; gap:11px; margin:0 2px 11px;
+  }
+  .tier__medal{
+    width:26px; height:26px; flex:none; object-fit:contain;
+    filter:drop-shadow(0 1px 2px rgba(16,24,40,.18));
+  }
+  .tier__name{
+    font-size:12px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--tier,var(--ink));
+  }
+  .tier__rule{ flex:1; height:1px; background:var(--border); }
+  .tier__count{ font-size:12px; color:var(--micro); font-weight:600; }
+
+  .rowcard{
+    background:var(--card); border:1px solid var(--border);
+    border-radius:var(--r-block); box-shadow:var(--shadow-card);
+    overflow:hidden;
+  }
+  .row{
+    display:flex; align-items:center; gap:13px;
+    padding:13px 16px; border-top:1px solid var(--border);
+  }
+  .row:first-child{ border-top:0; }
+  .row__medal{
+    width:38px; height:38px; flex:none; object-fit:contain;
+    filter:drop-shadow(0 1px 2px rgba(16,24,40,.16));
+  }
+  .row__body{ min-width:0; flex:1; }
+  .row__name{
+    font-size:14px; font-weight:700; color:var(--ink);
+    line-height:1.25; margin:0;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .row__brewery{
+    font-size:13px; color:var(--sec); margin:2px 0 0;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .row__tags{
+    display:flex; align-items:center; gap:7px; margin-top:7px; flex-wrap:wrap;
+  }
+  .tag{
+    font-size:11px; font-weight:600; color:var(--sec);
+    display:inline-flex; align-items:center; gap:5px;
+  }
+  .tag__sdot{ width:7px;height:7px;border-radius:50%; background:var(--td,var(--sec)); }
+  .tag .sep{ color:var(--border-strong); }
+  @media (max-width:480px){
+    .row{ padding:12px 13px; gap:11px; }
+    .row__medal{ width:34px; height:34px; }
+  }
+
+  .foot{
+    text-align:center; margin-top:26px; font-size:12px; color:var(--micro);
+  }
+</style>
+</head>
+<body>
+
+  <header class="appbar">
+    <div class="appbar__in">
+      <div class="wordmark">
+        <div class="wordmark__seal">酒</div>
+        <div class="wordmark__txt">Milano<span class="jp">酒</span>Sake Challenge</div>
+      </div>
+      <div class="appbar__spacer"></div>
+      <div class="appbar__edition">Medagliere 2026</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h2 class="sr-only">Filtra i risultati premiati del Milano Sake Challenge 2026 e consulta il medagliere</h2>
+
+    <div class="page-head">
+      <h1>I premiati</h1>
+      <p>Filtra per sessione, medaglia, categoria, prefettura o cerca per sakagura. I risultati sono raggruppati per tier, in ordine alfabetico.</p>
+    </div>
+
+    <!-- ============ FILTER PANEL ============ -->
+    <section class="filterpanel" aria-label="Filtri">
+
+      <!-- SESSIONE -->
+      <div class="fblock">
+        <div class="fblock__head">
+          <span class="micro">Sessione</span>
+          <span class="fblock__hint">Scegli una sessione per vedere le sue categorie</span>
+        </div>
+        <div class="sessgrid">
+          <button class="sesscard" data-sess="nihonshu" style="--accent:var(--s-nihonshu);--accent-tint:#eef2ff;--accent-ink:#312e81;">
+            <span class="sesscard__check">✓</span>
+            <div class="sesscard__top">
+              <span class="sesscard__dot"></span>
+              <span class="sesscard__jp">日本酒</span>
+            </div>
+            <div class="sesscard__name">Nihonshu</div>
+            <div class="sesscard__meta">15 categorie</div>
+          </button>
+          <button class="sesscard" data-sess="shochu" style="--accent:var(--s-shochu);--accent-tint:#fdf3e6;--accent-ink:#8a5208;">
+            <span class="sesscard__check">✓</span>
+            <div class="sesscard__top">
+              <span class="sesscard__dot"></span>
+              <span class="sesscard__jp">焼酎</span>
+            </div>
+            <div class="sesscard__name">Shochu</div>
+            <div class="sesscard__meta">6 categorie</div>
+          </button>
+          <button class="sesscard is-on" data-sess="design" style="--accent:var(--s-design);--accent-tint:#f5f0ff;--accent-ink:#5b21b6;">
+            <span class="sesscard__check">✓</span>
+            <div class="sesscard__top">
+              <span class="sesscard__dot"></span>
+              <span class="sesscard__jp">デザイン</span>
+            </div>
+            <div class="sesscard__name">Design</div>
+            <div class="sesscard__meta">21 categorie</div>
+          </button>
+          <button class="sesscard" data-sess="cibo" style="--accent:var(--s-cibo);--accent-tint:#eafaf0;--accent-ink:#15803d;">
+            <span class="sesscard__check">✓</span>
+            <div class="sesscard__top">
+              <span class="sesscard__dot"></span>
+              <span class="sesscard__jp">相性</span>
+            </div>
+            <div class="sesscard__name">Abbinamento Cibo</div>
+            <div class="sesscard__meta">5 categorie</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- MEDAGLIA -->
+      <div class="fblock">
+        <div class="fblock__head">
+          <span class="micro">Medaglia</span>
+          <span class="fblock__hint">Premi della sessione Design</span>
+        </div>
+        <div class="track" role="group" aria-label="Filtra per medaglia">
+          <button class="chip is-on" style="--cdot:var(--m-bestdesign);--con:#23408f;" aria-pressed="true">
+            <span class="chip__dot"></span>Best Design
+            <span class="chip__x">✕</span>
+          </button>
+          <button class="chip" style="--cdot:var(--m-gooddesign);" aria-pressed="false">
+            <span class="chip__dot"></span>Good Design
+            <span class="chip__x">✕</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- CATEGORIA -->
+      <div class="fblock">
+        <div class="fblock__head">
+          <span class="micro">Categoria</span>
+          <span class="fblock__hint">Le categorie cambiano in base alla sessione</span>
+          <span class="fblock__count" id="catcount">1 selezionata</span>
+        </div>
+        <div class="catwrap" id="catwrap" style="--accent:var(--s-design);--accent-tint:#f5f0ff;--accent-ink:#5b21b6;" role="group" aria-label="Filtra per categoria">
+          <button class="catbtn">Daiginjo</button>
+          <button class="catbtn is-on" aria-pressed="true">Junmai Daiginjo (&lt;35%)<span class="catbtn__x">✕</span></button>
+          <button class="catbtn">Junmai Daiginjo (≥35%)</button>
+          <button class="catbtn">Junmai Ginjo</button>
+          <button class="catbtn">Ginjo</button>
+          <button class="catbtn">Junmai</button>
+          <button class="catbtn">Honjozo</button>
+          <button class="catbtn">Futsushu</button>
+          <button class="catbtn">Nigori</button>
+          <button class="catbtn">Sparkling</button>
+          <button class="catbtn">Koshu</button>
+          <button class="catbtn">Umeshu</button>
+          <button class="catbtn">Yuzushu</button>
+          <button class="catbtn">Liqueur</button>
+          <button class="catbtn">Special Methods</button>
+          <button class="catbtn">Imo (Sweet Potato)</button>
+          <button class="catbtn">Mugi (Barley)</button>
+          <button class="catbtn">Kome (Rice)</button>
+          <button class="catbtn">Awamori</button>
+          <button class="catbtn">Aged Honkaku</button>
+          <button class="catbtn">Special Shochu</button>
+        </div>
+        <div class="catnote"><span class="dotmini"></span>La sessione Design unisce le categorie di Nihonshu e Shochu (21 in totale).</div>
+      </div>
+
+      <!-- PREFETTURA + RICERCA -->
+      <div class="fblock">
+        <div class="fduo">
+          <div>
+            <div class="fblock__head"><span class="micro">Prefettura</span></div>
+            <div class="field">
+              <span class="field__ico">◎</span>
+              <input class="input" type="text" placeholder="Es. Tochigi, Hyogo, Niigata…" value="" aria-label="Cerca prefettura" />
+            </div>
+            <div class="pref-tokens">
+              <span class="token">Tochigi<button class="token__x" aria-label="Rimuovi Tochigi">✕</button></span>
+              <span class="token">Tokyo<button class="token__x" aria-label="Rimuovi Tokyo">✕</button></span>
+            </div>
+            <div class="suggest">41 prefetture + <b>Estero</b> · digita per filtrare</div>
+          </div>
+          <div>
+            <div class="fblock__head"><span class="micro">Ricerca libera</span></div>
+            <div class="field">
+              <span class="field__ico">⌕</span>
+              <input class="input" type="search" placeholder="Nome prodotto o sakagura…" value="" aria-label="Cerca prodotto o sakagura" />
+            </div>
+            <div class="suggest">I nomi di prodotti e sakagura non vengono tradotti.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOOTER ACTIONS -->
+      <div class="panel-foot">
+        <span class="activecount"><b>4</b> filtri attivi</span>
+        <div class="panel-foot__sp"></div>
+        <button class="btn-clear">Azzera tutto</button>
+        <button class="btn-apply">Vedi 3 risultati</button>
+      </div>
+    </section>
+
+    <!-- ============ STICKY SUMMARY BAR ============ -->
+    <div class="summary" role="status" aria-label="Filtri attivi">
+      <div class="summary__crumbs">
+        <span class="summary__pill" style="--sc:var(--s-design);"><span class="sdot"></span>Design</span>
+        <span class="summary__pill" style="--sc:var(--m-bestdesign);"><span class="sdot"></span>Best Design</span>
+        <span class="summary__pill" style="--sc:var(--s-design);"><span class="sdot"></span>Junmai Daiginjo (&lt;35%)</span>
+        <span class="summary__pill" style="--sc:var(--indigo);"><span class="sdot"></span>Tochigi +1</span>
+      </div>
+      <div class="summary__sp"></div>
+      <span class="summary__res"><b>3</b> risultati</span>
+      <button class="summary__edit">↑ Modifica filtri</button>
+    </div>
+
+    <!-- ============ RESULTS ============ -->
+    <section class="results" aria-label="Risultati">
+      <div class="results__head">
+        <h2>Risultati</h2>
+        <span class="n">3 prodotti premiati</span>
+      </div>
+
+      <!-- BEST DESIGN tier -->
+      <div class="tier">
+        <div class="tier__head">
+          <img class="tier__medal" src="/medals/best_design_JDU.png" alt="" />
+          <span class="tier__name" style="--tier:#23408f;">Best Design</span>
+          <span class="tier__rule"></span>
+          <span class="tier__count">1</span>
+        </div>
+        <div class="rowcard">
+          <div class="row">
+            <img class="row__medal" src="/medals/best_design_JDU.png" alt="Best Design" />
+            <div class="row__body">
+              <p class="row__name">Tonoike AUTHENTIC Junmai Daiginjo</p>
+              <p class="row__brewery">Tonoikeshuzouten</p>
+              <div class="row__tags">
+                <span class="tag" style="--td:var(--s-design);"><span class="tag__sdot"></span>Design</span>
+                <span class="sep">·</span>
+                <span class="tag">Junmai Daiginjo (&lt;35%)</span>
+                <span class="sep">·</span>
+                <span class="tag">Tochigi</span>
+                <span class="sep">·</span>
+                <span class="tag">Kanto</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sample cross-tier rows to show the table format -->
+      <div class="tier">
+        <div class="tier__head">
+          <img class="tier__medal" src="/medals/nihonshu_platino.png" alt="" />
+          <span class="tier__name" style="--tier:#5c6b7a;">Platino</span>
+          <span class="tier__rule"></span>
+          <span class="tier__count">2</span>
+        </div>
+        <div class="rowcard">
+          <div class="row">
+            <img class="row__medal" src="/medals/nihonshu_platino.png" alt="Platino" />
+            <div class="row__body">
+              <p class="row__name">Kid Daiginjo</p>
+              <p class="row__brewery">Heiwa Shuzou Co., Ltd</p>
+              <div class="row__tags">
+                <span class="tag" style="--td:var(--s-nihonshu);"><span class="tag__sdot"></span>Nihonshu</span>
+                <span class="sep">·</span>
+                <span class="tag">Daiginjo</span>
+                <span class="sep">·</span>
+                <span class="tag">Wakayama</span>
+                <span class="sep">·</span>
+                <span class="tag">Kinki</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <img class="row__medal" src="/medals/nihonshu_platino.png" alt="Platino" />
+            <div class="row__body">
+              <p class="row__name">Hourai Junmai Daiginjo Shinpaku18</p>
+              <p class="row__brewery">Watanabe Shuzouten</p>
+              <div class="row__tags">
+                <span class="tag" style="--td:var(--s-nihonshu);"><span class="tag__sdot"></span>Nihonshu</span>
+                <span class="sep">·</span>
+                <span class="tag">Junmai Daiginjo (&lt;35%)</span>
+                <span class="sep">·</span>
+                <span class="tag">Gifu</span>
+                <span class="sep">·</span>
+                <span class="tag">Chubu</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">Milano Sake Challenge 2026 · Medagliere ufficiale</div>
+    </section>
+  </main>
+
+<script>
+  /* ---- Demo interactivity (mockup): toggling, session-aware categories, live summary ---- */
+  (function(){
+    var CATS = {
+      nihonshu:["Daiginjo","Junmai Daiginjo (<35%)","Junmai Daiginjo (≥35%)","Junmai Ginjo","Ginjo","Junmai","Honjozo","Futsushu","Nigori","Sparkling","Koshu","Umeshu","Yuzushu","Liqueur","Special Methods"],
+      shochu:["Imo (Sweet Potato)","Mugi (Barley)","Kome (Rice)","Awamori","Aged Honkaku","Special Shochu"],
+      design:["Daiginjo","Junmai Daiginjo (<35%)","Junmai Daiginjo (≥35%)","Junmai Ginjo","Ginjo","Junmai","Honjozo","Futsushu","Nigori","Sparkling","Koshu","Umeshu","Yuzushu","Liqueur","Special Methods","Imo (Sweet Potato)","Mugi (Barley)","Kome (Rice)","Awamori","Aged Honkaku","Special Shochu"],
+      cibo:["Lasagne","Parmigiano Reggiano","San Daniele","Tartufo","Gelato alla Fragola"]
+    };
+    var MEDALS = {
+      nihonshu:[["Platino","--m-platino"],["Doppio Oro","--m-doppiooro"],["Oro","--m-oro"],["Argento","--m-argento"]],
+      shochu:[["Platino","--m-platino"],["Doppio Oro","--m-doppiooro"],["Oro","--m-oro"],["Argento","--m-argento"]],
+      design:[["Best Design","--m-bestdesign"],["Good Design","--m-gooddesign"]],
+      cibo:[["Best With","--m-bestwith"],["Good With","--m-goodwith"]]
+    };
+    var SESS_NAME = {nihonshu:"Nihonshu",shochu:"Shochu",design:"Design",cibo:"Abbinamento Cibo"};
+    var SESS_TINT = {nihonshu:"#eef2ff",shochu:"#fdf3e6",design:"#f5f0ff",cibo:"#eafaf0"};
+    var SESS_INK  = {nihonshu:"#312e81",shochu:"#8a5208",design:"#5b21b6",cibo:"#15803d"};
+    var SESS_VAR  = {nihonshu:"var(--s-nihonshu)",shochu:"var(--s-shochu)",design:"var(--s-design)",cibo:"var(--s-cibo)"};
+
+    var current = "design";
+
+    // session selection (single-select for category context, like Kura Master)
+    document.querySelectorAll(".sesscard").forEach(function(card){
+      card.addEventListener("click",function(){
+        document.querySelectorAll(".sesscard").forEach(function(c){ c.classList.remove("is-on"); });
+        card.classList.add("is-on");
+        current = card.getAttribute("data-sess");
+        rebuildCategories();
+        rebuildMedals();
+      });
+    });
+
+    function rebuildCategories(){
+      var wrap = document.getElementById("catwrap");
+      wrap.style.setProperty("--accent", SESS_VAR[current]);
+      wrap.style.setProperty("--accent-tint", SESS_TINT[current]);
+      wrap.style.setProperty("--accent-ink", SESS_INK[current]);
+      wrap.innerHTML = "";
+      CATS[current].forEach(function(name){
+        var b = document.createElement("button");
+        b.className = "catbtn";
+        b.type = "button";
+        b.textContent = name;
+        var x = document.createElement("span"); x.className="catbtn__x"; x.textContent="✕";
+        b.appendChild(x);
+        b.addEventListener("click",function(){ b.classList.toggle("is-on"); updateCount(); });
+        wrap.appendChild(b);
+      });
+      updateCount();
+    }
+
+    function rebuildMedals(){
+      var track = document.querySelector(".track");
+      track.innerHTML = "";
+      MEDALS[current].forEach(function(m){
+        var b=document.createElement("button");
+        b.className="chip"; b.type="button";
+        b.style.setProperty("--cdot","var("+m[1]+")");
+        b.innerHTML='<span class="chip__dot"></span>'+m[0]+'<span class="chip__x">✕</span>';
+        b.addEventListener("click",function(){ b.classList.toggle("is-on"); });
+        track.appendChild(b);
+      });
+    }
+
+    function updateCount(){
+      var n = document.querySelectorAll("#catwrap .catbtn.is-on").length;
+      document.getElementById("catcount").textContent = n===0 ? "tutte" : (n+" selezionat"+(n===1?"a":"e"));
+    }
+
+    // wire up the pre-rendered category buttons (initial state)
+    document.querySelectorAll("#catwrap .catbtn").forEach(function(b){
+      b.addEventListener("click",function(){ b.classList.toggle("is-on"); updateCount(); });
+    });
+    document.querySelectorAll(".track .chip").forEach(function(b){
+      b.addEventListener("click",function(){ b.classList.toggle("is-on"); });
+    });
+    // pref tokens + summary edit (scroll up)
+    document.querySelectorAll(".token__x").forEach(function(x){
+      x.addEventListener("click",function(){ x.closest(".token").remove(); });
+    });
+    var edit = document.querySelector(".summary__edit");
+    if(edit) edit.addEventListener("click",function(){ window.scrollTo({top:0,behavior:"smooth"}); });
+  })();
+</script>
+</body>
+</html>

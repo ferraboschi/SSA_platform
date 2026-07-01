@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Milano Sake Challenge 2026 — Medagliere</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@400;450;500;600;700&family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* light, airy atelier palette */
+    --paper:        #f6f3ec;
+    --paper-2:      #fbfaf6;
+    --ink:          #1c1a17;
+    --ink-soft:     #4a463f;
+    --ink-mute:     #8a847a;
+    --line:         #e4ded2;
+    --line-soft:    #efeae0;
+    --card:         #ffffff;
+    --gold:         #9a7b2e;
+    --gold-deep:    #6f5618;
+    --accent:       #7a2b22; /* MSC oxblood seal */
+
+    /* region color system — refined, desaturated hues */
+    --r-hokkaido:   #2f6b6b; /* teal */
+    --r-kanto:      #3a5a8c; /* indigo */
+    --r-chubu:      #6a7b3a; /* moss */
+    --r-kansai:     #8c5a2b; /* terracotta */
+    --r-chugoku:    #6a4a8c; /* plum */
+    --r-kyushu:     #a8472f; /* persimmon */
+
+    --shadow-card:  0 1px 1px rgba(28,26,23,.04), 0 6px 18px -8px rgba(28,26,23,.18);
+    --shadow-lift:  0 2px 4px rgba(28,26,23,.06), 0 28px 50px -18px rgba(28,26,23,.34);
+    --shadow-medal: 0 18px 30px -14px rgba(28,26,23,.5);
+
+    --r-lg: 18px;
+    --r-md: 13px;
+    --r-sm: 9px;
+    --maxw: 1240px;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(154,123,46,.07), transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, rgba(122,43,34,.05), transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Inter", system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    line-height:1.45;
+  }
+  ::selection{ background:rgba(154,123,46,.22); }
+
+  .wrap{ max-width:var(--maxw); margin:0 auto; padding:0 28px; }
+
+  /* ---------- HEADER ---------- */
+  header.masthead{
+    position:relative;
+    padding:30px 0 26px;
+    border-bottom:1px solid var(--line);
+    overflow:hidden;
+  }
+  .masthead::after{
+    content:""; position:absolute; left:0; right:0; bottom:0; height:1px;
+    background:linear-gradient(90deg, transparent, rgba(154,123,46,.5), transparent);
+  }
+  .mast-top{ display:flex; align-items:center; justify-content:space-between; gap:18px; }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .seal{
+    width:46px; height:46px; border-radius:50%; flex:none;
+    display:grid; place-items:center;
+    background:
+      radial-gradient(circle at 32% 28%, #b9923c, #7a5e1d 70%);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,.5), inset 0 -3px 7px rgba(0,0,0,.35), 0 4px 10px -3px rgba(122,94,29,.6);
+    color:#fff5dd; font-family:"Fraunces",serif; font-weight:600; font-size:18px; letter-spacing:.5px;
+    position:relative;
+  }
+  .seal::before{
+    content:""; position:absolute; inset:4px; border-radius:50%;
+    border:1px solid rgba(255,245,221,.45);
+  }
+  .brand-txt{ display:flex; flex-direction:column; line-height:1.05; }
+  .brand-kicker{
+    font-size:10.5px; letter-spacing:.34em; text-transform:uppercase;
+    color:var(--gold-deep); font-weight:600;
+  }
+  .brand-name{ font-family:"Fraunces",serif; font-weight:500; font-size:18px; letter-spacing:.2px; margin-top:3px; }
+
+  .lang{
+    display:inline-flex; align-items:center; border:1px solid var(--line);
+    border-radius:999px; overflow:hidden; background:var(--paper-2);
+    box-shadow:0 1px 2px rgba(28,26,23,.04);
+  }
+  .lang button{
+    border:0; background:transparent; cursor:pointer; padding:7px 13px;
+    font:600 11px/1 "Inter",sans-serif; letter-spacing:.12em; color:var(--ink-mute);
+    transition:.18s;
+  }
+  .lang button.on{ background:var(--ink); color:var(--paper-2); }
+  .lang button:not(.on):hover{ color:var(--ink); }
+
+  .hero{ margin-top:34px; display:grid; grid-template-columns: 1fr auto; gap:30px; align-items:end; }
+  .hero h1{
+    font-family:"Fraunces",serif; font-weight:400; font-optical-sizing:auto;
+    font-size:clamp(40px, 6.5vw, 76px); line-height:.96; letter-spacing:-.015em;
+    margin:0; color:var(--ink);
+  }
+  .hero h1 em{ font-style:italic; color:var(--gold-deep); }
+  .hero .lede{
+    margin:16px 0 0; max-width:54ch; color:var(--ink-soft); font-size:15px; line-height:1.6;
+  }
+  .hero-meta{ text-align:right; white-space:nowrap; }
+  .hero-meta .yr{
+    font-family:"Fraunces",serif; font-weight:300; font-size:64px; line-height:.85;
+    color:var(--ink); letter-spacing:-.01em;
+  }
+  .hero-meta .place{
+    margin-top:6px; font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--ink-mute);
+  }
+
+  /* ---------- STAT RIBBON ---------- */
+  .ribbon{ display:flex; gap:0; margin-top:30px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .ribbon .st{ flex:1; padding:14px 4px 13px; text-align:center; border-right:1px solid var(--line-soft); }
+  .ribbon .st:last-child{ border-right:0; }
+  .ribbon .st b{ font-family:"Fraunces",serif; font-weight:500; font-size:22px; display:block; }
+  .ribbon .st span{ font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-mute); }
+
+  /* ---------- FILTER BAR ---------- */
+  .filterbar{
+    position:sticky; top:0; z-index:50;
+    margin:0 0 0; padding:14px 0;
+    backdrop-filter:saturate(1.3) blur(12px);
+    background:rgba(246,243,236,.84);
+    border-bottom:1px solid var(--line);
+  }
+  .filter-inner{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .field{ position:relative; }
+  .field.search{ flex:1; min-width:240px; }
+  .search input{
+    width:100%; border:1px solid var(--line); background:var(--card);
+    border-radius:999px; padding:13px 16px 13px 44px;
+    font:450 14.5px "Inter",sans-serif; color:var(--ink);
+    box-shadow:var(--shadow-card); transition:.2s;
+  }
+  .search input::placeholder{ color:var(--ink-mute); }
+  .search input:focus{ outline:none; border-color:var(--gold); box-shadow:0 0 0 4px rgba(154,123,46,.12), var(--shadow-card); }
+  .search .ic{
+    position:absolute; left:16px; top:50%; transform:translateY(-50%);
+    width:17px; height:17px; color:var(--ink-mute); pointer-events:none;
+  }
+  .field-label{
+    display:block; font-size:9.5px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--ink-mute); margin:0 0 6px 2px; font-weight:600;
+  }
+
+  /* region pills */
+  .regions{ display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+  .rpill{
+    --c:var(--ink);
+    display:inline-flex; align-items:center; gap:7px;
+    border:1px solid var(--line); background:var(--card); cursor:pointer;
+    border-radius:999px; padding:8px 13px 8px 11px;
+    font:600 12px "Inter",sans-serif; color:var(--ink-soft);
+    transition:.18s; box-shadow:0 1px 2px rgba(28,26,23,.04);
+  }
+  .rpill .dot{ width:9px; height:9px; border-radius:50%; background:var(--c); box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent); flex:none; }
+  .rpill:hover{ border-color:color-mix(in srgb, var(--c) 55%, var(--line)); color:var(--ink); transform:translateY(-1px); }
+  .rpill.on{ background:var(--c); border-color:var(--c); color:#fff; box-shadow:0 6px 14px -6px color-mix(in srgb, var(--c) 70%, transparent); }
+  .rpill.on .dot{ background:#fff; box-shadow:none; }
+
+  .select-wrap{ position:relative; }
+  .select-wrap select{
+    appearance:none; border:1px solid var(--line); background:var(--card);
+    border-radius:999px; padding:10px 38px 10px 15px;
+    font:600 12.5px "Inter",sans-serif; color:var(--ink-soft); cursor:pointer;
+    box-shadow:0 1px 2px rgba(28,26,23,.04); transition:.18s;
+  }
+  .select-wrap select:hover{ border-color:var(--gold); }
+  .select-wrap::after{
+    content:""; position:absolute; right:15px; top:50%; width:7px; height:7px;
+    border-right:1.6px solid var(--ink-mute); border-bottom:1.6px solid var(--ink-mute);
+    transform:translateY(-65%) rotate(45deg); pointer-events:none;
+  }
+
+  .filter-toolrow{ display:flex; align-items:center; gap:12px; width:100%; flex-wrap:wrap; }
+  .count-tag{ font-size:12px; color:var(--ink-mute); margin-left:auto; white-space:nowrap; }
+  .count-tag b{ color:var(--ink); font-weight:600; }
+
+  /* ---------- SECTION ---------- */
+  .section-head{ display:flex; align-items:baseline; gap:14px; margin:40px 0 18px; }
+  .section-head h2{
+    font-family:"Fraunces",serif; font-weight:500; font-size:26px; margin:0; letter-spacing:-.01em;
+  }
+  .section-head .rule{ flex:1; height:1px; background:var(--line); }
+  .section-head .n{ font-size:12px; color:var(--ink-mute); letter-spacing:.06em; }
+
+  /* ---------- GRID ---------- */
+  .grid{
+    display:grid; gap:26px;
+    grid-template-columns:repeat(3, 1fr);
+    padding-bottom:10px;
+  }
+  @media (max-width:1080px){ .grid{ grid-template-columns:repeat(2,1fr); } }
+
+  .card{
+    position:relative; background:var(--card);
+    border:1px solid var(--line); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-card);
+    transition:transform .32s cubic-bezier(.2,.7,.2,1), box-shadow .32s, border-color .32s;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .card:hover{ transform:translateY(-6px); box-shadow:var(--shadow-lift); border-color:color-mix(in srgb, var(--gold) 30%, var(--line)); }
+
+  /* region color edge */
+  .card .edge{ position:absolute; top:0; left:0; bottom:0; width:4px; background:var(--rc, var(--ink-mute)); opacity:.0; transition:.32s; }
+  .card:hover .edge{ opacity:.9; }
+
+  /* PLINTH — the hero medal */
+  .plinth{
+    position:relative;
+    padding:30px 24px 22px;
+    background:
+      radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--rc, #999) 9%, var(--paper-2)) 0%, var(--paper-2) 62%);
+    border-bottom:1px solid var(--line-soft);
+    display:flex; justify-content:center;
+  }
+  .plinth::after{ /* soft contact shadow ellipse under medal */
+    content:""; position:absolute; left:50%; bottom:24px; transform:translateX(-50%);
+    width:120px; height:18px; border-radius:50%;
+    background:radial-gradient(ellipse, rgba(28,26,23,.26), transparent 70%);
+    filter:blur(3px); z-index:0; transition:.32s;
+  }
+  .card:hover .plinth::after{ width:138px; opacity:.9; bottom:18px; }
+  .medal{
+    position:relative; z-index:1; width:auto; height:208px; object-fit:contain;
+    filter:drop-shadow(var(--shadow-medal));
+    transform:rotate(-1.2deg);
+    transition:transform .4s cubic-bezier(.2,.7,.2,1), filter .4s;
+  }
+  .card:hover .medal{ transform:rotate(0deg) scale(1.06) translateY(-4px); filter:drop-shadow(0 26px 40px -16px rgba(28,26,23,.6)); }
+
+  /* tier ribbon label on plinth */
+  .tier-tag{
+    position:absolute; top:16px; left:16px; z-index:2;
+    display:inline-flex; align-items:center; gap:6px;
+    font:600 10px "Inter",sans-serif; letter-spacing:.14em; text-transform:uppercase;
+    padding:5px 10px; border-radius:999px;
+    background:var(--card); border:1px solid var(--line); color:var(--ink-soft);
+    box-shadow:0 1px 3px rgba(28,26,23,.08);
+  }
+  .tier-tag .gleam{ width:7px; height:7px; border-radius:2px; transform:rotate(45deg); }
+  .t-platinum .gleam{ background:linear-gradient(135deg,#e8e8ea,#a9aab0); }
+  .t-double_gold .gleam{ background:linear-gradient(135deg,#f3d27a,#b8862f); }
+  .t-gold .gleam{ background:linear-gradient(135deg,#f0cf86,#c69a3e); }
+  .t-silver .gleam{ background:linear-gradient(135deg,#dadbe0,#b2b4ba); }
+  .t-best_design .gleam,.t-good_design .gleam{ background:linear-gradient(135deg,#caa9d6,#7a4a8c); }
+  .t-good_with .gleam{ background:linear-gradient(135deg,#e6a98f,#a8472f); }
+  .session-tag{
+    position:absolute; top:16px; right:16px; z-index:2;
+    font:600 9.5px "Inter",sans-serif; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--ink-mute);
+  }
+
+  /* BODY */
+  .cbody{ padding:18px 20px 16px; display:flex; flex-direction:column; flex:1; }
+  .chip-row{ display:flex; align-items:center; gap:8px; margin-bottom:11px; flex-wrap:wrap; }
+  .region-chip{
+    display:inline-flex; align-items:center; gap:6px;
+    font:600 10.5px "Inter",sans-serif; letter-spacing:.04em;
+    padding:4px 9px 4px 8px; border-radius:999px;
+    color:var(--rc, var(--ink)); background:color-mix(in srgb, var(--rc,#999) 11%, transparent);
+    border:1px solid color-mix(in srgb, var(--rc,#999) 26%, transparent);
+  }
+  .region-chip .dot{ width:7px; height:7px; border-radius:50%; background:var(--rc,#999); }
+  .pref-chip{ font-size:11px; color:var(--ink-mute); letter-spacing:.02em; }
+  .pref-chip::before{ content:"·"; margin-right:8px; color:var(--line); }
+
+  .pname{
+    font-family:"Fraunces",serif; font-weight:500; font-size:19px; line-height:1.18;
+    letter-spacing:-.005em; margin:2px 0 0; color:var(--ink);
+  }
+  .sakagura{
+    margin-top:8px; display:flex; flex-direction:column; gap:1px;
+  }
+  .sakagura .lbl{ font-size:9px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-mute); }
+  .sakagura .nm{ font-size:13px; font-weight:600; color:var(--ink-soft); line-height:1.3; }
+  .sakagura .jp{ font-family:"Noto Sans JP",sans-serif; font-size:11.5px; color:var(--ink-mute); }
+
+  .cat-line{
+    margin-top:11px; padding-top:11px; border-top:1px dashed var(--line);
+    font-size:12px; color:var(--ink-soft);
+  }
+  .cat-line .k{ color:var(--ink-mute); }
+
+  /* mini tech preview */
+  .mini{ display:flex; gap:14px; margin-top:11px; }
+  .mini .m{ display:flex; flex-direction:column; }
+  .mini .m b{ font-family:"Fraunces",serif; font-weight:500; font-size:15px; line-height:1; }
+  .mini .m span{ font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-mute); margin-top:4px; }
+
+  .cfoot{ margin-top:auto; padding-top:15px; display:flex; align-items:center; gap:9px; }
+  .btn{
+    border:1px solid var(--line); background:var(--paper-2); cursor:pointer;
+    border-radius:999px; padding:9px 14px; font:600 12px "Inter",sans-serif; color:var(--ink);
+    display:inline-flex; align-items:center; gap:7px; transition:.18s; white-space:nowrap;
+  }
+  .btn svg{ width:14px; height:14px; }
+  .btn:hover{ border-color:var(--gold); background:#fff; transform:translateY(-1px); }
+  .btn.primary{ background:var(--ink); color:var(--paper-2); border-color:var(--ink); flex:1; justify-content:center; }
+  .btn.primary:hover{ background:#000; }
+  .btn.share{ position:relative; }
+
+  /* ---------- EXPANDED / TECH SHEET (inline) ---------- */
+  .card.open{ grid-column:1 / -1; }
+  .card.open:hover{ transform:none; }
+  .sheet{
+    display:none; border-top:1px solid var(--line-soft);
+    background:linear-gradient(180deg, var(--paper-2), var(--card));
+  }
+  .card.open .sheet{ display:block; }
+  .card.open{ display:grid; grid-template-columns: 360px 1fr; }
+  .card.open .plinth{ border-bottom:0; border-right:1px solid var(--line-soft); align-items:center; }
+  .card.open .medal{ height:300px; }
+  .card.open .cbody{ display:none; }
+  .sheet{ grid-column:2; padding:30px 34px 30px; }
+  .sheet-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+  .sheet-head .pname{ font-size:30px; margin:0; }
+  .sheet .chip-row{ margin:14px 0 0; }
+  .sheet .sakagura{ flex-direction:row; align-items:baseline; gap:10px; margin-top:14px; flex-wrap:wrap; }
+  .sheet .sakagura .nm{ font-size:15px; }
+  .sheet-close{
+    border:1px solid var(--line); background:var(--card); cursor:pointer; border-radius:50%;
+    width:34px; height:34px; display:grid; place-items:center; color:var(--ink-soft); flex:none; transition:.18s;
+  }
+  .sheet-close:hover{ background:var(--accent); color:#fff; border-color:var(--accent); transform:rotate(90deg); }
+
+  .specgrid{
+    margin-top:22px; display:grid; grid-template-columns:repeat(4,1fr); gap:0;
+    border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--card);
+  }
+  .spec{ padding:14px 16px; border-right:1px solid var(--line-soft); border-bottom:1px solid var(--line-soft); }
+  .spec:nth-child(4n){ border-right:0; }
+  .spec .k{ font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-mute); }
+  .spec .v{ font-family:"Fraunces",serif; font-weight:500; font-size:20px; margin-top:5px; line-height:1; }
+  .spec .v small{ font-family:"Inter"; font-weight:500; font-size:11px; color:var(--ink-mute); margin-left:2px; }
+
+  .sheet-foot{ margin-top:22px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .sheet-foot .site{
+    margin-left:auto; font-size:12px; color:var(--ink-mute);
+  }
+  .award-note{
+    margin-top:20px; padding:14px 16px; border-radius:var(--r-md);
+    background:color-mix(in srgb, var(--gold) 7%, var(--paper-2));
+    border:1px solid color-mix(in srgb, var(--gold) 22%, var(--line));
+    font-size:12.5px; color:var(--ink-soft); display:flex; gap:11px; align-items:flex-start;
+  }
+  .award-note b{ color:var(--gold-deep); }
+
+  /* share popover */
+  .share-pop{
+    position:absolute; bottom:calc(100% + 10px); right:0; z-index:30;
+    background:var(--card); border:1px solid var(--line); border-radius:var(--r-md);
+    box-shadow:var(--shadow-lift); padding:7px; min-width:210px; display:none;
+  }
+  .share.active .share-pop{ display:block; animation:pop .16s ease; }
+  @keyframes pop{ from{ opacity:0; transform:translateY(5px);} to{ opacity:1; transform:none;} }
+  .share-pop a{
+    display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:8px;
+    font:500 12.5px "Inter",sans-serif; color:var(--ink-soft); text-decoration:none; cursor:pointer; transition:.14s;
+  }
+  .share-pop a:hover{ background:var(--paper); color:var(--ink); }
+  .share-pop a svg{ width:15px; height:15px; color:var(--ink-mute); }
+  .share-pop .ttl{ font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-mute); padding:6px 11px 4px; }
+
+  /* footer */
+  footer.foot{ margin-top:60px; border-top:1px solid var(--line); padding:34px 0 60px; }
+  .foot-inner{ display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap; align-items:center; }
+  .foot-inner p{ margin:0; font-size:12px; color:var(--ink-mute); max-width:60ch; line-height:1.6; }
+  .foot-inner .crest{ font-family:"Fraunces",serif; font-weight:500; font-size:15px; color:var(--ink); }
+
+  .toast{
+    position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:var(--paper-2); padding:12px 20px; border-radius:999px;
+    font:600 13px "Inter",sans-serif; box-shadow:var(--shadow-lift); opacity:0; pointer-events:none;
+    transition:.28s cubic-bezier(.2,.7,.2,1); z-index:200;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width:760px){
+    .wrap{ padding:0 18px; }
+    .hero{ grid-template-columns:1fr; gap:16px; align-items:start; }
+    .hero-meta{ text-align:left; }
+    .hero-meta .yr{ font-size:46px; }
+    .ribbon{ flex-wrap:wrap; }
+    .ribbon .st{ flex:1 1 50%; border-bottom:1px solid var(--line-soft); }
+    .grid{ grid-template-columns:1fr; gap:18px; }
+    .filter-toolrow{ gap:9px; }
+    .count-tag{ margin-left:0; width:100%; order:5; }
+    .regions{ overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+    .regions::-webkit-scrollbar{ display:none; }
+    .rpill{ flex:none; }
+    /* expanded card stacks on mobile */
+    .card.open{ grid-template-columns:1fr; display:flex; flex-direction:column; }
+    .card.open .plinth{ border-right:0; border-bottom:1px solid var(--line-soft); }
+    .card.open .medal{ height:240px; }
+    .sheet{ grid-column:1; padding:22px 18px; }
+    .sheet-head .pname{ font-size:23px; }
+    .specgrid{ grid-template-columns:repeat(2,1fr); }
+    .spec:nth-child(4n){ border-right:1px solid var(--line-soft); }
+    .spec:nth-child(2n){ border-right:0; }
+    .medal{ height:190px; }
+  }
+  @media (max-width:400px){
+    .hero h1{ font-size:36px; }
+    .medal{ height:178px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== HEADER ===================== -->
+<header class="masthead">
+  <div class="wrap">
+    <div class="mast-top">
+      <div class="brand">
+        <div class="seal">M<small style="font-size:11px">S</small>C</div>
+        <div class="brand-txt">
+          <span class="brand-kicker">Palmarès Ufficiale</span>
+          <span class="brand-name">Milano Sake Challenge</span>
+        </div>
+      </div>
+      <div class="lang" role="group" aria-label="Lingua">
+        <button class="on">IT</button><button>EN</button><button>JA</button>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div>
+        <h1>Il <em>Medagliere</em><br>delle sakagura premiate</h1>
+        <p class="lede">I sake e gli shōchū insigniti alla Milano Sake Challenge 2026. Un riconoscimento europeo all'eccellenza dei produttori giapponesi — sfoglia per sakagura, regione o tipo di medaglia.</p>
+      </div>
+      <div class="hero-meta">
+        <div class="yr">2026</div>
+        <div class="place">Milano · Italia</div>
+      </div>
+    </div>
+
+    <div class="ribbon">
+      <div class="st"><b>12</b><span>Etichette</span></div>
+      <div class="st"><b>11</b><span>Sakagura</span></div>
+      <div class="st"><b>6</b><span>Regioni</span></div>
+      <div class="st"><b>4</b><span>Sessioni</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== FILTER BAR ===================== -->
+<div class="filterbar">
+  <div class="wrap">
+    <div class="filter-inner">
+      <div class="field search">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="q" type="search" placeholder="Cerca per sakagura o etichetta…" aria-label="Cerca sakagura">
+      </div>
+    </div>
+    <div class="filter-toolrow" style="margin-top:12px">
+      <div class="regions" id="regions" role="group" aria-label="Regione">
+        <button class="rpill on" data-region="all" style="--c:var(--ink)"><span class="dot"></span>Tutte le regioni</button>
+        <button class="rpill" data-region="Hokkaido & Tōhoku" style="--c:var(--r-hokkaido)"><span class="dot"></span>Hokkaidō &amp; Tōhoku</button>
+        <button class="rpill" data-region="Kantō" style="--c:var(--r-kanto)"><span class="dot"></span>Kantō</button>
+        <button class="rpill" data-region="Chūbu & Hokuriku" style="--c:var(--r-chubu)"><span class="dot"></span>Chūbu &amp; Hokuriku</button>
+        <button class="rpill" data-region="Kansai" style="--c:var(--r-kansai)"><span class="dot"></span>Kansai</button>
+        <button class="rpill" data-region="Chūgoku & Shikoku" style="--c:var(--r-chugoku)"><span class="dot"></span>Chūgoku &amp; Shikoku</button>
+        <button class="rpill" data-region="Kyūshū & Okinawa" style="--c:var(--r-kyushu)"><span class="dot"></span>Kyūshū &amp; Okinawa</button>
+      </div>
+      <div class="select-wrap">
+        <select id="session" aria-label="Sessione">
+          <option value="all">Tutte le sessioni</option>
+          <option value="nihonshu">Nihonshu</option>
+          <option value="shochu">Shōchū</option>
+          <option value="design">Design</option>
+          <option value="pairing">Pairing</option>
+        </select>
+      </div>
+      <div class="select-wrap">
+        <select id="tier" aria-label="Medaglia">
+          <option value="all">Tutte le medaglie</option>
+          <option value="platinum">Platino</option>
+          <option value="double_gold">Doppio Oro</option>
+          <option value="gold">Oro</option>
+          <option value="silver">Argento</option>
+          <option value="best_design">Best Design</option>
+          <option value="good_design">Good Design</option>
+          <option value="good_with">Good With</option>
+        </select>
+      </div>
+      <div class="count-tag"><b id="cnt">12</b> riconoscimenti</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== RESULTS ===================== -->
+<main class="wrap" id="main"></main>
+
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <div>
+      <div class="crest">Milano Sake Challenge 2026</div>
+      <p>Medagliere ufficiale. Le etichette all'interno di ciascuna medaglia sono elencate in ordine alfabetico. I nomi dei prodotti e delle sakagura sono riportati nella lingua originale. © 2026 — Tutti i diritti riservati.</p>
+    </div>
+    <button class="btn" onclick="toast('Link del medagliere copiato')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5 8.6 10.5"/></svg>
+      Condividi il medagliere
+    </button>
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DATA = [
+  {name:"Hourai Junmai Daiginjo Shinpaku18",sakagura:"Watanabe Shuzouten Co, Ltd.",sakagura_jp:"有限会社渡辺酒造店",session:"nihonshu",category:"Junmai Daiginjo (<35%)",medal:"platinum",medal_img:"/medals/nihonshu_platino.png",prefecture:"Gifu",region:"Chūbu & Hokuriku",polishing_rate:18,smv:0,alcohol:16,price:18850,rice:"Yamadanishiki",yeast:"M310",koji:"yellow",brewery_website:"https://www.sake-hourai.co.jp/",product_type:"Sake"},
+  {name:"HARUSHIKA JUNMAI NARA NO YAE SAKURA",sakagura:"S. Imanishi Co., Ltd.",sakagura_jp:"株式会社今西清兵衛商店",session:"nihonshu",category:"Junmai",medal:"double_gold",medal_img:"/medals/nihonshu_doppio_oro.png",prefecture:"Nara",region:"Kansai",polishing_rate:60,smv:-19,alcohol:14,price:1800,rice:"Hinohikari",yeast:"Flower Kobo",koji:"yellow",brewery_website:"https://www.harushika.com/",product_type:"Sake"},
+  {name:"Hayashi Jyunmai Ginjyo Gohyakumangoku",sakagura:"Hayashi Shuzo",sakagura_jp:"林酒造場",session:"nihonshu",category:"Junmai Ginjo",medal:"gold",medal_img:"/medals/nihonshu_oro.png",prefecture:"Toyama",region:"Chūbu & Hokuriku",polishing_rate:55,smv:0,alcohol:16,price:3900,rice:"Gohyakumangoku",yeast:"Kyokai 9",koji:"yellow",brewery_founded:1626,brewery_website:"https://www.hayashisyuzo.com/",product_type:"Sake"},
+  {name:"Ichinokura Tokubetsu Junmai Yamahai-Shikomi",sakagura:"ICHINOKURA",sakagura_jp:"株式会社 一ノ蔵",session:"nihonshu",category:"Junmai",medal:"silver",medal_img:"/medals/nihonshu_argento.png",prefecture:"Miyagi",region:"Hokkaido & Tōhoku",polishing_rate:60,smv:2,alcohol:15,price:1463,rice:"Sasanishiki",yeast:"Kyokai 7/9",koji:"yellow",brewery_founded:1973,brewery_website:"https://ichinokura.co.jp/",product_type:"Sake"},
+  {name:"Joraku Wine Yeast Brewed",sakagura:"Joraku Shuzo Co.,LTD",sakagura_jp:"常楽酒造株式会社",session:"shochu",category:"Kome (Rice)",medal:"platinum",medal_img:"/medals/shochu_platino.png",prefecture:"Kumamoto",region:"Kyūshū & Okinawa",price:1522,brewery_founded:1912,brewery_website:"https://joraku.co.jp/",product_type:"Shochu"},
+  {name:"FORTUNA",sakagura:"Izumi Syuzou Co.,Ltd.",sakagura_jp:"出水酒造株式会社",session:"shochu",category:"Imo (Sweet Potato)",medal:"gold",medal_img:"/medals/shochu_oro.png",prefecture:"Kagoshima",region:"Kyūshū & Okinawa",price:15000,brewery_founded:1950,brewery_website:"https://www.izumi-syuzou.co.jp/",product_type:"Shochu"},
+  {name:"AKANEKAZE 43",sakagura:"Hombo Shuzo Co., Ltd.",sakagura_jp:"本坊酒造株式会社",session:"shochu",category:"Imo (Sweet Potato)",medal:"double_gold",medal_img:"/medals/shochu_doppio_oro.png",price:5940,product_type:"Shochu"},
+  {name:"Tonoike AUTHENTIC JunmaiDaiginjo",sakagura:"Tonoikeshuzouten CO., LTD",sakagura_jp:"株式会社外池酒造店",session:"design",category:"Junmai Daiginjo (<35%)",medal:"best_design",medal_img:"/medals/best_design_JDU.png",prefecture:"Tochigi",region:"Kantō",polishing_rate:38,smv:-3,alcohol:16,price:10909,koji:"yellow",brewery_founded:1937,brewery_website:"https://tonoike.jp/",product_type:"Sake"},
+  {name:"Shikisakura Tochiginohoshi Junmai",sakagura:"Utsunomiya Shuzo Co., Ltd.",sakagura_jp:"宇都宮酒造株式会社",session:"design",category:"Junmai",medal:"good_design",medal_img:"/medals/good_design.png",prefecture:"Tochigi",region:"Kantō",polishing_rate:65,smv:2,alcohol:17,price:1500,rice:"Tochigi-no-hoshi",yeast:"Tochigi T-S",koji:"yellow",brewery_founded:1947,brewery_website:"http://www.shikisakura.co.jp/",product_type:"Sake"},
+  {name:"SHIRAYUKI Tanba Densho",sakagura:"Konishi Brewing Co.,Ltd.",sakagura_jp:"小西酒造株式会社",session:"nihonshu",category:"Futsushu",medal:"platinum",medal_img:"/medals/nihonshu_platino.png",prefecture:"Hyogo",region:"Kansai",polishing_rate:75,smv:1,alcohol:14.5,price:1684,rice:"Kokusanmai",yeast:"Kyokai 7",koji:"yellow",brewery_website:"https://www.konishi.co.jp/",product_type:"Sake"},
+  {name:"Gokyo Junmai Daiginjo 50%",sakagura:"Sakaishuzo Co., Ltd.",sakagura_jp:"酒井酒造株式会社",session:"nihonshu",category:"Junmai Daiginjo (≥35%)",medal:"gold",medal_img:"/medals/nihonshu_oro.png",prefecture:"Yamaguchi",region:"Chūgoku & Shikoku",polishing_rate:50,smv:-1.5,alcohol:15.5,price:3300,rice:"Yamadanishiki",yeast:"Kyokai 18",koji:"yellow",brewery_founded:1871,brewery_website:"https://gokyo-sake.co.jp/",product_type:"Sake"},
+  {name:"Ichinokura Tokubetsu Junmai (Parmigiano)",sakagura:"ICHINOKURA",sakagura_jp:"株式会社 一ノ蔵",session:"pairing",category:"Parmigiano Reggiano",medal:"good_with",medal_img:"/medals/pairing_goodwith_PR.png",prefecture:"Miyagi",region:"Hokkaido & Tōhoku",rice:"Sasanishiki",brewery_founded:1973,brewery_website:"https://ichinokura.co.jp/",product_type:"Sake"}
+];
+
+const REGION_VAR = {
+  "Hokkaido & Tōhoku":"var(--r-hokkaido)",
+  "Kantō":"var(--r-kanto)",
+  "Chūbu & Hokuriku":"var(--r-chubu)",
+  "Kansai":"var(--r-kansai)",
+  "Chūgoku & Shikoku":"var(--r-chugoku)",
+  "Kyūshū & Okinawa":"var(--r-kyushu)"
+};
+const TIER_LABEL = {platinum:"Platino",double_gold:"Doppio Oro",gold:"Oro",silver:"Argento",best_design:"Best Design",good_design:"Good Design",good_with:"Good With"};
+const TIER_ORDER = {platinum:0,double_gold:1,gold:2,silver:3,best_design:4,good_design:5,good_with:6};
+const SESSION_LABEL = {nihonshu:"Nihonshu",shochu:"Shōchū",design:"Design",pairing:"Pairing"};
+const SECTION_LABEL = {platinum:"Platino",double_gold:"Doppio Oro",gold:"Oro",silver:"Argento",best_design:"Best Design",good_design:"Good Design",good_with:"Good With — Pairing"};
+
+const yen = v => "¥" + v.toLocaleString("ja-JP");
+
+function specBlocks(p){
+  const out = [];
+  if(p.polishing_rate!=null) out.push(["Polishing", p.polishing_rate, "%"]);
+  if(p.smv!=null) out.push(["SMV (日本酒度)", (p.smv>0?"+":"")+p.smv, ""]);
+  if(p.alcohol!=null) out.push(["Alcol", p.alcohol, "%"]);
+  if(p.price!=null) out.push(["Prezzo", yen(p.price), ""]);
+  if(p.rice) out.push(["Riso", p.rice, ""]);
+  if(p.yeast) out.push(["Lievito", p.yeast, ""]);
+  if(p.koji) out.push(["Kōji", cap(p.koji), ""]);
+  if(p.brewery_founded) out.push(["Fondazione", p.brewery_founded, ""]);
+  return out;
+}
+const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
+
+function miniStats(p){
+  const m = [];
+  if(p.polishing_rate!=null) m.push(["Polish", p.polishing_rate+"%"]);
+  if(p.smv!=null) m.push(["SMV", (p.smv>0?"+":"")+p.smv]);
+  if(p.alcohol!=null) m.push(["Alcol", p.alcohol+"%"]);
+  if(m.length===0 && p.price!=null) m.push(["Prezzo", yen(p.price)]);
+  return m.slice(0,3);
+}
+
+function shareIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5 8.6 10.5"/></svg>'; }
+function linkIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>'; }
+function bldgIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 8h2M13 8h2M9 12h2M13 12h2M9 16h6"/></svg>'; }
+function mapIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>'; }
+
+function cardHTML(p, idx){
+  const rc = REGION_VAR[p.region] || "var(--ink-mute)";
+  const region = p.region ? `<span class="region-chip" style="--rc:${rc}"><span class="dot"></span>${p.region}</span>` : "";
+  const pref = p.prefecture ? `<span class="pref-chip">${p.prefecture}</span>` : "";
+  const mini = miniStats(p).map(m=>`<div class="m"><b>${m[1]}</b><span>${m[0]}</span></div>`).join("");
+  const jp = p.sakagura_jp ? `<span class="jp">${p.sakagura_jp}</span>` : "";
+
+  // tech sheet
+  const specs = specBlocks(p).map(s=>`<div class="spec"><div class="k">${s[0]}</div><div class="v">${s[1]}${s[2]?`<small>${s[2]}</small>`:""}</div></div>`).join("");
+  const site = p.brewery_website ? `<a class="btn" href="${p.brewery_website}" target="_blank" rel="noopener">${bldgIcon()} Vai al sito</a>` : "";
+
+  return `
+  <article class="card" data-idx="${idx}" style="--rc:${rc}">
+    <div class="edge"></div>
+    <div class="plinth">
+      <span class="tier-tag t-${p.medal}"><span class="gleam"></span>${TIER_LABEL[p.medal]}</span>
+      <span class="session-tag">${SESSION_LABEL[p.session]}</span>
+      <img class="medal" src="${p.medal_img}" alt="Medaglia ${TIER_LABEL[p.medal]} — ${p.name}" loading="lazy">
+    </div>
+
+    <div class="cbody">
+      <div class="chip-row">${region}${pref}</div>
+      <h3 class="pname">${p.name}</h3>
+      <div class="sakagura">
+        <span class="lbl">Sakagura</span>
+        <span class="nm">${p.sakagura}</span>
+        ${jp}
+      </div>
+      <div class="cat-line"><span class="k">Categoria</span> · ${p.category}</div>
+      ${mini?`<div class="mini">${mini}</div>`:""}
+      <div class="cfoot">
+        <button class="btn primary" onclick="openSheet(${idx})">${docIcon()} Scheda tecnica</button>
+        <div class="share">
+          <button class="btn" onclick="toggleShare(event)" aria-label="Condividi">${shareIcon()} Condividi</button>
+          <div class="share-pop">
+            <div class="ttl">Condividi</div>
+            <a onclick="copyShare('etichetta','${esc(p.name)}')">${linkIcon()} Link dell'etichetta</a>
+            <a onclick="copyShare('sakagura','${esc(p.sakagura)}')">${bldgIcon()} Tutte le medaglie di ${esc(p.sakagura)}</a>
+            <a onclick="copyShare('regione','${esc(p.region||"")}')">${mapIcon()} Medaglie della regione</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h3 class="pname">${p.name}</h3>
+          <div class="chip-row">${region}${pref}<span class="tier-tag t-${p.medal}" style="position:static"><span class="gleam"></span>${TIER_LABEL[p.medal]}</span></div>
+          <div class="sakagura">
+            <span class="lbl">Sakagura</span>
+            <span class="nm">${p.sakagura}</span>
+            ${jp}
+          </div>
+        </div>
+        <button class="sheet-close" onclick="closeSheet(${idx})" aria-label="Chiudi">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="cat-line" style="border-top:0;padding-top:14px"><span class="k">Sessione</span> · ${SESSION_LABEL[p.session]} &nbsp;|&nbsp; <span class="k">Categoria</span> · ${p.category}</div>
+      <div class="specgrid">${specs || '<div class="spec"><div class="k">Dettagli tecnici</div><div class="v" style="font-size:14px">Non comunicati</div></div>'}</div>
+      <div class="award-note">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--gold-deep);flex:none"><circle cx="12" cy="8" r="5"/><path d="M8.5 12.5 7 21l5-2.5L17 21l-1.5-8.5"/></svg>
+        <span>Premiato con <b>${TIER_LABEL[p.medal]}</b> alla Milano Sake Challenge 2026, sessione <b>${SESSION_LABEL[p.session]}</b>.</span>
+      </div>
+      <div class="sheet-foot">
+        ${site}
+        <div class="share" style="position:relative">
+          <button class="btn" onclick="toggleShare(event)">${shareIcon()} Condividi questa scheda</button>
+          <div class="share-pop">
+            <div class="ttl">Condividi</div>
+            <a onclick="copyShare('etichetta','${esc(p.name)}')">${linkIcon()} Link dell'etichetta</a>
+            <a onclick="copyShare('sakagura','${esc(p.sakagura)}')">${bldgIcon()} Tutte le medaglie di ${esc(p.sakagura)}</a>
+          </div>
+        </div>
+        <span class="site">${p.product_type||""}</span>
+      </div>
+    </div>
+  </article>`;
+}
+function docIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>'; }
+function esc(s){ return (s||"").replace(/'/g,"\\'").replace(/"/g,"&quot;"); }
+
+// ---------- render with sections by tier, alphabetical within ----------
+let OPEN_IDX = 7; // start with one card pre-expanded (Tonoike — Best Design)
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const region = currentRegion;
+  const session = document.getElementById("session").value;
+  const tier = document.getElementById("tier").value;
+
+  let rows = DATA.map((p,i)=>({p,i})).filter(({p})=>{
+    if(region!=="all" && p.region!==region) return false;
+    if(session!=="all" && p.session!==session) return false;
+    if(tier!=="all" && p.medal!==tier) return false;
+    if(q){
+      const hay = (p.sakagura+" "+p.name+" "+(p.sakagura_jp||"")+" "+(p.prefecture||"")).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  document.getElementById("cnt").textContent = rows.length;
+
+  // group by tier
+  const groups = {};
+  rows.forEach(r=>{ (groups[r.p.medal] ||= []).push(r); });
+  const tiers = Object.keys(groups).sort((a,b)=>TIER_ORDER[a]-TIER_ORDER[b]);
+
+  const main = document.getElementById("main");
+  if(rows.length===0){
+    main.innerHTML = `<div style="padding:80px 0;text-align:center;color:var(--ink-mute)">
+      <div style="font-family:Fraunces,serif;font-size:26px;color:var(--ink)">Nessun riconoscimento</div>
+      <p style="margin-top:8px">Prova a modificare la ricerca o i filtri.</p></div>`;
+    return;
+  }
+
+  main.innerHTML = tiers.map(t=>{
+    const items = groups[t].sort((a,b)=> a.p.name.localeCompare(b.p.name, "en"));
+    return `<section>
+      <div class="section-head">
+        <h2>${SECTION_LABEL[t]}</h2>
+        <div class="rule"></div>
+        <span class="n">${items.length} ${items.length===1?"etichetta":"etichette"}</span>
+      </div>
+      <div class="grid">${items.map(({p,i})=>cardHTML(p,i)).join("")}</div>
+    </section>`;
+  }).join("");
+
+  // re-apply open state if the open card is visible
+  if(OPEN_IDX!=null){
+    const el = main.querySelector(`.card[data-idx="${OPEN_IDX}"]`);
+    if(el) el.classList.add("open");
+  }
+}
+
+let currentRegion = "all";
+
+function openSheet(idx){
+  document.querySelectorAll(".card.open").forEach(c=>c.classList.remove("open"));
+  OPEN_IDX = idx;
+  const el = document.querySelector(`.card[data-idx="${idx}"]`);
+  if(el){ el.classList.add("open"); el.scrollIntoView({behavior:"smooth", block:"center"}); }
+}
+function closeSheet(idx){
+  const el = document.querySelector(`.card[data-idx="${idx}"]`);
+  if(el) el.classList.remove("open");
+  if(OPEN_IDX===idx) OPEN_IDX=null;
+}
+
+function toggleShare(e){
+  e.stopPropagation();
+  const wrap = e.currentTarget.closest(".share");
+  const wasOpen = wrap.classList.contains("active");
+  document.querySelectorAll(".share.active").forEach(s=>s.classList.remove("active"));
+  if(!wasOpen) wrap.classList.add("active");
+}
+document.addEventListener("click", ()=> document.querySelectorAll(".share.active").forEach(s=>s.classList.remove("active")));
+
+function copyShare(kind, val){
+  const map = {etichetta:"dell'etichetta", sakagura:"della sakagura "+val, regione:"della regione "+val};
+  toast("Link "+(map[kind]||kind)+" copiato");
+}
+
+let tmr;
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(tmr); tmr = setTimeout(()=>t.classList.remove("show"), 2200);
+}
+
+// region pills
+document.getElementById("regions").addEventListener("click", e=>{
+  const b = e.target.closest(".rpill"); if(!b) return;
+  document.querySelectorAll(".rpill").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on");
+  currentRegion = b.dataset.region;
+  render();
+});
+document.getElementById("q").addEventListener("input", render);
+document.getElementById("session").addEventListener("change", render);
+document.getElementById("tier").addEventListener("change", render);
+
+render();
+</script>
+</body>
+</html>
