@@ -155,6 +155,12 @@ describe("gradeAnswers — manual-review types", () => {
     expect(r.gradable).toBe(0);
     expect(r.detail[0].ok).toBeNull();
   });
+  it("a choice question with an EMPTY answer key ([]) falls back to manual (not auto-wrong)", () => {
+    const r = gradeAnswers([q({ id: "e", type: "single", options: ["A", "B"], correct: [] })], { e: "A" });
+    expect(r.gradable).toBe(0);
+    expect(r.manual).toBe(1);
+    expect(r.detail[0].ok).toBeNull();
+  });
 });
 
 describe("gradeAnswers — whole submission scoring", () => {

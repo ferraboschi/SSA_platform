@@ -50,6 +50,22 @@ interface MiniJson {
   questions?: QJson[];
 }
 
+// Image questions store the label/bottle image as a URL that the educator
+// pastes into the editor (see ExamLibraryEditor: the field is a plain "URL
+// immagine (https://…)" input, and the editor renders <img src={imageId}>).
+// There is no Supabase Storage upload pipeline in this codebase — nothing to
+// resolve a bare storage key against — so we pass the value through UNCHANGED,
+// but only when it actually looks like a usable image URL. This guards against
+// a stray non-URL value (e.g. a legacy bare id) turning into a broken <img> on
+// an "image" question, which auto-grades and would mark the student wrong.
+function toImageUrl(raw: string | undefined): string | undefined {
+  const v = (raw ?? "").trim();
+  if (!v) return undefined;
+  // Accept absolute http(s), protocol-relative, root-relative, and data URLs.
+  if (/^(https?:\/\/|\/\/|\/|data:image\/)/i.test(v)) return v;
+  return undefined;
+}
+
 // Drop duplicate questions by normalized text (a re-imported bank duplicates
 // text with regenerated ids). Keeps the first occurrence so the student sees
 // each question once.
@@ -80,13 +96,14 @@ function mapQuestions(
       // Keep correct as-is: numeric indices for choice questions, accepted answer
       // STRINGS for "fill" (filtering to numbers used to drop the fill answers).
       const correct = q.correct ?? [];
+      const image = toImageUrl(q.imageId);
       return {
         id,
         type: q.type,
         text: q.text ?? "",
         options,
         ...(i18n ? { i18n } : {}),
-        ...(q.imageId ? { image: q.imageId } : {}),
+        ...(image ? { image } : {}),
         ...(includeAnswers ? { correct } : {}),
       };
     }

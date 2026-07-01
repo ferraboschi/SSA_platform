@@ -169,7 +169,9 @@ export function gradeAnswers(
     }
 
     // Open / match / order (or a choice question with no answer key) → manual.
-    if (!isObjective(q.type) || !q.correct) {
+    // An EMPTY key ([]) is "no key" too — never auto-fail the whole class on it
+    // (mirrors the fill branch's `accepted.length === 0` guard above).
+    if (!isObjective(q.type) || !q.correct || q.correct.length === 0) {
       manual++;
       return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: "—", ok: null };
     }

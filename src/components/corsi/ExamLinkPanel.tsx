@@ -141,7 +141,11 @@ export function ExamLinkPanel({
                   </span>
                 </td>
                 <td>
-                  <Cell tKey={tst.key} mode="exam" />
+                  {tst.key === "final" ? (
+                    <Cell tKey={tst.key} mode="exam" />
+                  ) : (
+                    <span style={{ color: "var(--text-4)" }}>—</span>
+                  )}
                 </td>
                 <td>
                   <Cell tKey={tst.key} mode="test" />

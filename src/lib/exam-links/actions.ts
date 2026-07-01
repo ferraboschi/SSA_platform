@@ -36,6 +36,22 @@ export async function createExamLink(
   if (roleKey !== "admin" && roleKey !== "manager") {
     return { ok: false, error: "Non autorizzato." };
   }
+  // Only real exam courses may get an exam link. Downstream the runner maps
+  // course.type to a family with `type === "shochu" ? "shochu" : "nihonshu"`,
+  // so ANY other type (introduttivo/masterclass/…) would be silently treated
+  // as the nihonshu certification exam. Guard against that at the source.
+  const svc = getSupabaseServiceClient();
+  const { data: corso } = await svc
+    .from("corsi")
+    .select("type")
+    .eq("id", Number(input.courseId))
+    .maybeSingle();
+  if (!corso) {
+    return { ok: false, error: "Corso non trovato." };
+  }
+  if (corso.type !== "certificato" && corso.type !== "shochu") {
+    return { ok: false, error: "Questo corso non prevede un esame (solo Certificato o Shochu)." };
+  }
   const ttlH = EXAM_LINK_TTL_HOURS[input.mode];
   const exp = Math.floor(Date.now() / 1000) + ttlH * 3600;
   const token = signExamToken({
