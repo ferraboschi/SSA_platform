@@ -2,28 +2,43 @@
 
 // Roll-call ("appello") roster for the PUBLIC educator share link.
 //
-// Renders the enrolled roster with `dayCount` presence checkboxes per student
-// (G1/G2/G3, or a single "Presente" for a 1-day course). State is hydrated on
-// mount from getAttendanceAction(token) and each toggle does an optimistic
-// update + setAttendanceAction(token, …), reverting on error. Per-cell writes
-// are serialized so a fast double-toggle can't land out of order.
+// Renders the enrolled roster with `dayCount` presence checkboxes per SUBJECT.
+// A subject is EITHER an enrolled corsista OR a "companion" (an extra attendee
+// entered for a buyer who bought >=2 seats — a "doppio"). State is hydrated on
+// mount from getAttendanceAction(token) (keyed by a subject string `c<id>` /
+// `p<id>`) and each toggle does an optimistic update + setAttendanceAction(...),
+// reverting on error. Per-cell writes are serialized so a fast double-toggle
+// can't land out of order.
+//
+// For a corsista row that is a "doppio" with a free slot, an inline
+// "Aggiungi partecipante" mini-form calls addPartecipanteFromLinkAction and
+// optimistically adds the new companion row.
 //
 // SECURITY: the client only ever holds the SIGNED TOKEN — never a service
 // client or a raw courseId. The server derives the course from the token and
-// enforces enrollment + day bounds + rate limits (see attendance-actions.ts).
+// enforces enrollment/ownership + day bounds + rate limits + the doubles-only
+// companion rule (see attendance-actions.ts). Every UI gate is re-checked
+// server-side.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getAttendanceAction,
   setAttendanceAction,
+  addPartecipanteFromLinkAction,
   type AttendanceMap,
+  type AttendanceSubject,
 } from "@/lib/share-links/attendance-actions";
 
 interface Student {
   id: number;
+  kind: "corsista" | "partecipante";
   name: string;
   email: string;
   phone: string;
+  iscrizioneId?: number;
+  tickets?: number;
+  companionsUsed?: number;
+  guestOf?: string;
 }
 
 // Public share page renders in hardcoded Italian (no i18n hook in this route);
@@ -36,27 +51,44 @@ const T = {
   empty: "Nessun iscritto al momento.",
   readonly: "Appello non ancora disponibile.",
   saveError: "Salvataggio non riuscito, riprova.",
+  guestOf: (name: string) => (name ? `ospite di ${name}` : "ospite"),
+  addParticipant: "Aggiungi partecipante",
+  name: "Nome",
+  phone: "Telefono",
+  add: "Aggiungi",
+  cancel: "Annulla",
+  addError: "Aggiunta non riuscita, riprova.",
 };
+
+// A subject's stable UI key: `c<corsistaId>` or `p<partecipanteId>`. Matches the
+// attendance map keys produced server-side.
+const subjKey = (s: Pick<Student, "kind" | "id">) => `${s.kind === "corsista" ? "c" : "p"}${s.id}`;
 
 export default function AttendanceRoster({
   token,
-  students,
+  students: initialStudents,
   dayCount,
 }: {
   token: string;
   students: Student[];
   dayCount: number;
 }) {
+  const [students, setStudents] = useState<Student[]>(initialStudents);
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   const [readOnly, setReadOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Per-cell write queue: serialize writes for a given (student, day) so a rapid
+  // Per-cell write queue: serialize writes for a given (subject, day) so a rapid
   // double-toggle can't race and land the wrong final value.
   const chains = useRef<Map<string, Promise<void>>>(new Map());
   // Track cells with an in-flight write to disable them (avoid pile-ups).
   const [pending, setPending] = useState<Set<string>>(new Set());
+  // Which corsista row currently has its "add participant" form open.
+  const [addOpen, setAddOpen] = useState<string | null>(null);
 
-  const days = Array.from({ length: Math.max(1, dayCount) }, (_, i) => i + 1);
+  const days = useMemo(
+    () => Array.from({ length: Math.max(1, dayCount) }, (_, i) => i + 1),
+    [dayCount],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -76,25 +108,26 @@ export default function AttendanceRoster({
     };
   }, [token]);
 
-  const cellKey = (studentId: number, day: number) => `${studentId}:${day}`;
+  const cellKey = (subj: string, day: number) => `${subj}:${day}`;
 
-  function toggle(studentId: number, day: number, next: boolean) {
+  function toggle(subject: AttendanceSubject, day: number, next: boolean) {
     if (readOnly) return;
-    const key = cellKey(studentId, day);
-    const prev = !!attendance[studentId]?.[day];
+    const subj = subjKey(subject);
+    const key = cellKey(subj, day);
+    const prev = !!attendance[subj]?.[day];
 
     // Optimistic update.
-    setAttendance((m) => ({ ...m, [studentId]: { ...(m[studentId] ?? {}), [day]: next } }));
+    setAttendance((m) => ({ ...m, [subj]: { ...(m[subj] ?? {}), [day]: next } }));
     setPending((s) => new Set(s).add(key));
     setError(null);
 
     const run = async () => {
-      const res = await setAttendanceAction(token, studentId, day, next).catch(
+      const res = await setAttendanceAction(token, subject, day, next).catch(
         () => ({ ok: false }) as { ok: boolean; schema?: boolean; error?: string },
       );
       if (!res.ok) {
         // Revert to the pre-toggle value and surface the error.
-        setAttendance((m) => ({ ...m, [studentId]: { ...(m[studentId] ?? {}), [day]: prev } }));
+        setAttendance((m) => ({ ...m, [subj]: { ...(m[subj] ?? {}), [day]: prev } }));
         if (res.schema) setReadOnly(true);
         else setError(res.error || T.saveError);
       }
@@ -140,86 +173,283 @@ export default function AttendanceRoster({
           marginBottom: 24,
         }}
       >
-        {students.map((s, i) => (
-          <div
-            key={`${s.id}-${i}`}
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 8,
-              padding: "10px 14px",
-              borderBottom: i === students.length - 1 ? "none" : "1px solid var(--border-2, #f0f1f3)",
-            }}
-          >
-            <span
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: 999,
-                background: "var(--surface-2, #f4f5f7)",
-                display: "grid",
-                placeItems: "center",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--text-3, #6b7280)",
-                flexShrink: 0,
-              }}
-            >
-              {i + 1}
-            </span>
-            <span style={{ fontSize: 13.5, fontWeight: 600, flex: "1 1 140px", minWidth: 0 }}>
-              {s.name || "—"}
-            </span>
-            {s.email && (
-              <a
-                href={`mailto:${s.email}`}
-                style={{ fontSize: 12, color: "var(--indigo-600, #4f46e5)", textDecoration: "none", flex: "1 1 180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        {students.map((s, i) => {
+          const subj = subjKey(s);
+          const isCompanion = s.kind === "partecipante";
+          const tickets = s.tickets ?? 1;
+          const used = s.companionsUsed ?? 0;
+          // A corsista with unfilled companion slots can add a participant.
+          const canAdd =
+            !readOnly && !isCompanion && tickets >= 2 && used < tickets - 1 && s.iscrizioneId != null;
+          const formOpen = canAdd && addOpen === subj;
+          return (
+            <div key={`${subj}-${i}`} style={{ borderBottom: i === students.length - 1 ? "none" : "1px solid var(--border-2, #f0f1f3)" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "10px 14px",
+                  background: isCompanion ? "var(--surface-2, #f9fafb)" : undefined,
+                }}
               >
-                {s.email}
-              </a>
-            )}
-            {s.phone && (
-              <a
-                href={`tel:${s.phone}`}
-                style={{ fontSize: 12, color: "var(--text-2, #374151)", textDecoration: "none", flexShrink: 0 }}
-              >
-                {s.phone}
-              </a>
-            )}
-            <div style={{ display: "flex", gap: 12, flexShrink: 0, flexWrap: "wrap" }}>
-              {days.map((day) => {
-                const key = cellKey(s.id, day);
-                const checked = !!attendance[s.id]?.[day];
-                const disabled = readOnly || pending.has(key);
-                return (
-                  <label
-                    key={day}
+                <span
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 999,
+                    background: isCompanion ? "var(--indigo-50, #eef2ff)" : "var(--surface-2, #f4f5f7)",
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: isCompanion ? "var(--indigo-600, #4f46e5)" : "var(--text-3, #6b7280)",
+                    flexShrink: 0,
+                  }}
+                >
+                  {isCompanion ? "+" : i + 1}
+                </span>
+                <span style={{ fontSize: 13.5, fontWeight: 600, flex: "1 1 140px", minWidth: 0 }}>
+                  {s.name || "—"}
+                  {isCompanion && (
+                    <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: "var(--text-3, #6b7280)", fontStyle: "italic" }}>
+                      ({T.guestOf(s.guestOf ?? "")})
+                    </span>
+                  )}
+                </span>
+                {s.email && (
+                  <a
+                    href={`mailto:${s.email}`}
+                    style={{ fontSize: 12, color: "var(--indigo-600, #4f46e5)", textDecoration: "none", flex: "1 1 180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {s.email}
+                  </a>
+                )}
+                {s.phone && (
+                  <a
+                    href={`tel:${s.phone}`}
+                    style={{ fontSize: 12, color: "var(--text-2, #374151)", textDecoration: "none", flexShrink: 0 }}
+                  >
+                    {s.phone}
+                  </a>
+                )}
+                <div style={{ display: "flex", gap: 12, flexShrink: 0, flexWrap: "wrap" }}>
+                  {days.map((day) => {
+                    const key = cellKey(subj, day);
+                    const checked = !!attendance[subj]?.[day];
+                    const disabled = readOnly || pending.has(key);
+                    return (
+                      <label
+                        key={day}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          fontSize: 12,
+                          color: "var(--text-2, #374151)",
+                          cursor: disabled ? "default" : "pointer",
+                          opacity: disabled && !readOnly ? 0.6 : 1,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={(e) => toggle({ kind: s.kind, id: s.id }, day, e.target.checked)}
+                          style={{ width: 16, height: 16, accentColor: "var(--indigo-600, #4f46e5)", cursor: disabled ? "default" : "pointer" }}
+                        />
+                        {dayCount > 1 ? T.day(day) : T.present}
+                      </label>
+                    );
+                  })}
+                </div>
+                {canAdd && !formOpen && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setAddOpen(subj);
+                    }}
                     style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 5,
-                      fontSize: 12,
-                      color: "var(--text-2, #374151)",
-                      cursor: disabled ? "default" : "pointer",
-                      opacity: disabled && !readOnly ? 0.6 : 1,
+                      flexShrink: 0,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      color: "var(--indigo-600, #4f46e5)",
+                      background: "transparent",
+                      border: "1px dashed var(--indigo-200, #c7d2fe)",
+                      borderRadius: 8,
+                      padding: "4px 9px",
+                      cursor: "pointer",
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={disabled}
-                      onChange={(e) => toggle(s.id, day, e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: "var(--indigo-600, #4f46e5)", cursor: disabled ? "default" : "pointer" }}
-                    />
-                    {dayCount > 1 ? T.day(day) : T.present}
-                  </label>
-                );
-              })}
+                    + {T.addParticipant}
+                  </button>
+                )}
+              </div>
+              {formOpen && s.iscrizioneId != null && (
+                <AddParticipantForm
+                  token={token}
+                  iscrizioneId={s.iscrizioneId}
+                  onCancel={() => setAddOpen(null)}
+                  onSchema={() => {
+                    setReadOnly(true);
+                    setAddOpen(null);
+                  }}
+                  onError={(m) => setError(m)}
+                  onAdded={(companion) => {
+                    // Optimistically add the new companion row directly after the
+                    // corsista, and bump its used-slot count.
+                    setStudents((prev) => {
+                      const next = [...prev];
+                      const idx = next.findIndex((x) => x.kind === "corsista" && x.id === s.id);
+                      const anchor = idx >= 0 ? idx : next.length - 1;
+                      next[anchor] = { ...next[anchor], companionsUsed: (next[anchor].companionsUsed ?? 0) + 1 };
+                      next.splice(anchor + 1, 0, {
+                        id: companion.id,
+                        kind: "partecipante",
+                        name: companion.full_name,
+                        email: "",
+                        phone: companion.phone,
+                        guestOf: s.name,
+                      });
+                      return next;
+                    });
+                    setAddOpen(null);
+                  }}
+                />
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
+  );
+}
+
+function AddParticipantForm({
+  token,
+  iscrizioneId,
+  onAdded,
+  onCancel,
+  onSchema,
+  onError,
+}: {
+  token: string;
+  iscrizioneId: number;
+  onAdded: (companion: { id: number; full_name: string; phone: string }) => void;
+  onCancel: () => void;
+  onSchema: () => void;
+  onError: (message: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    const res = await addPartecipanteFromLinkAction(token, iscrizioneId, trimmed, phone.trim()).catch(
+      () => ({ ok: false }) as { ok: boolean; schema?: boolean; error?: string; companion?: { id: number; full_name: string; phone: string } },
+    );
+    setBusy(false);
+    if (res.ok && res.companion) {
+      onAdded(res.companion);
+    } else if (res.schema) {
+      onSchema();
+    } else {
+      onError(res.error || T.addError);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        alignItems: "center",
+        padding: "8px 14px 12px 46px",
+        background: "var(--surface-2, #f9fafb)",
+      }}
+    >
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={T.name}
+        maxLength={120}
+        disabled={busy}
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") onCancel();
+        }}
+        style={{
+          flex: "1 1 150px",
+          minWidth: 0,
+          fontSize: 12.5,
+          padding: "6px 9px",
+          borderRadius: 8,
+          border: "1px solid var(--border, #e5e7eb)",
+        }}
+      />
+      <input
+        type="tel"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        placeholder={T.phone}
+        maxLength={40}
+        disabled={busy}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") onCancel();
+        }}
+        style={{
+          flex: "1 1 120px",
+          minWidth: 0,
+          fontSize: 12.5,
+          padding: "6px 9px",
+          borderRadius: 8,
+          border: "1px solid var(--border, #e5e7eb)",
+        }}
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={busy || !name.trim()}
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: "#fff",
+          background: "var(--indigo-600, #4f46e5)",
+          border: "none",
+          borderRadius: 8,
+          padding: "6px 12px",
+          cursor: busy || !name.trim() ? "default" : "pointer",
+          opacity: busy || !name.trim() ? 0.6 : 1,
+        }}
+      >
+        {T.add}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={busy}
+        style={{
+          fontSize: 12,
+          fontWeight: 500,
+          color: "var(--text-2, #374151)",
+          background: "transparent",
+          border: "1px solid var(--border, #e5e7eb)",
+          borderRadius: 8,
+          padding: "6px 12px",
+          cursor: busy ? "default" : "pointer",
+        }}
+      >
+        {T.cancel}
+      </button>
+    </div>
   );
 }

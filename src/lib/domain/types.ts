@@ -136,6 +136,17 @@ export interface Student {
   isDuplicate?: boolean;
   /** Number of tickets this person holds for the course. */
   tickets?: number;
+  /** Enrollment (corsi_iscrizioni) id — drives companion ("doppio") management. */
+  iscrizioneId?: number;
+  /** Extra attendees entered for this enrollment (a buyer of >=2 seats). */
+  companions?: CourseCompanion[];
+}
+
+/** An extra attendee ("doppio") entered for a course enrollment. */
+export interface CourseCompanion {
+  id: number;
+  name: string;
+  phone: string;
 }
 
 export interface Corsista {

@@ -32,10 +32,21 @@ export interface SharedDay {
   sakes: SharedSake[];
 }
 export interface SharedStudent {
+  /** For a corsista: the corsista id. For a companion: the corsi_partecipanti id. */
   id: number;
+  /** Distinguishes an enrolled corsista from an added companion ("doppio"). */
+  kind: "corsista" | "partecipante";
   name: string;
   email: string;
   phone: string;
+  /** Corsista rows only: the enrollment id (drives the public companion-add). */
+  iscrizioneId?: number;
+  /** Corsista rows only: seats bought on this order (>=2 ⇒ a "doppio"). */
+  tickets?: number;
+  /** Corsista rows only: how many companion slots are already filled. */
+  companionsUsed?: number;
+  /** Companion rows only: a label like "(ospite di <buyer>)". */
+  guestOf?: string;
 }
 export interface SharedCourse {
   courseName: string;
@@ -145,18 +156,60 @@ export async function loadSharedCourse(
     }));
   }
 
-  // Enrolled students (id, name, email, phone) — the roster the educator needs
-  // (the id drives the roll-call/attendance writes).
+  // Enrolled students — the roster the educator needs. We carry the enrollment
+  // id (drives the public companion-add) and the corsista id (drives roll-call
+  // writes). Companions are appended below as their own rows.
   const { data: iscr } = await sb
     .from("corsi_iscrizioni")
-    .select("corsista:corsisti(id,full_name,email,phone)")
+    .select("id, corsista:corsisti(id,full_name,email,phone)")
     .eq("corso_id", corso.id);
   type IscrJoin = {
+    id: number;
     corsista: { id: number; full_name: string | null; email: string | null; phone: string | null } | null;
   };
+  const iscrRows = (iscr ?? []) as unknown as IscrJoin[];
+
+  // Tickets per person ("doppio"): count purchases matched on the course title,
+  // mirroring the internal roster (src/lib/data/supabase/index.ts ~L694-704).
+  const ticketCount = new Map<number, number>();
+  const { data: pur } = await sb
+    .from("purchases")
+    .select("corsista_id")
+    .eq("cluster", "corso")
+    .eq("product_title", corso.full_title ?? "");
+  for (const p of (pur ?? []) as { corsista_id: number }[]) {
+    ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + 1);
+  }
+
+  // Existing companions per enrollment (graceful degrade if the table/migration
+  // is absent — the roster then simply shows no companions and no add slots).
+  const companionsByIscr = new Map<number, { id: number; full_name: string; phone: string }[]>();
+  {
+    const { data: partData, error: partErr } = await sb
+      .from("corsi_partecipanti")
+      .select("id, iscrizione_id, full_name, phone")
+      .eq("corso_id", corso.id);
+    if (!partErr) {
+      for (const p of (partData ?? []) as {
+        id: number;
+        iscrizione_id: number | null;
+        full_name: string | null;
+        phone: string | null;
+      }[]) {
+        if (p.iscrizione_id == null) continue;
+        (companionsByIscr.get(p.iscrizione_id) ?? companionsByIscr.set(p.iscrizione_id, []).get(p.iscrizione_id)!).push({
+          id: p.id,
+          full_name: p.full_name ?? "",
+          phone: p.phone ?? "",
+        });
+      }
+    }
+  }
+
   const seen = new Set<string>();
   const students: SharedStudent[] = [];
-  for (const r of (iscr ?? []) as unknown as IscrJoin[]) {
+  const companions: SharedStudent[] = [];
+  for (const r of iscrRows) {
     const c = r.corsista;
     if (!c) continue;
     const key = (c.email || c.full_name || "").trim().toLowerCase();
@@ -165,14 +218,34 @@ export async function loadSharedCourse(
     if (!key) continue;
     if (seen.has(key)) continue;
     seen.add(key);
+    const tickets = ticketCount.get(c.id) ?? 1;
+    const mine = companionsByIscr.get(r.id) ?? [];
     students.push({
       id: c.id,
+      kind: "corsista",
       name: c.full_name ?? "",
       email: c.email ?? "",
       phone: c.phone ?? "",
+      iscrizioneId: r.id,
+      tickets,
+      companionsUsed: mine.length,
     });
+    // Each companion becomes its OWN roster line (its own roll-call checkboxes),
+    // labelled as a guest of the buyer.
+    for (const comp of mine) {
+      companions.push({
+        id: comp.id,
+        kind: "partecipante",
+        name: comp.full_name,
+        email: "",
+        phone: comp.phone,
+        guestOf: c.full_name ?? "",
+      });
+    }
   }
   students.sort((a, b) => a.name.localeCompare(b.name));
+  companions.sort((a, b) => a.name.localeCompare(b.name));
+  students.push(...companions);
 
   const type = corso.type as CourseTypeKey;
   const totalSakes = days.reduce((n, d) => n + d.sakes.length, 0);

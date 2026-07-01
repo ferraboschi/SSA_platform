@@ -82,7 +82,7 @@ export default async function Page({
 
         {/* Materials summary */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
-          <Stat label="Iscritti" value={String(course.students.length)} />
+          <Stat label="Iscritti" value={String(course.students.filter((s) => s.kind === "corsista").length)} />
           <Stat label="Giornate" value={String(course.days.length)} />
           <Stat label="Sake totali" value={String(course.totalSakes)} />
           <Stat label="Costo sake" value={`${Math.round(course.totalSakeCost).toLocaleString("it-IT")} €`} />

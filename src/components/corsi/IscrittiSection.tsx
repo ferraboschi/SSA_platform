@@ -1,18 +1,34 @@
 "use client";
 
+import { useState } from "react";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
-import type { Student } from "@/lib/domain";
+import type { CourseCompanion, Student } from "@/lib/domain";
+import {
+  addPartecipanteAction,
+  removePartecipanteAction,
+} from "@/lib/corsi/partecipanti-actions";
 
 export function IscrittiSection({
+  courseId,
   students,
   whatsappLink,
 }: {
+  courseId: string;
   students: Student[];
   whatsappLink: string;
 }) {
   const tr = useT();
   const t = tr.corsi.iscritti;
+  // Local overlay of companions so add/remove reflect immediately without a full
+  // page reload (the server action revalidates too, but this keeps the UI snappy).
+  const [companionsById, setCompanionsById] = useState<Record<number, CourseCompanion[]>>(() => {
+    const seed: Record<number, CourseCompanion[]> = {};
+    for (const s of students) if (s.iscrizioneId != null) seed[s.iscrizioneId] = s.companions ?? [];
+    return seed;
+  });
+  const companionsFor = (s: Student): CourseCompanion[] =>
+    s.iscrizioneId != null ? (companionsById[s.iscrizioneId] ?? s.companions ?? []) : [];
 
   const paying = students.filter((s) => s.amount > 0).length;
   const free = students.filter((s) => s.amount === 0).length;
@@ -110,6 +126,18 @@ export function IscrittiSection({
                             {format(t.buyerDiff, { name: s.buyerName })}
                           </div>
                         )}
+                        {s.iscrizioneId != null && (
+                          <CompanionManager
+                            courseId={courseId}
+                            iscrizioneId={s.iscrizioneId}
+                            buyerName={s.name}
+                            companions={companionsFor(s)}
+                            onChange={(list) =>
+                              setCompanionsById((m) => ({ ...m, [s.iscrizioneId as number]: list }))
+                            }
+                            t={t}
+                          />
+                        )}
                       </div>
                     </div>
                   </td>
@@ -184,6 +212,156 @@ export function IscrittiSection({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// Existing companions ("doppio" extra attendees) for one enrollment + an inline
+// add form. Staff may add for ANY enrollment (not only doubles) — the server
+// action is role-guarded and re-derives the course from the enrollment.
+function CompanionManager({
+  courseId,
+  iscrizioneId,
+  buyerName,
+  companions,
+  onChange,
+  t,
+}: {
+  courseId: string;
+  iscrizioneId: number;
+  buyerName: string;
+  companions: CourseCompanion[];
+  onChange: (list: CourseCompanion[]) => void;
+  t: ReturnType<typeof useT>["corsi"]["iscritti"];
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await addPartecipanteAction(Number(courseId), iscrizioneId, trimmed, phone.trim()).catch(
+      () => ({ ok: false }) as Awaited<ReturnType<typeof addPartecipanteAction>>,
+    );
+    setBusy(false);
+    if (res.ok && res.companion) {
+      onChange([...companions, { id: res.companion.id, name: res.companion.full_name, phone: res.companion.phone }]);
+      setName("");
+      setPhone("");
+      setOpen(false);
+    } else {
+      setError(res.error || t.companionAddError);
+    }
+  }
+
+  async function remove(id: number) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await removePartecipanteAction(id).catch(
+      () => ({ ok: false }) as Awaited<ReturnType<typeof removePartecipanteAction>>,
+    );
+    setBusy(false);
+    if (res.ok) onChange(companions.filter((c) => c.id !== id));
+    else setError(res.error || t.companionRemoveError);
+  }
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      {companions.map((c) => (
+        <div
+          key={c.id}
+          style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-2)", marginTop: 2 }}
+        >
+          <Icon name="user" size={11} className="text-3" />
+          <span style={{ fontWeight: 500 }}>{c.name}</span>
+          {c.phone && <span style={{ color: "var(--text-3)" }}>· {c.phone}</span>}
+          <span style={{ fontSize: 10.5, color: "var(--text-4)", fontStyle: "italic" }}>
+            {format(t.companionGuestOf, { name: buyerName })}
+          </span>
+          <button
+            type="button"
+            onClick={() => remove(c.id)}
+            disabled={busy}
+            title={t.companionRemove}
+            style={{
+              marginLeft: 2,
+              background: "transparent",
+              border: "none",
+              color: "var(--danger, #dc2626)",
+              cursor: busy ? "default" : "pointer",
+              fontSize: 11,
+              padding: 0,
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      {open ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 4 }}>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t.companionName}
+            maxLength={120}
+            disabled={busy}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") add();
+              if (e.key === "Escape") setOpen(false);
+            }}
+            style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 130 }}
+          />
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder={t.companionPhone}
+            maxLength={40}
+            disabled={busy}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") add();
+              if (e.key === "Escape") setOpen(false);
+            }}
+            style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 110 }}
+          />
+          <button type="button" className="btn btn-sm btn-primary" onClick={add} disabled={busy || !name.trim()}>
+            {t.companionAdd}
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
+            {t.companionCancel}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setOpen(true);
+          }}
+          style={{
+            marginTop: 2,
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: "var(--indigo, #4f46e5)",
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+          }}
+        >
+          + {t.companionAddParticipant}
+        </button>
+      )}
+      {error && <div style={{ fontSize: 11, color: "var(--danger, #dc2626)", marginTop: 3 }}>{error}</div>}
     </div>
   );
 }

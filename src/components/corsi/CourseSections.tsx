@@ -80,7 +80,9 @@ export function CourseSections({
         ))}
       </div>
 
-      {section === "iscritti" && <IscrittiSection students={students} whatsappLink={whatsappLink} />}
+      {section === "iscritti" && (
+        <IscrittiSection courseId={courseId} students={students} whatsappLink={whatsappLink} />
+      )}
       {section === "programma" && (
         <ProgrammaEconomiaSection
           courseId={courseId}

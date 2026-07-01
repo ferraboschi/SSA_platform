@@ -26,6 +26,7 @@ import { DEFAULT_THRESHOLDS } from "@/lib/domain";
 import type {
   CorsistaEnrollment,
   Course,
+  CourseCompanion,
   CourseTypeKey,
   DashThresholds,
   Educator,
@@ -658,9 +659,9 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
     // the base columns if the enrichment migration hasn't been applied yet, so
     // the iscritti list never disappears.
     const RICH_ISCR =
-      "corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,buyer_name,corsista:corsisti(full_name,email,phone,has_whatsapp)";
+      "id,corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,buyer_name,corsista:corsisti(full_name,email,phone,has_whatsapp)";
     const BASE_ISCR =
-      "corsista_id,amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)";
+      "id,corsista_id,amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)";
     const richRes = await sb
       .from("corsi_iscrizioni")
       .select(RICH_ISCR)
@@ -674,6 +675,7 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         ).data
       : richRes.data;
     type IscrJoin = {
+      id: number;
       corsista_id: number;
       amount_cents: number;
       exam_result: "passed" | "retrial" | "failed" | null;
@@ -701,6 +703,32 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       .eq("product_title", row.full_title);
     for (const p of (pur ?? []) as { corsista_id: number }[]) {
       ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + 1);
+    }
+
+    // Companion attendees ("doppio") per enrollment. Degrades gracefully to an
+    // empty map if the corsi_partecipanti table/migration is not yet applied.
+    const companionsByIscr = new Map<number, CourseCompanion[]>();
+    {
+      const { data: partData, error: partErr } = await sb
+        .from("corsi_partecipanti")
+        .select("id, iscrizione_id, full_name, phone")
+        .eq("corso_id", row.id);
+      if (!partErr) {
+        for (const p of (partData ?? []) as {
+          id: number;
+          iscrizione_id: number | null;
+          full_name: string | null;
+          phone: string | null;
+        }[]) {
+          if (p.iscrizione_id == null) continue;
+          (companionsByIscr.get(p.iscrizione_id) ??
+            companionsByIscr.set(p.iscrizione_id, []).get(p.iscrizione_id)!).push({
+            id: p.id,
+            name: p.full_name ?? "",
+            phone: p.phone ?? "",
+          });
+        }
+      }
     }
 
     let revenue = 0;
@@ -737,6 +765,8 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
         buyerName: buyer,
         isDuplicate: tickets > 1,
         tickets,
+        iscrizioneId: r.id,
+        companions: companionsByIscr.get(r.id) ?? [],
         hasWhatsApp: c?.has_whatsapp ?? false,
         nameMismatch: mismatch,
         registrationName: mismatch ? buyer : null,
