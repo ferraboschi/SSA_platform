@@ -76,7 +76,11 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const pct = course.capacity ? course.enrolled / course.capacity : 0;
   const costItems = Object.values(course.costs).filter(Boolean).length;
   const marginOnRevenue = course.revenue ? Math.round((course.margin / course.revenue) * 100) : 0;
-  const programSakeCount = course.program.reduce((s, p) => s + p.sakes.length, 0);
+  // Count sakes from the operator's saved OVERLAY when present (authoritative, same
+  // source the section itself uses) — falling back to the base program. Reading only
+  // the base showed "0" for every course whose programme was assigned through the UI.
+  const programDays = programOverlay?.days?.length ? programOverlay.days : course.program;
+  const programSakeCount = programDays.reduce((s, p) => s + p.sakes.length, 0);
   const esame = course.exam ? toEsameData(course) : null;
   // Exam links work off the family template (not course.exam, which the
   // Supabase path doesn't populate), so surface them for every exam-bearing
