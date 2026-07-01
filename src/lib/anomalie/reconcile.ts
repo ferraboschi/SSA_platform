@@ -17,6 +17,7 @@ import "server-only";
 // ONE source of truth — this file no longer re-derives the predicates.
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { paginateAll } from "@/lib/data/supabase/query-helpers";
 import {
   missingCompanions,
   fullDiscountCancelled,
@@ -42,14 +43,13 @@ async function loadAll<T>(
   table: string,
   columns: string,
 ): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await sb.from(table).select(columns).range(from, from + 999);
-    if (error || !data) break;
-    out.push(...(data as T[]));
-    if (data.length < 1000) break;
-  }
-  return out;
+  return paginateAll<T>(
+    async (from, to) => {
+      const { data, error } = await sb.from(table).select(columns).range(from, to);
+      return { data: data as T[] | null, error };
+    },
+    { onError: "break" },
+  );
 }
 
 export interface ReconciliationCounts {
@@ -119,29 +119,22 @@ export async function computeReconciliation(): Promise<ReconciliationCounts> {
 
   // ── Rule 1: doppio-no-2nd ──────────────────────────────────────────────
   try {
-    const purchases: PurchaseCorsoRow[] = [];
-    for (let from = 0; ; from += 1000) {
+    const purchases = await paginateAll<PurchaseCorsoRow>(async (from, to) => {
       const { data, error } = await sb
         .from("purchases")
         .select("corsista_id,product_title")
         .eq("cluster", "corso")
-        .range(from, from + 999);
-      if (error) throw error;
-      const rows = (data ?? []) as PurchaseCorsoRow[];
-      purchases.push(...rows);
-      if (rows.length < 1000) break;
-    }
-    const partecipanti: PartecipanteRow[] = [];
-    for (let from = 0; ; from += 1000) {
+        .range(from, to);
+      return { data: (data ?? []) as PurchaseCorsoRow[], error };
+    });
+    // corsi_partecipanti missing → the throw propagates and degrades this to 0.
+    const partecipanti = await paginateAll<PartecipanteRow>(async (from, to) => {
       const { data, error } = await sb
         .from("corsi_partecipanti")
         .select("iscrizione_id")
-        .range(from, from + 999);
-      if (error) throw error; // corsi_partecipanti missing → degrade to 0
-      const rows = (data ?? []) as PartecipanteRow[];
-      partecipanti.push(...rows);
-      if (rows.length < 1000) break;
-    }
+        .range(from, to);
+      return { data: (data ?? []) as PartecipanteRow[], error };
+    });
     counts.doppioNo2nd = missingCompanions(
       ruleEnr,
       corsoById,

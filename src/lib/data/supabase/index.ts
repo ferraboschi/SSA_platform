@@ -71,6 +71,7 @@ import {
   profileToUser,
   purchaseRowToDomain,
 } from "./mappers";
+import { paginateAll, selectWithFallback } from "./query-helpers";
 import type {
   CorsistaRow,
   CorsoRow,
@@ -333,30 +334,34 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       const enrollByCorsista = new Map<number, CorsistaEnrollment[]>();
       const ISCR_PAGE = 1000;
       let iscrSelect = enrollmentSelect; // drops to base if exam_score_pct absent
-      for (let from = 0; ; from += ISCR_PAGE) {
-        let { data: page, error: e2 } = await sb
-          .from("corsi_iscrizioni")
-          .select(iscrSelect)
-          .range(from, from + ISCR_PAGE - 1);
-        if (e2 && iscrSelect === enrollmentSelect) {
-          // pre-migration: retry without exam_score_pct
-          iscrSelect = enrollmentSelectBase;
-          ({ data: page, error: e2 } = await sb
+      const iscrRows = await paginateAll<IscrizioneRow>(
+        async (from, to) => {
+          let { data: page, error: e2 } = await sb
             .from("corsi_iscrizioni")
             .select(iscrSelect)
-            .range(from, from + ISCR_PAGE - 1));
-        }
-        if (e2) throw e2;
-        const rows = (page ?? []) as unknown as IscrizioneRow[];
-        for (const i of rows) {
-          const e = iscrizioneToEnrollment(i);
-          if (!e) continue;
-          e.certificateUrl = certMap.get(`${i.corsista_id}-${i.corso_id}`) ?? null;
-          const list = enrollByCorsista.get(i.corsista_id) ?? [];
-          list.push(e);
-          enrollByCorsista.set(i.corsista_id, list);
-        }
-        if (rows.length < ISCR_PAGE) break;
+            .range(from, to);
+          if (e2 && iscrSelect === enrollmentSelect) {
+            // pre-migration: retry without exam_score_pct
+            iscrSelect = enrollmentSelectBase;
+            ({ data: page, error: e2 } = await sb
+              .from("corsi_iscrizioni")
+              .select(iscrSelect)
+              .range(from, to));
+          }
+          return {
+            data: (page ?? []) as unknown as IscrizioneRow[],
+            error: e2,
+          };
+        },
+        { pageSize: ISCR_PAGE },
+      );
+      for (const i of iscrRows) {
+        const e = iscrizioneToEnrollment(i);
+        if (!e) continue;
+        e.certificateUrl = certMap.get(`${i.corsista_id}-${i.corso_id}`) ?? null;
+        const list = enrollByCorsista.get(i.corsista_id) ?? [];
+        list.push(e);
+        enrollByCorsista.set(i.corsista_id, list);
       }
 
       return (corsistiData as CorsistaRow[])
@@ -373,17 +378,19 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       if (error) throw error;
       if (!c) return null;
       const row = c as CorsistaRow;
-      let res = await sb
-        .from("corsi_iscrizioni")
-        .select(enrollmentSelect)
-        .eq("corsista_id", row.id);
-      if (res.error) {
-        // pre-migration: retry without exam_score_pct
-        res = (await sb
-          .from("corsi_iscrizioni")
-          .select(enrollmentSelectBase)
-          .eq("corsista_id", row.id)) as typeof res;
-      }
+      // pre-migration: retry without exam_score_pct if the rich select errors.
+      const res = await selectWithFallback<IscrizioneRow>(
+        (columns) =>
+          sb
+            .from("corsi_iscrizioni")
+            .select(columns)
+            .eq("corsista_id", row.id) as unknown as Promise<{
+            data: IscrizioneRow[] | null;
+            error: unknown;
+          }>,
+        enrollmentSelect,
+        enrollmentSelectBase,
+      );
       if (res.error) throw res.error;
       const iscr = res.data;
       const certMap = await loadCertMap();
@@ -662,18 +669,20 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       "id,corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,buyer_name,corsista:corsisti(full_name,email,phone,has_whatsapp)";
     const BASE_ISCR =
       "id,corsista_id,amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)";
-    const richRes = await sb
-      .from("corsi_iscrizioni")
-      .select(RICH_ISCR)
-      .eq("corso_id", row.id);
-    const iscr = richRes.error
-      ? (
-          await sb
+    const iscr = (
+      await selectWithFallback<unknown>(
+        (columns) =>
+          sb
             .from("corsi_iscrizioni")
-            .select(BASE_ISCR)
-            .eq("corso_id", row.id)
-        ).data
-      : richRes.data;
+            .select(columns)
+            .eq("corso_id", row.id) as unknown as Promise<{
+            data: unknown[] | null;
+            error: unknown;
+          }>,
+        RICH_ISCR,
+        BASE_ISCR,
+      )
+    ).data;
     type IscrJoin = {
       id: number;
       corsista_id: number;
@@ -835,12 +844,12 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       // enrollments and PostgREST caps a single request (~1000 rows), so a flat
       // .limit() silently truncated totals and undercounted revenue/headcount.
       // Fetch every page (in order), then roll up once via the pure aggregation.
-      const enrollAggRows: {
+      type EnrollAggRow = {
         corso_id: number;
         amount_cents: number;
         discount_cents: number | null;
         financial_status?: string | null;
-      }[] = [];
+      };
       const ENR_PAGE = 1000;
       // `financial_status` may not exist pre-enrichment migration → fall back to
       // the base columns (revenue then treats every enrollment as paid, as it
@@ -848,28 +857,26 @@ export async function createSupabaseDataSource(): Promise<DataSource> {
       const AGG_RICH = "corso_id,amount_cents,discount_cents,financial_status";
       const AGG_BASE = "corso_id,amount_cents,discount_cents";
       let aggSelect = AGG_RICH;
-      for (let from = 0; ; from += ENR_PAGE) {
-        let { data: page, error: pErr } = await sb
-          .from("corsi_iscrizioni")
-          .select(aggSelect)
-          .range(from, from + ENR_PAGE - 1);
-        if (pErr && aggSelect === AGG_RICH) {
-          aggSelect = AGG_BASE;
-          ({ data: page, error: pErr } = await sb
+      const enrollAggRows = await paginateAll<EnrollAggRow>(
+        async (from, to) => {
+          let { data: page, error: pErr } = await sb
             .from("corsi_iscrizioni")
             .select(aggSelect)
-            .range(from, from + ENR_PAGE - 1));
-        }
-        if (pErr) throw pErr;
-        const rows = (page ?? []) as unknown as {
-          corso_id: number;
-          amount_cents: number;
-          discount_cents: number | null;
-          financial_status?: string | null;
-        }[];
-        for (const i of rows) enrollAggRows.push(i);
-        if (rows.length < ENR_PAGE) break;
-      }
+            .range(from, to);
+          if (pErr && aggSelect === AGG_RICH) {
+            aggSelect = AGG_BASE;
+            ({ data: page, error: pErr } = await sb
+              .from("corsi_iscrizioni")
+              .select(aggSelect)
+              .range(from, to));
+          }
+          return {
+            data: (page ?? []) as unknown as EnrollAggRow[],
+            error: pErr,
+          };
+        },
+        { pageSize: ENR_PAGE },
+      );
       const agg = aggregateCourseEnrollments(enrollAggRows);
 
       // Applied transfer credits per destination course (euros), fetched once via
