@@ -26,6 +26,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Design-reference prototype (not app code — never built or shipped).
     "_reference/**",
+    // Agent scratch + temporary git worktrees (a full second copy of the repo);
+    // never lint these — they'd double-count and drag in ignored trees.
+    ".claude/**",
   ]),
 ]);
 
