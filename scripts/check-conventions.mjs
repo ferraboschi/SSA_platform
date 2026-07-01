@@ -11,6 +11,10 @@
 //   4. No `console.*` log that interpolates an env var matching /_TOKEN|_KEY|_SECRET/.
 //   5. No Italian month-name array/map literal defined outside the single source
 //      of truth (src/lib/dates/italian-months.ts) or seed/test files.
+//   6. No `"use client"` file may import the Supabase DB client or server-only
+//      data access (getSupabase*Client, @/lib/integrations/supabase,
+//      @/lib/data/supabase, @/lib/data/provider, server-only) — keeps the
+//      RSC/client boundary clean and DB access off the client bundle.
 //
 // Usage: node scripts/check-conventions.mjs
 
@@ -64,6 +68,11 @@ for (const rel of files) {
 //   as any  ->  `as` keyword, ws, `any`, boundary
 const ANY_RE = /(:\s*any(?![\w$])|(?<![\w$])as\s+any(?![\w$]))/;
 const SECRET_ENV_RE = /_TOKEN|_KEY|_SECRET/;
+// Rule 6: a "use client" directive (the first statement of a client module).
+const USE_CLIENT_RE = /^\s*["']use client["']\s*;?\s*$/m;
+// DB client / server-only data-access that must never reach a client module.
+const BANNED_CLIENT_IMPORT_RE =
+  /from\s+["'](?:server-only|@\/lib\/integrations\/supabase(?:\/[^"']*)?|@\/lib\/data\/supabase(?:\/[^"']*)?|@\/lib\/data\/provider)["']|getSupabase(?:Service|Server)Client/;
 const MONTH_WORDS = [
   "Gennaio",
   "Febbraio",
@@ -131,11 +140,23 @@ for (const rel of files) {
   }
   const lines = text.split("\n");
   inBlockComment = false; // reset per file
+  const isClient = USE_CLIENT_RE.test(text);
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
     const line = stripComments(raw); // code only — comments removed
     const ln = i + 1;
+
+    // Rule 6: a client module must not import the DB client / server-only access.
+    // Type-only imports (`import type …`) are erased at build, so they're allowed.
+    if (
+      isClient &&
+      /^\s*import\b/.test(line) &&
+      !/^\s*import\s+type\b/.test(line) &&
+      BANNED_CLIENT_IMPORT_RE.test(line)
+    ) {
+      add(abs, ln, '`"use client"` module must not import the Supabase client / server-only data access');
+    }
 
     // Rule 2: `: any` / ` as any` (skip *.test.*)
     if (!isTest(rel) && ANY_RE.test(line)) {
