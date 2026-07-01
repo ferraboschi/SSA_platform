@@ -101,10 +101,22 @@ export function ExamRunner({
   /** Preview: at the end, compute + show the outcome instead of a thank-you. */
   showResult?: boolean;
 }) {
-  // Language is the FIRST step (a gate), unless forced by the link or resumed.
-  const forced = LANGS.includes(forcedLang as Lang) ? (forcedLang as Lang) : null;
-  const resumedLang =
-    resumeState?.lang && LANGS.includes(resumeState.lang as Lang) ? (resumeState.lang as Lang) : null;
+  // Only offer a non-Italian language when EVERY question is fully translated into
+  // it (text + all options). Otherwise the student would silently receive Italian
+  // questions — and their answers couldn't be graded. Italian is always available.
+  const fullyTranslated = (l: "en" | "ja"): boolean =>
+    questions.length > 0 &&
+    questions.every((q) => {
+      const tr = q.i18n?.[l];
+      return !!tr?.text && (q.options.length === 0 || (tr.options?.length ?? 0) >= q.options.length);
+    });
+  const availableLangs: Lang[] = LANGS.filter((l) => l === "it" || fullyTranslated(l as "en" | "ja"));
+  const canUse = (l: string | null | undefined): boolean => !!l && availableLangs.includes(l as Lang);
+
+  // Language is the FIRST step (a gate), unless forced by the link or resumed — but
+  // never force/resume into a language the exam isn't actually translated into.
+  const forced = canUse(forcedLang) ? (forcedLang as Lang) : null;
+  const resumedLang = canUse(resumeState?.lang) ? (resumeState?.lang as Lang) : null;
   const [lang, setLang] = useState<Lang>(resumedLang ?? forced ?? "it");
   const [langPicked, setLangPicked] = useState<boolean>(Boolean(forced) || Boolean(resumedLang));
   const [idx, setIdx] = useState(resumeState?.currentIdx ?? 0);
@@ -291,7 +303,7 @@ export function ExamRunner({
           <div className="exam-public-q" {...noCopy}>
             <p className="exam-public-q-text">{CHROME[lang].chooseLang}</p>
             <div className="exam-public-options">
-              {LANGS.map((l) => (
+              {availableLangs.map((l) => (
                 <button
                   key={l}
                   type="button"
