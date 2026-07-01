@@ -80,7 +80,7 @@ export interface CorsoEmbedded {
   city: string;
   month: string;
   year: number;
-  lifecycle: "pubblicato" | "bozza" | "archiviato" | "passato";
+  lifecycle: "pubblicato" | "bozza" | "archiviato" | "passato" | "cancelled";
 }
 
 export interface IscrizioneRow {

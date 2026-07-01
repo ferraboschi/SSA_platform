@@ -146,7 +146,16 @@ function classifyLine(title: string, productType: string | null): Classification
   return { cluster: "evento", subtype: null, delivery };
 }
 
-/** Upsert future-dated course tickets into `corsi`. Returns product_id → corso. */
+/** year*12 + month0 from a YYYY-MM-DD start_date (for past/future month comparison). */
+function dateMonthKey(startDate: string | null): number | null {
+  if (!startDate) return null;
+  const d = new Date(startDate);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.getUTCFullYear() * 12 + d.getUTCMonth();
+}
+
+/** Upsert course tickets into `corsi`, inheriting lifecycle from Shopify status +
+ *  the course date (all statuses, incl. past/draft/archived). Returns product_id → corso. */
 async function syncCourses(
   products: AdminProduct[],
 ): Promise<{ map: Map<number, { id: number; price: number }>; upserted: number }> {
@@ -161,11 +170,19 @@ async function syncCourses(
   // (never overwrite a staff/manual assignment).
   const { data: existingRows } = await sb
     .from("corsi")
-    .select("external_id, educator_id")
+    .select("external_id, educator_id, lifecycle, start_date")
     .not("external_id", "is", null);
   const known = new Set((existingRows ?? []).map((r) => String(r.external_id)));
   const educatorByExt = new Map(
     (existingRows ?? []).map((r) => [String(r.external_id), r.educator_id as number | null]),
+  );
+  // Prior lifecycle (for the "annulled stays annulled" stickiness) + a month-key of
+  // the course date (for the deletion-reconciliation pass below).
+  const lifecycleByExt = new Map(
+    (existingRows ?? []).map((r) => [String(r.external_id), (r.lifecycle as string) ?? ""]),
+  );
+  const monthKeyByExt = new Map(
+    (existingRows ?? []).map((r) => [String(r.external_id), dateMonthKey(r.start_date as string | null)]),
   );
 
   // Educator resolver: the Shopify `custom.sake_educator` metafield holds the
@@ -192,10 +209,9 @@ async function syncCourses(
 
   for (const p of products) {
     if ((p.product_type || "").toLowerCase() !== "ticket") continue;
-    // Only PUBLISHED (active) products become courses. Draft/archived Shopify
-    // products are not on the public site, so they must not appear as courses
-    // here (they'd be phantom "bozza" courses with no real presence).
-    if (p.status !== "active") continue;
+    // We now ingest EVERY status (active/draft/archived) and inherit lifecycle from
+    // Shopify + the course date (computed below), so drafts, past and annulled
+    // courses are reflected on the platform instead of silently ignored.
 
     // Custom metafields are fetched at most once per product, lazily — only when
     // the title can't be parsed (date lives in metafields, e.g. masterclasses)
@@ -219,7 +235,27 @@ async function syncCourses(
     }
 
     const key = parsed.year * 12 + (parsed.month - 1);
-    if (key < curKey) continue; // only future / current-month courses
+    const isPast = key < curKey; // course month is before the current month
+
+    // Inherit the lifecycle from Shopify status + the date. Precedence:
+    //  • already "cancelled" → stays cancelled (an annulled course never resurrects);
+    //  • draft            → bozza (separate Bozze area);
+    //  • past (any status)→ passato (it was held);
+    //  • archived+future  → cancelled (annulled before its date);
+    //  • active+future    → pubblicato (the only live state).
+    // (Read-time deriveLifecycle refines the current-month day-level pubblicato→passato
+    //  flip between hourly syncs.)
+    const prior = lifecycleByExt.get(String(p.id));
+    const lifecycle: string =
+      prior === "cancelled"
+        ? "cancelled"
+        : p.status === "draft"
+          ? "bozza"
+          : isPast
+            ? "passato"
+            : p.status === "archived"
+              ? "cancelled"
+              : "pubblicato";
     const variant = p.variants?.[0];
     const price = Math.round(parseFloat(variant?.price || "0") * 100) || 0;
     const mm = String(parsed.month).padStart(2, "0");
@@ -242,11 +278,13 @@ async function syncCourses(
     };
 
     if (known.has(String(p.id))) {
-      // Existing course: update sync-owned fields only — DO NOT touch
-      // lifecycle / capacity / min_students (staff-managed).
+      // Existing course: refresh sync-owned fields + the inherited lifecycle
+      // (Shopify is now the source of truth for state). capacity / min_students stay
+      // staff-managed. A 'cancelled' write fails harmlessly (error, no update) if the
+      // CHECK-constraint migration hasn't been applied yet.
       const { error } = await sb
         .from("corsi")
-        .update(syncOwned)
+        .update({ ...syncOwned, lifecycle })
         .eq("external_id", String(p.id));
       if (!error) upserted++;
       // Backfill the educator only when it's still missing (never overwrite a
@@ -268,7 +306,7 @@ async function syncCourses(
       const educatorId = resolveEducatorByName((await getMf()).sake_educator || null);
       const { error } = await sb.from("corsi").insert({
         ...syncOwned,
-        lifecycle: "pubblicato",
+        lifecycle,
         capacity,
         min_students: 6,
         educator_id: educatorId,
@@ -276,6 +314,35 @@ async function syncCourses(
       if (!error) upserted++;
     }
   }
+  // ── Deletion reconciliation ────────────────────────────────────────────────
+  // A previously-synced course whose Shopify product is no longer returned was
+  // DELETED on Shopify → annulled ("cancelled") if still upcoming, else it was held
+  // ("passato"). We NEVER hard-delete the row (enrollments + exam history stay).
+  // GUARDED: never mass-cancel the catalog on a partial/failed/truncated fetch — only
+  // reconcile when the fetch is provably plausible (non-empty, and it still contains
+  // most of what we previously synced). First-ever run (nothing synced) is exempt.
+  const seenIds = new Set(products.map((p) => String(p.id)));
+  const ticketCount = products.filter((p) => (p.product_type || "").toLowerCase() === "ticket").length;
+  const priorSynced = known.size;
+  const seenKnown = [...known].filter((e) => seenIds.has(e)).length;
+  const reconcileSafe =
+    priorSynced === 0 ||
+    (products.length > 0 && ticketCount >= priorSynced - 5 && seenKnown / priorSynced >= 0.5);
+  if (reconcileSafe) {
+    for (const ext of known) {
+      if (seenIds.has(ext)) continue; // still on Shopify → already handled in the loop
+      const prior = lifecycleByExt.get(ext);
+      if (prior === "cancelled" || prior === "passato") continue; // already terminal
+      const mk = monthKeyByExt.get(ext);
+      const gone: string = mk != null && mk < curKey ? "passato" : "cancelled";
+      await sb.from("corsi").update({ lifecycle: gone }).eq("external_id", ext);
+    }
+  } else {
+    console.warn(
+      `[shopify-sync] deletion reconciliation SKIPPED (partial fetch?): fetched=${products.length} tickets=${ticketCount} priorSynced=${priorSynced} seenKnown=${seenKnown}`,
+    );
+  }
+
   // Reload the product_id → corso map (covers both new and pre-existing courses).
   const { data } = await sb
     .from("corsi")

@@ -165,7 +165,7 @@ export function computeStatus(
   minStud: number,
   lifecycle: CourseLifecycle,
 ): CourseStatus {
-  if (lifecycle === "passato" || lifecycle === "archiviato")
+  if (lifecycle === "passato" || lifecycle === "archiviato" || lifecycle === "cancelled")
     return enrolled >= minStud ? "in-traiettoria" : "critico";
   const ratio = minStud > 0 ? enrolled / minStud : 1;
   if (ratio >= 1) return "in-traiettoria";
@@ -186,18 +186,33 @@ export function computeStatus(
  *  every consumer goes through this one mapper, so the fix is a single source of
  *  truth with no backfill/migration needed. "bozza"/"archiviato"/"passato" (already
  *  set) are never touched — only a stale "pubblicato" past its last day is corrected. */
+/** True once the course's LAST day is fully over (still "live" through its last day). */
+function coursePast(startDate: string | null, days: number): boolean {
+  if (!startDate) return false;
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) return false;
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + Math.max(days, 1) - 1);
+  end.setUTCHours(23, 59, 59, 999);
+  return end.getTime() < Date.now();
+}
+
+/** The sync writes the authoritative lifecycle hourly from Shopify status + date.
+ *  This read-time pass covers two things it can't:
+ *   1. the GAP between a course's date passing and the next sync run — a stale
+ *      "pubblicato" whose last day is over reads "passato";
+ *   2. LEGACY "archiviato" rows (the model no longer produces that value) folded
+ *      into the two-reason scheme — past → "passato" (it was held), future →
+ *      "cancelled" (it was pulled before its date).
+ *  "bozza"/"passato"/"cancelled" pass through untouched (never resurrected). */
 export function deriveLifecycle(
   lifecycle: CourseLifecycle,
   startDate: string | null,
   days: number,
 ): CourseLifecycle {
-  if (lifecycle !== "pubblicato" || !startDate) return lifecycle;
-  const start = new Date(startDate);
-  if (Number.isNaN(start.getTime())) return lifecycle;
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + Math.max(days, 1) - 1);
-  end.setUTCHours(23, 59, 59, 999); // still "pubblicato" through its last day
-  return end.getTime() < Date.now() ? "passato" : lifecycle;
+  if (lifecycle === "pubblicato") return coursePast(startDate, days) ? "passato" : "pubblicato";
+  if (lifecycle === "archiviato") return coursePast(startDate, days) ? "passato" : "cancelled";
+  return lifecycle;
 }
 
 export function placeholderEducator(): Educator {

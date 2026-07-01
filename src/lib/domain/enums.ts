@@ -10,11 +10,18 @@ export const COURSE_TYPE_KEYS = [
 ] as const;
 export type CourseTypeKey = (typeof COURSE_TYPE_KEYS)[number];
 
+// Inherited from Shopify + the course date:
+//  • pubblicato — active on Shopify, still upcoming (the only "live" state).
+//  • bozza      — draft on Shopify (shown only in the separate Bozze area).
+//  • passato    — the course date has passed: it was held.
+//  • cancelled  — annulled before its date (pulled from Shopify while still future).
+//  • archiviato — LEGACY only, no longer produced; folded into passato/cancelled at read time.
 export const COURSE_LIFECYCLES = [
   "pubblicato",
   "bozza",
   "archiviato",
   "passato",
+  "cancelled",
 ] as const;
 export type CourseLifecycle = (typeof COURSE_LIFECYCLES)[number];
 

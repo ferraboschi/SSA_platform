@@ -42,6 +42,19 @@ export const TAB_LIFECYCLE: Record<CatalogTab, CourseLifecycle> = {
   passati: "passato",
 };
 
+// ── Shared lifecycle predicates (single source of truth for which surface a
+// course belongs to). Active views (dashboard, pianificatore, corsi catalog) show
+// ONLY active courses; drafts live in the separate Bozze area; passed + cancelled
+// (+ any legacy archiviato) live in the Archivio section.
+export const isActiveCourse = (lc: CourseLifecycle): boolean => lc === "pubblicato";
+export const isDraftCourse = (lc: CourseLifecycle): boolean => lc === "bozza";
+export const isArchivedCourse = (lc: CourseLifecycle): boolean =>
+  lc === "passato" || lc === "cancelled" || lc === "archiviato";
+/** The archive REASON tag shown in the Archivio section. */
+export type ArchiveReason = "passed" | "cancelled";
+export const archiveReason = (lc: CourseLifecycle): ArchiveReason =>
+  lc === "cancelled" ? "cancelled" : "passed";
+
 export type CourseSortKey =
   | "date"
   | "type"

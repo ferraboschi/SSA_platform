@@ -49,10 +49,15 @@ describe("deriveLifecycle", () => {
     // 3-day course that started yesterday is still on day 2 → not over yet.
     expect(deriveLifecycle("pubblicato", iso(-1), 3)).toBe("pubblicato");
   });
-  it("never overrides a deliberate 'bozza'/'archiviato'/'passato' value", () => {
+  it("preserves terminal bozza/passato/cancelled values (never resurrected)", () => {
     expect(deriveLifecycle("bozza", iso(-100), 1)).toBe("bozza");
-    expect(deriveLifecycle("archiviato", iso(-100), 1)).toBe("archiviato");
     expect(deriveLifecycle("passato", iso(5), 1)).toBe("passato");
+    expect(deriveLifecycle("cancelled", iso(5), 1)).toBe("cancelled");
+    expect(deriveLifecycle("cancelled", iso(-100), 1)).toBe("cancelled"); // annulled stays annulled
+  });
+  it("folds legacy 'archiviato' into the two-reason model by date", () => {
+    expect(deriveLifecycle("archiviato", iso(-100), 1)).toBe("passato"); // it was held
+    expect(deriveLifecycle("archiviato", iso(5), 1)).toBe("cancelled"); // pulled before its date
   });
   it("is defensive against a missing/malformed start_date", () => {
     expect(deriveLifecycle("pubblicato", null, 1)).toBe("pubblicato");
