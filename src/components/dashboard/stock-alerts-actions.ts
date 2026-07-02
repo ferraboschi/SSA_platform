@@ -4,6 +4,7 @@ import { getDataSource } from "@/lib/data";
 import { getSession } from "@/lib/auth/session";
 import { hasRole } from "@/lib/auth/guard";
 import { sendStockAlertEmail } from "@/lib/alerts/emails";
+import { alertRecipients } from "@/lib/integrations/config";
 import type { StockAlert } from "@/lib/domain";
 
 /** Replace the full set of low-stock SKU watches (dashboard "Memoria operativa"). */
@@ -30,9 +31,9 @@ export async function sendTestStockAlertAction(): Promise<{ ok: boolean; error?:
     return { ok: false, error: "Non autorizzato." };
   }
   try {
-    // During testing, route the sample alert to the admin's own inbox so we can
-    // verify delivery without spamming the real recipient (Camilla).
-    const testTo = "lorenzo@ef-ti.com";
+    // Send the sample alert to the REAL stock-alert recipient (corsi@…) so the
+    // test verifies the actual delivery path, not a personal inbox.
+    const testTo = alertRecipients.stock;
     const res = await sendStockAlertEmail(
       "Esempio (test)",
       [{ name: "Sake di prova", code: "TEST-SKU", stock: 3, min: 10 }],

@@ -129,7 +129,7 @@ export const resendConfig = {
 export const alertRecipients = {
   /** Stock / low-stock alerts → Camilla. */
   get stock() {
-    return env("ALERT_EMAIL_STOCK") ?? "cosi@sakesommelierassociation.it";
+    return env("ALERT_EMAIL_STOCK") ?? "corsi@sakesommelierassociation.it";
   },
   /** Course-ended "da fatturare" notices → Luigi (accounting). */
   get invoice() {
