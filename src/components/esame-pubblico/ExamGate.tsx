@@ -2,10 +2,15 @@
 
 // Entry for the public exam link.
 //  • Preview (test/validate) → straight to the runner (page sets reveal/showResult).
-//  • Real exam → ProctoredExam: pick your name → waiting room → educator admits →
-//    runner with RESUMABLE state (logout/refresh/disconnect resumes exactly where
-//    you were, until final submission).
-import { useCallback, useEffect, useRef, useState } from "react";
+//  • Real exam, PERSONAL link (token carries the bound corsista `s`) → straight to
+//    the runner; identity is written server-side from `s` at submit. Progress is
+//    resumed from this browser (localStorage) so a refresh/disconnect never loses
+//    answers.
+//  • Real exam, SHARED class link (no `s`) → EMAIL GATE: the student enters the
+//    email they confirmed at course start; on a match the server mints a PERSONAL
+//    link and we redirect to it. No roster is ever exposed and there is no
+//    name-pick (both were impersonation / PII-leak surfaces).
+import { useCallback, useEffect, useState } from "react";
 import {
   ExamRunner,
   type RunnerQuestion,
@@ -13,17 +18,13 @@ import {
   type PersistState,
 } from "./ExamRunner";
 import {
-  getExamRosterAction,
-  checkInExamSessionAction,
-  getExamSessionAction,
-  saveExamProgressAction,
-  submitExamSessionAction,
-  type ExamSessionState,
-} from "@/lib/exam-links/sessions";
+  resolveExamAccessByEmailAction,
+  type ResolveExamAccessResult,
+} from "@/lib/exam-links/access-actions";
 import { CHROME, LANGS, type Lang } from "./exam-chrome";
 
-// The link's forced language drives the pre-exam/waiting/error screens (the
-// student hasn't picked a language yet at this stage). Fall back to Italian.
+// The link's forced language drives the pre-exam screens (the student hasn't
+// picked a language yet at this stage). Fall back to Italian.
 function resolveGateLang(forcedLang?: string): Lang {
   return LANGS.includes(forcedLang as Lang) ? (forcedLang as Lang) : "it";
 }
@@ -31,6 +32,8 @@ function resolveGateLang(forcedLang?: string): Lang {
 export interface ExamGateProps {
   token: string;
   mode: "exam" | "test" | "validate";
+  /** True when the token is a PERSONAL link (bound corsista `s` present). */
+  personal?: boolean;
   forcedLang?: string;
   collectRegistration?: boolean;
   reveal?: boolean;
@@ -40,264 +43,149 @@ export interface ExamGateProps {
 }
 
 export function ExamGate(props: ExamGateProps) {
-  if (props.mode !== "exam") {
-    return <ExamRunner {...props} />;
-  }
-  return <ProctoredExam {...props} />;
+  // Previews go straight to the runner.
+  if (props.mode !== "exam") return <ExamRunner {...props} />;
+  // Real exam: a personal link runs directly; a shared link must pass the email
+  // gate first (which resolves → mints a personal link → redirects here).
+  if (props.personal) return <DirectExam {...props} />;
+  return <EmailGate {...props} />;
 }
 
-type Phase = "loading" | "pick" | "checking" | "waiting" | "exam" | "submitted" | "error";
-interface RosterStudent {
-  id: number;
-  name: string;
-}
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-type CheckInResult = Awaited<ReturnType<typeof checkInExamSessionAction>>;
-
-// Resume must survive a flaky network. Retry transient check-in failures a few
-// times (a dropped admitted student must NOT fall back to the picker), but bail
-// immediately on hard errors (not enrolled, expired link, missing migration).
-async function checkInWithRetry(
-  token: string,
-  id: number,
-  name: string,
-  tries = 3,
-): Promise<CheckInResult> {
-  let last = await checkInExamSessionAction(token, id, name);
-  for (let i = 1; i < tries && !(last.ok && last.state); i++) {
-    if (last.error && /non iscritt|non valid|scadut|migrazione|solo per/i.test(last.error)) break;
-    await sleep(500 * i);
-    last = await checkInExamSessionAction(token, id, name);
-  }
-  return last;
-}
-
-function ProctoredExam(props: ExamGateProps) {
-  const { token } = props;
+/**
+ * Personal-link exam: run directly, resuming answers from this browser so a
+ * refresh/disconnect mid-exam doesn't lose progress. Submission is bound to the
+ * corsista by the token's `s` (server-side in submitExam) — the runner needs no
+ * session machinery.
+ */
+function DirectExam(props: ExamGateProps) {
   const lang = resolveGateLang(props.forcedLang);
   const t = CHROME[lang];
-  const storeKey = `ssa-exam-${token}`;
-  const [phase, setPhase] = useState<Phase>("loading");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [roster, setRoster] = useState<RosterStudent[]>([]);
-  const [filter, setFilter] = useState("");
-  const [picked, setPicked] = useState<RosterStudent | null>(null);
-  const [sessionState, setSessionState] = useState<ExamSessionState | null>(null);
-  const corsistaIdRef = useRef<number | null>(null);
-  // Per-session bearer secret (from check-in). Held in memory only — re-fetched
-  // via check-in on every reconnect, never persisted to disk.
-  const secretRef = useRef<string | null>(null);
+  const storeKey = `ssa-exam-${props.token}`;
+  const [ready, setReady] = useState(false);
+  const [resume, setResume] = useState<PersistState | undefined>(undefined);
 
-  const routeByStatus = (s: ExamSessionState) => {
-    if (s.status === "submitted") setPhase("submitted");
-    else if (s.status === "admitted") setPhase("exam");
-    else setPhase("waiting");
-  };
-
-  // On mount: try to resume from this browser; otherwise load the roster.
+  // Read resume state client-side BEFORE mounting the runner (its state
+  // initializes from resumeState once), never during SSR.
   useEffect(() => {
-    let stored: RosterStudent | null = null;
     try {
       const raw = localStorage.getItem(storeKey);
-      if (raw) stored = JSON.parse(raw) as RosterStudent;
+      if (raw) setResume(JSON.parse(raw) as PersistState);
     } catch {
-      stored = null;
+      /* private mode / bad JSON → start fresh */
     }
-    (async () => {
-      if (stored?.id) {
-        // Retry transient failures so a flaky reconnect doesn't bounce an
-        // already-admitted student back to the name picker.
-        const r = await checkInWithRetry(token, stored.id, stored.name);
-        if (r.ok && r.state) {
-          corsistaIdRef.current = stored.id;
-          secretRef.current = r.secret ?? null;
-          setPicked(stored);
-          setSessionState(r.state);
-          routeByStatus(r.state);
-          return;
-        }
-      }
-      const rr = await getExamRosterAction(token);
-      if (!rr.ok) {
-        setErrorMsg(rr.error || t.gateRosterErr);
-        setPhase("error");
-        return;
-      }
-      setRoster(rr.students || []);
-      setPhase("pick");
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setReady(true);
+  }, [storeKey]);
 
-  const doCheckIn = async (student: RosterStudent) => {
-    setPhase("checking");
-    const r = await checkInWithRetry(token, student.id, student.name);
-    if (!r.ok || !r.state) {
-      setErrorMsg(r.error || t.gateCheckInErr);
-      setPhase("error");
-      return;
-    }
-    corsistaIdRef.current = student.id;
-    secretRef.current = r.secret ?? null;
-    setPicked(student);
-    try {
-      localStorage.setItem(storeKey, JSON.stringify(student));
-    } catch {
-      /* private mode — resume still works via name re-pick */
-    }
-    setSessionState(r.state);
-    routeByStatus(r.state);
-  };
-
-  // Poll for admission while waiting.
-  useEffect(() => {
-    if (phase !== "waiting" || corsistaIdRef.current == null) return;
-    const id = setInterval(async () => {
-      const r = await getExamSessionAction(token, corsistaIdRef.current!, secretRef.current ?? undefined);
-      if (r.ok && r.state) {
-        setSessionState(r.state);
-        if (r.state.status === "admitted") setPhase("exam");
-        else if (r.state.status === "submitted") setPhase("submitted");
-      }
-    }, 3000);
-    return () => clearInterval(id);
-  }, [phase, token]);
-
-  // Memoized so the runner's save effects don't see a new callback every render
-  // (which would restart its periodic-save interval). Closes over refs only.
   const persist = useCallback(
-    (s: { answers: Record<string, string[] | string>; currentIdx: number; lang: string; elapsed: number }) => {
-      if (corsistaIdRef.current == null) return;
-      const id = corsistaIdRef.current;
-      const secret = secretRef.current ?? undefined;
-      // Fire-and-forget, but retry ONCE on a transient failure so a single
-      // dropped request doesn't silently lose the student's latest answers.
-      // Swallow rejections (network drop) — the next debounced/15s save self-heals.
-      void saveExamProgressAction(token, id, secret, s)
-        .then((r) => {
-          if (!r?.ok) return saveExamProgressAction(token, id, secret, s);
-        })
-        .catch(() => {});
+    (s: PersistState) => {
+      try {
+        localStorage.setItem(storeKey, JSON.stringify(s));
+      } catch {
+        /* private mode — progress just won't survive a refresh */
+      }
     },
-    [token],
+    [storeKey],
   );
-  const submit = useCallback(async (final: PersistState) => {
-    if (corsistaIdRef.current == null) return { ok: false, error: "Sessione non valida." };
-    // Send the final client state so the graded row reflects the very last edit,
-    // not just what the ≤1s autosave happened to persist.
-    return submitExamSessionAction(token, corsistaIdRef.current, secretRef.current ?? undefined, {
-      answers: final.answers,
-      lang: final.lang,
-      elapsed: final.elapsed,
-    });
-  }, [token]);
 
-  // ── Render by phase ──────────────────────────────────────────────────────
-  if (phase === "loading" || phase === "checking") {
+  if (!ready) {
     return (
       <GateShell header={props.header}>
         <p style={{ textAlign: "center", color: "var(--text-3,#6b7280)" }}>{t.gateMoment}</p>
       </GateShell>
     );
   }
-  if (phase === "error") {
-    return (
-      <GateShell header={props.header}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 34 }}>⚠️</div>
-          <p style={{ marginTop: 8 }}>{errorMsg}</p>
-        </div>
-      </GateShell>
-    );
-  }
-  if (phase === "submitted") {
-    return (
-      <GateShell header={props.header}>
-        <div style={{ textAlign: "center" }}>
-          <div className="exam-public-thanks-check">✓</div>
-          <h2 style={{ marginTop: 8 }}>{t.submittedTitle}</h2>
-          <p style={{ color: "var(--text-3,#6b7280)" }}>{t.submittedBody}</p>
-        </div>
-      </GateShell>
-    );
-  }
-  if (phase === "pick") {
-    const filtered = filter.trim()
-      ? roster.filter((s) => s.name.toLowerCase().includes(filter.trim().toLowerCase()))
-      : roster;
-    return (
-      <GateShell header={props.header}>
-        <h2 style={{ fontSize: 18, textAlign: "center", marginBottom: 4 }}>{t.pickTitle}</h2>
-        <p style={{ fontSize: 13, color: "var(--text-3,#6b7280)", textAlign: "center", marginBottom: 14 }}>
-          {t.pickHint}
-        </p>
-        {roster.length > 8 && (
-          <input
-            className="exam-public-input"
-            placeholder={t.pickSearch}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            style={{ marginBottom: 10 }}
-          />
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 380, overflowY: "auto" }}>
-          {filtered.length === 0 ? (
-            <p style={{ fontSize: 13, color: "var(--text-3,#6b7280)" }}>{t.pickNoMatch}</p>
-          ) : (
-            filtered.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="exam-public-opt"
-                onClick={() => doCheckIn(s)}
-                style={{ textAlign: "left" }}
-              >
-                <span>{s.name}</span>
-              </button>
-            ))
-          )}
-        </div>
-      </GateShell>
-    );
-  }
-  if (phase === "waiting") {
-    return (
-      <GateShell header={props.header}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 34 }}>⏳</div>
-          <h2 style={{ fontSize: 18, marginTop: 8 }}>{t.waitTitle}</h2>
-          <p style={{ fontSize: 13.5, color: "var(--text-3,#6b7280)", lineHeight: 1.5, marginTop: 6 }}>
-            {picked?.name ? <><strong>{picked.name}</strong> — </> : null}
-            {t.waitBodyZoom}
-          </p>
-        </div>
-      </GateShell>
-    );
-  }
+  return <ExamRunner {...props} resumeState={resume} onPersist={persist} />;
+}
 
-  // phase === "exam"
+// Email-gate copy (it/en; other forced langs fall back to Italian).
+const GATE_TXT: Record<"it" | "en", { title: string; hint: string; ph: string; go: string; checking: string }> = {
+  it: {
+    title: "Accesso all'esame",
+    hint: "Inserisci l'indirizzo email che hai confermato durante il corso.",
+    ph: "nome@esempio.it",
+    go: "Entra",
+    checking: "Verifica…",
+  },
+  en: {
+    title: "Exam access",
+    hint: "Enter the email address you confirmed during the course.",
+    ph: "name@example.com",
+    go: "Enter",
+    checking: "Checking…",
+  },
+};
+
+/**
+ * Shared-link email gate: verify the confirmed email against the sanitized list,
+ * then redirect to the freshly-minted personal link. Never exposes the roster.
+ */
+function EmailGate(props: ExamGateProps) {
+  const lang = resolveGateLang(props.forcedLang);
+  const tx = GATE_TXT[lang === "en" ? "en" : "it"];
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (busy || !email.trim()) return;
+    setBusy(true);
+    setError(null);
+    const res = await resolveExamAccessByEmailAction(props.token, email).catch(
+      () => ({ ok: false, error: "Errore di rete, riprova." }) as ResolveExamAccessResult,
+    );
+    if (res.ok && res.url) {
+      // Redirect to the personal link → the page reloads with a bound token.
+      window.location.href = res.url;
+      return;
+    }
+    setBusy(false);
+    setError(res.error || "Verifica non riuscita.");
+  };
+
   return (
-    <ExamRunner
-      {...props}
-      resumeState={
-        sessionState
-          ? {
-              answers: sessionState.answers,
-              currentIdx: sessionState.currentIdx,
-              lang: sessionState.lang ?? undefined,
-              elapsed: sessionState.elapsed,
-            }
-          : undefined
-      }
-      onPersist={persist}
-      onSubmitSession={submit}
-    />
+    <GateShell header={props.header}>
+      <h2 style={{ fontSize: 18, textAlign: "center", marginBottom: 4 }}>{tx.title}</h2>
+      <p style={{ fontSize: 13, color: "var(--text-3,#6b7280)", textAlign: "center", marginBottom: 14 }}>
+        {tx.hint}
+      </p>
+      <input
+        className="exam-public-input"
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        placeholder={tx.ph}
+        value={email}
+        disabled={busy}
+        onChange={(e) => setEmail(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+        }}
+        style={{ marginBottom: 10 }}
+      />
+      {error && (
+        <p style={{ fontSize: 12.5, color: "var(--red-600,#dc2626)", marginBottom: 10 }} role="alert">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        className="exam-public-opt"
+        onClick={submit}
+        disabled={busy || !email.trim()}
+        style={{
+          width: "100%",
+          justifyContent: "center",
+          fontWeight: 600,
+          opacity: busy || !email.trim() ? 0.6 : 1,
+        }}
+      >
+        {busy ? tx.checking : tx.go}
+      </button>
+    </GateShell>
   );
 }
 
-/** Minimal SSA-styled shell for the pre-exam screens (pick / waiting / states). */
+/** Minimal SSA-styled shell for the pre-exam screens (gate / loading). */
 function GateShell({ header, children }: { header: RunnerHeader; children: React.ReactNode }) {
   return (
     <div className="exam-public-shell">

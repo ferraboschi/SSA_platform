@@ -8,8 +8,7 @@
 // SUBJECT is EITHER an enrolled corsista OR a "companion" (corsi_partecipanti) —
 // a 2nd+ attendee entered for a buyer who bought >=2 seats ("doppio").
 //
-// Security posture mirrors exam-links/sessions.ts exactly (the proven public-
-// write pattern):
+// Security posture follows the proven public-write pattern:
 //   • RE-VERIFY the signed token server-side on every call (never trust the
 //     client) — a tampered/expired token is rejected.
 //   • Derive courseId FROM THE TOKEN payload (`c`). The client NEVER passes a

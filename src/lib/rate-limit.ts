@@ -1,7 +1,7 @@
 // Per-instance, in-memory fixed-window rate limiter (factory).
 //
-// Extracted verbatim from the duplicated limiters in
-// src/lib/share-links/attendance-actions.ts and src/lib/exam-links/sessions.ts.
+// Extracted verbatim from the duplicated limiters in the public-write server
+// actions (e.g. src/lib/share-links/attendance-actions.ts).
 // Each factory call closes over its OWN Map, so distinct callers limit
 // independently. Best-effort only: the Map lives in a single Node process, so a
 // multi-instance deploy limits per-instance. The hardened version would use a

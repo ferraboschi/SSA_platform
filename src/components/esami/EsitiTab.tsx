@@ -1,10 +1,10 @@
 "use client";
 
-// The course "Esiti" tab: live admission control + results (grade / view PDF /
-// send) on the REAL grading data. Loads lazily via a server action so it only
-// runs when the tab is opened.
+// The course "Esiti" tab: results (grade / view PDF / send) on the REAL grading
+// data. Loads lazily via a server action so it only runs when the tab is opened.
+// (The old live-admission "waiting room" was retired when exam entry moved to
+// email-verified personal links — see ExamGate.)
 import { useCallback, useEffect, useState } from "react";
-import { ExamAdmissionPanel } from "./ExamAdmissionPanel";
 import { ExamResultsClient } from "./ExamResultsClient";
 import {
   getCourseExamResultsAction,
@@ -44,7 +44,6 @@ export function EsitiTab({
 
   return (
     <div style={{ display: "grid", gap: 4 }}>
-      <ExamAdmissionPanel courseId={courseId} testKey="final" />
       {err ? (
         <div className="card card-pad text-3">Errore: {err}</div>
       ) : !data ? (
