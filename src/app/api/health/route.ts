@@ -6,6 +6,7 @@ import { ensureRagWired, ragGroundingStatus } from "@/lib/rag";
 import { getVectorStore } from "@/lib/rag/store";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
+import { getGrantedScopes } from "@/lib/integrations/shopify/admin-client";
 import { hasRole } from "@/lib/auth/guard";
 
 // Liveness + admin-only diagnostics. Anonymous callers get a trivial `{ ok: true }`
@@ -156,6 +157,20 @@ export async function GET() {
   const shochuExam = await examCounts("shochu");
   const certExam = await examCounts("certificato");
 
+  // Shopify discount-write capability: can the SSA admin token CREATE+SAVE
+  // discount codes (needed to auto-issue credit redemption codes to Shopify)?
+  // Reads the granted scopes (no side effects). canWriteDiscounts=false means the
+  // custom app needs `write_discounts` added + reinstall before auto-create works.
+  let shopifyScopes: string[] = [];
+  let canWriteDiscounts = false;
+  let scopesError: string | null = null;
+  try {
+    shopifyScopes = await getGrantedScopes();
+    canWriteDiscounts = shopifyScopes.includes("write_discounts");
+  } catch (e) {
+    scopesError = e instanceof Error ? e.message : "unknown";
+  }
+
   return NextResponse.json({
     ok: true,
     ...getConnectionStatus(),
@@ -174,5 +189,6 @@ export async function GET() {
     examSessions: { table: examSessionsTable, sessionSecretCol },
     courseStatus,
     exam: { shochu: shochuExam, certificato: certExam },
+    shopifyDiscounts: { canWriteDiscounts, scopes: shopifyScopes, error: scopesError },
   });
 }

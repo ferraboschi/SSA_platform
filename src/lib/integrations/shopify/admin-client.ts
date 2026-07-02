@@ -94,6 +94,23 @@ async function adminGet(
   return { body: await res.json(), link: res.headers.get("Link") };
 }
 
+/** Granted API scopes for the current admin token — read-only diagnostic.
+ *  Uses the UNVERSIONED /admin/oauth/access_scopes.json endpoint (definitive list
+ *  of what the token can do). Needed to confirm `write_discounts` before wiring
+ *  auto-created credit discount codes. Never mutates anything. */
+export async function getGrantedScopes(): Promise<string[]> {
+  const domain = shopifyConfig.storeDomain;
+  const token = shopifyConfig.adminToken;
+  if (!domain || !token) throw new Error("Shopify not configured");
+  const res = await fetch(`https://${domain}/admin/oauth/access_scopes.json`, {
+    headers: { "X-Shopify-Access-Token": token },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Shopify access_scopes ${res.status}`);
+  const body = (await res.json()) as { access_scopes?: { handle: string }[] };
+  return (body.access_scopes ?? []).map((s) => s.handle);
+}
+
 /** All products (paginated). Only `limit` may accompany `page_info`. */
 export async function listAllProducts(): Promise<AdminProduct[]> {
   const out: AdminProduct[] = [];
