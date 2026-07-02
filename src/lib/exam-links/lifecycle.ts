@@ -36,30 +36,35 @@ function closureKey(corsoId: number, testKey: string): string {
   return `${corsoId}:${testKey}`;
 }
 
-async function readClosures(): Promise<Record<string, string>> {
+/** Read the closures map. `null` = READ FAILED (distinct from "no closures"):
+ *  reads fail open (no closure), but WRITES MUST ABORT — re-writing the whole
+ *  key from a failed read would silently erase every other course's closures. */
+async function readClosures(): Promise<Record<string, string> | null> {
   try {
     const svc = getSupabaseServiceClient();
-    const { data } = await svc
+    const { data, error } = await svc
       .from("settings_kv")
       .select("value")
       .eq("key", CLOSURES_KEY)
       .maybeSingle();
+    if (error) return null;
     return (data?.value as StoredClosures | null)?.items ?? {};
   } catch {
-    return {}; // settings_kv unavailable → no closures (links live their TTL)
+    return null;
   }
 }
 
 /** closedAt ISO for a (course, test), or null if not closed. */
 export async function getClosure(corsoId: number, testKey: string): Promise<string | null> {
   const items = await readClosures();
-  return items[closureKey(corsoId, testKey)] ?? null;
+  return items?.[closureKey(corsoId, testKey)] ?? null;
 }
 
 /** All closures for one course, keyed by testKey. */
 export async function getCourseClosures(corsoId: number): Promise<Record<string, string>> {
   const items = await readClosures();
   const out: Record<string, string> = {};
+  if (!items) return out;
   const prefix = `${corsoId}:`;
   for (const [k, v] of Object.entries(items)) {
     if (k.startsWith(prefix)) out[k.slice(prefix.length)] = v;
@@ -71,6 +76,7 @@ export async function setClosure(corsoId: number, testKey: string): Promise<bool
   try {
     const svc = getSupabaseServiceClient();
     const items = await readClosures();
+    if (!items) return false; // failed read → abort, never clobber
     items[closureKey(corsoId, testKey)] = new Date().toISOString();
     const { error } = await svc
       .from("settings_kv")
@@ -85,6 +91,7 @@ export async function clearClosure(corsoId: number, testKey: string): Promise<bo
   try {
     const svc = getSupabaseServiceClient();
     const items = await readClosures();
+    if (!items) return false; // failed read → abort, never clobber
     delete items[closureKey(corsoId, testKey)];
     const { error } = await svc
       .from("settings_kv")
