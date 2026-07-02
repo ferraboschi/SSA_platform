@@ -25,6 +25,8 @@ import {
   getAttendanceAction,
   setAttendanceAction,
   addPartecipanteFromLinkAction,
+  setAttendeeEmailAction,
+  sendAttendeeConfirmLinkAction,
   type AttendanceMap,
   type AttendanceSubject,
 } from "@/lib/share-links/attendance-actions";
@@ -34,6 +36,7 @@ interface Student {
   kind: "corsista" | "partecipante";
   name: string;
   email: string;
+  emailConfirmed: boolean;
   phone: string;
   iscrizioneId?: number;
   tickets?: number;
@@ -58,6 +61,17 @@ const T = {
   add: "Aggiungi",
   cancel: "Annulla",
   addError: "Aggiunta non riuscita, riprova.",
+  emailConfirmed: "Email confermata",
+  emailPending: "In attesa di conferma",
+  correct: "Correggi",
+  send: "Invia conferma",
+  save: "Salva",
+  noEmail: "nessuna email",
+  emailPlaceholder: "email@esempio.it",
+  sentTo: (e: string) => `Inviata a ${e}`,
+  copyLink: "Copia link",
+  linkCopied: "Link copiato ✓",
+  emailError: "Operazione non riuscita, riprova.",
 };
 
 // A subject's stable UI key: `c<corsistaId>` or `p<partecipanteId>`. Matches the
@@ -218,13 +232,21 @@ export default function AttendanceRoster({
                     </span>
                   )}
                 </span>
-                {s.email && (
-                  <a
-                    href={`mailto:${s.email}`}
-                    style={{ fontSize: 12, color: "var(--indigo-600, #4f46e5)", textDecoration: "none", flex: "1 1 180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  >
-                    {s.email}
-                  </a>
+                {s.kind === "partecipante" || s.iscrizioneId != null ? (
+                  <AttendeeEmail
+                    token={token}
+                    kind={s.kind}
+                    refId={s.kind === "corsista" ? s.iscrizioneId! : s.id}
+                    email={s.email}
+                    confirmed={s.emailConfirmed}
+                    readOnly={readOnly}
+                  />
+                ) : (
+                  s.email && (
+                    <span style={{ fontSize: 12, color: "var(--text-3, #6b7280)", flex: "1 1 180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.email}
+                    </span>
+                  )
                 )}
                 {s.phone && (
                   <a
@@ -310,6 +332,7 @@ export default function AttendanceRoster({
                         kind: "partecipante",
                         name: companion.full_name,
                         email: "",
+                        emailConfirmed: false,
                         phone: companion.phone,
                         guestOf: s.name,
                       });
@@ -450,6 +473,233 @@ function AddParticipantForm({
       >
         {T.cancel}
       </button>
+    </div>
+  );
+}
+
+function MiniBtn({
+  children,
+  onClick,
+  disabled,
+  primary,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        flexShrink: 0,
+        fontSize: 11,
+        fontWeight: 600,
+        padding: "4px 8px",
+        borderRadius: 7,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+        border: primary ? "none" : "1px solid var(--border, #e5e7eb)",
+        background: primary ? "var(--indigo-600, #4f46e5)" : "transparent",
+        color: primary ? "#fff" : "var(--text-2, #374151)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Per-attendee email confirmation control on the appello. Shows a status dot
+ * (green = confirmed by the student, amber = pending), the current target email,
+ * and lets the educator correct it (setAttendeeEmailAction) or send the
+ * confirmation magic-link (sendAttendeeConfirmLinkAction). In test mode the link
+ * isn't emailed — it's returned here to copy for WhatsApp/SMS.
+ */
+function AttendeeEmail({
+  token,
+  kind,
+  refId,
+  email: initialEmail,
+  confirmed: initialConfirmed,
+  readOnly,
+}: {
+  token: string;
+  kind: "corsista" | "partecipante";
+  refId: number;
+  email: string;
+  confirmed: boolean;
+  readOnly?: boolean;
+}) {
+  const [email, setEmail] = useState(initialEmail);
+  const [confirmed, setConfirmed] = useState(initialConfirmed);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(initialEmail);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+
+  const save = async () => {
+    const clean = draft.trim();
+    if (!clean || busy) return;
+    setBusy(true);
+    setNote(null);
+    const res = await setAttendeeEmailAction(token, { kind, id: refId }, clean).catch(
+      () => ({ ok: false }) as { ok: boolean; error?: string },
+    );
+    setBusy(false);
+    if (res.ok) {
+      setEmail(clean);
+      setConfirmed(false);
+      setEditing(false);
+    } else {
+      setNote(res.error || T.emailError);
+    }
+  };
+
+  const send = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    setLink(null);
+    const res = await sendAttendeeConfirmLinkAction(token, { kind, id: refId }).catch(
+      () => ({ ok: false }) as { ok: boolean; sentTo?: string; url?: string; error?: string },
+    );
+    setBusy(false);
+    if (!res.ok) {
+      setNote(res.error || T.emailError);
+      return;
+    }
+    if (res.sentTo) {
+      setNote(T.sentTo(res.sentTo));
+    } else {
+      setNote(res.error ?? null);
+      if (res.url) setLink(res.url);
+    }
+  };
+
+  const copyLink = async () => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setNote(T.linkCopied);
+    } catch {
+      window.prompt(T.copyLink, link);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 230px", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+        <span
+          title={confirmed ? T.emailConfirmed : T.emailPending}
+          aria-label={confirmed ? T.emailConfirmed : T.emailPending}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            flexShrink: 0,
+            background: confirmed ? "var(--green-500, #22c55e)" : "var(--amber-400, #f59e0b)",
+          }}
+        />
+        {editing ? (
+          <input
+            type="email"
+            inputMode="email"
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            placeholder={T.emailPlaceholder}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: 12,
+              padding: "5px 8px",
+              borderRadius: 7,
+              border: "1px solid var(--border, #e5e7eb)",
+            }}
+          />
+        ) : (
+          <span
+            style={{
+              fontSize: 12,
+              color: email ? "var(--text-2, #374151)" : "var(--text-4, #9ca3af)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {email || T.noEmail}
+          </span>
+        )}
+        {!readOnly &&
+          (editing ? (
+            <>
+              <MiniBtn onClick={save} disabled={busy || !draft.trim()} primary>
+                {T.save}
+              </MiniBtn>
+              <MiniBtn
+                onClick={() => {
+                  setEditing(false);
+                  setDraft(email);
+                }}
+                disabled={busy}
+              >
+                {T.cancel}
+              </MiniBtn>
+            </>
+          ) : (
+            <>
+              <MiniBtn
+                onClick={() => {
+                  setDraft(email);
+                  setEditing(true);
+                  setNote(null);
+                }}
+                disabled={busy}
+              >
+                {T.correct}
+              </MiniBtn>
+              <MiniBtn onClick={send} disabled={busy} primary>
+                {busy ? "…" : T.send}
+              </MiniBtn>
+            </>
+          ))}
+      </div>
+      {note && (
+        <div style={{ fontSize: 11, color: "var(--text-3, #6b7280)" }}>
+          {note}
+          {link && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={copyLink}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--indigo-600, #4f46e5)",
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                {T.copyLink}
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

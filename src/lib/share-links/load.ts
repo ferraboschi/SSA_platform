@@ -43,7 +43,11 @@ export interface SharedStudent {
   /** Distinguishes an enrolled corsista from an added companion ("doppio"). */
   kind: "corsista" | "partecipante";
   name: string;
+  /** Best email: the confirmed-during-course snapshot if set, else the Shopify
+   *  email (corsista) / empty (companion). This is what the exam gate matches. */
   email: string;
+  /** Whether the attendee confirmed their email at course start (green tick). */
+  emailConfirmed: boolean;
   phone: string;
   /** Corsista rows only: the enrollment id (drives the public companion-add). */
   iscrizioneId?: number;
@@ -229,6 +233,50 @@ export async function loadSharedCourse(
     }
   }
 
+  // Confirmed-email snapshot per enrollment + per companion (course-start
+  // sanitization). Separate lightweight queries so a pre-migration DB (columns
+  // absent) simply degrades to "not confirmed" without breaking the roster.
+  const enrolledEmail = new Map<number, { email: string; confirmed: boolean }>();
+  {
+    const { data, error } = await sb
+      .from("corsi_iscrizioni")
+      .select("id, enrolled_email, email_confirmed_at")
+      .eq("corso_id", corso.id);
+    if (!error) {
+      for (const r of (data ?? []) as {
+        id: number;
+        enrolled_email: string | null;
+        email_confirmed_at: string | null;
+      }[]) {
+        if (r.enrolled_email || r.email_confirmed_at) {
+          enrolledEmail.set(r.id, {
+            email: (r.enrolled_email ?? "").trim(),
+            confirmed: Boolean(r.email_confirmed_at),
+          });
+        }
+      }
+    }
+  }
+  const companionEmail = new Map<number, { email: string; confirmed: boolean }>();
+  {
+    const { data, error } = await sb
+      .from("corsi_partecipanti")
+      .select("id, email, email_confirmed_at")
+      .eq("corso_id", corso.id);
+    if (!error) {
+      for (const r of (data ?? []) as {
+        id: number;
+        email: string | null;
+        email_confirmed_at: string | null;
+      }[]) {
+        companionEmail.set(r.id, {
+          email: (r.email ?? "").trim(),
+          confirmed: Boolean(r.email_confirmed_at),
+        });
+      }
+    }
+  }
+
   const seen = new Set<string>();
   const students: SharedStudent[] = [];
   const companions: SharedStudent[] = [];
@@ -243,11 +291,13 @@ export async function loadSharedCourse(
     seen.add(key);
     const tickets = ticketCount.get(c.id) ?? 1;
     const mine = companionsByIscr.get(r.id) ?? [];
+    const snap = enrolledEmail.get(r.id);
     students.push({
       id: c.id,
       kind: "corsista",
       name: c.full_name ?? "",
-      email: c.email ?? "",
+      email: snap?.email || (c.email ?? ""),
+      emailConfirmed: snap?.confirmed ?? false,
       phone: c.phone ?? "",
       iscrizioneId: r.id,
       tickets,
@@ -256,11 +306,13 @@ export async function loadSharedCourse(
     // Each companion becomes its OWN roster line (its own roll-call checkboxes),
     // labelled as a guest of the buyer.
     for (const comp of mine) {
+      const csnap = companionEmail.get(comp.id);
       companions.push({
         id: comp.id,
         kind: "partecipante",
         name: comp.full_name,
-        email: "",
+        email: csnap?.email ?? "",
+        emailConfirmed: csnap?.confirmed ?? false,
         phone: comp.phone,
         guestOf: c.full_name ?? "",
       });

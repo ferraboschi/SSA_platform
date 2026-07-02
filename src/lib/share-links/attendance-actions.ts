@@ -32,9 +32,12 @@
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyShareToken } from "./token";
+import { loadConfirmSubject } from "@/lib/attendee/confirm";
+import { deliverConfirmLink } from "@/lib/attendee/confirm-email";
 
 const TABLE = "corsi_presenze";
 const PART_TABLE = "corsi_partecipanti";
+const ISCR_TABLE = "corsi_iscrizioni";
 
 // ── Rate limiting (PER-INSTANCE, in-memory) ──────────────────────────────────
 // These actions are gated only by the shared, signed share token — a scrape/DoS
@@ -46,6 +49,7 @@ const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT_READ = 30; // getAttendanceAction — hydrate on mount / refresh
 const RATE_LIMIT_WRITE = 120; // setAttendanceAction — one per checkbox toggle
 const RATE_LIMIT_ADD = 10; // addPartecipanteFromLinkAction — creating a companion
+const RATE_LIMIT_EMAIL = 40; // set/send attendee confirmation email (course-start)
 
 // Isolated fixed-window limiter, keyed by `${bucket}:${token}`.
 const limiter = createFixedWindowLimiter(RATE_WINDOW_MS);
@@ -320,4 +324,127 @@ export async function addPartecipanteFromLinkAction(
     ok: true,
     companion: { id: Number(inserted.id), full_name: inserted.full_name as string, phone: (inserted.phone as string) ?? "" },
   };
+}
+
+// ── Course-start EMAIL SANITIZATION on the share link ───────────────────────
+// The educator (no login — authorized by the share token) confirms/corrects each
+// attendee's email and sends the confirmation magic-link. Same token-auth posture
+// as the appello: re-verify the token, derive the course from it, and bind the
+// client-passed subject id to THIS course before any write.
+//
+// SUBJECT REF: for a corsista the id is the ENROLLMENT id (corsi_iscrizioni.id —
+// where the enrolled_email snapshot lives), NOT the corsista_id used by the
+// appello. For a companion it is the corsi_partecipanti id.
+
+export type ConfirmRef = { kind: "corsista" | "partecipante"; id: number };
+
+async function confirmRefInCourse(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  corsoId: number,
+  ref: ConfirmRef,
+): Promise<{ ok: boolean; error?: string; schema?: boolean }> {
+  const kind = ref?.kind;
+  const id = Number(ref?.id);
+  if (kind !== "corsista" && kind !== "partecipante") return { ok: false, error: "Soggetto non valido." };
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Soggetto non valido." };
+
+  if (kind === "corsista") {
+    // The enrollment must belong to THIS course (id alone is never trusted).
+    const { data, error } = await svc
+      .from(ISCR_TABLE)
+      .select("id, corso_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!data || Number(data.corso_id) !== corsoId) {
+      return { ok: false, error: "Iscrizione non valida per questo corso." };
+    }
+  } else {
+    const { data, error } = await svc
+      .from(PART_TABLE)
+      .select("id, corso_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) {
+      if (isMissingTable(error)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+      return { ok: false, error: error.message };
+    }
+    if (!data || Number(data.corso_id) !== corsoId) {
+      return { ok: false, error: "Partecipante non valido per questo corso." };
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * PUBLIC (share token): the educator sets/corrects an attendee's TARGET email
+ * (the sanitized address that will receive the tests + exam). Writes the snapshot
+ * (corsi_iscrizioni.enrolled_email / corsi_partecipanti.email) and CLEARS the
+ * confirmed flag — changing the target requires a fresh student confirmation.
+ * The global corsisti.email identity is never touched.
+ */
+export async function setAttendeeEmailAction(
+  token: string,
+  ref: ConfirmRef,
+  email: string,
+): Promise<{ ok: boolean; error?: string; schema?: boolean }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+
+  const clean = String(email ?? "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean) || clean.length > 254) {
+    return { ok: false, error: "Email non valida." };
+  }
+
+  const svc = getSupabaseServiceClient();
+  const guard = await confirmRefInCourse(svc, corsoId, ref);
+  if (!guard.ok) return guard;
+
+  const patch =
+    ref.kind === "corsista"
+      ? { enrolled_email: clean, email_confirmed_at: null }
+      : { email: clean, email_confirmed_at: null };
+  const { error } = await svc
+    .from(ref.kind === "corsista" ? ISCR_TABLE : PART_TABLE)
+    .update(patch)
+    .eq("id", ref.id)
+    .eq("corso_id", corsoId);
+  if (error) {
+    if (isMissingTable(error)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/**
+ * PUBLIC (share token): mint + (go-live-gated) send the confirmation magic-link
+ * for one attendee. No staff session here, so in TEST mode nothing is emailed —
+ * the link is returned for the educator to copy (WhatsApp/SMS). When
+ * EXAM_RESULT_EMAILS_LIVE is on, it emails the attendee's confirmed/target email.
+ */
+export async function sendAttendeeConfirmLinkAction(
+  token: string,
+  ref: ConfirmRef,
+): Promise<{ ok: boolean; url?: string; sentTo?: string; live?: boolean; error?: string; schema?: boolean }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+
+  const svc = getSupabaseServiceClient();
+  const guard = await confirmRefInCourse(svc, corsoId, ref);
+  if (!guard.ok) return guard;
+
+  const subject = await loadConfirmSubject(String(corsoId), ref.kind, String(ref.id));
+  if (!subject) return { ok: false, error: "Destinatario non trovato." };
+
+  const res = await deliverConfirmLink({
+    courseId: String(corsoId),
+    kind: ref.kind,
+    subjectId: String(ref.id),
+    toEmail: subject.email,
+    name: subject.fullName,
+    courseName: subject.courseName,
+  });
+  return { ok: true, ...res };
 }

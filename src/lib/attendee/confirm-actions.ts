@@ -1,32 +1,16 @@
 "use server";
 
 import { getSession } from "@/lib/auth/session";
-import { appConfig, examEmailConfig } from "@/lib/integrations/config";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { getEmailService } from "@/lib/integrations/email";
-import {
-  signConfirmToken,
-  verifyConfirmToken,
-  CONFIRM_LINK_TTL_HOURS,
-  type ConfirmSubjectKind,
-} from "./confirm-token";
+import { verifyConfirmToken, type ConfirmSubjectKind } from "./confirm-token";
 import { loadConfirmSubject } from "./confirm";
+import { deliverConfirmLink } from "./confirm-email";
 
 function normEmail(s: string): string {
   return s.trim().toLowerCase();
 }
 function isValidEmail(s: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s) && s.length <= 254;
-}
-function escapeHtml(s: string): string {
-  const map: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  };
-  return s.replace(/[&<>"']/g, (c) => map[c]);
 }
 
 /**
@@ -101,47 +85,16 @@ export async function sendConfirmLinkAction(
   const subject = await loadConfirmSubject(input.courseId, input.kind, input.subjectId);
   if (!subject) return { ok: false, error: "Destinatario non trovato." };
 
-  const exp = Math.floor(Date.now() / 1000) + CONFIRM_LINK_TTL_HOURS * 3600;
-  const token = signConfirmToken({
-    c: input.courseId,
-    k: input.kind,
-    i: input.subjectId,
-    l: input.lang,
-    e: exp,
+  // Staff path: in test mode route to the acting staff's own inbox.
+  const res = await deliverConfirmLink({
+    courseId: input.courseId,
+    kind: input.kind,
+    subjectId: input.subjectId,
+    toEmail: subject.email,
+    name: subject.fullName,
+    courseName: subject.courseName,
+    lang: input.lang,
+    fallbackTo: session?.user?.email ?? "",
   });
-  const url = `${appConfig.baseUrl.replace(/\/$/, "")}/conferma/${token}`;
-
-  const live = examEmailConfig.live;
-  const dest = live ? subject.email : session?.user?.email ?? "";
-  // Live but no known email (e.g. a companion not yet given one): hand back the
-  // link so the educator can deliver it via WhatsApp/SMS — the page still asks
-  // for (and verifies) the email there.
-  if (!dest) {
-    return { ok: true, url, live, error: "Nessuna email nota — usa il link (WhatsApp/SMS)." };
-  }
-
-  try {
-    const hi = subject.fullName ? `Ciao ${escapeHtml(subject.fullName)},` : "Ciao,";
-    const html =
-      `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;color:#1a1a2e">` +
-      `<h2 style="font-size:18px;margin:0 0 10px">Conferma i tuoi dati</h2>` +
-      `<p style="font-size:14px;line-height:1.6;margin:0 0 6px">${hi}</p>` +
-      `<p style="font-size:14px;line-height:1.6;margin:0 0 16px">Per il corso <strong>${escapeHtml(subject.courseName)}</strong> ti chiediamo di confermare il tuo indirizzo email: è quello a cui riceverai i test e l'esame.</p>` +
-      `<p style="margin:0 0 18px"><a href="${url}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600">Conferma i miei dati</a></p>` +
-      `<p style="font-size:12px;color:#6b7280;word-break:break-all;margin:0 0 10px">Se il pulsante non funziona, copia questo link:<br/>${url}</p>` +
-      `<p style="font-size:12px;color:#9ca3af;margin:0">Se non ti aspettavi questo messaggio, puoi ignorarlo.</p>` +
-      `</div>`;
-    const r = await getEmailService().send({
-      to: dest,
-      subject: live ? "Conferma i tuoi dati — SSA" : "[PROVA] Conferma dati corsista — SSA",
-      html,
-      tag: "attendee-confirm",
-    });
-    if (r.status === "skipped") {
-      return { ok: true, url, live, error: "Email non configurata (Resend assente) — usa il link." };
-    }
-    return { ok: true, url, sentTo: dest, live };
-  } catch {
-    return { ok: true, url, live, error: "Invio non riuscito — usa il link (Copia)." };
-  }
+  return { ok: true, ...res };
 }
