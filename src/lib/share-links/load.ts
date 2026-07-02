@@ -12,6 +12,12 @@ import { COURSE_TYPES, EXAM_COURSE_TYPES } from "@/lib/domain";
 import type { CourseTypeKey } from "@/lib/domain";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
+import { appConfig } from "@/lib/integrations/config";
+import {
+  signExamToken,
+  EXAM_LINK_TTL_HOURS,
+  type ExamTestKey,
+} from "@/lib/exam-links/token";
 
 export interface SharedSake {
   code: string;
@@ -48,6 +54,16 @@ export interface SharedStudent {
   /** Companion rows only: a label like "(ospite di <buyer>)". */
   guestOf?: string;
 }
+export interface SharedExamTest {
+  /** "day1" … "dayN" or "final". */
+  key: string;
+  /** Human label ("Test giorno 1" / "Esame finale"). */
+  label: string;
+  /** The official final exam vs a day mini-test. */
+  isFinal: boolean;
+  /** Ready-to-share student class link (/esame/<signed token>). */
+  url: string;
+}
 export interface SharedCourse {
   courseName: string;
   typeLabel: string;
@@ -55,6 +71,13 @@ export interface SharedCourse {
   date: string;
   educator: string;
   hasExam: boolean;
+  /**
+   * Configured exam tests with their student class links, in run order
+   * (day-tests that actually have questions, then the final exam). `null` for
+   * non-exam course types (introduttivo/masterclass/…). Present so the educator
+   * page can hand each test's link to the class (e.g. paste into WhatsApp).
+   */
+  exam: SharedExamTest[] | null;
   /** Roll-call days: Certificato = 3, everything else = 1. */
   dayCount: number;
   /** Distinct sakes across all days. */
@@ -248,6 +271,44 @@ export async function loadSharedCourse(
   students.push(...companions);
 
   const type = corso.type as CourseTypeKey;
+
+  // Exam section: only certificato (nihonshu) / shochu bear an exam. Surface the
+  // configured tests (day mini-tests that actually have questions, then the final
+  // exam) each with a signed class link the educator can share with students.
+  // Tokens are stateless (the link IS the grant), so we mint them here server-side.
+  const examFamily: "nihonshu" | "shochu" | null =
+    type === "certificato" ? "nihonshu" : type === "shochu" ? "shochu" : null;
+  let exam: SharedExamTest[] | null = null;
+  if (examFamily) {
+    const dbFamily = examFamily === "shochu" ? "shochu" : "certificato";
+    const { data: tpl } = await sb
+      .from("exam_templates")
+      .select("data")
+      .eq("family", dbFamily)
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const tplData = (tpl?.data ?? {}) as {
+      questions?: unknown[];
+      miniTests?: { day: number; questions?: unknown[] }[];
+    };
+    const base = appConfig.baseUrl.replace(/\/$/, "");
+    const exp = Math.floor(Date.now() / 1000) + EXAM_LINK_TTL_HOURS.exam * 3600;
+    const link = (testKey: ExamTestKey) =>
+      `${base}/esame/${signExamToken({ c: String(corso.id), t: testKey, m: "exam", e: exp })}`;
+    const tests: SharedExamTest[] = [];
+    for (const mt of (tplData.miniTests ?? []).slice().sort((a, b) => a.day - b.day)) {
+      if ((mt.questions?.length ?? 0) > 0) {
+        const key = `day${mt.day}` as const;
+        tests.push({ key, label: `Test giorno ${mt.day}`, isFinal: false, url: link(key) });
+      }
+    }
+    if ((tplData.questions?.length ?? 0) > 0) {
+      tests.push({ key: "final", label: "Esame finale", isFinal: true, url: link("final") });
+    }
+    exam = tests.length ? tests : null;
+  }
+
   const totalSakes = days.reduce((n, d) => n + d.sakes.length, 0);
   const totalSakeCost = days.reduce(
     (n, d) => n + d.sakes.reduce((m, s) => m + (s.cost || 0) * (s.qty || 0), 0),
@@ -261,6 +322,7 @@ export async function loadSharedCourse(
     date: `${corso.month ?? ""} ${corso.year ?? ""}`.trim(),
     educator,
     hasExam: EXAM_COURSE_TYPES.includes(type),
+    exam,
     dayCount: type === "certificato" ? 3 : 1,
     totalSakes,
     totalSakeCost,

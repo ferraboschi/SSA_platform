@@ -7,6 +7,7 @@ import type { Metadata } from "next";
 import { verifyShareToken } from "@/lib/share-links/token";
 import { loadSharedCourse } from "@/lib/share-links/load";
 import AttendanceRoster from "@/components/condividi/AttendanceRoster";
+import ExamLinksShare from "@/components/condividi/ExamLinksShare";
 import { loadPlannerState } from "@/lib/pianificatore-server";
 import type { PlannerSaved } from "@/lib/pianificatore";
 import { COURSE_TYPES } from "@/lib/domain/constants";
@@ -220,6 +221,14 @@ export default async function Page({
           ))}
         </div>
 
+        {/* Exam section — student class links per configured test (last, per the
+            educator page layout). Only for exam-bearing course types. */}
+        {course.exam && course.exam.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <ExamLinksShare tests={course.exam} />
+          </div>
+        )}
+
         <div
           style={{
             marginTop: 22,
@@ -230,7 +239,7 @@ export default async function Page({
             textAlign: "center",
           }}
         >
-          Vista di sola lettura · condivisa dalla segreteria SSA
+          Pagina condivisa dalla segreteria SSA · i link d&apos;esame sono per gli studenti
         </div>
       </div>
     </div>
