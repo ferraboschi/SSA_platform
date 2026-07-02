@@ -33,7 +33,7 @@ export async function resolveExamAccessByEmailAction(
   // Only the real exam mode is gated; previews (test/validate) don't identify.
   if (m !== "exam") return { ok: false, error: "Questo link non richiede verifica." };
   // A token that is ALREADY personal shouldn't reach the gate; nothing to do.
-  if (res.payload.s) return { ok: false, error: "Questo link è già personale." };
+  if (res.payload.s || res.payload.p) return { ok: false, error: "Questo link è già personale." };
   if (limiter.isLimited("resolve", token, RATE_LIMIT_RESOLVE)) {
     return { ok: false, error: "Troppi tentativi, riprova tra poco." };
   }

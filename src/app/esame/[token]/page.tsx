@@ -86,9 +86,10 @@ export default async function Page({
     <ExamGate
       token={token}
       mode={mode}
-      // A personal link carries the bound corsista id (`s`); a shared class link
-      // does not (→ the email gate resolves it). Never expose the id itself.
-      personal={Boolean(res.payload.s)}
+      // A personal link carries the bound subject id — corsista (`s`) OR
+      // companion (`p`); a shared class link carries neither (→ the email gate
+      // resolves it). Never expose the id itself.
+      personal={Boolean(res.payload.s || res.payload.p)}
       forcedLang={res.payload.l}
       // Proctored exams identify the student by the verified name-pick
       // (corsista_id), so the runner must NOT also ask them to re-type their
