@@ -24,7 +24,7 @@ function installSpy() {
 const base = {
   courseId: "10",
   testKey: "final" as const,
-  corsistaId: "42",
+  subject: { kind: "corsista" as const, id: "42" },
   testLabel: "Esame finale",
   toEmail: "student@real.it",
   name: "Anna",

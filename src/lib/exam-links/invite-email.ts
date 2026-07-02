@@ -17,14 +17,21 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => map[c]);
 }
 
-/** Mint a PERSONAL exam URL bound to one corsista (`s`), for one test.
+/** The subject a personal link binds to: an enrolled corsista (token `s`) or a
+ *  "doppio" companion (token `p`). */
+export interface ExamSubjectRef {
+  kind: "corsista" | "partecipante";
+  id: string;
+}
+
+/** Mint a PERSONAL exam URL bound to one subject, for one test.
  *  Lifecycle default: the link dies at the END OF THE SEND DAY (Europe/Rome);
  *  the educator can choose "7d" to keep it alive longer (e.g. the feedback).
  *  `ia` (issue time) lets a later CLOSE-ALL cut it off early. */
 export function buildPersonalExamUrl(
   courseId: string,
   testKey: ExamTestKey,
-  corsistaId: string,
+  subject: ExamSubjectRef,
   ttl: ExamLinkTtlChoice = "eod",
 ): string {
   const now = Math.floor(Date.now() / 1000);
@@ -32,7 +39,7 @@ export function buildPersonalExamUrl(
     c: courseId,
     t: testKey,
     m: "exam",
-    s: corsistaId,
+    ...(subject.kind === "corsista" ? { s: subject.id } : { p: subject.id }),
     ia: now,
     e: expiryForChoice(ttl),
   });
@@ -61,7 +68,8 @@ export function renderExamInviteEmailHtml(
 export interface DeliverExamInviteArgs {
   courseId: string;
   testKey: ExamTestKey;
-  corsistaId: string;
+  /** Who the link binds to (corsista or "doppio" companion). */
+  subject: ExamSubjectRef;
   testLabel: string;
   /** The student's confirmed/target email (the live recipient). */
   toEmail: string;
@@ -86,7 +94,7 @@ export interface DeliverExamInviteResult {
  * (staff) or, absent that, returns the link for manual WhatsApp/SMS delivery.
  */
 export async function deliverExamInvite(a: DeliverExamInviteArgs): Promise<DeliverExamInviteResult> {
-  const url = buildPersonalExamUrl(a.courseId, a.testKey, a.corsistaId, a.ttl ?? "eod");
+  const url = buildPersonalExamUrl(a.courseId, a.testKey, a.subject, a.ttl ?? "eod");
   const live = examEmailConfig.live;
   const dest = live ? a.toEmail.trim() : (a.fallbackTo ?? "").trim();
   if (!dest) {

@@ -3,7 +3,7 @@ import { getTranslations } from "@/lib/i18n/server";
 import { getDataSource } from "@/lib/data";
 import { requireNavAccess } from "@/lib/auth/guard";
 import { EsameReport } from "@/components/esami/EsameReport";
-import { loadCourseExamResults } from "@/lib/exam-links/results";
+import { loadCourseExamResults, findConfirmedResultByEmail } from "@/lib/exam-links/results";
 import type { ExamFamily, ExamResult, ExamResultStatus } from "@/lib/domain";
 
 export default async function Page({
@@ -38,11 +38,10 @@ export default async function Page({
   let result: ExamResult | null = null;
   if (course && family) {
     const subs = await loadCourseExamResults(id, family);
-    const low = decoded.toLowerCase();
     // Only a CONFIRMED outcome yields a certificate — matching the email/PDF/
-    // attendance consumers. An unconfirmed submission falls through to the
-    // "unavailable" card instead of showing a provisional auto-result.
-    const sub = subs.find((s) => s.studentEmail.toLowerCase() === low && s.currentResult);
+    // attendance consumers. Deterministic when a companion shares the buyer's
+    // email (corsista row wins) — see findConfirmedResultByEmail.
+    const sub = findConfirmedResultByEmail(subs, decoded);
     if (sub) {
       result = {
         email: sub.studentEmail,

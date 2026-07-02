@@ -43,8 +43,9 @@ export default function ExamSendPanel({
 }) {
   const [sel, setSel] = useState(tests[0]?.key ?? "");
   const test = tests.find((t) => t.key === sel) ?? tests[0];
-  const corsisti = students.filter((s) => s.kind === "corsista");
-  const companions = students.filter((s) => s.kind === "partecipante");
+  // Everyone gets a personal link: corsisti AND companions ("doppio"). A
+  // companion without an email can't be emailed — their row shows a hint.
+  const roster = students;
   const [copied, setCopied] = useState(false);
   const [allBusy, setAllBusy] = useState(false);
   const [allNote, setAllNote] = useState<string | null>(null);
@@ -234,28 +235,23 @@ export default function ExamSendPanel({
           overflow: "hidden",
         }}
       >
-        {corsisti.length === 0 ? (
+        {roster.length === 0 ? (
           <div style={{ padding: "12px 14px", fontSize: 12.5, color: "var(--text-4, #9ca3af)" }}>
             Nessuno studente iscritto.
           </div>
         ) : (
-          corsisti.map((s, i) => (
+          roster.map((s, i) => (
             <StudentSendRow
-              key={s.id}
+              key={`${s.kind}-${s.id}`}
               token={token}
               testKey={test.key}
               ttl={ttl}
               person={s}
-              last={i === corsisti.length - 1}
+              last={i === roster.length - 1}
             />
           ))
         )}
       </div>
-      {companions.length > 0 && (
-        <p style={{ fontSize: 11, color: "var(--text-4, #9ca3af)", marginTop: 8 }}>
-          Gli accompagnatori (doppio) non possono ancora ricevere un link d&apos;esame personale.
-        </p>
-      )}
     </div>
   );
 }
@@ -296,7 +292,9 @@ function StudentSendRow({
     setBusy(true);
     setNote(null);
     setLink(null);
-    const res = await sendPersonalExamLinkAction(token, testKey, person.id, ttl).catch(
+    // Kind is passed EXPLICITLY — corsista and partecipante ids are separate
+    // sequences, a bare number must never be assumed to be a corsista.
+    const res = await sendPersonalExamLinkAction(token, testKey, person.id, ttl, person.kind).catch(
       () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof sendPersonalExamLinkAction>>,
     );
     setBusy(false);
@@ -342,7 +340,14 @@ function StudentSendRow({
             background: person.emailConfirmed ? "var(--green-500, #22c55e)" : "var(--amber-400, #f59e0b)",
           }}
         />
-        <span style={{ fontSize: 13, fontWeight: 600, flex: "1 1 120px", minWidth: 0 }}>{person.name || "—"}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, flex: "1 1 120px", minWidth: 0 }}>
+          {person.name || "—"}
+          {person.kind === "partecipante" && (
+            <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 500, color: "var(--text-4, #9ca3af)", fontStyle: "italic" }}>
+              (ospite)
+            </span>
+          )}
+        </span>
         <span
           style={{
             fontSize: 11.5,

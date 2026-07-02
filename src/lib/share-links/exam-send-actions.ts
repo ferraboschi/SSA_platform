@@ -44,6 +44,24 @@ async function courseName(svc: Svc, corsoId: number): Promise<string> {
   return (data?.short_title as string) || (data?.full_title as string) || "Corso SSA";
 }
 
+// Guard + resolve a companion's name + confirmed email. Course-bound (null on
+// mismatch) like corsistaTarget; degrades to no email if the column is absent.
+async function partecipanteTarget(
+  svc: Svc,
+  corsoId: number,
+  partecipanteId: number,
+): Promise<{ name: string; email: string } | null> {
+  const { data, error } = await svc
+    .from("corsi_partecipanti")
+    .select("id, full_name, email")
+    .eq("id", partecipanteId)
+    .eq("corso_id", corsoId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const r = data as { full_name: string | null; email?: string | null };
+  return { name: r.full_name ?? "", email: (r.email ?? "").trim() };
+}
+
 // Guard + resolve a corsista's name + target email (enrolled_email snapshot
 // preferred, corsisti.email fallback; degrades if the column is absent).
 async function corsistaTarget(
@@ -89,12 +107,15 @@ function ttlChoice(v: unknown): ExamLinkTtlChoice {
   return v === "7d" ? "7d" : "eod";
 }
 
-/** Send one personal exam link to one corsista. */
+/** Send one personal exam link to one subject (corsista or "doppio" companion).
+ *  The kind is EXPLICIT — corsista and partecipante ids are separate sequences,
+ *  so a bare number must never be assumed to be a corsista. */
 export async function sendPersonalExamLinkAction(
   token: string,
   testKey: string,
-  corsistaId: number,
+  subjectId: number,
   ttl?: string,
+  kind: "corsista" | "partecipante" = "corsista",
 ): Promise<SendExamLinkResult> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
@@ -103,17 +124,21 @@ export async function sendPersonalExamLinkAction(
   }
   const t = String(testKey);
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
-  const cid = Number(corsistaId);
-  if (!Number.isInteger(cid) || cid <= 0) return { ok: false, error: "Corsista non valido." };
+  const cid = Number(subjectId);
+  if (!Number.isInteger(cid) || cid <= 0) return { ok: false, error: "Destinatario non valido." };
+  const k = kind === "partecipante" ? "partecipante" : "corsista";
 
   const svc = getSupabaseServiceClient();
-  const target = await corsistaTarget(svc, corsoId, cid);
-  if (!target) return { ok: false, error: "Corsista non iscritto a questo corso." };
+  const target =
+    k === "corsista"
+      ? await corsistaTarget(svc, corsoId, cid)
+      : await partecipanteTarget(svc, corsoId, cid);
+  if (!target) return { ok: false, error: "Destinatario non trovato in questo corso." };
 
   const res = await deliverExamInvite({
     courseId: String(corsoId),
     testKey: t as ExamTestKey,
-    corsistaId: String(cid),
+    subject: { kind: k, id: String(cid) },
     testLabel: testLabel(t),
     toEmail: target.email,
     name: target.name,
@@ -181,7 +206,7 @@ export async function sendPersonalExamLinksToAllAction(
     const res = await deliverExamInvite({
       courseId: String(corsoId),
       testKey: t as ExamTestKey,
-      corsistaId: String(r.corsista_id),
+      subject: { kind: "corsista", id: String(r.corsista_id) },
       testLabel: testLabel(t),
       toEmail: email,
       name: r.corsista?.full_name ?? "",
@@ -191,7 +216,40 @@ export async function sendPersonalExamLinksToAllAction(
     live = res.live;
     if (res.sentTo) sent++;
   }
-  return { ok: true, live, total: rows.length, sent, noEmail };
+
+  // Companions ("doppio") with a CONFIRMED email get their own personal link.
+  // Keyed on corso_id directly (not iscrizione_id joins) so an orphaned
+  // enrollment reference can never drop a companion. Degrades to none if the
+  // email columns aren't migrated yet.
+  let companions = 0;
+  {
+    const { data: parts, error: pErr } = await svc
+      .from("corsi_partecipanti")
+      .select("id, full_name, email, email_confirmed_at")
+      .eq("corso_id", corsoId)
+      .not("email", "is", null)
+      .not("email_confirmed_at", "is", null);
+    if (!pErr) {
+      for (const pr of (parts ?? []) as { id: number; full_name: string | null; email: string | null }[]) {
+        const email = (pr.email ?? "").trim();
+        if (!email) continue;
+        companions++;
+        const res = await deliverExamInvite({
+          courseId: String(corsoId),
+          testKey: t as ExamTestKey,
+          subject: { kind: "partecipante", id: String(pr.id) },
+          testLabel: testLabel(t),
+          toEmail: email,
+          name: pr.full_name ?? "",
+          courseName: cname,
+          ttl: ttlChoice(ttl),
+        });
+        live = res.live;
+        if (res.sentTo) sent++;
+      }
+    }
+  }
+  return { ok: true, live, total: rows.length + companions, sent, noEmail };
 }
 
 // ── Lifecycle: close a test for everyone / reopen ───────────────────────────

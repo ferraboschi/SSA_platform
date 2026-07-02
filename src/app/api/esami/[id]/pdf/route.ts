@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
 import { hasRole } from "@/lib/auth/guard";
 import { renderCertificatePdf } from "@/lib/esami/certificate-pdf";
-import { loadCourseExamResults } from "@/lib/exam-links/results";
+import { loadCourseExamResults, findConfirmedResultByEmail } from "@/lib/exam-links/results";
 import type { ExamFamily } from "@/lib/domain";
 
 // Per-student exam-result PDF (IT+EN), inline so it can be previewed in an iframe
@@ -28,8 +28,9 @@ export async function GET(
   if (!family) return NextResponse.json({ ok: false, error: "no exam" }, { status: 404 });
 
   // Real confirmed result from the grading flow (not the demo-only examResults2).
+  // Deterministic when a companion shares the buyer's email (corsista row wins).
   const subs = await loadCourseExamResults(course.id, family);
-  const sub = subs.find((s) => s.studentEmail.toLowerCase() === email && s.currentResult);
+  const sub = findConfirmedResultByEmail(subs, email);
   if (!sub) return NextResponse.json({ ok: false, error: "result not found" }, { status: 404 });
 
   const buf = await renderCertificatePdf({

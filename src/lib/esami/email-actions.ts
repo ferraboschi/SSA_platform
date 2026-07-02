@@ -8,7 +8,7 @@ import { hasRole } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import { appConfig, examEmailConfig } from "@/lib/integrations/config";
 import { sendExamResultEmail } from "@/lib/alerts/emails";
-import { loadCourseExamResults } from "@/lib/exam-links/results";
+import { loadCourseExamResults, findConfirmedResultByEmail } from "@/lib/exam-links/results";
 import { renderCertificatePdf } from "./certificate-pdf";
 import type { ExamFamily } from "@/lib/domain";
 import type { ReportLang } from "@/lib/i18n/report";
@@ -47,8 +47,9 @@ export async function sendExamResultEmailAction(
   if (!family) return { ok: false, error: "Questo corso non prevede un esame." };
 
   // Real confirmed result from the grading flow (not the demo-only examResults2).
+  // Deterministic when a companion shares the buyer's email (corsista row wins).
   const subs = await loadCourseExamResults(course.id, family);
-  const result = subs.find((s) => s.studentEmail.toLowerCase() === lowEmail && s.currentResult);
+  const result = findConfirmedResultByEmail(subs, lowEmail);
   if (!result) return { ok: false, error: "Esito non confermato per questo studente." };
   const outcome = result.currentResult as "passed" | "retrial" | "failed";
   // Null when no objective % is certified (all-manual exam / operator override):

@@ -23,6 +23,9 @@ export interface GradedSubmission {
   manualCount: number;
   suggested: ExamOutcome;
   enrollmentId: number | null;
+  /** Set (and enrollmentId null) when the submission belongs to a "doppio"
+   *  companion (corsi_partecipanti) instead of an enrolled corsista. */
+  partecipanteId: number | null;
   currentResult: string | null;
   currentScore: number | null;
   /** Language the student took the exam in (for a localized result email/PDF). */
@@ -30,18 +33,47 @@ export interface GradedSubmission {
   answers: GradedAnswer[];
 }
 
+/** Find the CONFIRMED result for an email — deterministic when a companion
+ *  shares the buyer's email (same household): the enrolled corsista's row wins
+ *  over a companion's, then the most recent. Pure (unit-tested). */
+export function findConfirmedResultByEmail(
+  subs: GradedSubmission[],
+  email: string,
+): GradedSubmission | null {
+  const low = email.toLowerCase().trim();
+  const matches = subs.filter(
+    (s) => s.studentEmail.toLowerCase() === low && s.currentResult,
+  );
+  if (matches.length === 0) return null;
+  const corsista = matches.find((s) => s.enrollmentId != null);
+  return corsista ?? matches[0];
+}
+
 export async function loadCourseExamResults(
   courseId: string,
   family: "nihonshu" | "shochu",
 ): Promise<GradedSubmission[]> {
   const svc = getSupabaseServiceClient();
-  const { data: subs } = await svc
+  // Try WITH partecipante_id; retry without it if the migration isn't applied.
+  const SUB_COLS = "id, test_key, answers, registration, corsista_id, created_at, lang";
+  const primary = await svc
     .from("exam_submissions")
-    .select("id, test_key, answers, registration, corsista_id, created_at, lang")
+    .select(`${SUB_COLS}, partecipante_id`)
     .eq("corso_id", Number(courseId))
     .eq("mode", "exam")
     .neq("test_key", "feedback")
     .order("created_at", { ascending: false });
+  let subs = primary.data as unknown[] | null;
+  if (primary.error) {
+    const fallback = await svc
+      .from("exam_submissions")
+      .select(SUB_COLS)
+      .eq("corso_id", Number(courseId))
+      .eq("mode", "exam")
+      .neq("test_key", "feedback")
+      .order("created_at", { ascending: false });
+    subs = fallback.data as unknown[] | null;
+  }
   if (!subs || subs.length === 0) return [];
 
   const qCache = new Map<string, PublicRunnerQuestion[]>();
@@ -65,6 +97,43 @@ export async function loadCourseExamResults(
         .filter((id): id is number => id != null),
     ),
   );
+
+  // BATCH the companion identities too (no per-row N+1): distinct
+  // partecipante_ids → one corsi_partecipanti fetch (name, email, outcome).
+  type PartecipanteRow = {
+    id: number;
+    full_name: string | null;
+    email: string | null;
+    exam_result: string | null;
+    exam_score_pct: number | null;
+  };
+  const partecipanteIds = Array.from(
+    new Set(
+      (subs as Array<{ partecipante_id?: number | null }>)
+        .map((s) => s.partecipante_id ?? null)
+        .filter((id): id is number => id != null),
+    ),
+  );
+  const partecipantiById = new Map<number, PartecipanteRow>();
+  if (partecipanteIds.length > 0) {
+    // Outcome columns may predate the migration — retry with the base columns
+    // so identities still resolve (result then shows as unconfirmed).
+    const withOutcome = await svc
+      .from("corsi_partecipanti")
+      .select("id, full_name, email, exam_result, exam_score_pct")
+      .in("id", partecipanteIds);
+    let pRows = withOutcome.data as PartecipanteRow[] | null;
+    if (withOutcome.error) {
+      const base = await svc
+        .from("corsi_partecipanti")
+        .select("id, full_name, email")
+        .in("id", partecipanteIds);
+      pRows = ((base.data ?? []) as Array<Omit<PartecipanteRow, "exam_result" | "exam_score_pct">>).map(
+        (r) => ({ ...r, exam_result: null, exam_score_pct: null }),
+      );
+    }
+    for (const r of pRows ?? []) partecipantiById.set(r.id, r);
+  }
 
   const corsistiById = new Map<number, CorsistaRow>();
   const enrollmentByCorsistaId = new Map<number, EnrollmentRow>();
@@ -94,6 +163,7 @@ export async function loadCourseExamResults(
     answers: Record<string, string | string[]> | null;
     registration: Record<string, string> | null;
     corsista_id: number | null;
+    partecipante_id?: number | null;
     created_at: string;
     lang: string | null;
   }>) {
@@ -122,6 +192,40 @@ export async function loadCourseExamResults(
       currentResult = row.exam_result;
       currentScore = row.exam_score_pct;
     };
+
+    // COMPANION: a personal link bound to a "doppio" companion carries
+    // partecipante_id — identity and outcome live on corsi_partecipanti (the
+    // enrollment belongs to the main corsista and is NEVER used for companions).
+    const partecipanteId = s.partecipante_id ?? null;
+    if (partecipanteId != null) {
+      const part = partecipantiById.get(partecipanteId) ?? null;
+      if (part) {
+        // AUTHORITATIVE, same rule as corsisti: the verified subject's own
+        // name/email win over anything typed into registration fields.
+        if (part.full_name) name = part.full_name;
+        if (part.email) email = part.email.toLowerCase().trim();
+        currentResult = part.exam_result;
+        currentScore = part.exam_score_pct;
+      }
+      out.push({
+        id: s.id,
+        studentName: name,
+        studentEmail: email,
+        testKey: s.test_key,
+        submittedAt: s.created_at,
+        autoScore,
+        gradable,
+        manualCount: manual,
+        suggested,
+        enrollmentId: null,
+        partecipanteId,
+        currentResult,
+        currentScore,
+        lang: s.lang ?? null,
+        answers: detail,
+      });
+      continue;
+    }
 
     // PRIMARY: proctored submissions carry corsista_id → resolve the student and
     // enrollment directly. This is the reliable tie-back even when the exam
@@ -173,6 +277,7 @@ export async function loadCourseExamResults(
       manualCount: manual,
       suggested,
       enrollmentId,
+      partecipanteId: null,
       currentResult,
       currentScore,
       lang: s.lang ?? null,

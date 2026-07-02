@@ -26,6 +26,9 @@ export interface ExamTokenPayload {
    *  submission can be tied back to the student. Absent on shared links
    *  (backwards compatible: old links keep verifying). */
   s?: string;
+  /** Optional companion (corsi_partecipanti) id — the "doppio" twin of `s`.
+   *  A personal link carries AT MOST ONE of `s` | `p`; the HMAC covers both. */
+  p?: string;
   /** Optional issue time, epoch seconds — set on links minted since the
    *  lifecycle feature. Lets an educator CLOSE a test for everyone: tokens
    *  issued before the closure are rejected; a re-send (fresh `ia`) re-opens. */

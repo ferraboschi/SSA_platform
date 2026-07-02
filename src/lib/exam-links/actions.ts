@@ -88,7 +88,7 @@ export async function submitExam(
   // hand-in of a student who STARTED before the expiry (entry has zero grace).
   const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
-  const { c, t, m, s } = res.payload;
+  const { c, t, m, s, p } = res.payload;
   if (m !== "exam") return { ok: true }; // preview/validation: no write
 
   // Split out the registration fields ("reg:<field>") from graded answers.
@@ -102,6 +102,8 @@ export async function submitExam(
   const svc = getSupabaseServiceClient();
   const corsoId = /^\d+$/.test(c) ? Number(c) : null;
   const corsistaId = s && /^\d+$/.test(s) ? Number(s) : null;
+  // Companion personal links carry `p` instead of `s` (at most one is set).
+  const partecipanteId = p && /^\d+$/.test(p) ? Number(p) : null;
   const row = {
     corso_id: corsoId,
     course_ref: c,
@@ -113,10 +115,15 @@ export async function submitExam(
     registration: Object.keys(registration).length ? registration : null,
   };
 
-  // Try to record which enrolled student this was (personal links carry `s`).
-  // If the corsista_id column isn't there yet (migration not applied), retry
-  // without it so the submission is never lost.
-  let { error } = await svc.from("exam_submissions").insert({ ...row, corsista_id: corsistaId });
+  // Try to record which subject this was (personal links carry `s` OR `p`).
+  // If a subject column isn't there yet (migration not applied), retry without
+  // it so the submission is never lost — same degrade as the corsista rollout.
+  const full: Record<string, unknown> = { ...row, corsista_id: corsistaId };
+  if (partecipanteId != null) full.partecipante_id = partecipanteId;
+  let { error } = await svc.from("exam_submissions").insert(full);
+  if (error && /partecipante_id/i.test(error.message)) {
+    ({ error } = await svc.from("exam_submissions").insert({ ...row, corsista_id: corsistaId }));
+  }
   if (error && /corsista_id/i.test(error.message)) {
     ({ error } = await svc.from("exam_submissions").insert(row));
   }

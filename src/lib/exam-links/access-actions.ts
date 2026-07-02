@@ -64,7 +64,23 @@ export async function resolveExamAccessByEmailAction(
     .not("email_confirmed_at", "is", null)
     .limit(1);
   const row = !error && data && data.length ? (data[0] as { corsista_id: number }) : null;
+
+  // SECONDARY: companions ("doppio", corsi_partecipanti.email) — same
+  // confirmed-only rule, same course binding. Checked only when no corsista
+  // matched, so existing behaviour keeps priority.
+  let partRow: { id: number } | null = null;
   if (!row) {
+    const { data: pData, error: pErr } = await svc
+      .from("corsi_partecipanti")
+      .select("id")
+      .eq("corso_id", corsoId)
+      .eq("email", clean)
+      .not("email_confirmed_at", "is", null)
+      .limit(1);
+    partRow = !pErr && pData && pData.length ? (pData[0] as { id: number }) : null;
+  }
+
+  if (!row && !partRow) {
     // Generic message — do NOT reveal whether the email is enrolled-but-unconfirmed
     // vs unknown (avoids turning the gate into an enrollment oracle).
     return {
@@ -81,7 +97,7 @@ export async function resolveExamAccessByEmailAction(
     c,
     t,
     m: "exam",
-    s: String(row.corsista_id),
+    ...(row ? { s: String(row.corsista_id) } : { p: String(partRow!.id) }),
     ia: Math.floor(Date.now() / 1000),
     l,
     e: exp,

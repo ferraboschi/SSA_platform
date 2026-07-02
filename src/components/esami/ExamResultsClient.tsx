@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
-import { gradeEnrollmentAction } from "@/lib/exam-links/grading-actions";
+import { gradeEnrollmentAction, gradePartecipanteAction } from "@/lib/exam-links/grading-actions";
 import { certifiedScore } from "@/lib/exam-links/grading";
 import { gradeOpenAnswerAction, type GradeOpenResult } from "@/lib/esami/ai-actions";
 import { FeedbackSummary } from "./FeedbackSummary";
@@ -217,8 +217,12 @@ function ResultRow({
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
 
+  // A row is confirmable when it belongs to an enrolled corsista OR a "doppio"
+  // companion (each persists its outcome on its own table).
+  const canGrade = r.enrollmentId != null || r.partecipanteId != null;
+
   const grade = (outcome: ExamOutcome) => {
-    if (r.enrollmentId == null) {
+    if (!canGrade) {
       setErr("Studente non trovato tra gli iscritti — impossibile registrare l'esito.");
       return;
     }
@@ -228,7 +232,10 @@ function ResultRow({
       // outcome — otherwise the result certifies the outcome alone (no "0%" for an
       // all-manual exam, no contradictory "Bocciato 85%" on an override).
       const score = certifiedScore(r.gradable, r.autoScore, outcome);
-      const res = await gradeEnrollmentAction(r.enrollmentId!, outcome, score, courseId);
+      const res =
+        r.enrollmentId != null
+          ? await gradeEnrollmentAction(r.enrollmentId, outcome, score, courseId)
+          : await gradePartecipanteAction(r.partecipanteId!, outcome, score, courseId);
       if (res.ok) {
         // Embedded in a tab, the client-loaded data needs an explicit re-fetch;
         // on the standalone page, router.refresh() re-runs the server load.
@@ -243,6 +250,11 @@ function ResultRow({
       <tr>
         <td style={{ fontWeight: 600 }}>
           {r.studentName}
+          {r.partecipanteId != null && (
+            <span className="text-3" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 400, fontStyle: "italic" }}>
+              (ospite)
+            </span>
+          )}
           <div className="text-3" style={{ fontSize: 11, fontWeight: 400 }}>{r.studentEmail || "—"}</div>
         </td>
         <td className="text-3">{r.testKey}</td>
@@ -271,10 +283,10 @@ function ResultRow({
               <button
                 key={o}
                 className="btn btn-xs"
-                disabled={pending || r.enrollmentId == null}
+                disabled={pending || !canGrade}
                 onClick={() => grade(o)}
                 title={
-                  r.enrollmentId == null
+                  !canGrade
                     ? "Studente non iscritto"
                     : r.gradable === 0
                       ? "Valutazione manuale — nessuna domanda a correzione automatica"
