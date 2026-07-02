@@ -30,18 +30,18 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "dashboard", icon: "home", href: "/dashboard", group: "main" },
   { id: "corsi", icon: "book", href: "/corsi", group: "catalogo" },
   { id: "pianificatore", icon: "calendar", href: "/pianificatore", group: "catalogo" },
-  {
-    id: "esami",
-    icon: "exam",
-    href: "/esami",
-    group: "catalogo",
-    children: [{ id: "esami-editor", href: "/esami/editor" }],
-  },
+  // Catalogo now holds only the two libraries (materials + exams/tests) alongside
+  // the course list, planner and archive — exam *management* moved to Sistema.
+  // The exam/test library, formerly a child of the "esami" item, is promoted to a
+  // top-level catalog entry so it stays in Catalogo while "esami" moves out.
   { id: "template-materiali", icon: "copy", href: "/template-materiali", group: "catalogo" },
+  { id: "esami-editor", icon: "note", href: "/esami/editor", group: "catalogo" },
   { id: "archivio", icon: "archive", href: "/archivio", group: "catalogo" },
   { id: "corsisti", icon: "users", href: "/corsisti", group: "persone" },
   { id: "anomalie", icon: "warn", href: "/anomalie", group: "persone" },
   { id: "educator", icon: "graduation", href: "/educator", group: "persone" },
+  // Sistema: exam management (grading/results hub) sits with the operational tools.
+  { id: "esami", icon: "exam", href: "/esami", group: "sistema" },
   { id: "crediti", icon: "coin", href: "/crediti", group: "sistema" },
   { id: "analisi", icon: "trending", href: "/analisi", group: "sistema" },
   { id: "account", icon: "user", href: "/account", group: "sistema" },

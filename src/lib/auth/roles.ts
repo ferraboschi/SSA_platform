@@ -83,6 +83,7 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
   social: {
     hidden: [
       "esami",
+      "esami-editor",
       "pianificatore",
       "analisi",
       "template-materiali",
@@ -96,6 +97,7 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
   accountant: {
     hidden: [
       "esami",
+      "esami-editor",
       "pianificatore",
       "analisi",
       "template-materiali",
