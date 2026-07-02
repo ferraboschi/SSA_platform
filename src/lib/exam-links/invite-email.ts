@@ -3,7 +3,8 @@
 import "server-only";
 import { appConfig, examEmailConfig } from "@/lib/integrations/config";
 import { getEmailService } from "@/lib/integrations/email";
-import { signExamToken, EXAM_LINK_TTL_HOURS, type ExamTestKey } from "./token";
+import { signExamToken, type ExamTestKey } from "./token";
+import { expiryForChoice, type ExamLinkTtlChoice } from "./lifecycle";
 
 function escapeHtml(s: string): string {
   const map: Record<string, string> = {
@@ -16,15 +17,25 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => map[c]);
 }
 
-/** Mint a PERSONAL exam URL bound to one corsista (`s`), for one test. */
+/** Mint a PERSONAL exam URL bound to one corsista (`s`), for one test.
+ *  Lifecycle default: the link dies at the END OF THE SEND DAY (Europe/Rome);
+ *  the educator can choose "7d" to keep it alive longer (e.g. the feedback).
+ *  `ia` (issue time) lets a later CLOSE-ALL cut it off early. */
 export function buildPersonalExamUrl(
   courseId: string,
   testKey: ExamTestKey,
   corsistaId: string,
-  ttlHours: number = EXAM_LINK_TTL_HOURS.exam,
+  ttl: ExamLinkTtlChoice = "eod",
 ): string {
-  const exp = Math.floor(Date.now() / 1000) + ttlHours * 3600;
-  const token = signExamToken({ c: courseId, t: testKey, m: "exam", s: corsistaId, e: exp });
+  const now = Math.floor(Date.now() / 1000);
+  const token = signExamToken({
+    c: courseId,
+    t: testKey,
+    m: "exam",
+    s: corsistaId,
+    ia: now,
+    e: expiryForChoice(ttl),
+  });
   return `${appConfig.baseUrl.replace(/\/$/, "")}/esame/${token}`;
 }
 
@@ -58,7 +69,8 @@ export interface DeliverExamInviteArgs {
   courseName: string;
   /** Test-mode routing (staff inbox); omit on the public share path → link only. */
   fallbackTo?: string;
-  ttlHours?: number;
+  /** Link duration: "eod" (default, dies end of send day) or "7d" (keep alive). */
+  ttl?: ExamLinkTtlChoice;
 }
 export interface DeliverExamInviteResult {
   /** Always returned so the caller has a Copia-link / WhatsApp-SMS fallback. */
@@ -74,7 +86,7 @@ export interface DeliverExamInviteResult {
  * (staff) or, absent that, returns the link for manual WhatsApp/SMS delivery.
  */
 export async function deliverExamInvite(a: DeliverExamInviteArgs): Promise<DeliverExamInviteResult> {
-  const url = buildPersonalExamUrl(a.courseId, a.testKey, a.corsistaId, a.ttlHours);
+  const url = buildPersonalExamUrl(a.courseId, a.testKey, a.corsistaId, a.ttl ?? "eod");
   const live = examEmailConfig.live;
   const dest = live ? a.toEmail.trim() : (a.fallbackTo ?? "").trim();
   if (!dest) {

@@ -26,6 +26,10 @@ export interface ExamTokenPayload {
    *  submission can be tied back to the student. Absent on shared links
    *  (backwards compatible: old links keep verifying). */
   s?: string;
+  /** Optional issue time, epoch seconds — set on links minted since the
+   *  lifecycle feature. Lets an educator CLOSE a test for everyone: tokens
+   *  issued before the closure are rejected; a re-send (fresh `ia`) re-opens. */
+  ia?: number;
   /** Expiry, epoch seconds. */
   e: number;
 }
@@ -62,8 +66,11 @@ export type VerifyResult =
   | { ok: true; payload: ExamTokenPayload }
   | { ok: false; reason: "malformed" | "bad-signature" | "expired" };
 
-/** Verify signature + expiry and return the decoded payload. */
-export function verifyExamToken(token: string): VerifyResult {
+/** Verify signature + expiry and return the decoded payload.
+ *  `graceSeconds` loosens ONLY the expiry check — used by submit so a student
+ *  who started near the link's end-of-day expiry can still hand in their work
+ *  (entry keeps zero grace). */
+export function verifyExamToken(token: string, graceSeconds = 0): VerifyResult {
   const parts = token.split(".");
   if (parts.length !== 2) return { ok: false, reason: "malformed" };
   const [body, mac] = parts;
@@ -79,7 +86,7 @@ export function verifyExamToken(token: string): VerifyResult {
   } catch {
     return { ok: false, reason: "malformed" };
   }
-  if (typeof payload.e !== "number" || payload.e * 1000 < Date.now()) {
+  if (typeof payload.e !== "number" || (payload.e + graceSeconds) * 1000 < Date.now()) {
     return { ok: false, reason: "expired" };
   }
   return { ok: true, payload };

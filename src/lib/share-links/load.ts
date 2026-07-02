@@ -18,6 +18,7 @@ import {
   EXAM_LINK_TTL_HOURS,
   type ExamTestKey,
 } from "@/lib/exam-links/token";
+import { getCourseClosures } from "@/lib/exam-links/lifecycle";
 
 export interface SharedSake {
   code: string;
@@ -59,7 +60,7 @@ export interface SharedStudent {
   guestOf?: string;
 }
 export interface SharedExamTest {
-  /** "day1" … "dayN" or "final". */
+  /** "day1" … "dayN", "feedback" or "final". */
   key: string;
   /** Human label ("Test giorno 1" / "Esame finale"). */
   label: string;
@@ -67,6 +68,8 @@ export interface SharedExamTest {
   isFinal: boolean;
   /** Ready-to-share student class link (/esame/<signed token>). */
   url: string;
+  /** Lifecycle: ISO timestamp if the educator closed this test, else null. */
+  closedAt: string | null;
 }
 export interface SharedCourse {
   courseName: string;
@@ -346,23 +349,26 @@ export async function loadSharedCourse(
       feedback?: { questions?: unknown[] };
     };
     const base = appConfig.baseUrl.replace(/\/$/, "");
-    const exp = Math.floor(Date.now() / 1000) + EXAM_LINK_TTL_HOURS.exam * 3600;
+    const now = Math.floor(Date.now() / 1000);
+    const exp = now + EXAM_LINK_TTL_HOURS.exam * 3600;
+    const closures = await getCourseClosures(Number(corso.id));
     const link = (testKey: ExamTestKey) =>
-      `${base}/esame/${signExamToken({ c: String(corso.id), t: testKey, m: "exam", e: exp })}`;
+      `${base}/esame/${signExamToken({ c: String(corso.id), t: testKey, m: "exam", ia: now, e: exp })}`;
     // Order mirrors the run order the educator expects: day mini-tests, then the
     // feedback, then the official final exam.
     const tests: SharedExamTest[] = [];
+    const push = (key: ExamTestKey, label: string, isFinal: boolean) =>
+      tests.push({ key, label, isFinal, url: link(key), closedAt: closures[key] ?? null });
     for (const mt of (tplData.miniTests ?? []).slice().sort((a, b) => a.day - b.day)) {
       if ((mt.questions?.length ?? 0) > 0) {
-        const key = `day${mt.day}` as const;
-        tests.push({ key, label: `Test giorno ${mt.day}`, isFinal: false, url: link(key) });
+        push(`day${mt.day}`, `Test giorno ${mt.day}`, false);
       }
     }
     if ((tplData.feedback?.questions?.length ?? 0) > 0) {
-      tests.push({ key: "feedback", label: "Feedback", isFinal: false, url: link("feedback") });
+      push("feedback", "Feedback", false);
     }
     if ((tplData.questions?.length ?? 0) > 0) {
-      tests.push({ key: "final", label: "Esame finale", isFinal: true, url: link("final") });
+      push("final", "Esame finale", true);
     }
     exam = tests.length ? tests : null;
   }

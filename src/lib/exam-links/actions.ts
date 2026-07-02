@@ -84,7 +84,9 @@ export async function submitExam(
   token: string,
   input: SubmitExamInput,
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = verifyExamToken(token);
+  // 3h submit-only grace: a link that expires end-of-day must never reject the
+  // hand-in of a student who STARTED before the expiry (entry has zero grace).
+  const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
   const { c, t, m, s } = res.payload;
   if (m !== "exam") return { ok: true }; // preview/validation: no write

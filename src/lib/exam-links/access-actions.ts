@@ -9,7 +9,8 @@
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { appConfig } from "@/lib/integrations/config";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
-import { verifyExamToken, signExamToken, EXAM_LINK_TTL_HOURS } from "./token";
+import { verifyExamToken, signExamToken } from "./token";
+import { getClosure, isBlockedByClosure, expiryForChoice } from "./lifecycle";
 
 // Token-keyed, per-instance limiter — the gate is an email-enumeration surface.
 const limiter = createFixedWindowLimiter(60_000);
@@ -44,6 +45,12 @@ export async function resolveExamAccessByEmailAction(
   const corsoId = /^\d+$/.test(c) ? Number(c) : null;
   if (corsoId == null) return { ok: false, error: "Corso non valido." };
 
+  // Lifecycle: if the educator closed this test, the shared link stops resolving.
+  const closedAt = await getClosure(corsoId, t);
+  if (isBlockedByClosure(closedAt, res.payload.ia)) {
+    return { ok: false, error: "Questo test è stato chiuso dall'educator." };
+  }
+
   const svc = getSupabaseServiceClient();
   // Match ONLY the confirmed-during-course snapshot. enrolled_email is stored
   // already-normalized (lowercased) on write, so an equality match is exact.
@@ -67,12 +74,15 @@ export async function resolveExamAccessByEmailAction(
     };
   }
 
-  const exp = Math.floor(Date.now() / 1000) + EXAM_LINK_TTL_HOURS[m] * 3600;
+  // Lifecycle default (end of day), but never beyond the shared link's own
+  // expiry — passing the gate must not extend what the educator shared.
+  const exp = Math.min(expiryForChoice("eod"), res.payload.e);
   const personal = signExamToken({
     c,
     t,
     m: "exam",
     s: String(row.corsista_id),
+    ia: Math.floor(Date.now() / 1000),
     l,
     e: exp,
   });

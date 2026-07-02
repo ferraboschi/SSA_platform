@@ -7,6 +7,7 @@
 import type { Metadata } from "next";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyExamToken } from "@/lib/exam-links/token";
+import { getClosure, isBlockedByClosure } from "@/lib/exam-links/lifecycle";
 import { loadPublicExam } from "@/lib/exam-links/load";
 import { ExamGate } from "@/components/esame-pubblico/ExamGate";
 import "@/components/esame-pubblico/exam-public.css";
@@ -41,6 +42,17 @@ export default async function Page({
         ? "Questo link è scaduto. Richiedi un nuovo link al tuo educator."
         : "Questo link non è valido. Verifica di aver copiato l'indirizzo completo.";
     return <Invalid reason={msg} />;
+  }
+
+  // Lifecycle: the educator can CLOSE a test for everyone. An exam-mode token
+  // issued before the closure is rejected; a re-send (fresh `ia`) re-opens.
+  if (res.payload.m === "exam") {
+    const closedAt = await getClosure(Number(res.payload.c), res.payload.t);
+    if (isBlockedByClosure(closedAt, res.payload.ia)) {
+      return (
+        <Invalid reason="Questo test è stato chiuso dall'educator. Se ti serve un nuovo accesso, chiedi di reinviarti il link." />
+      );
+    }
   }
 
   // We need the course type to resolve the exam family. Read it (service role).

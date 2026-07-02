@@ -4,6 +4,8 @@ import { useState } from "react";
 import {
   sendPersonalExamLinkAction,
   sendPersonalExamLinksToAllAction,
+  closeExamLinksAction,
+  reopenExamLinksAction,
 } from "@/lib/share-links/exam-send-actions";
 
 // Local prop shapes (structurally match the loader types) so this client
@@ -13,6 +15,7 @@ interface ExamTest {
   label: string;
   isFinal: boolean;
   url: string;
+  closedAt: string | null;
 }
 interface Person {
   id: number;
@@ -45,8 +48,32 @@ export default function ExamSendPanel({
   const [copied, setCopied] = useState(false);
   const [allBusy, setAllBusy] = useState(false);
   const [allNote, setAllNote] = useState<string | null>(null);
+  // Link duration for sends: default end-of-day; "7d" keeps it alive (feedback).
+  const [ttl, setTtl] = useState<"eod" | "7d">("eod");
+  // Closure state per test, seeded from the loader and updated optimistically.
+  const [closed, setClosed] = useState<Record<string, string | null>>(() =>
+    Object.fromEntries(tests.map((t) => [t.key, t.closedAt])),
+  );
+  const [lifeBusy, setLifeBusy] = useState(false);
 
   if (!test) return null;
+  const isClosed = Boolean(closed[test.key]);
+
+  const toggleClosure = async () => {
+    if (lifeBusy) return;
+    setLifeBusy(true);
+    setAllNote(null);
+    const action = isClosed ? reopenExamLinksAction : closeExamLinksAction;
+    const res = await action(token, test.key).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string },
+    );
+    setLifeBusy(false);
+    if (res.ok) {
+      setClosed((m) => ({ ...m, [test.key]: isClosed ? null : new Date().toISOString() }));
+    } else {
+      setAllNote(res.error || "Operazione non riuscita.");
+    }
+  };
 
   const copyGeneral = async () => {
     try {
@@ -62,7 +89,7 @@ export default function ExamSendPanel({
     if (allBusy) return;
     setAllBusy(true);
     setAllNote(null);
-    const res = await sendPersonalExamLinksToAllAction(token, test.key).catch(
+    const res = await sendPersonalExamLinksToAllAction(token, test.key, ttl).catch(
       () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof sendPersonalExamLinksToAllAction>>,
     );
     setAllBusy(false);
@@ -108,6 +135,52 @@ export default function ExamSendPanel({
             {t.label}
           </button>
         ))}
+      </div>
+
+      {/* Lifecycle: duration for new sends + close/reopen for everyone. */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "wrap",
+          marginBottom: 8,
+          padding: "8px 10px",
+          borderRadius: 8,
+          background: isClosed ? "var(--red-50, #fef2f2)" : "var(--surface-2, #f9fafb)",
+          border: `1px solid ${isClosed ? "var(--red-200, #fecaca)" : "var(--border, #e5e7eb)"}`,
+        }}
+      >
+        {isClosed ? (
+          <span style={{ fontSize: 12, color: "var(--red-600, #dc2626)", fontWeight: 600, flex: "1 1 auto" }}>
+            Test chiuso — i link inviati non funzionano più. Un nuovo invio riapre l&apos;accesso.
+          </span>
+        ) : (
+          <>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-3, #6b7280)", flexShrink: 0 }}>
+              Durata link
+            </span>
+            <select
+              value={ttl}
+              onChange={(e) => setTtl(e.target.value === "7d" ? "7d" : "eod")}
+              style={{
+                fontSize: 12,
+                padding: "5px 8px",
+                borderRadius: 7,
+                border: "1px solid var(--border, #e5e7eb)",
+                background: "var(--surface, #fff)",
+                flex: "0 1 auto",
+              }}
+            >
+              <option value="eod">Fine giornata (oggi)</option>
+              <option value="7d">7 giorni (es. feedback)</option>
+            </select>
+            <span style={{ flex: "1 1 auto" }} />
+          </>
+        )}
+        <button type="button" onClick={toggleClosure} disabled={lifeBusy} style={miniBtn(false)}>
+          {lifeBusy ? "…" : isClosed ? "Riapri" : "Chiudi per tutti"}
+        </button>
       </div>
 
       {/* General class link (email-gated) + send-to-all */}
@@ -171,6 +244,7 @@ export default function ExamSendPanel({
               key={s.id}
               token={token}
               testKey={test.key}
+              ttl={ttl}
               person={s}
               last={i === corsisti.length - 1}
             />
@@ -203,11 +277,13 @@ function miniBtn(primary: boolean): React.CSSProperties {
 function StudentSendRow({
   token,
   testKey,
+  ttl,
   person,
   last,
 }: {
   token: string;
   testKey: string;
+  ttl: "eod" | "7d";
   person: Person;
   last: boolean;
 }) {
@@ -220,7 +296,7 @@ function StudentSendRow({
     setBusy(true);
     setNote(null);
     setLink(null);
-    const res = await sendPersonalExamLinkAction(token, testKey, person.id).catch(
+    const res = await sendPersonalExamLinkAction(token, testKey, person.id, ttl).catch(
       () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof sendPersonalExamLinkAction>>,
     );
     setBusy(false);

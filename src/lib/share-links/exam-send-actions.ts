@@ -11,6 +11,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyShareToken } from "./token";
 import { deliverExamInvite } from "@/lib/exam-links/invite-email";
+import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
 import type { ExamTestKey } from "@/lib/exam-links/token";
 
 const limiter = createFixedWindowLimiter(60_000);
@@ -83,11 +84,17 @@ export interface SendExamLinkResult {
   error?: string;
 }
 
+// Whitelist the duration choice (never trust the client string).
+function ttlChoice(v: unknown): ExamLinkTtlChoice {
+  return v === "7d" ? "7d" : "eod";
+}
+
 /** Send one personal exam link to one corsista. */
 export async function sendPersonalExamLinkAction(
   token: string,
   testKey: string,
   corsistaId: number,
+  ttl?: string,
 ): Promise<SendExamLinkResult> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
@@ -111,6 +118,7 @@ export async function sendPersonalExamLinkAction(
     toEmail: target.email,
     name: target.name,
     courseName: await courseName(svc, corsoId),
+    ttl: ttlChoice(ttl),
   });
   return { ok: true, ...res };
 }
@@ -128,6 +136,7 @@ export interface SendExamLinksAllResult {
 export async function sendPersonalExamLinksToAllAction(
   token: string,
   testKey: string,
+  ttl?: string,
 ): Promise<SendExamLinksAllResult> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
@@ -177,9 +186,45 @@ export async function sendPersonalExamLinksToAllAction(
       toEmail: email,
       name: r.corsista?.full_name ?? "",
       courseName: cname,
+      ttl: ttlChoice(ttl),
     });
     live = res.live;
     if (res.sentTo) sent++;
   }
   return { ok: true, live, total: rows.length, sent, noEmail };
+}
+
+// ── Lifecycle: close a test for everyone / reopen ───────────────────────────
+// Closure blocks every exam-mode token for (course, test) issued BEFORE the
+// closure; re-sending after it mints fresh tokens (`ia` > closedAt) → re-opens
+// for exactly the people the educator re-invites. Token-auth as everywhere here.
+
+export async function closeExamLinksAction(
+  token: string,
+  testKey: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("send", token, RATE_LIMIT_SEND)) {
+    return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  }
+  const t = String(testKey);
+  if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
+  const ok = await setClosure(corsoId, t);
+  return ok ? { ok: true } : { ok: false, error: "Chiusura non riuscita, riprova." };
+}
+
+export async function reopenExamLinksAction(
+  token: string,
+  testKey: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("send", token, RATE_LIMIT_SEND)) {
+    return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  }
+  const t = String(testKey);
+  if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
+  const ok = await clearClosure(corsoId, t);
+  return ok ? { ok: true } : { ok: false, error: "Riapertura non riuscita, riprova." };
 }
