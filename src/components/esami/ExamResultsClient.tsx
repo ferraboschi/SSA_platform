@@ -53,10 +53,16 @@ export function ExamResultsClient({
 }) {
   // Confirmed results = graded submissions whose outcome has been confirmed,
   // DEDUPED by student (a re-submission would otherwise create a duplicate row
-  // and collide on the React key). Results are newest-first, so the first wins.
+  // and collide on the React key). Results are newest-first, so the first wins —
+  // except that a CORSISTA row beats a companion sharing the same email, matching
+  // findConfirmedResultByEmail's tie-break (the send/report surfaces route to the
+  // corsista, so the label here must name the same person).
+  const sorted = [...results].sort(
+    (a, b) => Number(b.enrollmentId != null) - Number(a.enrollmentId != null),
+  );
   const confirmed: ConfirmedResultRow[] = [];
   const seenConfirmed = new Set<string>();
-  for (const r of results) {
+  for (const r of sorted) {
     if (!r.currentResult) continue;
     const key = (r.studentEmail || r.studentName).toLowerCase().trim();
     if (seenConfirmed.has(key)) continue;

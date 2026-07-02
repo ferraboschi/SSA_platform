@@ -39,6 +39,15 @@ alter table public.corsi_partecipanti
   add column if not exists exam_result text,
   add column if not exists exam_score_pct integer;
 
+-- Same value domain as corsi_iscrizioni.exam_result (init.sql:254).
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'corsi_partecipanti_exam_result_check') then
+    alter table public.corsi_partecipanti
+      add constraint corsi_partecipanti_exam_result_check
+      check (exam_result in ('passed','retrial','failed'));
+  end if;
+end $$;
+
 -- The shared-link email gate now also matches companion confirmed emails.
 create index if not exists corsi_partecipanti_email_idx
   on public.corsi_partecipanti (corso_id, email)

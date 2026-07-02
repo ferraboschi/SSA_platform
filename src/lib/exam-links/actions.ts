@@ -118,13 +118,35 @@ export async function submitExam(
   // Try to record which subject this was (personal links carry `s` OR `p`).
   // If a subject column isn't there yet (migration not applied), retry without
   // it so the submission is never lost — same degrade as the corsista rollout.
+  //
+  // The retry must ONLY fire for a genuinely MISSING COLUMN — never for an FK
+  // violation (the FK constraint name contains the column name, so a bare
+  // substring match would silently downgrade a deleted-subject submit into an
+  // identity-less orphan row). Missing column: PostgREST PGRST204 / Postgres
+  // 42703; FK violation: 23503 → explicit visible error instead.
+  type DbErr = { code?: string; message: string };
+  const isMissingColumn = (e: DbErr | null, col: string): boolean => {
+    if (!e || !e.message.includes(col)) return false;
+    if (e.code === "PGRST204" || e.code === "42703") return true;
+    return /column|schema cache|does not exist/i.test(e.message);
+  };
+  const isSubjectFkViolation = (e: DbErr | null): boolean =>
+    !!e &&
+    (e.code === "23503" || /foreign key/i.test(e.message)) &&
+    /partecipante_id|corsista_id/.test(e.message);
+
   const full: Record<string, unknown> = { ...row, corsista_id: corsistaId };
   if (partecipanteId != null) full.partecipante_id = partecipanteId;
   let { error } = await svc.from("exam_submissions").insert(full);
-  if (error && /partecipante_id/i.test(error.message)) {
+  if (isSubjectFkViolation(error)) {
+    // The bound subject no longer exists (deleted/merged mid-window). Refuse
+    // loudly — a graded row with NO identity would be invisible to results.
+    return { ok: false, error: "Il tuo accesso non è più valido: contatta l'educator per un nuovo link." };
+  }
+  if (error && isMissingColumn(error, "partecipante_id")) {
     ({ error } = await svc.from("exam_submissions").insert({ ...row, corsista_id: corsistaId }));
   }
-  if (error && /corsista_id/i.test(error.message)) {
+  if (error && isMissingColumn(error, "corsista_id")) {
     ({ error } = await svc.from("exam_submissions").insert(row));
   }
   if (error) {
