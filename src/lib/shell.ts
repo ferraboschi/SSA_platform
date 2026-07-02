@@ -15,6 +15,12 @@ export interface SidebarCourse {
   missEducator: boolean;
   missLocation: boolean;
   missDate: boolean;
+  /**
+   * Exam family for the course type: certificato → "nihonshu", shochu → "shochu",
+   * everything else (e.g. introduttivo) → null (no exam). Drives whether the
+   * nested course menu shows an "Esame" section.
+   */
+  examFamily: "nihonshu" | "shochu" | null;
 }
 
 export interface SearchEntry {

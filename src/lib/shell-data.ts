@@ -166,6 +166,14 @@ async function fetchShellData(): Promise<ShellData> {
         missEducator: !c.educator_id,
         missLocation: !c.city || !c.city.trim(),
         missDate: !c.year || !c.month || !c.month.trim() || !c.day,
+        // Only certificato/shochu bear an exam; sidebar courses are already
+        // filtered to `pubblicato`, so no extra lifecycle guard is needed here.
+        examFamily:
+          c.type === "certificato"
+            ? "nihonshu"
+            : c.type === "shochu"
+              ? "shochu"
+              : null,
       };
     });
 

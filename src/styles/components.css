@@ -139,6 +139,27 @@
 .sb-sublink.active { color: var(--indigo); font-weight: var(--fw-semibold); background: var(--indigo-50); }
 .sb-sublink.active .sb-sublink-tick { background: var(--indigo); transform: scale(1.2); }
 
+/* Third level: the active course's own sections (People / Programme / Exam). */
+.sb-subsublink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 44px;
+  border-radius: var(--r-2);
+  font-size: 11.5px;
+  color: var(--text-4);
+  text-decoration: none;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.sb-subsublink .sb-subsublink-tick {
+  width: 4px; height: 4px; border-radius: 1px;
+  background: var(--border-strong, var(--text-4));
+  flex-shrink: 0;
+  transition: background var(--dur-fast);
+}
+.sb-subsublink:hover { background: var(--surface-hover); color: var(--text-2); }
+.sb-subsublink:hover .sb-subsublink-tick { background: var(--indigo); }
+
 .flip-up { transform: rotate(180deg); transition: transform var(--dur-fast); }
 
 /* Reorder up/down buttons (question list) */

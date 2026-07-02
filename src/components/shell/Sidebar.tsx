@@ -105,45 +105,65 @@ export function Sidebar({ nav, counts, courses, users, open, onNavigate }: Sideb
                     </Link>
                   ))}
                 {showChildren &&
-                  courses.map((ch) => (
-                    <Link
-                      key={ch.id}
-                      href={ch.href}
-                      className={`sb-sublink ${ch.href === pathname ? "active" : ""}`}
-                      title={`${ch.label} · ${ch.meta}`}
-                    >
-                      <SidebarCourseDots c={ch} />
-                      <span
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          minWidth: 0,
-                          gap: 1,
-                          flex: 1,
-                        }}
-                      >
-                        <span
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
+                  courses.map((ch) => {
+                    const courseActive = ch.href === pathname;
+                    return (
+                      <Fragment key={ch.id}>
+                        <Link
+                          href={ch.href}
+                          className={`sb-sublink ${courseActive ? "active" : ""}`}
+                          title={`${ch.label} · ${ch.meta}`}
                         >
-                          {ch.label}
-                        </span>
-                        <span
-                          className="num"
-                          style={{
-                            fontSize: 9.5,
-                            color: "var(--text-4)",
-                            letterSpacing: "0.01em",
-                          }}
-                        >
-                          {ch.meta}
-                        </span>
-                      </span>
-                    </Link>
-                  ))}
+                          <SidebarCourseDots c={ch} />
+                          <span
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              minWidth: 0,
+                              gap: 1,
+                              flex: 1,
+                            }}
+                          >
+                            <span
+                              style={{
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {ch.label}
+                            </span>
+                            <span
+                              className="num"
+                              style={{
+                                fontSize: 9.5,
+                                color: "var(--text-4)",
+                                letterSpacing: "0.01em",
+                              }}
+                            >
+                              {ch.meta}
+                            </span>
+                          </span>
+                        </Link>
+                        {/* Active course expands to its own People / Programme /
+                            Exam structure — the same tabs as the detail page,
+                            deep-linked via ?tab=. "Esame" only when the course
+                            type bears an exam (certificato/shochu). */}
+                        {courseActive &&
+                          courseSections(t, ch).map((s) => (
+                            <Link
+                              key={s.id}
+                              href={s.href}
+                              className="sb-subsublink"
+                              onClick={onNavigate}
+                            >
+                              <span className="sb-subsublink-tick" />
+                              <span>{s.label}</span>
+                            </Link>
+                          ))}
+                      </Fragment>
+                    );
+                  })}
               </Fragment>
             );
           })}
@@ -165,6 +185,23 @@ function groupLabel(t: T, key: NavGroupKey): string {
 function itemLabel(t: T, id: string): string {
   const items = t.nav.items as Record<string, string>;
   return items[id] ?? id;
+}
+
+// Per-course sub-sections mirrored from the detail-page tabs. "Esame" is only
+// offered for exam-bearing course types (examFamily set); introduttivo has none.
+function courseSections(
+  t: T,
+  ch: SidebarCourse,
+): { id: string; label: string; href: string }[] {
+  const d = t.corsi.detail;
+  const secs = [
+    { id: "iscritti", label: d.tabIscritti, href: `${ch.href}?tab=iscritti` },
+    { id: "programma", label: d.tabProgramma, href: `${ch.href}?tab=programma` },
+  ];
+  if (ch.examFamily) {
+    secs.push({ id: "esame", label: d.tabEsame, href: `${ch.href}?tab=esame` });
+  }
+  return secs;
 }
 
 // Two status icons before each sidebar course — same two orthogonal axes as the
