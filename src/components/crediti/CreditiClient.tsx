@@ -562,6 +562,31 @@ function ClosedCard({
         </button>
       </CardHead>
       <OriginDest credito={credito} t={t} />
+      {credito.codice && (
+        // Traceability: keep the ISSUED code visible on a used/closed credit so a
+        // staff member can tie a Shopify redemption (code) back to its destination
+        // course (the → link in OriginDest above). Read-only here — already spent.
+        <div
+          style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}
+        >
+          <span className="text-4" style={{ fontSize: 11 }}>
+            {t.codeLabel}
+          </span>
+          <code
+            className="mono"
+            style={{
+              fontWeight: 600,
+              letterSpacing: ".06em",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border-2)",
+              borderRadius: 5,
+              padding: "1px 6px",
+            }}
+          >
+            {credito.codice}
+          </code>
+        </div>
+      )}
     </div>
   );
 }
