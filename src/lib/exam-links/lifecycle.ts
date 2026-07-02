@@ -17,7 +17,12 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { endOfDayEpochSeconds } from "./lifecycle-time";
 
-export const CLOSURES_KEY = "exam_link_closures";
+/** One settings_kv row PER closure (key = `exam_link_closure:<corsoId>:<testKey>`,
+ *  value = { closedAt }). Single-row upsert/delete are atomic, so concurrent
+ *  close/reopen actions can never lose each other's writes (no shared-map
+ *  read-modify-write). Reads fail open — a transient error never locks students
+ *  out; it only means a closure isn't seen for that one request. */
+export const CLOSURE_KEY_PREFIX = "exam_link_closure:";
 
 /** Link duration choices offered to the educator at send time. */
 export type ExamLinkTtlChoice = "eod" | "7d";
@@ -28,74 +33,75 @@ export function expiryForChoice(choice: ExamLinkTtlChoice): number {
   return endOfDayEpochSeconds("Europe/Rome", new Date());
 }
 
-interface StoredClosures {
-  items?: Record<string, string>; // `<corsoId>:<testKey>` → closedAt ISO
+interface StoredClosure {
+  closedAt?: string; // ISO
 }
 
 function closureKey(corsoId: number, testKey: string): string {
-  return `${corsoId}:${testKey}`;
+  return `${CLOSURE_KEY_PREFIX}${corsoId}:${testKey}`;
 }
 
-/** Read the closures map. `null` = READ FAILED (distinct from "no closures"):
- *  reads fail open (no closure), but WRITES MUST ABORT — re-writing the whole
- *  key from a failed read would silently erase every other course's closures. */
-async function readClosures(): Promise<Record<string, string> | null> {
+/** closedAt ISO for a (course, test), or null if not closed. */
+export async function getClosure(corsoId: number, testKey: string): Promise<string | null> {
   try {
     const svc = getSupabaseServiceClient();
     const { data, error } = await svc
       .from("settings_kv")
       .select("value")
-      .eq("key", CLOSURES_KEY)
+      .eq("key", closureKey(corsoId, testKey))
       .maybeSingle();
-    if (error) return null;
-    return (data?.value as StoredClosures | null)?.items ?? {};
+    if (error) return null; // fail open — never lock students out on a blip
+    return (data?.value as StoredClosure | null)?.closedAt ?? null;
   } catch {
     return null;
   }
 }
 
-/** closedAt ISO for a (course, test), or null if not closed. */
-export async function getClosure(corsoId: number, testKey: string): Promise<string | null> {
-  const items = await readClosures();
-  return items?.[closureKey(corsoId, testKey)] ?? null;
-}
-
 /** All closures for one course, keyed by testKey. */
 export async function getCourseClosures(corsoId: number): Promise<Record<string, string>> {
-  const items = await readClosures();
   const out: Record<string, string> = {};
-  if (!items) return out;
-  const prefix = `${corsoId}:`;
-  for (const [k, v] of Object.entries(items)) {
-    if (k.startsWith(prefix)) out[k.slice(prefix.length)] = v;
+  try {
+    const svc = getSupabaseServiceClient();
+    const prefix = `${CLOSURE_KEY_PREFIX}${corsoId}:`;
+    const { data, error } = await svc
+      .from("settings_kv")
+      .select("key, value")
+      .like("key", `${prefix}%`);
+    if (error) return out;
+    for (const r of (data ?? []) as { key: string; value: StoredClosure | null }[]) {
+      const closedAt = r.value?.closedAt;
+      if (closedAt) out[r.key.slice(prefix.length)] = closedAt;
+    }
+  } catch {
+    /* fail open */
   }
   return out;
 }
 
+/** Atomic single-row upsert — concurrent closes can never lose each other. */
 export async function setClosure(corsoId: number, testKey: string): Promise<boolean> {
   try {
     const svc = getSupabaseServiceClient();
-    const items = await readClosures();
-    if (!items) return false; // failed read → abort, never clobber
-    items[closureKey(corsoId, testKey)] = new Date().toISOString();
     const { error } = await svc
       .from("settings_kv")
-      .upsert({ key: CLOSURES_KEY, value: { items } }, { onConflict: "key" });
+      .upsert(
+        { key: closureKey(corsoId, testKey), value: { closedAt: new Date().toISOString() } },
+        { onConflict: "key" },
+      );
     return !error;
   } catch {
     return false;
   }
 }
 
+/** Atomic single-row delete. */
 export async function clearClosure(corsoId: number, testKey: string): Promise<boolean> {
   try {
     const svc = getSupabaseServiceClient();
-    const items = await readClosures();
-    if (!items) return false; // failed read → abort, never clobber
-    delete items[closureKey(corsoId, testKey)];
     const { error } = await svc
       .from("settings_kv")
-      .upsert({ key: CLOSURES_KEY, value: { items } }, { onConflict: "key" });
+      .delete()
+      .eq("key", closureKey(corsoId, testKey));
     return !error;
   } catch {
     return false;
