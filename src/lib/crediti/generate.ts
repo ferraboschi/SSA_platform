@@ -11,12 +11,24 @@ import "server-only";
 // upserted with ON CONFLICT DO NOTHING — re-runs never duplicate and never
 // clobber a staff-edited stato/destinazione.
 //
+// SHOPIFY: for each NEW credit (one that did not exist before this run) the
+// credit's `codice` is also created as a real one-time, fixed-amount Shopify
+// discount code via the GraphQL Admin API, so it is live at checkout. This is
+// gated on the token holding the `write_discounts` scope (resolved once per run)
+// and is per-discount best-effort: any failure keeps the local code and stores a
+// NULL shopify_discount_id — never a throw. Only NEW enrolments trigger a create,
+// so re-runs never re-create a discount.
+//
 // DEGRADES GRACEFULLY: if the corsi_crediti table (or any queried column) is
 // missing (pre-migration), it returns { created: 0 } silently. It never throws
 // into the sync.
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { isPaidRevenue, netPaidCents } from "@/lib/economics/revenue";
+import {
+  createBasicCodeDiscount,
+  getGrantedScopes,
+} from "@/lib/integrations/shopify/admin-client";
 import { generateCreditCode } from "./code";
 
 export async function generateTransferCredits(): Promise<{ created: number }> {
@@ -62,6 +74,40 @@ export async function generateTransferCredits(): Promise<{ created: number }> {
       financial_status?: string | null;
     };
 
+    // ── Candidate paid, non-historical enrolments (net > 0) on cancelled courses.
+    const candidates: Array<{ corsista_id: number; net: number; corso_id: number; id: number }> = [];
+    for (const r of (iscr ?? []) as unknown as IscrRow[]) {
+      if (r.historical) continue; // historical seats are already delivered/settled
+      if (!isPaidRevenue(r.financial_status)) continue; // only money actually collected
+      const net = netPaidCents(r);
+      if (net <= 0) continue; // free/transferred seats carry no credit
+      candidates.push({ corsista_id: r.corsista_id, net, corso_id: r.corso_id, id: r.id });
+    }
+    if (candidates.length === 0) return { created: 0 };
+
+    // ── NEW-only: which of these enrolments do NOT already have a credit? This is
+    // what keeps a Shopify discount from being (re)created on every sync — a
+    // discount is created ONLY for a genuinely new credit, never re-issued.
+    const { data: existing, error: existErr } = await svc
+      .from("corsi_crediti")
+      .select("iscrizione_origine_id")
+      .in("iscrizione_origine_id", candidates.map((c) => c.id));
+    if (existErr) return { created: 0 }; // table missing (pre-migration) → silent no-op
+    const hasCredit = new Set<number>(
+      ((existing ?? []) as { iscrizione_origine_id: number | null }[])
+        .map((e) => e.iscrizione_origine_id)
+        .filter((v): v is number => v != null),
+    );
+    const fresh = candidates.filter((c) => !hasCredit.has(c.id));
+    if (fresh.length === 0) return { created: 0 };
+
+    // ── Resolve Shopify capability ONCE per run: only create discounts if the
+    // token actually holds write_discounts. Any failure → treat as incapable
+    // (local codes only), never throw.
+    const canCreate = (await getGrantedScopes().catch(() => [] as string[])).includes(
+      "write_discounts",
+    );
+
     const rows: Array<{
       corsista_id: number;
       importo_cents: number;
@@ -69,28 +115,39 @@ export async function generateTransferCredits(): Promise<{ created: number }> {
       iscrizione_origine_id: number;
       stato: "aperto";
       codice: string;
+      shopify_discount_id: string | null;
     }> = [];
-    for (const r of (iscr ?? []) as unknown as IscrRow[]) {
-      if (r.historical) continue; // historical seats are already delivered/settled
-      if (!isPaidRevenue(r.financial_status)) continue; // only money actually collected
-      const net = netPaidCents(r);
-      if (net <= 0) continue; // free/transferred seats carry no credit
+    for (const c of fresh) {
+      // One-time redemption code, generated only for a NEW credit.
+      const codice = generateCreditCode();
+      let shopify_discount_id: string | null = null;
+      if (canCreate) {
+        try {
+          const d = await createBasicCodeDiscount({
+            code: codice,
+            amountEuros: c.net / 100,
+            title: "Credito SSA — corso annullato",
+            usageLimit: 1,
+          });
+          shopify_discount_id = d.id;
+        } catch {
+          // Keep the local code; leave shopify_discount_id null. NEVER throw.
+        }
+      }
       rows.push({
-        corsista_id: r.corsista_id,
-        importo_cents: net,
-        corso_origine_id: r.corso_id,
-        iscrizione_origine_id: r.id,
+        corsista_id: c.corsista_id,
+        importo_cents: c.net,
+        corso_origine_id: c.corso_id,
+        iscrizione_origine_id: c.id,
         stato: "aperto",
-        // One-time redemption code, generated only on INSERT — the ignoreDuplicates
-        // upsert leaves an already-issued code untouched on re-runs.
-        codice: generateCreditCode(),
+        codice,
+        shopify_discount_id,
       });
     }
-    if (rows.length === 0) return { created: 0 };
 
-    // UPSERT keyed on the unique origin enrolment: ignoreDuplicates keeps a
-    // re-run from re-inserting or overwriting a staff-edited row. `count` is the
-    // number of NEW rows Postgres actually inserted.
+    // UPSERT keyed on the unique origin enrolment: ignoreDuplicates is the DB
+    // backstop against a race (a credit inserted between the NEW-only read and
+    // this write). `count` is the number of NEW rows Postgres actually inserted.
     const { error: upErr, count } = await svc
       .from("corsi_crediti")
       .upsert(rows, {

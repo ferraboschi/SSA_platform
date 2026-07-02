@@ -1455,6 +1455,8 @@ export const it = {
     codeCopy: "Copia",
     codeCopied: "Copiato ✓",
     codeHint: "univoco, una tantum",
+    codeLive: "Sconto Shopify attivo",
+    codeManual: "sconto da creare su Shopify",
     // Stati
     states: {
       aperto: "Aperto",

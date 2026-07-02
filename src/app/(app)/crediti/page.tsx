@@ -23,6 +23,7 @@ interface CreditoRow {
   stato: string;
   nota: string | null;
   codice?: string | null;
+  shopify_discount_id?: string | null;
 }
 
 export default async function Page() {
@@ -41,16 +42,25 @@ export default async function Page() {
 
   // Load the ledger. If the corsi_crediti table is missing (pre-migration), the
   // query errors → render the friendly "migration missing" note (no crash).
-  // `codice` was added by a later migration, so try WITH it and fall back to
-  // WITHOUT it when the column isn't there yet (table present, codice not).
+  // `codice` and `shopify_discount_id` were each added by a later migration, so
+  // degrade the select in steps: try WITH both, then WITH codice only, then the
+  // base columns — so a DB at any migration level still renders.
   const BASE_COLS =
     "id,corsista_id,importo_cents,corso_origine_id,iscrizione_origine_id,corso_destinazione_id,iscrizione_destinazione_id,stato,nota";
   const primary = await svc
     .from("corsi_crediti")
-    .select(`${BASE_COLS},codice`)
+    .select(`${BASE_COLS},codice,shopify_discount_id`)
     .order("created_at", { ascending: false });
   let credData = primary.data as CreditoRow[] | null;
   let credErr = primary.error;
+  if (credErr) {
+    const withCode = await svc
+      .from("corsi_crediti")
+      .select(`${BASE_COLS},codice`)
+      .order("created_at", { ascending: false });
+    credData = withCode.data as CreditoRow[] | null;
+    credErr = withCode.error;
+  }
   if (credErr) {
     const fallback = await svc
       .from("corsi_crediti")
@@ -135,6 +145,7 @@ export default async function Page() {
       : "aperto") as CreditoView["stato"],
     nota: c.nota,
     codice: c.codice ?? null,
+    shopifyDiscountId: c.shopify_discount_id ?? null,
   }));
 
   // ── Destination picker: candidate courses (not cancelled) + their enrollments.

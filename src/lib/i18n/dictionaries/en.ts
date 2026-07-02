@@ -1453,6 +1453,8 @@ export const en: Dictionary = {
     codeCopy: "Copy",
     codeCopied: "Copied ✓",
     codeHint: "unique, one-time",
+    codeLive: "Shopify discount live",
+    codeManual: "discount to create on Shopify",
     // States
     states: {
       aperto: "Open",

@@ -22,6 +22,9 @@ export interface CreditoView {
   nota: string | null;
   /** One-time redemption code to hand to the credit's owner (null pre-migration). */
   codice: string | null;
+  /** Shopify GID of the auto-created discount, or null when the code isn't yet a
+   *  live Shopify discount (pre-scope / API error / created manually). */
+  shopifyDiscountId: string | null;
 }
 
 export interface CourseOption {
@@ -333,8 +336,18 @@ function OriginDest({ credito, t }: { credito: CreditoView; t: TDict }) {
 }
 
 /** The one-time redemption code for an active credit — copied to the owner, who
- *  enters it as the Shopify discount code; the sync then auto-closes the credit. */
-function CodeRow({ codice, t }: { codice: string; t: TDict }) {
+ *  enters it as the Shopify discount code; the sync then auto-closes the credit.
+ *  When the code has been created as a live Shopify discount we show a success
+ *  chip; otherwise a muted hint that it still needs creating on Shopify. */
+function CodeRow({
+  codice,
+  shopifyDiscountId,
+  t,
+}: {
+  codice: string;
+  shopifyDiscountId: string | null;
+  t: TDict;
+}) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -369,6 +382,24 @@ function CodeRow({ codice, t }: { codice: string; t: TDict }) {
         <Icon name={copied ? "check" : "copy"} size={12} />
         {copied ? t.codeCopied : t.codeCopy}
       </button>
+      {shopifyDiscountId ? (
+        <span
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            color: "var(--success-fg)",
+            background: "var(--success-bg)",
+            padding: "1px 8px",
+            borderRadius: 999,
+          }}
+        >
+          {t.codeLive}
+        </span>
+      ) : (
+        <span className="text-4" style={{ fontSize: 11, fontStyle: "italic" }}>
+          {t.codeManual}
+        </span>
+      )}
       <span className="text-4" style={{ fontSize: 11 }}>
         {t.codeHint}
       </span>
@@ -439,7 +470,9 @@ function OpenCard({
 
       <OriginDest credito={credito} t={t} />
 
-      {credito.codice && <CodeRow codice={credito.codice} t={t} />}
+      {credito.codice && (
+        <CodeRow codice={credito.codice} shopifyDiscountId={credito.shopifyDiscountId} t={t} />
+      )}
 
       {picking && (
         <div
