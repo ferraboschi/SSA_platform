@@ -21,6 +21,8 @@ export interface ConfirmSubject {
   email: string;
   /** Whether this attendee already confirmed (email_confirmed_at is set). */
   confirmed: boolean;
+  /** Delivery address previously saved on /conferma ("" if none / pre-migration). */
+  deliveryAddress: string;
 }
 
 export async function loadConfirmSubject(
@@ -43,7 +45,9 @@ export async function loadConfirmSubject(
     // snapshot columns; fall back if the migration isn't applied yet.
     const withSnap = await sb
       .from("corsi_iscrizioni")
-      .select("id, enrolled_email, email_confirmed_at, corsista:corsisti(full_name, email, phone)")
+      .select(
+        "id, enrolled_email, email_confirmed_at, delivery_address, corsista:corsisti(full_name, email, phone)",
+      )
       .eq("id", Number(subjectId))
       .eq("corso_id", Number(courseId))
       .maybeSingle();
@@ -51,6 +55,7 @@ export async function loadConfirmSubject(
       id: number;
       enrolled_email?: string | null;
       email_confirmed_at?: string | null;
+      delivery_address?: string | null;
       corsista: { full_name: string | null; email: string | null; phone: string | null } | null;
     };
     let row = withSnap.data as Row | null;
@@ -73,13 +78,14 @@ export async function loadConfirmSubject(
       phone: row.corsista.phone ?? "",
       email: (row.enrolled_email || row.corsista.email || "").trim(),
       confirmed: Boolean(row.email_confirmed_at),
+      deliveryAddress: (row.delivery_address ?? "").trim(),
     };
   }
 
   // Companion ("doppio"): name/phone live on the row; email is its own column.
   const withEmail = await sb
     .from("corsi_partecipanti")
-    .select("id, full_name, phone, email, email_confirmed_at")
+    .select("id, full_name, phone, email, email_confirmed_at, delivery_address")
     .eq("id", Number(subjectId))
     .eq("corso_id", Number(courseId))
     .maybeSingle();
@@ -89,6 +95,7 @@ export async function loadConfirmSubject(
     phone: string | null;
     email?: string | null;
     email_confirmed_at?: string | null;
+    delivery_address?: string | null;
   };
   let prow = withEmail.data as PRow | null;
   if (withEmail.error) {
@@ -110,5 +117,6 @@ export async function loadConfirmSubject(
     phone: prow.phone ?? "",
     email: (prow.email || "").trim(),
     confirmed: Boolean(prow.email_confirmed_at),
+    deliveryAddress: (prow.delivery_address ?? "").trim(),
   };
 }

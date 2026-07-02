@@ -3,51 +3,63 @@
 import { getSession } from "@/lib/auth/session";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyConfirmToken, type ConfirmSubjectKind } from "./confirm-token";
+import { normEmail, isValidEmail, normAddress } from "./confirm-normalize";
 import { loadConfirmSubject } from "./confirm";
 import { deliverConfirmLink } from "./confirm-email";
-
-function normEmail(s: string): string {
-  return s.trim().toLowerCase();
-}
-function isValidEmail(s: string): boolean {
-  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s) && s.length <= 254;
-}
 
 /**
  * PUBLIC save from the confirmation magic-link page. The subject (course + kind +
  * id) is taken from the VERIFIED token, never the client. Writes the CONFIRMED
- * email snapshot + the confirmed-at flag (the educator's green tick). The global
- * corsisti.email identity is intentionally left untouched.
+ * email snapshot + the confirmed-at flag (the educator's green tick), and — when
+ * provided — the delivery address (Stage 3). The global corsisti.email identity
+ * is intentionally left untouched. An empty address means "leave the stored
+ * value untouched" (re-confirming the email never wipes a saved address).
  */
 export async function confirmAttendeeAction(
   token: string,
   email: string,
-): Promise<{ ok: boolean; error?: string }> {
+  deliveryAddress?: string,
+): Promise<{ ok: boolean; error?: string; addressSaved?: boolean }> {
   const res = verifyConfirmToken(token);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
   const clean = normEmail(email);
   if (!isValidEmail(clean)) {
     return { ok: false, error: "Inserisci un indirizzo email valido." };
   }
+  const addr = normAddress(deliveryAddress);
+  if (!addr.ok) return { ok: false, error: addr.error };
 
   const { c, k, i } = res.payload;
   const svc = getSupabaseServiceClient();
   const now = new Date().toISOString();
 
   const table = k === "corsista" ? "corsi_iscrizioni" : "corsi_partecipanti";
-  const patch =
+  const base =
     k === "corsista"
       ? { enrolled_email: clean, email_confirmed_at: now }
       : { email: clean, email_confirmed_at: now };
-  const { error } = await svc
+  const withAddr = addr.value != null ? { ...base, delivery_address: addr.value } : base;
+
+  let { error } = await svc
     .from(table)
-    .update(patch)
+    .update(withAddr)
     .eq("id", Number(i))
     .eq("corso_id", Number(c));
+  // Pre-migration degrade: the email confirmation (the primary act) must still
+  // succeed when delivery_address doesn't exist yet — retry without it.
+  let addressSaved = addr.value != null;
+  if (error && addr.value != null && /delivery_address|column/i.test(error.message)) {
+    addressSaved = false;
+    ({ error } = await svc
+      .from(table)
+      .update(base)
+      .eq("id", Number(i))
+      .eq("corso_id", Number(c)));
+  }
   if (error) {
     return { ok: false, error: "Salvataggio non riuscito (migrazione non applicata?)." };
   }
-  return { ok: true };
+  return { ok: true, addressSaved };
 }
 
 export interface SendConfirmLinkInput {

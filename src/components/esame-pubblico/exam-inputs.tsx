@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { RegField, RunnerQuestion } from "./ExamRunner";
 import { EMAIL_RE } from "./exam-chrome";
+// Google Places address autocomplete lives in the SHARED component — also used
+// by the /conferma attendee page.
+import { GoogleAddressInput } from "@/components/address/AddressInput";
 
 // Country dial codes — Italy first (the SSA audience), then common ones.
 const COUNTRY_CODES: { c: string; n: string }[] = [
@@ -27,83 +30,6 @@ function splitPhone(val: string): { code: string; num: string } {
   return { code: "+39", num: val.replace(/^\+\d{1,4}\s*/, "") };
 }
 
-// ── Google Places address autocomplete (optional) ───────────────────────────
-// Enabled only when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is set (Render env). Without
-// it the field degrades gracefully to a plain textarea.
-interface GPlace {
-  formatted_address?: string;
-}
-interface GAutocomplete {
-  addListener(ev: string, cb: () => void): void;
-  getPlace(): GPlace;
-}
-interface GMaps {
-  maps: { places: { Autocomplete: new (input: HTMLInputElement, opts?: object) => GAutocomplete } };
-}
-const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-let gmapsPromise: Promise<void> | null = null;
-function loadGoogleMaps(): Promise<void> {
-  if (typeof window === "undefined" || !GMAPS_KEY) return Promise.reject(new Error("no key"));
-  const w = window as unknown as { google?: GMaps };
-  if (w.google?.maps?.places) return Promise.resolve();
-  if (gmapsPromise) return gmapsPromise;
-  gmapsPromise = new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places&language=it`;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("gmaps load failed"));
-    document.head.appendChild(s);
-  });
-  return gmapsPromise;
-}
-
-function GoogleAddressInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!GMAPS_KEY) return;
-    loadGoogleMaps()
-      .then(() => {
-        const w = window as unknown as { google?: GMaps };
-        if (!ref.current || !w.google) return;
-        const ac = new w.google.maps.places.Autocomplete(ref.current, {
-          types: ["address"],
-          fields: ["formatted_address"],
-        });
-        ac.addListener("place_changed", () => {
-          const a = ac.getPlace().formatted_address;
-          if (a) onChange(a);
-        });
-      })
-      .catch(() => {
-        /* key invalid / network → keep the input usable as free text */
-      });
-    // run once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!GMAPS_KEY) {
-    return (
-      <textarea
-        className="exam-public-textarea"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={3}
-      />
-    );
-  }
-  return (
-    <input
-      ref={ref}
-      className="exam-public-input"
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder="Inizia a digitare l'indirizzo…"
-      autoComplete="off"
-    />
-  );
-}
 
 export function RegInput({
   field,

@@ -49,6 +49,7 @@ export default async function Page({
           name={subject.fullName}
           phone={subject.phone}
           email={subject.email}
+          deliveryAddress={subject.deliveryAddress}
           courseName={subject.courseName}
           alreadyConfirmed={subject.confirmed}
         />

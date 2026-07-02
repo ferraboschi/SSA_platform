@@ -2,18 +2,21 @@
 
 import { useState } from "react";
 import { confirmAttendeeAction } from "@/lib/attendee/confirm-actions";
+import { GoogleAddressInput } from "@/components/address/AddressInput";
 
 /**
  * Public "confirm your details" form. Name + phone are shown read-only
  * (prefilled); the EMAIL is the field the student confirms/corrects — it becomes
- * the address that receives the day-tests + exam. On success the educator sees a
- * green tick for this attendee.
+ * the address that receives the day-tests + exam. The DELIVERY ADDRESS is
+ * optional (Google Places autocomplete when the key is set, plain field
+ * otherwise — never blocks). On success the educator sees a green tick.
  */
 export function ConfirmForm({
   token,
   name,
   phone,
   email: initialEmail,
+  deliveryAddress: initialAddress,
   courseName,
   alreadyConfirmed,
 }: {
@@ -21,21 +24,26 @@ export function ConfirmForm({
   name: string;
   phone: string;
   email: string;
+  deliveryAddress: string;
   courseName: string;
   alreadyConfirmed: boolean;
 }) {
   const [email, setEmail] = useState(initialEmail);
+  const [address, setAddress] = useState(initialAddress);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [addressSaved, setAddressSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
     setError(null);
     setBusy(true);
-    const res = await confirmAttendeeAction(token, email);
+    const res = await confirmAttendeeAction(token, email, address);
     setBusy(false);
-    if (res.ok) setDone(true);
-    else setError(res.error ?? "Qualcosa è andato storto.");
+    if (res.ok) {
+      setAddressSaved(res.addressSaved === true && Boolean(address.trim()));
+      setDone(true);
+    } else setError(res.error ?? "Qualcosa è andato storto.");
   };
 
   if (done) {
@@ -61,6 +69,11 @@ export function ConfirmForm({
           Grazie{name ? `, ${name.split(" ")[0]}` : ""}. Riceverai i test e l&apos;esame
           all&apos;indirizzo <strong>{email}</strong>.
         </p>
+        {addressSaved && (
+          <p style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", margin: "8px 0 0", lineHeight: 1.5 }}>
+            Spediremo eventuali materiali a: <strong>{address.trim()}</strong>
+          </p>
+        )}
       </div>
     );
   }
@@ -92,6 +105,18 @@ export function ConfirmForm({
           placeholder="nome@esempio.it"
           style={{ width: "100%", padding: "9px 11px", fontSize: 14 }}
         />
+      </Field>
+      <Field label="Indirizzo di consegna (facoltativo)">
+        <GoogleAddressInput
+          value={address}
+          onChange={setAddress}
+          className="input"
+          textareaClassName="input"
+          placeholder="Dove spedirti materiali e attestato"
+        />
+        <p style={{ fontSize: 11, color: "var(--text-4, #9ca3af)", margin: "4px 0 0" }}>
+          Serve per l&apos;eventuale spedizione di materiali e attestato.
+        </p>
       </Field>
 
       {alreadyConfirmed && !error && (
