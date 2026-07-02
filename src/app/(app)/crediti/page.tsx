@@ -22,6 +22,7 @@ interface CreditoRow {
   iscrizione_destinazione_id: number | null;
   stato: string;
   nota: string | null;
+  codice?: string | null;
 }
 
 export default async function Page() {
@@ -40,12 +41,24 @@ export default async function Page() {
 
   // Load the ledger. If the corsi_crediti table is missing (pre-migration), the
   // query errors → render the friendly "migration missing" note (no crash).
-  const { data: credData, error: credErr } = await svc
+  // `codice` was added by a later migration, so try WITH it and fall back to
+  // WITHOUT it when the column isn't there yet (table present, codice not).
+  const BASE_COLS =
+    "id,corsista_id,importo_cents,corso_origine_id,iscrizione_origine_id,corso_destinazione_id,iscrizione_destinazione_id,stato,nota";
+  const primary = await svc
     .from("corsi_crediti")
-    .select(
-      "id,corsista_id,importo_cents,corso_origine_id,iscrizione_origine_id,corso_destinazione_id,iscrizione_destinazione_id,stato,nota",
-    )
+    .select(`${BASE_COLS},codice`)
     .order("created_at", { ascending: false });
+  let credData = primary.data as CreditoRow[] | null;
+  let credErr = primary.error;
+  if (credErr) {
+    const fallback = await svc
+      .from("corsi_crediti")
+      .select(BASE_COLS)
+      .order("created_at", { ascending: false });
+    credData = fallback.data as CreditoRow[] | null;
+    credErr = fallback.error;
+  }
 
   if (credErr) {
     return (
@@ -121,6 +134,7 @@ export default async function Page() {
       ? c.stato
       : "aperto") as CreditoView["stato"],
     nota: c.nota,
+    codice: c.codice ?? null,
   }));
 
   // ── Destination picker: candidate courses (not cancelled) + their enrollments.

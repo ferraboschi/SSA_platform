@@ -1435,11 +1435,12 @@ export const it = {
       "Funzione disponibile dopo la migrazione del database (tabella crediti non ancora creata).",
     empty: "Nessun credito. Tutto riconciliato. 🎉",
     // Sezioni per stato
-    openTitle: "Crediti aperti",
-    openSubtitle: "Da collegare a una nuova iscrizione (o da rimborsare / annullare).",
-    appliedTitle: "Crediti applicati",
+    openTitle: "Crediti attivi",
+    openSubtitle:
+      "Da chiudere: copia il codice univoco e invialo alla persona; quando lo usa come sconto su Shopify il credito passa da solo in «Utilizzati». (Oppure collega a mano / rimborsa / annulla.)",
+    appliedTitle: "Crediti utilizzati",
     appliedSubtitle:
-      "Collegati a un'iscrizione di destinazione. Il ricavo si riconosce quando quel corso viene erogato.",
+      "Codice riscattato (o collegati a mano) a un'iscrizione di destinazione. Il ricavo si riconosce quando quel corso viene erogato.",
     closedTitle: "Crediti chiusi",
     closedSubtitle: "Rimborsati o annullati — fuori dal registro.",
     // Etichette card
@@ -1449,6 +1450,11 @@ export const it = {
     destination: "Corso di destinazione",
     noDestination: "Nessuna destinazione",
     amount: "Importo",
+    // Codice sconto univoco (una tantum) da copiare alla persona
+    codeLabel: "Codice sconto",
+    codeCopy: "Copia",
+    codeCopied: "Copiato ✓",
+    codeHint: "univoco, una tantum",
     // Stati
     states: {
       aperto: "Aperto",

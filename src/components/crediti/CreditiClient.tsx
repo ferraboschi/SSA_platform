@@ -20,6 +20,8 @@ export interface CreditoView {
   corsoDestinazioneTitle: string | null;
   stato: CreditoStato;
   nota: string | null;
+  /** One-time redemption code to hand to the credit's owner (null pre-migration). */
+  codice: string | null;
 }
 
 export interface CourseOption {
@@ -330,6 +332,50 @@ function OriginDest({ credito, t }: { credito: CreditoView; t: TDict }) {
   );
 }
 
+/** The one-time redemption code for an active credit — copied to the owner, who
+ *  enters it as the Shopify discount code; the sync then auto-closes the credit. */
+function CodeRow({ codice, t }: { codice: string; t: TDict }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(codice);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — the code is on screen to copy by hand */
+    }
+  };
+  return (
+    <div
+      style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12.5 }}
+    >
+      <span className="text-4" style={{ fontSize: 11 }}>
+        {t.codeLabel}
+      </span>
+      <code
+        className="mono"
+        style={{
+          fontWeight: 700,
+          letterSpacing: ".08em",
+          background: "var(--surface-2)",
+          border: "1px solid var(--border-2)",
+          borderRadius: 6,
+          padding: "2px 8px",
+        }}
+      >
+        {codice}
+      </code>
+      <button className="btn btn-sm" onClick={copy}>
+        <Icon name={copied ? "check" : "copy"} size={12} />
+        {copied ? t.codeCopied : t.codeCopy}
+      </button>
+      <span className="text-4" style={{ fontSize: 11 }}>
+        {t.codeHint}
+      </span>
+    </div>
+  );
+}
+
 function OpenCard({
   credito,
   t,
@@ -392,6 +438,8 @@ function OpenCard({
       </CardHead>
 
       <OriginDest credito={credito} t={t} />
+
+      {credito.codice && <CodeRow codice={credito.codice} t={t} />}
 
       {picking && (
         <div

@@ -1433,11 +1433,12 @@ export const en: Dictionary = {
       "Feature available after the database migration (credits table not created yet).",
     empty: "No credits. All reconciled. 🎉",
     // Sections by state
-    openTitle: "Open credits",
-    openSubtitle: "To link to a new enrollment (or to refund / void).",
-    appliedTitle: "Applied credits",
+    openTitle: "Active credits",
+    openSubtitle:
+      "To close: copy the unique code and send it to the person; when they use it as a Shopify discount the credit moves itself to “Used”. (Or link by hand / refund / void.)",
+    appliedTitle: "Used credits",
     appliedSubtitle:
-      "Linked to a destination enrollment. Revenue is recognised when that course is delivered.",
+      "Code redeemed (or linked by hand) to a destination enrollment. Revenue is recognised when that course is delivered.",
     closedTitle: "Closed credits",
     closedSubtitle: "Refunded or voided — out of the ledger.",
     // Card labels
@@ -1447,6 +1448,11 @@ export const en: Dictionary = {
     destination: "Destination course",
     noDestination: "No destination",
     amount: "Amount",
+    // Unique one-time discount code to copy to the person
+    codeLabel: "Discount code",
+    codeCopy: "Copy",
+    codeCopied: "Copied ✓",
+    codeHint: "unique, one-time",
     // States
     states: {
       aperto: "Open",

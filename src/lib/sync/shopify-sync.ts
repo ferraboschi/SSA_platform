@@ -18,7 +18,7 @@ import {
   type AdminProduct,
 } from "@/lib/integrations/shopify/admin-client";
 import { syncEducatorActivation } from "@/lib/educators/sync-active";
-import { generateTransferCredits } from "@/lib/crediti/generate";
+import { generateTransferCredits, matchTransferCreditsByCode } from "@/lib/crediti/generate";
 import { logReconciliation } from "@/lib/anomalie/reconcile";
 import { MONTH_TO_NUM, MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
 
@@ -560,6 +560,10 @@ export async function runShopifySync(opts?: {
   // EVERY pull path (cron route + top-bar refresh) so the credit ledger stays
   // current. Idempotent + self-guarding: it never throws and no-ops pre-migration.
   await generateTransferCredits().catch(() => {});
+
+  // Then auto-close any credit whose one-time redemption code was used as the
+  // Shopify discount on a new purchase (→ moved to "Utilizzati"). Self-guarding.
+  await matchTransferCreditsByCode().catch(() => {});
 
   // Reconciliation counts summary (counts only, no PII). Fully self-guarding:
   // logReconciliation swallows its own errors, and the extra .catch keeps even
