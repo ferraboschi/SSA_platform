@@ -343,17 +343,23 @@ export async function loadSharedCourse(
     const tplData = (tpl?.data ?? {}) as {
       questions?: unknown[];
       miniTests?: { day: number; questions?: unknown[] }[];
+      feedback?: { questions?: unknown[] };
     };
     const base = appConfig.baseUrl.replace(/\/$/, "");
     const exp = Math.floor(Date.now() / 1000) + EXAM_LINK_TTL_HOURS.exam * 3600;
     const link = (testKey: ExamTestKey) =>
       `${base}/esame/${signExamToken({ c: String(corso.id), t: testKey, m: "exam", e: exp })}`;
+    // Order mirrors the run order the educator expects: day mini-tests, then the
+    // feedback, then the official final exam.
     const tests: SharedExamTest[] = [];
     for (const mt of (tplData.miniTests ?? []).slice().sort((a, b) => a.day - b.day)) {
       if ((mt.questions?.length ?? 0) > 0) {
         const key = `day${mt.day}` as const;
         tests.push({ key, label: `Test giorno ${mt.day}`, isFinal: false, url: link(key) });
       }
+    }
+    if ((tplData.feedback?.questions?.length ?? 0) > 0) {
+      tests.push({ key: "feedback", label: "Feedback", isFinal: false, url: link("feedback") });
     }
     if ((tplData.questions?.length ?? 0) > 0) {
       tests.push({ key: "final", label: "Esame finale", isFinal: true, url: link("final") });
