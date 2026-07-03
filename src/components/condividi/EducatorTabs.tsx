@@ -21,6 +21,7 @@ import {
   setAttendeeEmailAction,
   setAttendeePhoneAction,
   sendAttendeeConfirmLinkAction,
+  sendConfirmLinksToAllAction,
   type AttendanceMap,
   type AttendanceSubject,
 } from "@/lib/share-links/attendance-actions";
@@ -372,6 +373,33 @@ function EmailTab({
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
 }) {
+  const [allBusy, setAllBusy] = useState(false);
+  const [allNote, setAllNote] = useState<string | null>(null);
+  const pendingCount = students.filter((s) => !s.emailConfirmed).length;
+
+  const sendAll = async () => {
+    if (allBusy) return;
+    setAllBusy(true);
+    setAllNote(null);
+    const res = await sendConfirmLinksToAllAction(token).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof sendConfirmLinksToAllAction>>,
+    );
+    setAllBusy(false);
+    if (!res.ok) {
+      setAllNote(res.error || "Invio non riuscito.");
+      return;
+    }
+    if (!res.live) {
+      setAllNote(
+        `Modalità test: nessuna email inviata (${res.total ?? 0} persone). Usa "Invia conferma" sui singoli per copiare i link.`,
+      );
+    } else {
+      setAllNote(
+        `Inviate ${res.sent ?? 0}/${res.total ?? 0}${res.noEmail ? ` · ${res.noEmail} senza email (usa il link singolo)` : ""}.`,
+      );
+    }
+  };
+
   return (
     <div>
       <p style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", margin: "0 0 12px", lineHeight: 1.5 }}>
@@ -379,6 +407,18 @@ function EmailTab({
         riceverà i test e l&apos;esame. Correggi qui email o telefono sbagliati e invia il link di
         conferma. 🟢 = confermata · 🟡 = in attesa.
       </p>
+      <button
+        type="button"
+        className="edu-btn primary"
+        onClick={sendAll}
+        disabled={allBusy}
+        style={{ width: "100%", marginBottom: 8 }}
+      >
+        {allBusy ? "Invio…" : `Invia conferma a tutti${pendingCount ? ` (${pendingCount} in attesa)` : ""}`}
+      </button>
+      {allNote && (
+        <p style={{ fontSize: 12, color: "var(--text-3, #6b7280)", margin: "0 0 10px" }}>{allNote}</p>
+      )}
       <div className="edu-list">
         {students.map((s) => (
           <AttendeeCard

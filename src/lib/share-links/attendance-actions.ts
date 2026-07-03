@@ -418,6 +418,83 @@ export async function setAttendeeEmailAction(
 }
 
 /**
+ * PUBLIC (share token): ONE button — send the confirmation magic-link to EVERY
+ * attendee (enrolled corsisti + companions that have an email). Go-live gated
+ * like the single send: in test mode nothing is emailed (the educator uses the
+ * per-person copy links instead). Skips nothing silently: returns counts.
+ */
+export async function sendConfirmLinksToAllAction(
+  token: string,
+): Promise<{ ok: boolean; live?: boolean; total?: number; sent?: number; noEmail?: number; error?: string }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) {
+    return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  }
+
+  const svc = getSupabaseServiceClient();
+  let total = 0;
+  let sent = 0;
+  let noEmail = 0;
+  let live = false;
+
+  // Enrolled corsisti — subject ref = the ENROLLMENT id (where the snapshot lives).
+  const { data: iscr } = await svc
+    .from(ISCR_TABLE)
+    .select("id")
+    .eq("corso_id", corsoId);
+  for (const r of (iscr ?? []) as { id: number }[]) {
+    total++;
+    const subject = await loadConfirmSubject(String(corsoId), "corsista", String(r.id));
+    if (!subject) continue;
+    if (!subject.email) {
+      noEmail++;
+      continue;
+    }
+    const res = await deliverConfirmLink({
+      courseId: String(corsoId),
+      kind: "corsista",
+      subjectId: String(r.id),
+      toEmail: subject.email,
+      name: subject.fullName,
+      courseName: subject.courseName,
+    });
+    live = res.live;
+    if (res.sentTo) sent++;
+  }
+
+  // Companions — only those that already have an email (the others get the
+  // per-person copy link at the appello).
+  const { data: parts, error: pErr } = await svc
+    .from(PART_TABLE)
+    .select("id, email")
+    .eq("corso_id", corsoId);
+  if (!pErr) {
+    for (const p of (parts ?? []) as { id: number; email?: string | null }[]) {
+      total++;
+      if (!(p.email ?? "").trim()) {
+        noEmail++;
+        continue;
+      }
+      const subject = await loadConfirmSubject(String(corsoId), "partecipante", String(p.id));
+      if (!subject) continue;
+      const res = await deliverConfirmLink({
+        courseId: String(corsoId),
+        kind: "partecipante",
+        subjectId: String(p.id),
+        toEmail: subject.email,
+        name: subject.fullName,
+        courseName: subject.courseName,
+      });
+      live = res.live;
+      if (res.sentTo) sent++;
+    }
+  }
+
+  return { ok: true, live, total, sent, noEmail };
+}
+
+/**
  * PUBLIC (share token): the educator corrects an attendee's PHONE. For a
  * corsista it updates corsisti.phone (the global identity — so the correction
  * propagates everywhere the number appears); for a companion, its own row.
