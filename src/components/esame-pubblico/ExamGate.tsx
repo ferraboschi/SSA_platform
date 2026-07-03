@@ -69,11 +69,11 @@ function DirectExam(props: ExamGateProps) {
   // change or at most every 10s. Fire-and-forget, never blocks the student.
   const reportRef = useRef<{ idx: number; at: number }>({ idx: -1, at: 0 });
   const report = useCallback(
-    (idx: number, elapsed: number) => {
+    (idx: number, elapsed: number, answers?: Record<string, string[] | string>) => {
       const now = Date.now();
       if (idx === reportRef.current.idx && now - reportRef.current.at < 10_000) return;
       reportRef.current = { idx, at: now };
-      void reportExamProgressAction(props.token, { currentIdx: idx, total, elapsed }).catch(() => {});
+      void reportExamProgressAction(props.token, { currentIdx: idx, total, elapsed, answers }).catch(() => {});
     },
     [props.token, total],
   );
@@ -91,7 +91,7 @@ function DirectExam(props: ExamGateProps) {
     if (stored) setResume(stored);
     setReady(true);
     // First heartbeat: the educator sees "in corso" as soon as the test opens.
-    report(stored?.currentIdx ?? 0, stored?.elapsed ?? 0);
+    report(stored?.currentIdx ?? 0, stored?.elapsed ?? 0, stored?.answers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeKey]);
 
@@ -102,7 +102,7 @@ function DirectExam(props: ExamGateProps) {
       } catch {
         /* private mode — progress just won't survive a refresh */
       }
-      report(s.currentIdx, s.elapsed);
+      report(s.currentIdx, s.elapsed, s.answers);
     },
     [storeKey, report],
   );

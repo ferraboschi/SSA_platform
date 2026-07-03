@@ -19,6 +19,9 @@ export interface ProgressInput {
   currentIdx: number;
   total: number;
   elapsed: number;
+  /** Current answers snapshot — graded on READ for the live corrette/sbagliate
+   *  counts in the educator's expanded row. */
+  answers?: Record<string, string[] | string>;
 }
 
 export async function reportExamProgressAction(
@@ -39,6 +42,16 @@ export async function reportExamProgressAction(
   const currentIdx = Math.max(0, Math.trunc(Number(input.currentIdx) || 0));
   const total = Math.max(0, Math.trunc(Number(input.total) || 0));
   const elapsed = Math.max(0, Math.trunc(Number(input.elapsed) || 0));
+  // Answers snapshot, size-bounded (an exam is ~100 short answers — 32KB is
+  // generous; anything bigger is dropped, the counts just lag a tick).
+  let answers: Record<string, string[] | string> | null = null;
+  try {
+    if (input.answers && JSON.stringify(input.answers).length <= 32_000) {
+      answers = input.answers;
+    }
+  } catch {
+    answers = null;
+  }
 
   const svc = getSupabaseServiceClient();
   const subjCol = corsistaId != null ? "corsista_id" : "partecipante_id";
@@ -47,20 +60,44 @@ export async function reportExamProgressAction(
   // Manual upsert (the unique indexes are PARTIAL, which PostgREST's
   // on_conflict can't target): update-first, insert when no row yet. A rare
   // concurrent double-insert bounces off the unique index and is ignored.
-  const { data: upd, error: updErr } = await svc
-    .from("exam_progress")
-    .update({ current_idx: currentIdx, total, elapsed_seconds: elapsed, updated_at: new Date().toISOString() })
-    .eq("corso_id", corsoId)
-    .eq("test_key", t)
-    .eq(subjCol, subjId)
-    .is("submitted_at", null)
-    .select("id");
+  // The answers column is newer than the table — retry without it (graceful).
+  const patch: Record<string, unknown> = {
+    current_idx: currentIdx,
+    total,
+    elapsed_seconds: elapsed,
+    updated_at: new Date().toISOString(),
+  };
+  if (answers) patch.answers = answers;
+  const doUpdate = (p: Record<string, unknown>) =>
+    svc
+      .from("exam_progress")
+      .update(p)
+      .eq("corso_id", corsoId)
+      .eq("test_key", t)
+      .eq(subjCol, subjId)
+      .is("submitted_at", null)
+      .select("id");
+  let { data: upd, error: updErr } = await doUpdate(patch);
+  if (updErr && answers && /answers|column/i.test(updErr.message)) {
+    delete patch.answers;
+    ({ data: upd, error: updErr } = await doUpdate(patch));
+  }
   if (updErr) return { ok: true }; // table missing pre-migration → silent no-op
   if ((upd ?? []).length === 0) {
-    await svc
-      .from("exam_progress")
-      .insert({ corso_id: corsoId, test_key: t, [subjCol]: subjId, current_idx: currentIdx, total, elapsed_seconds: elapsed })
-      .select("id");
+    const row: Record<string, unknown> = {
+      corso_id: corsoId,
+      test_key: t,
+      [subjCol]: subjId,
+      current_idx: currentIdx,
+      total,
+      elapsed_seconds: elapsed,
+    };
+    if (answers) row.answers = answers;
+    let ins = await svc.from("exam_progress").insert(row).select("id");
+    if (ins.error && answers && /answers|column/i.test(ins.error.message)) {
+      delete row.answers;
+      ins = await svc.from("exam_progress").insert(row).select("id");
+    }
   }
   return { ok: true };
 }

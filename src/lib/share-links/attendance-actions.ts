@@ -417,14 +417,36 @@ export async function setAttendeeEmailAction(
   return { ok: true };
 }
 
+/** Subjects (corsista_id / partecipante_id) with ANY presence row for a course.
+ *  "Non devo verificare la mail di chi non è presente." */
+async function presentSubjects(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  corsoId: number,
+): Promise<{ corsisti: Set<number>; partecipanti: Set<number> }> {
+  const corsisti = new Set<number>();
+  const partecipanti = new Set<number>();
+  const { data, error } = await svc
+    .from(TABLE)
+    .select("corsista_id, partecipante_id, present")
+    .eq("corso_id", corsoId)
+    .eq("present", true);
+  if (!error) {
+    for (const r of (data ?? []) as { corsista_id: number | null; partecipante_id: number | null }[]) {
+      if (r.corsista_id != null) corsisti.add(r.corsista_id);
+      if (r.partecipante_id != null) partecipanti.add(r.partecipante_id);
+    }
+  }
+  return { corsisti, partecipanti };
+}
+
 /**
- * PUBLIC (share token): ONE button — send the confirmation magic-link to EVERY
- * attendee (enrolled corsisti + companions that have an email). Sends are LIVE
+ * PUBLIC (share token): ONE button — send the confirmation magic-link to every
+ * PRESENT attendee (per the appello) that has an email. Sends are LIVE
  * (delivery is the verification step). Skips nothing silently: returns counts.
  */
 export async function sendConfirmLinksToAllAction(
   token: string,
-): Promise<{ ok: boolean; total?: number; sent?: number; noEmail?: number; error?: string }> {
+): Promise<{ ok: boolean; total?: number; sent?: number; noEmail?: number; notPresent?: number; error?: string }> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
   if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) {
@@ -432,17 +454,24 @@ export async function sendConfirmLinksToAllAction(
   }
 
   const svc = getSupabaseServiceClient();
+  const present = await presentSubjects(svc, corsoId);
   let total = 0;
   let sent = 0;
   let noEmail = 0;
+  let notPresent = 0;
 
-  // Enrolled corsisti — subject ref = the ENROLLMENT id (where the snapshot lives).
+  // Enrolled corsisti — subject ref = the ENROLLMENT id (where the snapshot lives),
+  // presence keyed by corsista_id.
   const { data: iscr } = await svc
     .from(ISCR_TABLE)
-    .select("id")
+    .select("id, corsista_id")
     .eq("corso_id", corsoId);
-  for (const r of (iscr ?? []) as { id: number }[]) {
+  for (const r of (iscr ?? []) as { id: number; corsista_id: number }[]) {
     total++;
+    if (!present.corsisti.has(r.corsista_id)) {
+      notPresent++;
+      continue;
+    }
     const subject = await loadConfirmSubject(String(corsoId), "corsista", String(r.id));
     if (!subject) continue;
     if (!subject.email) {
@@ -463,8 +492,7 @@ export async function sendConfirmLinksToAllAction(
     }
   }
 
-  // Companions — only those that already have an email (the others get the
-  // per-person copy link at the appello).
+  // Companions — same presence rule, keyed by their own id.
   const { data: parts, error: pErr } = await svc
     .from(PART_TABLE)
     .select("id, email")
@@ -472,6 +500,10 @@ export async function sendConfirmLinksToAllAction(
   if (!pErr) {
     for (const p of (parts ?? []) as { id: number; email?: string | null }[]) {
       total++;
+      if (!present.partecipanti.has(p.id)) {
+        notPresent++;
+        continue;
+      }
       if (!(p.email ?? "").trim()) {
         noEmail++;
         continue;
@@ -493,7 +525,92 @@ export async function sendConfirmLinksToAllAction(
     }
   }
 
-  return { ok: true, total, sent, noEmail };
+  return { ok: true, total, sent, noEmail, notPresent };
+}
+
+export interface VerificationState {
+  email: string;
+  phone: string;
+  confirmed: boolean;
+  sent: boolean;
+}
+
+/**
+ * PUBLIC (share token): live verification states keyed by subject
+ * (`c<corsistaId>` / `p<partecipanteId>`). Polled by the Appello tab so the
+ * educator SEES the green flip the moment a student completes the confirmation
+ * — the closing of the circle. Two-tier selects (graceful pre-migration).
+ */
+export async function getVerificationStatesAction(
+  token: string,
+): Promise<{ ok: boolean; states?: Record<string, VerificationState>; error?: string }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("read", token, RATE_LIMIT_READ)) return { ok: true, states: undefined };
+
+  const svc = getSupabaseServiceClient();
+  const states: Record<string, VerificationState> = {};
+
+  type IscrRow = {
+    corsista_id: number;
+    enrolled_email: string | null;
+    email_confirmed_at: string | null;
+    confirm_sent_at?: string | null;
+    corsista: { phone: string | null } | null;
+  };
+  let iscrRows: IscrRow[] | null = null;
+  const rich = await svc
+    .from(ISCR_TABLE)
+    .select("corsista_id, enrolled_email, email_confirmed_at, confirm_sent_at, corsista:corsisti(phone)")
+    .eq("corso_id", corsoId);
+  iscrRows = rich.data as unknown as IscrRow[] | null;
+  if (rich.error) {
+    const base = await svc
+      .from(ISCR_TABLE)
+      .select("corsista_id, enrolled_email, email_confirmed_at, corsista:corsisti(phone)")
+      .eq("corso_id", corsoId);
+    iscrRows = base.data as unknown as IscrRow[] | null;
+    if (base.error) return { ok: true, states: {} };
+  }
+  for (const r of iscrRows ?? []) {
+    states[`c${r.corsista_id}`] = {
+      email: (r.enrolled_email ?? "").trim(),
+      phone: (r.corsista?.phone ?? "").trim(),
+      confirmed: Boolean(r.email_confirmed_at),
+      sent: Boolean(r.confirm_sent_at),
+    };
+  }
+
+  type PartRow = {
+    id: number;
+    email?: string | null;
+    phone: string | null;
+    email_confirmed_at?: string | null;
+    confirm_sent_at?: string | null;
+  };
+  let partRows: PartRow[] | null = null;
+  const richP = await svc
+    .from(PART_TABLE)
+    .select("id, email, phone, email_confirmed_at, confirm_sent_at")
+    .eq("corso_id", corsoId);
+  partRows = richP.data as PartRow[] | null;
+  if (richP.error) {
+    const baseP = await svc
+      .from(PART_TABLE)
+      .select("id, phone")
+      .eq("corso_id", corsoId);
+    partRows = baseP.data as PartRow[] | null;
+  }
+  for (const r of partRows ?? []) {
+    states[`p${r.id}`] = {
+      email: (r.email ?? "").trim(),
+      phone: (r.phone ?? "").trim(),
+      confirmed: Boolean(r.email_confirmed_at),
+      sent: Boolean(r.confirm_sent_at),
+    };
+  }
+
+  return { ok: true, states };
 }
 
 /**

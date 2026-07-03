@@ -463,7 +463,8 @@ function StudentSendRow({
               </span>
             )}
           </span>
-          <ProgressBar p={progress} />
+          {/* The bar appears ONLY once the student has started the test. */}
+          {progress ? <ProgressBar p={progress} /> : <span style={{ flex: "1 1 60px" }} />}
           <span
             style={{
               fontSize: 10.5,
@@ -496,12 +497,19 @@ function StudentSendRow({
             color: "var(--text-2, #374151)",
           }}
         >
-          <span>✉️ {person.email || "nessuna email"}</span>
           {progress ? (
             <>
               <span>
                 Avanzamento: <strong>{progress.pct}%</strong> · domanda {progress.question} di {progress.total}
               </span>
+              {progress.correct != null && (
+                <span>
+                  Risposte: <strong style={{ color: "var(--green-600, #059669)" }}>{progress.correct} corrette</strong>
+                  {" · "}
+                  <strong style={{ color: "var(--red-600, #dc2626)" }}>{progress.wrong} sbagliate</strong>
+                  {" "}(correzione automatica in tempo reale)
+                </span>
+              )}
               <span>Inizio: {timeIt(progress.startedAt)}</span>
               <span>
                 {progress.submittedAt
@@ -514,6 +522,11 @@ function StudentSendRow({
             </>
           ) : (
             <span>Non ha ancora aperto il test.</span>
+          )}
+          {!person.emailConfirmed && (
+            <span style={{ color: "var(--amber-500, #d97706)" }}>
+              ⚠︎ Dati non ancora confermati dallo studente — completa la verifica nell&apos;Appello.
+            </span>
           )}
         </div>
       )}

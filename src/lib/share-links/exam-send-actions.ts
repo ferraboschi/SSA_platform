@@ -13,6 +13,8 @@ import { verifyShareToken } from "./token";
 import { deliverExamInvite } from "@/lib/exam-links/invite-email";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
+import { loadPublicExam, type PublicRunnerQuestion } from "@/lib/exam-links/load";
+import { gradeAnswers } from "@/lib/exam-links/grading";
 import type { ExamTestKey } from "@/lib/exam-links/token";
 
 const limiter = createFixedWindowLimiter(60_000);
@@ -285,6 +287,10 @@ export interface SubjectProgress {
   startedAt: string;
   updatedAt: string;
   submittedAt: string | null;
+  /** Live auto-grading of the answers so far (objective questions only);
+   *  null when the answers snapshot isn't available. */
+  correct: number | null;
+  wrong: number | null;
 }
 
 /**
@@ -303,15 +309,7 @@ export async function getExamProgressAction(
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
 
   const svc = getSupabaseServiceClient();
-  const { data, error } = await svc
-    .from("exam_progress")
-    .select("corsista_id, partecipante_id, current_idx, total, started_at, updated_at, submitted_at")
-    .eq("corso_id", corsoId)
-    .eq("test_key", t);
-  if (error) return { ok: true, progress: {} }; // pre-migration → no bars
-
-  const progress: Record<string, SubjectProgress> = {};
-  for (const r of (data ?? []) as {
+  type ProgRow = {
     corsista_id: number | null;
     partecipante_id: number | null;
     current_idx: number;
@@ -319,11 +317,51 @@ export async function getExamProgressAction(
     started_at: string;
     updated_at: string;
     submitted_at: string | null;
-  }[]) {
+    answers?: Record<string, string[] | string> | null;
+  };
+  // Two-tier select: WITH the answers snapshot (round-3 column), else without.
+  let rows: ProgRow[] | null = null;
+  const rich = await svc
+    .from("exam_progress")
+    .select("corsista_id, partecipante_id, current_idx, total, started_at, updated_at, submitted_at, answers")
+    .eq("corso_id", corsoId)
+    .eq("test_key", t);
+  rows = rich.data as ProgRow[] | null;
+  if (rich.error) {
+    const base = await svc
+      .from("exam_progress")
+      .select("corsista_id, partecipante_id, current_idx, total, started_at, updated_at, submitted_at")
+      .eq("corso_id", corsoId)
+      .eq("test_key", t);
+    rows = base.data as ProgRow[] | null;
+    if (base.error) return { ok: true, progress: {} }; // pre-migration → no bars
+  }
+
+  // Live auto-grading on READ: one template load per call (answers included),
+  // then the pure gradeAnswers per student. Objective questions only — the
+  // same corrector the Esiti tab uses.
+  const anyAnswers = (rows ?? []).some((r) => r.answers && Object.keys(r.answers).length > 0);
+  let questions: PublicRunnerQuestion[] = [];
+  if (anyAnswers) {
+    const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
+    const family = (corso?.type as string) === "shochu" ? "shochu" : "nihonshu";
+    const exam = await loadPublicExam(String(corsoId), family, t as ExamTestKey, true).catch(() => null);
+    questions = exam?.questions ?? [];
+  }
+
+  const progress: Record<string, SubjectProgress> = {};
+  for (const r of rows ?? []) {
     const key = r.corsista_id != null ? `c${r.corsista_id}` : r.partecipante_id != null ? `p${r.partecipante_id}` : null;
     if (!key) continue;
     const total = Math.max(1, r.total);
     const pct = r.submitted_at ? 100 : Math.min(99, Math.round((r.current_idx / total) * 100));
+    let correct: number | null = null;
+    let wrong: number | null = null;
+    if (r.answers && questions.length > 0) {
+      const { detail } = gradeAnswers(questions, r.answers);
+      correct = detail.filter((a) => a.ok === true).length;
+      wrong = detail.filter((a) => a.ok === false).length;
+    }
     progress[key] = {
       pct,
       question: Math.min(total, r.current_idx + 1),
@@ -331,6 +369,8 @@ export async function getExamProgressAction(
       startedAt: r.started_at,
       updatedAt: r.updated_at,
       submittedAt: r.submitted_at,
+      correct,
+      wrong,
     };
   }
   return { ok: true, progress };
