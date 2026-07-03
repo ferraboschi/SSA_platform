@@ -49,6 +49,7 @@ const RATE_LIMIT_READ = 30; // getAttendanceAction — hydrate on mount / refres
 const RATE_LIMIT_WRITE = 120; // setAttendanceAction — one per checkbox toggle
 const RATE_LIMIT_ADD = 10; // addPartecipanteFromLinkAction — creating a companion
 const RATE_LIMIT_EMAIL = 40; // set/send attendee confirmation email (course-start)
+const RATE_LIMIT_NAME = 40; // setPartecipanteNameAction — correcting a companion's name
 
 // Isolated fixed-window limiter, keyed by `${bucket}:${token}`.
 const limiter = createFixedWindowLimiter(RATE_WINDOW_MS);
@@ -80,6 +81,63 @@ async function courseDayCount(corsoId: number): Promise<number> {
   return type === "certificato" ? 3 : type === "shochu" ? 2 : 1;
 }
 
+/** Postgres unique-violation code (concurrent-insert race, see writePresence). */
+const PG_UNIQUE_VIOLATION = "23505";
+
+/**
+ * Write one presence row WITHOUT relying on ON CONFLICT. A companion's
+ * uniqueness is a PARTIAL index (`corsi_presenze_partecipante_uidx`, WHERE
+ * partecipante_id IS NOT NULL — 20260701190000_corsi_partecipanti.sql):
+ * Postgres can only use a partial index as an ON CONFLICT arbiter when the
+ * statement's own WHERE clause matches the predicate, and PostgREST's
+ * `on_conflict=col,col,col` column-list form never adds one — so
+ * `.upsert(row, {onConflict: "corso_id,partecipante_id,day_no"})` fails
+ * outright for EVERY companion with "no unique or exclusion constraint
+ * matching the ON CONFLICT specification" (the corsista branch happens to
+ * work because ITS uniqueness is a plain, non-partial table constraint).
+ * Select-then-write sidesteps the whole problem and works identically for
+ * both subject kinds. A concurrent duplicate insert for the exact same
+ * subject+day (two requests racing the same read-write window) is caught by
+ * its unique-violation code and converged to an update.
+ */
+async function writePresence(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  row: {
+    corso_id: number;
+    corsista_id: number | null;
+    partecipante_id: number | null;
+    day_no: number;
+    present: boolean;
+    updated_at: string;
+  },
+): Promise<{ error: { message: string; code?: string } | null }> {
+  const col = row.corsista_id != null ? "corsista_id" : "partecipante_id";
+  const val = (row.corsista_id ?? row.partecipante_id) as number;
+  const find = () => svc.from(TABLE).select("id").eq("corso_id", row.corso_id).eq(col, val).eq("day_no", row.day_no).maybeSingle();
+
+  const { data: existing, error: findErr } = await find();
+  if (findErr) return { error: findErr };
+  if (existing) {
+    const { error } = await svc
+      .from(TABLE)
+      .update({ present: row.present, updated_at: row.updated_at })
+      .eq("id", existing.id);
+    return { error };
+  }
+  const { error } = await svc.from(TABLE).insert(row);
+  if (error && (error as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+    const { data: race } = await find();
+    if (race) {
+      const { error: updErr } = await svc
+        .from(TABLE)
+        .update({ present: row.present, updated_at: row.updated_at })
+        .eq("id", race.id);
+      return { error: updErr };
+    }
+  }
+  return { error };
+}
+
 /** Unified presence subject: a corsista (`c<id>`) or a companion (`p<id>`). */
 export type AttendanceSubject = { kind: "corsista" | "partecipante"; id: number };
 
@@ -91,6 +149,7 @@ export interface SharedCompanion {
   id: number;
   full_name: string;
   phone: string;
+  email: string;
 }
 
 function subjectKey(kind: "corsista" | "partecipante", id: number): string {
@@ -224,12 +283,12 @@ export async function setAttendanceAction(
     kind === "corsista"
       ? { corso_id: corsoId, corsista_id: id, partecipante_id: null, day_no: day, present: !!present, updated_at: new Date().toISOString() }
       : { corso_id: corsoId, corsista_id: null, partecipante_id: id, day_no: day, present: !!present, updated_at: new Date().toISOString() };
-  const onConflict = kind === "corsista" ? "corso_id,corsista_id,day_no" : "corso_id,partecipante_id,day_no";
 
-  const { error } = await svc.from(TABLE).upsert(row, { onConflict });
+  const { error } = await writePresence(svc, row);
   if (error) {
     if (isMissingTable(error)) return { ok: false, schema: true, error: "Appello non disponibile (migrazione mancante)." };
-    return { ok: false, error: error.message };
+    console.error("[attendance] setAttendanceAction write failed", error);
+    return { ok: false, error: "Salvataggio non riuscito, riprova." };
   }
 
   // POST-WRITE RE-CHECK (races): two devices unchecking different days — or an
@@ -240,7 +299,7 @@ export async function setAttendanceAction(
   if (!present) {
     const locked = await isSubjectVerificationLocked(svc, corsoId, kind, id);
     if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, dayCount))) {
-      await svc.from(TABLE).upsert({ ...row, present: true, updated_at: new Date().toISOString() }, { onConflict });
+      await writePresence(svc, { ...row, present: true, updated_at: new Date().toISOString() });
       return { ok: false, error: LOCK_ERROR };
     }
   }
@@ -269,6 +328,7 @@ export async function addPartecipanteFromLinkAction(
   iscrizioneId: number,
   fullName: string,
   phone: string,
+  email?: string,
 ): Promise<{ ok: boolean; companion?: SharedCompanion; error?: string; schema?: boolean }> {
   // (1) courseId FROM THE TOKEN only.
   const corsoId = courseIdFromToken(token);
@@ -285,6 +345,15 @@ export async function addPartecipanteFromLinkAction(
   if (name.length > 120) return { ok: false, error: "Nome troppo lungo." };
   const tel = String(phone ?? "").trim();
   if (tel.length > 40) return { ok: false, error: "Telefono troppo lungo." };
+  // Email is OPTIONAL here (the educator may add the person before knowing
+  // it) but must be well-formed if given, so it's ready to send the moment
+  // presence is marked — no detour through "Correggi" for the common case.
+  const rawEmail = String(email ?? "").trim();
+  let cleanEmail: string | null = null;
+  if (rawEmail) {
+    cleanEmail = validEmail(rawEmail);
+    if (!cleanEmail) return { ok: false, error: "Email non valida." };
+  }
 
   const svc = getSupabaseServiceClient();
 
@@ -337,8 +406,8 @@ export async function addPartecipanteFromLinkAction(
 
   const { data: inserted, error: insErr } = await svc
     .from(PART_TABLE)
-    .insert({ corso_id: corsoId, iscrizione_id: iscrId, full_name: name, phone: tel || null })
-    .select("id, full_name, phone")
+    .insert({ corso_id: corsoId, iscrizione_id: iscrId, full_name: name, phone: tel || null, email: cleanEmail })
+    .select("id, full_name, phone, email")
     .maybeSingle();
   if (insErr) {
     if (isMissingTable(insErr)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
@@ -348,8 +417,62 @@ export async function addPartecipanteFromLinkAction(
 
   return {
     ok: true,
-    companion: { id: Number(inserted.id), full_name: inserted.full_name as string, phone: (inserted.phone as string) ?? "" },
+    companion: {
+      id: Number(inserted.id),
+      full_name: inserted.full_name as string,
+      phone: (inserted.phone as string) ?? "",
+      email: (inserted.email as string) ?? "",
+    },
   };
+}
+
+/**
+ * PUBLIC (share token): correct a COMPANION's name. Companions have no
+ * Shopify-sourced identity (unlike a corsista's name) — the educator typed it
+ * once at add time and, until now, had no way to fix a typo or a placeholder.
+ * Free until the companion CONFIRMS their data (final from then on, like every
+ * other field); renaming while a confirm link is out is safe — the link binds
+ * by id/token, not by name, so it never needs a resend.
+ */
+export async function setPartecipanteNameAction(
+  token: string,
+  partecipanteId: number,
+  fullName: string,
+): Promise<{ ok: boolean; error?: string; schema?: boolean }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("name", token, RATE_LIMIT_NAME)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+
+  const id = Number(partecipanteId);
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Partecipante non valido." };
+  const name = String(fullName ?? "").trim();
+  if (!name) return { ok: false, error: "Nome obbligatorio." };
+  if (name.length > 120) return { ok: false, error: "Nome troppo lungo." };
+
+  const svc = getSupabaseServiceClient();
+
+  const { data: row, error: findErr } = await svc
+    .from(PART_TABLE)
+    .select("id, corso_id, email_confirmed_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (findErr) {
+    if (isMissingTable(findErr)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+    return { ok: false, error: findErr.message };
+  }
+  if (!row || Number(row.corso_id) !== corsoId) {
+    return { ok: false, error: "Partecipante non valido per questo corso." };
+  }
+  if ((row as { email_confirmed_at: string | null }).email_confirmed_at) {
+    return { ok: false, error: "Dati già confermati — non sono più modificabili." };
+  }
+
+  const { error } = await svc.from(PART_TABLE).update({ full_name: name }).eq("id", id);
+  if (error) {
+    if (isMissingTable(error)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
 }
 
 // ── Course-start EMAIL SANITIZATION on the share link ───────────────────────

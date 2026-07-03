@@ -27,6 +27,7 @@ import {
   correctAndResendAction,
   getVerificationStatesAction,
   resetAppelloAction,
+  setPartecipanteNameAction,
   type AttendanceMap,
   type AttendanceSubject,
 } from "@/lib/share-links/attendance-actions";
@@ -394,7 +395,7 @@ function AppelloTab({
                         id: companion.id,
                         kind: "partecipante",
                         name: companion.full_name,
-                        email: "",
+                        email: companion.email,
                         emailConfirmed: false,
                         confirmSent: false,
                         confirmSentAt: null,
@@ -513,9 +514,13 @@ function VerifyActions({
   const [editing, setEditing] = useState(false);
   const [draftEmail, setDraftEmail] = useState(s.email);
   const [draftPhone, setDraftPhone] = useState(s.phone);
+  // A companion has NO Shopify-sourced identity (unlike a corsista's name,
+  // which stays read-only here) — name is editable ONLY for kind:"partecipante".
+  const [draftName, setDraftName] = useState(s.name);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const isGuest = s.kind === "partecipante";
 
   if (refId == null) return <span />;
   const ref = { kind: s.kind, id: refId };
@@ -576,14 +581,33 @@ function VerifyActions({
     }
   };
 
+  // Renaming a companion is its own small, non-atomic write — it doesn't
+  // invalidate an outstanding confirm link (bound by id, not by name), so it
+  // never needs to be bundled with the email correct-and-resend. Shared by
+  // both save paths below.
+  const saveNameIfChanged = async (): Promise<string | null> => {
+    if (!isGuest) return null;
+    const nameChanged = draftName.trim() !== (s.name || "").trim();
+    if (!nameChanged) return null;
+    if (!draftName.trim()) return "Il nome è obbligatorio.";
+    const r = await setPartecipanteNameAction(token, refId, draftName.trim()).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string },
+    );
+    if (r.ok) {
+      onUpdated({ name: draftName.trim() });
+      return null;
+    }
+    return r.error || "Salvataggio del nome non riuscito, riprova.";
+  };
+
   const saveFree = async () => {
     if (busy) return;
     setBusy(true);
     setNote(null);
     const emailChanged = draftEmail.trim().toLowerCase() !== (s.email || "").trim().toLowerCase();
     const phoneChanged = draftPhone.trim() !== (s.phone || "").trim();
-    let err: string | null = null;
-    if (emailChanged) {
+    let err: string | null = await saveNameIfChanged();
+    if (!err && emailChanged) {
       const r = await setAttendeeEmailAction(token, ref, draftEmail.trim()).catch(
         () => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string },
       );
@@ -607,6 +631,12 @@ function VerifyActions({
     setBusy(true);
     setNote(null);
     setLink(null);
+    const nameErr = await saveNameIfChanged();
+    if (nameErr) {
+      setBusy(false);
+      setNote(nameErr);
+      return;
+    }
     const res = await correctAndResendAction(token, ref, {
       email: draftEmail.trim(),
       phone: draftPhone.trim(),
@@ -634,6 +664,7 @@ function VerifyActions({
   const openEdit = () => {
     setDraftEmail(s.email);
     setDraftPhone(s.phone);
+    setDraftName(s.name);
     setEditing(true);
     setNote(null);
   };
@@ -651,6 +682,18 @@ function VerifyActions({
 
       {editing ? (
         <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {/* Only a companion's name is ours to fix — a corsista's name comes
+              from Shopify and stays read-only everywhere else in the app. */}
+          {isGuest && (
+            <input
+              type="text"
+              className="edu-input"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              placeholder="Nome e cognome"
+              maxLength={120}
+            />
+          )}
           <input
             type="email"
             inputMode="email"
@@ -670,11 +713,21 @@ function VerifyActions({
           />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {state === "attesa" ? (
-              <button type="button" className="edu-btn primary" onClick={saveAndResend} disabled={busy || !draftEmail.trim()}>
+              <button
+                type="button"
+                className="edu-btn primary"
+                onClick={saveAndResend}
+                disabled={busy || !draftEmail.trim() || (isGuest && !draftName.trim())}
+              >
                 {busy ? "…" : "Salva e rinvia"}
               </button>
             ) : (
-              <button type="button" className="edu-btn primary" onClick={saveFree} disabled={busy || !draftEmail.trim()}>
+              <button
+                type="button"
+                className="edu-btn primary"
+                onClick={saveFree}
+                disabled={busy || !draftEmail.trim() || (isGuest && !draftName.trim())}
+              >
                 {busy ? "…" : "Salva"}
               </button>
             )}
@@ -745,20 +798,29 @@ function AddParticipantForm({
 }: {
   token: string;
   iscrizioneId: number;
-  onAdded: (c: { id: number; full_name: string; phone: string }) => void;
+  onAdded: (c: { id: number; full_name: string; phone: string; email: string }) => void;
   onCancel: () => void;
   onError: (m: string) => void;
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // Optional here: the educator may add the person before knowing their
+  // email. Giving it now means "Invia email" is ready the moment presence
+  // is marked, with no detour through "Correggi".
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     const trimmed = name.trim();
     if (!trimmed || busy) return;
     setBusy(true);
-    const res = await addPartecipanteFromLinkAction(token, iscrizioneId, trimmed, phone.trim()).catch(
-      () => ({ ok: false }) as { ok: boolean; error?: string; companion?: { id: number; full_name: string; phone: string } },
+    const res = await addPartecipanteFromLinkAction(token, iscrizioneId, trimmed, phone.trim(), email.trim()).catch(
+      () =>
+        ({ ok: false }) as {
+          ok: boolean;
+          error?: string;
+          companion?: { id: number; full_name: string; phone: string; email: string };
+        },
     );
     setBusy(false);
     if (res.ok && res.companion) onAdded(res.companion);
@@ -784,6 +846,15 @@ function AddParticipantForm({
         onChange={(e) => setPhone(e.target.value)}
         placeholder="Telefono"
         maxLength={40}
+        disabled={busy}
+      />
+      <input
+        type="email"
+        inputMode="email"
+        className="edu-input"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email (facoltativa ora, obbligatoria per la conferma)"
         disabled={busy}
       />
       <div style={{ display: "flex", gap: 8 }}>
