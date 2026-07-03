@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   signConfirmToken,
   verifyConfirmToken,
+  isConfirmLinkSpent,
   CONFIRM_LINK_TTL_HOURS,
 } from "./confirm-token";
 
@@ -54,5 +55,29 @@ describe("confirm-token", () => {
 
   it("has a positive default TTL", () => {
     expect(CONFIRM_LINK_TTL_HOURS).toBeGreaterThan(0);
+  });
+});
+
+describe("isConfirmLinkSpent (link closes once the confirmation is done)", () => {
+  const confirmedAt = "2026-07-03T10:00:00.000Z";
+  const confirmedEpoch = Math.floor(new Date(confirmedAt).getTime() / 1000);
+
+  it("never confirmed → never spent", () => {
+    expect(isConfirmLinkSpent(null, undefined)).toBe(false);
+    expect(isConfirmLinkSpent(null, confirmedEpoch - 100)).toBe(false);
+  });
+
+  it("confirmed → links issued before (or without ia, legacy) are spent", () => {
+    expect(isConfirmLinkSpent(confirmedAt, confirmedEpoch - 100)).toBe(true);
+    expect(isConfirmLinkSpent(confirmedAt, confirmedEpoch)).toBe(true);
+    expect(isConfirmLinkSpent(confirmedAt, undefined)).toBe(true);
+  });
+
+  it("a deliberate RE-SEND after confirmation re-opens the form", () => {
+    expect(isConfirmLinkSpent(confirmedAt, confirmedEpoch + 60)).toBe(false);
+  });
+
+  it("garbage timestamp fails open", () => {
+    expect(isConfirmLinkSpent("not-a-date", undefined)).toBe(false);
   });
 });

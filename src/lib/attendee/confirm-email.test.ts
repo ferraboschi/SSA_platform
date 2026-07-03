@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   setEmailService,
   type EmailService,
@@ -6,15 +6,15 @@ import {
   type EmailSendResult,
 } from "@/lib/integrations/email";
 import { deliverConfirmLink } from "./confirm-email";
+import { verifyConfirmToken } from "./confirm-token";
 
-// A spy email service that records every send() so we can assert WHO (if anyone)
-// was emailed. The go-live invariant: with EXAM_RESULT_EMAILS_LIVE off, no real
-// attendee may ever be emailed.
+// Spy email service: records every send() so we can assert WHO was emailed and
+// WHAT link they received.
 function installSpy() {
-  const sent: { to: string | string[]; subject: string }[] = [];
+  const sent: { to: string | string[]; subject: string; html: string }[] = [];
   const service: EmailService = {
     async send(msg: EmailMessage): Promise<EmailSendResult> {
-      sent.push({ to: msg.to, subject: msg.subject });
+      sent.push({ to: msg.to, subject: msg.subject, html: msg.html });
       return { status: "sent", provider: "stub", id: "spy" };
     },
   };
@@ -27,53 +27,49 @@ const base = {
   kind: "corsista" as const,
   subjectId: "5",
   toEmail: "student@real.it",
-  name: "Anna",
+  name: "Anna Bianchi",
   courseName: "Certificato",
 };
 
-describe("deliverConfirmLink — go-live email gate", () => {
-  const prev = process.env.EXAM_RESULT_EMAILS_LIVE;
-  afterEach(() => {
-    if (prev === undefined) delete process.env.EXAM_RESULT_EMAILS_LIVE;
-    else process.env.EXAM_RESULT_EMAILS_LIVE = prev;
-  });
-
-  it("test mode + no fallback (educator share path): emails NOBODY, returns the link", async () => {
-    delete process.env.EXAM_RESULT_EMAILS_LIVE; // go-live OFF
-    const sent = installSpy();
-    const res = await deliverConfirmLink({ ...base }); // no fallbackTo
-    expect(sent).toHaveLength(0); // the student is NEVER emailed
-    expect(res.live).toBe(false);
-    expect(res.sentTo).toBeUndefined();
-    expect(res.url).toContain("/conferma/");
-  });
-
-  it("test mode + staff fallback (internal path): routes to staff, never the student", async () => {
-    delete process.env.EXAM_RESULT_EMAILS_LIVE;
-    const sent = installSpy();
-    const res = await deliverConfirmLink({ ...base, fallbackTo: "staff@ssa.it" });
-    expect(sent).toHaveLength(1);
-    expect(sent[0].to).toBe("staff@ssa.it");
-    expect(sent[0].to).not.toBe(base.toEmail);
-    expect(res.sentTo).toBe("staff@ssa.it");
-  });
-
-  it("live mode: emails the student's confirmed address", async () => {
-    process.env.EXAM_RESULT_EMAILS_LIVE = "true";
+describe("deliverConfirmLink — live delivery (the send IS the verification)", () => {
+  it("sends straight to the attendee's email", async () => {
     const sent = installSpy();
     const res = await deliverConfirmLink({ ...base });
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe("student@real.it");
     expect(res.sentTo).toBe("student@real.it");
-    expect(res.live).toBe(true);
   });
 
-  it("live mode + no known email: emails nobody, returns the link for WhatsApp/SMS", async () => {
-    process.env.EXAM_RESULT_EMAILS_LIVE = "true";
+  it("no known email → nothing sent, manual link returned for WhatsApp/SMS", async () => {
     const sent = installSpy();
     const res = await deliverConfirmLink({ ...base, toEmail: "" });
     expect(sent).toHaveLength(0);
     expect(res.url).toContain("/conferma/");
     expect(res.error).toBeTruthy();
+  });
+
+  it("the EMAILED link locks the email field (ch=email); the COPY link stays editable (ch=manual)", async () => {
+    const sent = installSpy();
+    const res = await deliverConfirmLink({ ...base });
+    // Copy link → manual channel.
+    const copyToken = res.url.split("/conferma/")[1];
+    const copyPayload = verifyConfirmToken(copyToken);
+    expect(copyPayload.ok && copyPayload.payload.ch).toBe("manual");
+    // Emailed link → email channel (extract from the html).
+    const m = /\/conferma\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/.exec(sent[0].html);
+    expect(m).toBeTruthy();
+    const mailPayload = verifyConfirmToken(m![1]);
+    expect(mailPayload.ok && mailPayload.payload.ch).toBe("email");
+    // Both carry an issue time (drives the spent-link closure).
+    expect(mailPayload.ok && typeof mailPayload.payload.ia).toBe("number");
+  });
+
+  it("uses the branded invite-style template (brand line + CTA + fallback link)", async () => {
+    const sent = installSpy();
+    await deliverConfirmLink({ ...base });
+    const html = sent[0].html;
+    expect(html).toContain("Sake Sommelier Association");
+    expect(html).toContain("Conferma i miei dati");
+    expect(html).toContain("Oppure copia questo indirizzo nel browser");
   });
 });

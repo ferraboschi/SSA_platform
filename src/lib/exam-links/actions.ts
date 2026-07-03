@@ -157,5 +157,18 @@ export async function submitExam(
     if (/duplicate key|unique|23505/i.test(error.message)) return { ok: true };
     return { ok: false, error: error.message };
   }
+
+  // Close the LIVE PROGRESS row (educator's bar jumps to "Consegnato").
+  // Best-effort: a missing table/row never affects the submission.
+  if (corsoId != null && (corsistaId != null || partecipanteId != null)) {
+    const subjCol = corsistaId != null ? "corsista_id" : "partecipante_id";
+    await svc
+      .from("exam_progress")
+      .update({ submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("corso_id", corsoId)
+      .eq("test_key", t)
+      .eq(subjCol, (corsistaId ?? partecipanteId)!)
+      .then(() => {}, () => {});
+  }
   return { ok: true };
 }

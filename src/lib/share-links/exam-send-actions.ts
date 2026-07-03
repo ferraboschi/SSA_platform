@@ -274,6 +274,68 @@ export async function sendPersonalExamLinksToAllAction(
   return { ok: true, live, total: rows.length + companions, sent, noEmail };
 }
 
+// ── Live progress (educator's per-student bar) ──────────────────────────────
+
+export interface SubjectProgress {
+  /** 0-100 (submitted → 100). */
+  pct: number;
+  /** 1-based current question (display). */
+  question: number;
+  total: number;
+  startedAt: string;
+  updatedAt: string;
+  submittedAt: string | null;
+}
+
+/**
+ * PUBLIC (share token): live progress for every student on one test, keyed by
+ * subject (`c<corsistaId>` / `p<partecipanteId>`). Polled by the Esami tab.
+ * Missing table (pre-migration) → empty map.
+ */
+export async function getExamProgressAction(
+  token: string,
+  testKey: string,
+): Promise<{ ok: boolean; progress?: Record<string, SubjectProgress>; error?: string }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("progress", token, 30)) return { ok: true, progress: undefined };
+  const t = String(testKey);
+  if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
+
+  const svc = getSupabaseServiceClient();
+  const { data, error } = await svc
+    .from("exam_progress")
+    .select("corsista_id, partecipante_id, current_idx, total, started_at, updated_at, submitted_at")
+    .eq("corso_id", corsoId)
+    .eq("test_key", t);
+  if (error) return { ok: true, progress: {} }; // pre-migration → no bars
+
+  const progress: Record<string, SubjectProgress> = {};
+  for (const r of (data ?? []) as {
+    corsista_id: number | null;
+    partecipante_id: number | null;
+    current_idx: number;
+    total: number;
+    started_at: string;
+    updated_at: string;
+    submitted_at: string | null;
+  }[]) {
+    const key = r.corsista_id != null ? `c${r.corsista_id}` : r.partecipante_id != null ? `p${r.partecipante_id}` : null;
+    if (!key) continue;
+    const total = Math.max(1, r.total);
+    const pct = r.submitted_at ? 100 : Math.min(99, Math.round((r.current_idx / total) * 100));
+    progress[key] = {
+      pct,
+      question: Math.min(total, r.current_idx + 1),
+      total: r.total,
+      startedAt: r.started_at,
+      updatedAt: r.updated_at,
+      submittedAt: r.submitted_at,
+    };
+  }
+  return { ok: true, progress };
+}
+
 // ── Lifecycle: close a test for everyone / reopen ───────────────────────────
 // Closure blocks every exam-mode token for (course, test) issued BEFORE the
 // closure; re-sending after it mints fresh tokens (`ia` > closedAt) → re-opens

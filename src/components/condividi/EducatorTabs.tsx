@@ -35,6 +35,8 @@ export interface Student {
   name: string;
   email: string;
   emailConfirmed: boolean;
+  /** A confirmation link was already sent → "mail non ancora confermata". */
+  confirmSent: boolean;
   phone: string;
   iscrizioneId?: number;
   tickets?: number;
@@ -87,6 +89,33 @@ export default function EducatorTabs({
   // Students are shared across tabs (a companion added in Appello shows up in
   // Verifica email too), so the list lives here.
   const [students, setStudents] = useState<Student[]>(initialStudents);
+  // ATTENDANCE lives here too: the Verifica email tab is GATED by presence —
+  // a student becomes verifiable only once marked present at the appello.
+  const [attendance, setAttendance] = useState<AttendanceMap>({});
+  const [attendanceReadOnly, setAttendanceReadOnly] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getAttendanceAction(token)
+      .then((res) => {
+        if (!alive) return;
+        if (res.ok) {
+          setAttendance(res.attendance ?? {});
+          if (res.schema) setAttendanceReadOnly(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
+  // Present on ANY day → verifiable in the email tab.
+  const presentKeys = new Set(
+    Object.entries(attendance)
+      .filter(([, days]) => Object.values(days).some(Boolean))
+      .map(([k]) => k),
+  );
 
   const tabs: { id: TabId; label: string }[] = [
     { id: "appello", label: "Appello" },
@@ -113,9 +142,20 @@ export default function EducatorTabs({
       </div>
 
       {tab === "appello" && (
-        <AppelloTab token={token} students={students} setStudents={setStudents} dayCount={dayCount} />
+        <AppelloTab
+          token={token}
+          students={students}
+          setStudents={setStudents}
+          dayCount={dayCount}
+          attendance={attendance}
+          setAttendance={setAttendance}
+          readOnly={attendanceReadOnly}
+          setReadOnly={setAttendanceReadOnly}
+        />
       )}
-      {tab === "email" && <EmailTab token={token} students={students} setStudents={setStudents} />}
+      {tab === "email" && (
+        <EmailTab token={token} students={students} setStudents={setStudents} presentKeys={presentKeys} />
+      )}
       {tab === "programma" && <ProgrammaTab days={days} />}
       {tab === "esami" && tests && (
         <ExamSendPanel token={token} tests={tests} students={students} />
@@ -133,37 +173,27 @@ function AppelloTab({
   students,
   setStudents,
   dayCount,
+  attendance,
+  setAttendance,
+  readOnly,
+  setReadOnly,
 }: {
   token: string;
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
   dayCount: number;
+  attendance: AttendanceMap;
+  setAttendance: React.Dispatch<React.SetStateAction<AttendanceMap>>;
+  readOnly: boolean;
+  setReadOnly: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
   const [day, setDay] = useState(1);
-  const [attendance, setAttendance] = useState<AttendanceMap>({});
-  const [readOnly, setReadOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState<string | null>(null);
   const chains = useRef<Map<string, Promise<void>>>(new Map());
 
   const dayList = useMemo(() => Array.from({ length: Math.max(1, dayCount) }, (_, i) => i + 1), [dayCount]);
-
-  useEffect(() => {
-    let alive = true;
-    getAttendanceAction(token)
-      .then((res) => {
-        if (!alive) return;
-        if (res.ok) {
-          setAttendance(res.attendance ?? {});
-          if (res.schema) setReadOnly(true);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [token]);
 
   const cellKey = (subj: string, d: number) => `${subj}:${d}`;
 
@@ -281,6 +311,7 @@ function AppelloTab({
                         name: companion.full_name,
                         email: "",
                         emailConfirmed: false,
+                        confirmSent: false,
                         phone: companion.phone,
                         guestOf: s.name,
                       });
@@ -368,14 +399,16 @@ function EmailTab({
   token,
   students,
   setStudents,
+  presentKeys,
 }: {
   token: string;
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+  presentKeys: Set<string>;
 }) {
   const [allBusy, setAllBusy] = useState(false);
   const [allNote, setAllNote] = useState<string | null>(null);
-  const pendingCount = students.filter((s) => !s.emailConfirmed).length;
+  const pendingCount = students.filter((s) => presentKeys.has(subjKey(s)) && !s.emailConfirmed).length;
 
   const sendAll = async () => {
     if (allBusy) return;
@@ -389,23 +422,18 @@ function EmailTab({
       setAllNote(res.error || "Invio non riuscito.");
       return;
     }
-    if (!res.live) {
-      setAllNote(
-        `Modalità test: nessuna email inviata (${res.total ?? 0} persone). Usa "Invia conferma" sui singoli per copiare i link.`,
-      );
-    } else {
-      setAllNote(
-        `Inviate ${res.sent ?? 0}/${res.total ?? 0}${res.noEmail ? ` · ${res.noEmail} senza email (usa il link singolo)` : ""}.`,
-      );
-    }
+    setStudents((prev) => prev.map((x) => (x.email ? { ...x, confirmSent: true } : x)));
+    setAllNote(
+      `Inviate ${res.sent ?? 0}/${res.total ?? 0}${res.noEmail ? ` · ${res.noEmail} senza email (usa il link singolo)` : ""}.`,
+    );
   };
 
   return (
     <div>
       <p style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", margin: "0 0 12px", lineHeight: 1.5 }}>
-        Ogni studente deve <strong>confermare la propria email</strong>: è l&apos;indirizzo a cui
-        riceverà i test e l&apos;esame. Correggi qui email o telefono sbagliati e invia il link di
-        conferma. 🟢 = confermata · 🟡 = in attesa.
+        Prima segna le <strong>presenze all&apos;appello</strong>: chi è presente diventa
+        verificabile qui. Correggi email o telefono sbagliati e invia il link di conferma —
+        lo studente riceve l&apos;email, apre il link e conferma i suoi dati.
       </p>
       <button
         type="button"
@@ -414,7 +442,7 @@ function EmailTab({
         disabled={allBusy}
         style={{ width: "100%", marginBottom: 8 }}
       >
-        {allBusy ? "Invio…" : `Invia conferma a tutti${pendingCount ? ` (${pendingCount} in attesa)` : ""}`}
+        {allBusy ? "Invio…" : `Invia conferma a tutti${pendingCount ? ` (${pendingCount} da confermare)` : ""}`}
       </button>
       {allNote && (
         <p role="status" style={{ fontSize: 12, color: "var(--text-3, #6b7280)", margin: "0 0 10px" }}>
@@ -427,6 +455,7 @@ function EmailTab({
             key={subjKey(s)}
             token={token}
             student={s}
+            present={presentKeys.has(subjKey(s))}
             onUpdated={(patch) =>
               setStudents((prev) =>
                 prev.map((x) => (x.kind === s.kind && x.id === s.id ? { ...x, ...patch } : x)),
@@ -439,13 +468,30 @@ function EmailTab({
   );
 }
 
+// The three verification states (after the presence gate):
+//   ⚪ absent            → "Assente — segna la presenza all'appello" (locked)
+//   🟡 present, nothing sent → "Mail non confermata"        [Invia conferma]
+//   🟠 sent, not confirmed   → "Mail non ancora confermata" [Reinvia]
+//   🟢 confirmed             → "Mail confermata"
+function cardState(s: Student, present: boolean) {
+  if (s.emailConfirmed)
+    return { dot: "var(--green-500, #22c55e)", label: "Mail confermata", color: "var(--green-600, #059669)" };
+  if (!present)
+    return { dot: "var(--border-strong, #d1d5db)", label: "Assente", color: "var(--text-4, #9ca3af)" };
+  if (s.confirmSent)
+    return { dot: "var(--amber-400, #f59e0b)", label: "Mail non ancora confermata", color: "var(--amber-500, #d97706)" };
+  return { dot: "var(--amber-400, #f59e0b)", label: "Mail non confermata", color: "var(--amber-500, #d97706)" };
+}
+
 function AttendeeCard({
   token,
   student: s,
+  present,
   onUpdated,
 }: {
   token: string;
   student: Student;
+  present: boolean;
   onUpdated: (patch: Partial<Student>) => void;
 }) {
   const refId = s.kind === "corsista" ? s.iscrizioneId : s.id;
@@ -458,6 +504,7 @@ function AttendeeCard({
 
   if (refId == null) return null;
   const ref = { kind: s.kind, id: refId };
+  const st = cardState(s, present);
 
   const save = async () => {
     if (busy) return;
@@ -503,7 +550,8 @@ function AttendeeCard({
       setNote(res.error || "Invio non riuscito.");
       return;
     }
-    if (res.sentTo) setNote(`Inviata a ${res.sentTo}`);
+    onUpdated({ confirmSent: true });
+    if (res.sentTo) setNote(`Email inviata a ${res.sentTo} ✓ — in attesa di conferma.`);
     else {
       setNote(res.error ?? null);
       if (res.url) setLink(res.url);
@@ -521,12 +569,14 @@ function AttendeeCard({
   };
 
   return (
-    <div className="edu-card">
+    <div className="edu-card" style={present || s.emailConfirmed ? undefined : { opacity: 0.55 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span
           className="edu-dot"
-          style={{ background: s.emailConfirmed ? "var(--green-500, #22c55e)" : "var(--amber-400, #f59e0b)" }}
-          title={s.emailConfirmed ? "Email confermata" : "In attesa di conferma"}
+          role="img"
+          aria-label={st.label}
+          title={st.label}
+          style={{ background: st.dot }}
         />
         <span className="edu-row-name" style={{ flex: 1, minWidth: 0 }}>
           {s.name || "—"}
@@ -534,15 +584,8 @@ function AttendeeCard({
             <span className="edu-guest"> (ospite{s.guestOf ? ` di ${s.guestOf}` : ""})</span>
           )}
         </span>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: s.emailConfirmed ? "var(--green-600, #059669)" : "var(--amber-500, #d97706)",
-            flexShrink: 0,
-          }}
-        >
-          {s.emailConfirmed ? "Confermata" : "Da confermare"}
+        <span style={{ fontSize: 11, fontWeight: 600, color: st.color, flexShrink: 0 }}>
+          {st.label}
         </span>
       </div>
 
@@ -599,14 +642,19 @@ function AttendeeCard({
                 setEditing(true);
                 setNote(null);
               }}
-              disabled={busy}
+              disabled={busy || !present}
             >
               Correggi
             </button>
-            <button type="button" className="edu-btn primary" onClick={send} disabled={busy}>
-              {busy ? "…" : "Invia conferma"}
+            <button type="button" className="edu-btn primary" onClick={send} disabled={busy || !present}>
+              {busy ? "…" : s.confirmSent && !s.emailConfirmed ? "Reinvia" : "Invia conferma"}
             </button>
           </div>
+          {!present && !s.emailConfirmed && (
+            <p style={{ fontSize: 11.5, color: "var(--text-4, #9ca3af)", margin: "8px 0 0" }}>
+              Segna la presenza all&apos;appello per abilitare la verifica.
+            </p>
+          )}
         </>
       )}
 

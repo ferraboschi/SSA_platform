@@ -2,9 +2,9 @@
 
 import { getSession } from "@/lib/auth/session";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { verifyConfirmToken, type ConfirmSubjectKind } from "./confirm-token";
+import { verifyConfirmToken, isConfirmLinkSpent, type ConfirmSubjectKind } from "./confirm-token";
 import { normEmail, isValidEmail, normAddress } from "./confirm-normalize";
-import { loadConfirmSubject } from "./confirm";
+import { loadConfirmSubject, stampConfirmSent } from "./confirm";
 import { deliverConfirmLink } from "./confirm-email";
 
 export interface ConfirmAttendeeInput {
@@ -31,15 +31,22 @@ export async function confirmAttendeeAction(
 ): Promise<{ ok: boolean; error?: string; addressSaved?: boolean }> {
   const res = verifyConfirmToken(token);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
-  const { c, k, i, ch } = res.payload;
+  const { c, k, i, ch, ia } = res.payload;
   const svc = getSupabaseServiceClient();
+
+  const subject = await loadConfirmSubject(c, k, i);
+  if (!subject) return { ok: false, error: "Destinatario non trovato." };
+  // SPENT-LINK rule: after a completed confirmation this link is closed — only
+  // a deliberate re-send (fresh token) re-opens the form. Enforced here too so
+  // a stale page can't POST around the closed screen.
+  if (isConfirmLinkSpent(subject.confirmedAt, ia)) {
+    return { ok: false, error: "Questo link è già stato utilizzato. Chiedi all'educator di reinviartelo." };
+  }
 
   // EMAIL — mandatory. On the "email" channel the client value is IGNORED: the
   // address the link was delivered to is authoritative (server-side lock).
   let clean = normEmail(input.email ?? "");
   if (ch === "email") {
-    const subject = await loadConfirmSubject(c, k, i);
-    if (!subject) return { ok: false, error: "Destinatario non trovato." };
     clean = normEmail(subject.email);
   }
   if (!isValidEmail(clean)) {
@@ -117,18 +124,15 @@ export interface SendConfirmLinkResult {
   ok: boolean;
   /** Always returned so the UI has a Copia-link / WhatsApp fallback. */
   url?: string;
-  /** Who the email actually went to (staff in test mode, student when live). */
+  /** Who the email actually went to. */
   sentTo?: string;
-  /** Whether EXAM_RESULT_EMAILS_LIVE is on (live → real students). */
-  live?: boolean;
   error?: string;
 }
 
 /**
- * Staff/educator action: mint a confirmation magic-link for one attendee and
- * email it. Gated by the same go-live switch as result emails — until
- * EXAM_RESULT_EMAILS_LIVE=true, the email routes to the ACTING STAFF (never a
- * real student). The link is always returned so it can be copied for WhatsApp/SMS.
+ * Staff action: mint a confirmation magic-link for one attendee and email it
+ * (LIVE — delivery is the verification step). The link is always returned so
+ * it can be copied for WhatsApp/SMS.
  */
 export async function sendConfirmLinkAction(
   input: SendConfirmLinkInput,
@@ -142,7 +146,6 @@ export async function sendConfirmLinkAction(
   const subject = await loadConfirmSubject(input.courseId, input.kind, input.subjectId);
   if (!subject) return { ok: false, error: "Destinatario non trovato." };
 
-  // Staff path: in test mode route to the acting staff's own inbox.
   const res = await deliverConfirmLink({
     courseId: input.courseId,
     kind: input.kind,
@@ -151,7 +154,7 @@ export async function sendConfirmLinkAction(
     name: subject.fullName,
     courseName: subject.courseName,
     lang: input.lang,
-    fallbackTo: session?.user?.email ?? "",
   });
+  await stampConfirmSent(input.courseId, input.kind, input.subjectId).catch(() => {});
   return { ok: true, ...res };
 }

@@ -21,8 +21,27 @@ export interface ConfirmSubject {
   email: string;
   /** Whether this attendee already confirmed (email_confirmed_at is set). */
   confirmed: boolean;
+  /** When they confirmed (ISO) — drives the "link closed after confirmation"
+   *  rule (tokens issued before this instant are spent). Null if never. */
+  confirmedAt: string | null;
   /** Delivery address previously saved on /conferma ("" if none / pre-migration). */
   deliveryAddress: string;
+}
+
+/** Stamp confirm_sent_at on the subject row (drives the "mail non ancora
+ *  confermata" state). Graceful pre-migration: a missing column is ignored. */
+export async function stampConfirmSent(
+  courseId: string,
+  kind: ConfirmSubjectKind,
+  subjectId: string,
+): Promise<void> {
+  const sb = getSupabaseServiceClient();
+  const table = kind === "corsista" ? "corsi_iscrizioni" : "corsi_partecipanti";
+  await sb
+    .from(table)
+    .update({ confirm_sent_at: new Date().toISOString() })
+    .eq("id", Number(subjectId))
+    .eq("corso_id", Number(courseId));
 }
 
 export async function loadConfirmSubject(
@@ -78,6 +97,7 @@ export async function loadConfirmSubject(
       phone: row.corsista.phone ?? "",
       email: (row.enrolled_email || row.corsista.email || "").trim(),
       confirmed: Boolean(row.email_confirmed_at),
+      confirmedAt: row.email_confirmed_at ?? null,
       deliveryAddress: (row.delivery_address ?? "").trim(),
     };
   }
@@ -117,6 +137,7 @@ export async function loadConfirmSubject(
     phone: prow.phone ?? "",
     email: (prow.email || "").trim(),
     confirmed: Boolean(prow.email_confirmed_at),
+    confirmedAt: prow.email_confirmed_at ?? null,
     deliveryAddress: (prow.delivery_address ?? "").trim(),
   };
 }

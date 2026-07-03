@@ -5,7 +5,7 @@
 // service client (anon is blocked by RLS), and let the student confirm/correct
 // their email — the course-start sanitization step.
 import type { Metadata } from "next";
-import { verifyConfirmToken } from "@/lib/attendee/confirm-token";
+import { verifyConfirmToken, isConfirmLinkSpent } from "@/lib/attendee/confirm-token";
 import { loadConfirmSubject } from "@/lib/attendee/confirm";
 import { ConfirmForm } from "@/components/conferma/ConfirmForm";
 import "@/components/esame-pubblico/exam-public.css";
@@ -28,6 +28,38 @@ export default async function Page({
 
   const subject = await loadConfirmSubject(res.payload.c, res.payload.k, res.payload.i);
   if (!subject) return <Invalid />;
+
+  // SPENT LINK: once the attendee has confirmed, links issued before that
+  // moment are closed — only a deliberate re-send re-opens the form.
+  if (isConfirmLinkSpent(subject.confirmedAt, res.payload.ia)) {
+    return (
+      <div className="exam-public-shell">
+        <div className="exam-public-card" style={{ textAlign: "center", maxWidth: 440 }}>
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: "50%",
+              background: "var(--green-50, #ecfdf5)",
+              color: "var(--green-600, #059669)",
+              display: "grid",
+              placeItems: "center",
+              margin: "0 auto 12px",
+              fontSize: 26,
+            }}
+          >
+            ✓
+          </div>
+          <h1 style={{ fontSize: 20, margin: "0 0 8px" }}>Dati già confermati</h1>
+          <p style={{ fontSize: 13.5, color: "var(--text-3, #6b7280)", margin: 0, lineHeight: 1.55 }}>
+            {subject.fullName ? `${subject.fullName.split(" ")[0]}, i` : "I"} tuoi dati per il corso{" "}
+            <strong>{subject.courseName}</strong> risultano già confermati. Se devi correggerli,
+            chiedi all&apos;educator di reinviarti un nuovo link.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="exam-public-shell">

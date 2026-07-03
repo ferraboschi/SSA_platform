@@ -10,7 +10,7 @@
 //    email they confirmed at course start; on a match the server mints a PERSONAL
 //    link and we redirect to it. No roster is ever exposed and there is no
 //    name-pick (both were impersonation / PII-leak surfaces).
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ExamRunner,
   type RunnerQuestion,
@@ -21,6 +21,7 @@ import {
   resolveExamAccessByEmailAction,
   type ResolveExamAccessResult,
 } from "@/lib/exam-links/access-actions";
+import { reportExamProgressAction } from "@/lib/exam-links/progress-actions";
 import { CHROME, LANGS, type Lang } from "./exam-chrome";
 
 // The link's forced language drives the pre-exam screens (the student hasn't
@@ -63,17 +64,35 @@ function DirectExam(props: ExamGateProps) {
   const storeKey = `ssa-exam-${props.token}`;
   const [ready, setReady] = useState(false);
   const [resume, setResume] = useState<PersistState | undefined>(undefined);
+  const total = props.questions.length;
+  // Throttle the LIVE-PROGRESS reports (educator's bar): send on question
+  // change or at most every 10s. Fire-and-forget, never blocks the student.
+  const reportRef = useRef<{ idx: number; at: number }>({ idx: -1, at: 0 });
+  const report = useCallback(
+    (idx: number, elapsed: number) => {
+      const now = Date.now();
+      if (idx === reportRef.current.idx && now - reportRef.current.at < 10_000) return;
+      reportRef.current = { idx, at: now };
+      void reportExamProgressAction(props.token, { currentIdx: idx, total, elapsed }).catch(() => {});
+    },
+    [props.token, total],
+  );
 
   // Read resume state client-side BEFORE mounting the runner (its state
   // initializes from resumeState once), never during SSR.
   useEffect(() => {
+    let stored: PersistState | undefined;
     try {
       const raw = localStorage.getItem(storeKey);
-      if (raw) setResume(JSON.parse(raw) as PersistState);
+      if (raw) stored = JSON.parse(raw) as PersistState;
     } catch {
       /* private mode / bad JSON → start fresh */
     }
+    if (stored) setResume(stored);
     setReady(true);
+    // First heartbeat: the educator sees "in corso" as soon as the test opens.
+    report(stored?.currentIdx ?? 0, stored?.elapsed ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeKey]);
 
   const persist = useCallback(
@@ -83,8 +102,9 @@ function DirectExam(props: ExamGateProps) {
       } catch {
         /* private mode — progress just won't survive a refresh */
       }
+      report(s.currentIdx, s.elapsed);
     },
-    [storeKey],
+    [storeKey, report],
   );
 
   if (!ready) {

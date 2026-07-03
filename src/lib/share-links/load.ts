@@ -50,6 +50,9 @@ export interface SharedStudent {
   email: string;
   /** Whether the attendee confirmed their email at course start (green tick). */
   emailConfirmed: boolean;
+  /** Whether a confirmation link was already SENT (the "mail non ancora
+   *  confermata" middle state). False pre-migration. */
+  confirmSent: boolean;
   phone: string;
   /** Corsista rows only: the enrollment id (drives the public companion-add). */
   iscrizioneId?: number;
@@ -242,46 +245,66 @@ export async function loadSharedCourse(
   }
 
   // Confirmed-email snapshot per enrollment + per companion (course-start
-  // sanitization). Separate lightweight queries so a pre-migration DB (columns
-  // absent) simply degrades to "not confirmed" without breaking the roster.
-  const enrolledEmail = new Map<number, { email: string; confirmed: boolean }>();
+  // sanitization). Two-tier selects: WITH confirm_sent_at first, then without
+  // (so a DB that has the 140000 migration but not the 20260703 one still
+  // shows confirmed states), then nothing (pre-migration roster still works).
+  type Snap = { email: string; confirmed: boolean; sent: boolean };
+  const enrolledEmail = new Map<number, Snap>();
   {
-    const { data, error } = await sb
+    type Row = {
+      id: number;
+      enrolled_email: string | null;
+      email_confirmed_at: string | null;
+      confirm_sent_at?: string | null;
+    };
+    let rows: Row[] | null = null;
+    const rich = await sb
       .from("corsi_iscrizioni")
-      .select("id, enrolled_email, email_confirmed_at")
+      .select("id, enrolled_email, email_confirmed_at, confirm_sent_at")
       .eq("corso_id", corso.id);
-    if (!error) {
-      for (const r of (data ?? []) as {
-        id: number;
-        enrolled_email: string | null;
-        email_confirmed_at: string | null;
-      }[]) {
-        if (r.enrolled_email || r.email_confirmed_at) {
-          enrolledEmail.set(r.id, {
-            email: (r.enrolled_email ?? "").trim(),
-            confirmed: Boolean(r.email_confirmed_at),
-          });
-        }
-      }
+    rows = rich.data as Row[] | null;
+    if (rich.error) {
+      const base = await sb
+        .from("corsi_iscrizioni")
+        .select("id, enrolled_email, email_confirmed_at")
+        .eq("corso_id", corso.id);
+      rows = base.data as Row[] | null;
+    }
+    for (const r of rows ?? []) {
+      enrolledEmail.set(r.id, {
+        email: (r.enrolled_email ?? "").trim(),
+        confirmed: Boolean(r.email_confirmed_at),
+        sent: Boolean(r.confirm_sent_at),
+      });
     }
   }
-  const companionEmail = new Map<number, { email: string; confirmed: boolean }>();
+  const companionEmail = new Map<number, Snap>();
   {
-    const { data, error } = await sb
+    type PRow = {
+      id: number;
+      email: string | null;
+      email_confirmed_at: string | null;
+      confirm_sent_at?: string | null;
+    };
+    let rows: PRow[] | null = null;
+    const rich = await sb
       .from("corsi_partecipanti")
-      .select("id, email, email_confirmed_at")
+      .select("id, email, email_confirmed_at, confirm_sent_at")
       .eq("corso_id", corso.id);
-    if (!error) {
-      for (const r of (data ?? []) as {
-        id: number;
-        email: string | null;
-        email_confirmed_at: string | null;
-      }[]) {
-        companionEmail.set(r.id, {
-          email: (r.email ?? "").trim(),
-          confirmed: Boolean(r.email_confirmed_at),
-        });
-      }
+    rows = rich.data as PRow[] | null;
+    if (rich.error) {
+      const base = await sb
+        .from("corsi_partecipanti")
+        .select("id, email, email_confirmed_at")
+        .eq("corso_id", corso.id);
+      rows = base.data as PRow[] | null;
+    }
+    for (const r of rows ?? []) {
+      companionEmail.set(r.id, {
+        email: (r.email ?? "").trim(),
+        confirmed: Boolean(r.email_confirmed_at),
+        sent: Boolean(r.confirm_sent_at),
+      });
     }
   }
 
@@ -306,6 +329,7 @@ export async function loadSharedCourse(
       name: c.full_name ?? "",
       email: snap?.email || (c.email ?? ""),
       emailConfirmed: snap?.confirmed ?? false,
+      confirmSent: snap?.sent ?? false,
       phone: c.phone ?? "",
       iscrizioneId: r.id,
       tickets,
@@ -321,6 +345,7 @@ export async function loadSharedCourse(
         name: comp.full_name,
         email: csnap?.email ?? "",
         emailConfirmed: csnap?.confirmed ?? false,
+        confirmSent: csnap?.sent ?? false,
         phone: comp.phone,
         guestOf: c.full_name ?? "",
       });

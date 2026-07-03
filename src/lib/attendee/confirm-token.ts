@@ -22,6 +22,10 @@ export interface ConfirmTokenPayload {
    *  page. "manual" (or absent, legacy) = handed over via WhatsApp/SMS/copy →
    *  the email stays editable and gets confirmed by typing it. */
   ch?: "email" | "manual";
+  /** Issue time, epoch seconds. Once the attendee HAS confirmed, links issued
+   *  BEFORE that confirmation are closed (the page shows "già confermato") —
+   *  a deliberate re-send (fresh `ia`) re-opens the form for corrections. */
+  ia?: number;
   /** Optional forced language for the page. */
   l?: string;
   /** Expiry, epoch seconds. */
@@ -53,6 +57,19 @@ function sign(body: string): string {
 /** Default confirmation-link lifetime: covers course start + a day or two of
  *  stragglers. The educator can always re-send (a fresh token). */
 export const CONFIRM_LINK_TTL_HOURS = 72;
+
+/** Once the attendee HAS confirmed, links issued BEFORE (or without an issue
+ *  time — legacy) are SPENT: the page shows "già confermato" and the save is
+ *  refused. A deliberate re-send (fresh `ia` > confirmedAt) re-opens the form. */
+export function isConfirmLinkSpent(
+  confirmedAtIso: string | null,
+  issuedAt: number | undefined,
+): boolean {
+  if (!confirmedAtIso) return false;
+  const confirmedAt = Math.floor(new Date(confirmedAtIso).getTime() / 1000);
+  if (!Number.isFinite(confirmedAt)) return false;
+  return issuedAt == null || issuedAt <= confirmedAt;
+}
 
 export function signConfirmToken(payload: ConfirmTokenPayload): string {
   const body = b64url(JSON.stringify(payload));

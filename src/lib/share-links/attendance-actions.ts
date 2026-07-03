@@ -31,7 +31,7 @@
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyShareToken } from "./token";
-import { loadConfirmSubject } from "@/lib/attendee/confirm";
+import { loadConfirmSubject, stampConfirmSent } from "@/lib/attendee/confirm";
 import { deliverConfirmLink } from "@/lib/attendee/confirm-email";
 
 const TABLE = "corsi_presenze";
@@ -419,13 +419,12 @@ export async function setAttendeeEmailAction(
 
 /**
  * PUBLIC (share token): ONE button — send the confirmation magic-link to EVERY
- * attendee (enrolled corsisti + companions that have an email). Go-live gated
- * like the single send: in test mode nothing is emailed (the educator uses the
- * per-person copy links instead). Skips nothing silently: returns counts.
+ * attendee (enrolled corsisti + companions that have an email). Sends are LIVE
+ * (delivery is the verification step). Skips nothing silently: returns counts.
  */
 export async function sendConfirmLinksToAllAction(
   token: string,
-): Promise<{ ok: boolean; live?: boolean; total?: number; sent?: number; noEmail?: number; error?: string }> {
+): Promise<{ ok: boolean; total?: number; sent?: number; noEmail?: number; error?: string }> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
   if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) {
@@ -436,7 +435,6 @@ export async function sendConfirmLinksToAllAction(
   let total = 0;
   let sent = 0;
   let noEmail = 0;
-  let live = false;
 
   // Enrolled corsisti — subject ref = the ENROLLMENT id (where the snapshot lives).
   const { data: iscr } = await svc
@@ -459,8 +457,10 @@ export async function sendConfirmLinksToAllAction(
       name: subject.fullName,
       courseName: subject.courseName,
     });
-    live = res.live;
-    if (res.sentTo) sent++;
+    if (res.sentTo) {
+      sent++;
+      await stampConfirmSent(String(corsoId), "corsista", String(r.id)).catch(() => {});
+    }
   }
 
   // Companions — only those that already have an email (the others get the
@@ -486,12 +486,14 @@ export async function sendConfirmLinksToAllAction(
         name: subject.fullName,
         courseName: subject.courseName,
       });
-      live = res.live;
-      if (res.sentTo) sent++;
+      if (res.sentTo) {
+        sent++;
+        await stampConfirmSent(String(corsoId), "partecipante", String(p.id)).catch(() => {});
+      }
     }
   }
 
-  return { ok: true, live, total, sent, noEmail };
+  return { ok: true, total, sent, noEmail };
 }
 
 /**
@@ -545,15 +547,14 @@ export async function setAttendeePhoneAction(
 }
 
 /**
- * PUBLIC (share token): mint + (go-live-gated) send the confirmation magic-link
- * for one attendee. No staff session here, so in TEST mode nothing is emailed —
- * the link is returned for the educator to copy (WhatsApp/SMS). When
- * EXAM_RESULT_EMAILS_LIVE is on, it emails the attendee's confirmed/target email.
+ * PUBLIC (share token): mint + send the confirmation magic-link for one
+ * attendee — LIVE, straight to their email (delivery is the verification
+ * step). The link is always returned for the WhatsApp/SMS fallback.
  */
 export async function sendAttendeeConfirmLinkAction(
   token: string,
   ref: ConfirmRef,
-): Promise<{ ok: boolean; url?: string; sentTo?: string; live?: boolean; error?: string; schema?: boolean }> {
+): Promise<{ ok: boolean; url?: string; sentTo?: string; error?: string; schema?: boolean }> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
   if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
@@ -573,5 +574,8 @@ export async function sendAttendeeConfirmLinkAction(
     name: subject.fullName,
     courseName: subject.courseName,
   });
+  // The educator "sent" either way: by email (sentTo) or by handing over the
+  // returned link — both flip the state to "mail non ancora confermata".
+  await stampConfirmSent(String(corsoId), ref.kind, String(ref.id)).catch(() => {});
   return { ok: true, ...res };
 }

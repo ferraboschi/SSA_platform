@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   sendPersonalExamLinkAction,
   sendPersonalExamLinksToAllAction,
   closeExamLinksAction,
   reopenExamLinksAction,
+  getExamProgressAction,
+  type SubjectProgress,
 } from "@/lib/share-links/exam-send-actions";
 
 // Local prop shapes (structurally match the loader types) so this client
@@ -58,6 +60,28 @@ export default function ExamSendPanel({
     Object.fromEntries(tests.map((t) => [t.key, t.closedAt])),
   );
   const [lifeBusy, setLifeBusy] = useState(false);
+  // LIVE PROGRESS for the selected test, keyed by subject (`c<id>` / `p<id>`).
+  // Polled every 10s while the tab is open — the educator watches the bars move.
+  const [progress, setProgress] = useState<Record<string, SubjectProgress>>({});
+  const selKey = test?.key ?? "";
+  const selConfigured = Boolean(test?.configured);
+  useEffect(() => {
+    if (!selKey || !selConfigured) return;
+    let alive = true;
+    const tick = () => {
+      getExamProgressAction(token, selKey)
+        .then((r) => {
+          if (alive && r.ok && r.progress) setProgress(r.progress);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const id = setInterval(tick, 10_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [token, selKey, selConfigured]);
 
   if (!test) return null;
   const isClosed = Boolean(closed[test.key]);
@@ -277,6 +301,7 @@ export default function ExamSendPanel({
               testKey={test.key}
               ttl={ttl}
               person={s}
+              progress={progress[`${s.kind === "corsista" ? "c" : "p"}${s.id}`]}
               last={i === roster.length - 1}
             />
           ))
@@ -287,6 +312,33 @@ export default function ExamSendPanel({
     </div>
   );
 }
+
+// Compact live-progress bar: green when submitted, indigo while running.
+function ProgressBar({ p }: { p: SubjectProgress | undefined }) {
+  const pct = p ? p.pct : 0;
+  const color = p?.submittedAt ? "var(--green-500, #22c55e)" : "var(--indigo-600, #4f46e5)";
+  return (
+    <div
+      role="progressbar"
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      style={{
+        flex: "1 1 90px",
+        minWidth: 70,
+        height: 8,
+        borderRadius: 999,
+        background: "var(--surface-3, #e5e7eb)",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ width: `${pct}%`, height: "100%", background: color, transition: "width .5s" }} />
+    </div>
+  );
+}
+
+const timeIt = (iso: string) =>
+  new Date(iso).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
 
 function miniBtn(primary: boolean): React.CSSProperties {
   return {
@@ -307,17 +359,20 @@ function StudentSendRow({
   testKey,
   ttl,
   person,
+  progress,
   last,
 }: {
   token: string;
   testKey: string;
   ttl: "eod" | "7d";
   person: Person;
+  progress: SubjectProgress | undefined;
   last: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const send = async () => {
     if (busy) return;
@@ -351,6 +406,12 @@ function StudentSendRow({
     }
   };
 
+  const stateLabel = progress?.submittedAt
+    ? "Consegnato ✓"
+    : progress
+      ? `In corso · dom. ${progress.question}/${progress.total}`
+      : "Non iniziato";
+
   return (
     <div
       style={{
@@ -361,44 +422,101 @@ function StudentSendRow({
         gap: 3,
       }}
     >
+      {/* Collapsed row: name → LIVE progress bar → state → Invia. Tapping the
+          name/bar area expands the run details. */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span
-          role="img"
-          aria-label={person.emailConfirmed ? "Email confermata" : "Email non ancora confermata"}
-          title={person.emailConfirmed ? "Email confermata" : "Email non ancora confermata"}
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          aria-expanded={expanded}
           style={{
-            width: 7,
-            height: 7,
-            borderRadius: "50%",
-            flexShrink: 0,
-            background: person.emailConfirmed ? "var(--green-500, #22c55e)" : "var(--amber-400, #f59e0b)",
-          }}
-        />
-        <span style={{ fontSize: 13, fontWeight: 600, flex: "1 1 120px", minWidth: 0 }}>
-          {person.name || "—"}
-          {person.kind === "partecipante" && (
-            <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 500, color: "var(--text-4, #9ca3af)", fontStyle: "italic" }}>
-              (ospite)
-            </span>
-          )}
-        </span>
-        <span
-          style={{
-            fontSize: 11.5,
-            color: person.email ? "var(--text-3, #6b7280)" : "var(--text-4, #9ca3af)",
-            flex: "1 1 150px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flex: "1 1 200px",
             minWidth: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            textAlign: "left",
+            cursor: "pointer",
+            font: "inherit",
           }}
         >
-          {person.email || "nessuna email"}
-        </span>
+          <span
+            role="img"
+            aria-label={person.emailConfirmed ? "Email confermata" : "Email non ancora confermata"}
+            title={person.emailConfirmed ? "Email confermata" : "Email non ancora confermata"}
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              flexShrink: 0,
+              background: person.emailConfirmed ? "var(--green-500, #22c55e)" : "var(--amber-400, #f59e0b)",
+            }}
+          />
+          <span style={{ fontSize: 13, fontWeight: 600, flexShrink: 0, maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {person.name || "—"}
+            {person.kind === "partecipante" && (
+              <span style={{ marginLeft: 4, fontSize: 10.5, fontWeight: 500, color: "var(--text-4, #9ca3af)", fontStyle: "italic" }}>
+                (ospite)
+              </span>
+            )}
+          </span>
+          <ProgressBar p={progress} />
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              flexShrink: 0,
+              color: progress?.submittedAt
+                ? "var(--green-600, #059669)"
+                : progress
+                  ? "var(--indigo-600, #4f46e5)"
+                  : "var(--text-4, #9ca3af)",
+            }}
+          >
+            {stateLabel}
+          </span>
+        </button>
         <button type="button" onClick={send} disabled={busy} style={miniBtn(true)}>
           {busy ? "…" : "Invia"}
         </button>
       </div>
+      {expanded && (
+        <div
+          style={{
+            display: "grid",
+            gap: 3,
+            padding: "8px 10px",
+            margin: "4px 0 2px 15px",
+            borderRadius: 8,
+            background: "var(--surface-2, #f9fafb)",
+            fontSize: 11.5,
+            color: "var(--text-2, #374151)",
+          }}
+        >
+          <span>✉️ {person.email || "nessuna email"}</span>
+          {progress ? (
+            <>
+              <span>
+                Avanzamento: <strong>{progress.pct}%</strong> · domanda {progress.question} di {progress.total}
+              </span>
+              <span>Inizio: {timeIt(progress.startedAt)}</span>
+              <span>
+                {progress.submittedAt
+                  ? `Consegnato: ${timeIt(progress.submittedAt)}`
+                  : `Ultimo aggiornamento: ${timeIt(progress.updatedAt)}`}
+              </span>
+              <span>
+                Stato: {progress.submittedAt ? "Consegnato — in valutazione negli Esiti" : "In corso"}
+              </span>
+            </>
+          ) : (
+            <span>Non ha ancora aperto il test.</span>
+          )}
+        </div>
+      )}
       {note && (
         <div style={{ fontSize: 11, color: "var(--text-3, #6b7280)", paddingLeft: 15 }}>
           {note}
