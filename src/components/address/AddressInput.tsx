@@ -40,12 +40,15 @@ function loadGoogleMaps(): Promise<void> {
 export function GoogleAddressInput({
   value,
   onChange,
+  id,
   className = "exam-public-input",
   textareaClassName = "exam-public-textarea",
   placeholder = "Inizia a digitare l'indirizzo…",
 }: {
   value: string;
   onChange: (v: string) => void;
+  /** Binds the field to an external <label htmlFor>. */
+  id?: string;
   /** Class for the autocomplete input (default: exam-public styling). */
   className?: string;
   /** Class for the no-key textarea fallback. */
@@ -78,15 +81,18 @@ export function GoogleAddressInput({
   if (!GMAPS_KEY) {
     return (
       <textarea
+        id={id}
         className={textareaClassName}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
         rows={3}
       />
     );
   }
   return (
     <input
+      id={id}
       ref={ref}
       className={className}
       type="text"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { confirmAttendeeAction } from "@/lib/attendee/confirm-actions";
 import { GoogleAddressInput } from "@/components/address/AddressInput";
 
@@ -33,6 +33,7 @@ export function ConfirmForm({
   courseName: string;
   alreadyConfirmed: boolean;
 }) {
+  const uid = useId();
   const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState(initialPhone);
   const [address, setAddress] = useState(initialAddress);
@@ -102,12 +103,13 @@ export function ConfirmForm({
         Tutti i campi sono obbligatori.
       </p>
 
-      <Field label="Nome e cognome">
-        <input className="input" value={name} readOnly style={ro} />
+      <Field label="Nome e cognome" htmlFor={`${uid}-nome`}>
+        <input id={`${uid}-nome`} className="input" value={name} readOnly style={ro} />
       </Field>
 
-      <Field label="Email">
+      <Field label="Email" htmlFor={`${uid}-email`}>
         <input
+          id={`${uid}-email`}
           className="input"
           type="email"
           inputMode="email"
@@ -123,8 +125,9 @@ export function ConfirmForm({
         )}
       </Field>
 
-      <Field label="Telefono">
+      <Field label="Telefono" htmlFor={`${uid}-tel`}>
         <input
+          id={`${uid}-tel`}
           className="input"
           type="tel"
           inputMode="tel"
@@ -137,8 +140,9 @@ export function ConfirmForm({
         />
       </Field>
 
-      <Field label="Indirizzo di consegna">
+      <Field label="Indirizzo di consegna" htmlFor={`${uid}-addr`}>
         <GoogleAddressInput
+          id={`${uid}-addr`}
           value={address}
           onChange={(v) => {
             setAddress(v);
@@ -228,10 +232,19 @@ const field: React.CSSProperties = {
   fontSize: 15,
 };
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
   return (
     <div style={{ marginBottom: 14 }}>
       <label
+        htmlFor={htmlFor}
         style={{
           display: "block",
           fontSize: 11.5,

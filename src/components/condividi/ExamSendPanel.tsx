@@ -125,6 +125,7 @@ export default function ExamSendPanel({
             key={t.key}
             type="button"
             onClick={() => setSel(t.key)}
+            aria-pressed={sel === t.key}
             style={{
               fontSize: 12.5,
               fontWeight: 600,
@@ -138,7 +139,9 @@ export default function ExamSendPanel({
             }}
           >
             {t.label}
-            {!t.configured && " ⚠︎"}
+            {!t.configured && (
+              <span role="img" aria-label="non configurato"> ⚠︎</span>
+            )}
           </button>
         ))}
       </div>
@@ -360,6 +363,8 @@ function StudentSendRow({
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span
+          role="img"
+          aria-label={person.emailConfirmed ? "Email confermata" : "Email non ancora confermata"}
           title={person.emailConfirmed ? "Email confermata" : "Email non ancora confermata"}
           style={{
             width: 7,

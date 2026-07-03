@@ -97,12 +97,13 @@ export default function EducatorTabs({
 
   return (
     <div>
-      <div className="edu-tabs" role="tablist">
+      {/* Plain toggle buttons (aria-pressed), NOT an ARIA tablist: native
+          button semantics match the actual behavior (no arrow-key roving). */}
+      <div className="edu-tabs">
         {tabs.map((t) => (
           <button
             key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
+            aria-pressed={tab === t.id}
             className={`edu-tab ${tab === t.id ? "active" : ""}`}
             onClick={() => setTab(t.id)}
           >
@@ -198,12 +199,11 @@ function AppelloTab({
   return (
     <div>
       {dayCount > 1 && (
-        <div className="edu-days" role="tablist" aria-label="Giornata">
+        <div className="edu-days" aria-label="Giornata">
           {dayList.map((d) => (
             <button
               key={d}
-              role="tab"
-              aria-selected={day === d}
+              aria-pressed={day === d}
               className={`edu-day ${day === d ? "active" : ""}`}
               onClick={() => setDay(d)}
             >
@@ -417,7 +417,9 @@ function EmailTab({
         {allBusy ? "Invio…" : `Invia conferma a tutti${pendingCount ? ` (${pendingCount} in attesa)` : ""}`}
       </button>
       {allNote && (
-        <p style={{ fontSize: 12, color: "var(--text-3, #6b7280)", margin: "0 0 10px" }}>{allNote}</p>
+        <p role="status" style={{ fontSize: 12, color: "var(--text-3, #6b7280)", margin: "0 0 10px" }}>
+          {allNote}
+        </p>
       )}
       <div className="edu-list">
         {students.map((s) => (
@@ -609,7 +611,7 @@ function AttendeeCard({
       )}
 
       {note && (
-        <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)", marginTop: 8 }}>
+        <div role="status" style={{ fontSize: 12, color: "var(--text-3, #6b7280)", marginTop: 8 }}>
           {note}
           {link && (
             <>
