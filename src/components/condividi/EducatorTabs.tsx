@@ -26,6 +26,7 @@ import {
   sendAttendeeConfirmLinkAction,
   correctAndResendAction,
   getVerificationStatesAction,
+  resetAppelloAction,
   type AttendanceMap,
   type AttendanceSubject,
 } from "@/lib/share-links/attendance-actions";
@@ -410,6 +411,86 @@ function AppelloTab({
             </div>
           );
         })}
+      </div>
+      {!readOnly && <ResetAppello token={token} />}
+    </div>
+  );
+}
+
+/** Double-confirmed course RESET: presence + email verifications back to zero
+ *  (emails/phones/addresses are kept). For test runs and wrong setups — the
+ *  destructive twin of the appello, so it lives at the very bottom, quiet. */
+function ResetAppello({ token }: { token: string }) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const doReset = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    const res = await resetAppelloAction(token).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string },
+    );
+    if (!res.ok) {
+      setBusy(false);
+      setNote(res.error || "Azzeramento non riuscito, riprova.");
+      return;
+    }
+    // Clean slate everywhere (attendance, chips, polls): full reload.
+    window.location.reload();
+  };
+
+  if (!armed) {
+    return (
+      <div style={{ marginTop: 18, textAlign: "center" }}>
+        <button
+          type="button"
+          className="edu-btn"
+          style={{ color: "var(--danger-fg)", borderColor: "var(--border)" }}
+          onClick={() => {
+            setNote(null);
+            setArmed(true);
+          }}
+        >
+          Azzera appello e verifiche…
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        marginTop: 18,
+        padding: "12px 14px",
+        borderRadius: "var(--r-3)",
+        border: "1px solid var(--danger-fg)",
+        background: "var(--danger-bg)",
+      }}
+    >
+      <p style={{ fontSize: 12.5, color: "var(--danger-fg)", margin: "0 0 10px", lineHeight: 1.5 }}>
+        Cancella <strong>tutte le presenze</strong> e <strong>tutte le conferme email</strong>{" "}
+        di questo corso: l&apos;appello riparte da zero e gli studenti dovranno ri-confermare i
+        dati. Email, telefoni e indirizzi restano salvati. Non si può annullare.
+      </p>
+      {note && (
+        <p style={{ fontSize: 12, color: "var(--danger-fg)", margin: "0 0 8px" }} role="alert">
+          {note}
+        </p>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" className="edu-btn" onClick={() => setArmed(false)} disabled={busy}>
+          Annulla
+        </button>
+        <button
+          type="button"
+          className="edu-btn"
+          style={{ background: "var(--danger-fg)", borderColor: "var(--danger-fg)", color: "var(--text-on-dark)" }}
+          onClick={doReset}
+          disabled={busy}
+        >
+          {busy ? "Azzeramento…" : "Sì, azzera tutto"}
+        </button>
       </div>
     </div>
   );

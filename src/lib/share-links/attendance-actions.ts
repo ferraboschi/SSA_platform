@@ -818,3 +818,48 @@ export async function correctAndResendAction(
   return { ok: true, sentAtIso, ...res };
 }
 
+
+/**
+ * PUBLIC (share token): RESET the appello + verification state of THIS course
+ * so the educator can re-run the whole flow from scratch (test runs, wrong
+ * setup). Deletes every presence row and clears the confirm/sent stamps on
+ * enrollments and companions — emails, phones and delivery addresses are DATA
+ * and are kept. Deliberately destructive: the UI double-confirms, and the
+ * rate limit is tight. Course-bound by the verified token, like everything
+ * else on this page.
+ */
+export async function resetAppelloAction(token: string): Promise<{ ok: boolean; error?: string }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("reset", token, 5)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+
+  const svc = getSupabaseServiceClient();
+
+  // 1 · Presence rows (a missing table just means nothing to delete).
+  const del = await svc.from(TABLE).delete().eq("corso_id", corsoId);
+  if (del.error && !isMissingTable(del.error)) return { ok: false, error: del.error.message };
+
+  // 2 · Enrollment stamps — two-tier: retry without confirm_sent_at on a
+  // pre-migration DB; if even email_confirmed_at is missing, the whole
+  // verification feature doesn't exist yet → nothing to clear.
+  const iscr = await svc
+    .from(ISCR_TABLE)
+    .update({ email_confirmed_at: null, confirm_sent_at: null })
+    .eq("corso_id", corsoId);
+  if (iscr.error) {
+    const base = await svc.from(ISCR_TABLE).update({ email_confirmed_at: null }).eq("corso_id", corsoId);
+    if (base.error && !isMissingTable(base.error)) return { ok: false, error: base.error.message };
+  }
+
+  // 3 · Companion stamps, same two-tier.
+  const part = await svc
+    .from(PART_TABLE)
+    .update({ email_confirmed_at: null, confirm_sent_at: null })
+    .eq("corso_id", corsoId);
+  if (part.error) {
+    const base = await svc.from(PART_TABLE).update({ email_confirmed_at: null }).eq("corso_id", corsoId);
+    if (base.error && !isMissingTable(base.error)) return { ok: false, error: base.error.message };
+  }
+
+  return { ok: true };
+}
