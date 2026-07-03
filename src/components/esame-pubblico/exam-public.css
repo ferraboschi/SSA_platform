@@ -355,10 +355,6 @@
   color: var(--indigo-600);
 }
 
-.edu-bulk {
-  width: 100%;
-  margin-bottom: 8px;
-}
 
 .edu-list {
   border: 1px solid var(--border);
@@ -438,7 +434,6 @@
     align-items: start;
   }
   .edu-rowgrid > .badge { margin-top: 14px; }
-  .edu-bulk { width: auto; max-width: 420px; }
 }
 
 .edu-empty {

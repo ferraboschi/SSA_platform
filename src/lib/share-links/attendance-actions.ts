@@ -32,7 +32,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyShareToken } from "./token";
 import { loadConfirmSubject, stampConfirmSent } from "@/lib/attendee/confirm";
-import { deliverConfirmLink } from "@/lib/attendee/confirm-email";
+import { deliverConfirmLink, buildConfirmUrl } from "@/lib/attendee/confirm-email";
 
 const TABLE = "corsi_presenze";
 const PART_TABLE = "corsi_partecipanti";
@@ -469,117 +469,6 @@ export async function setAttendeeEmailAction(
   return writeAttendeeEmail(svc, corsoId, ref, clean);
 }
 
-/** Subjects (corsista_id / partecipante_id) with ANY presence row for a course.
- *  "Non devo verificare la mail di chi non è presente." */
-async function presentSubjects(
-  svc: ReturnType<typeof getSupabaseServiceClient>,
-  corsoId: number,
-): Promise<{ corsisti: Set<number>; partecipanti: Set<number> }> {
-  const corsisti = new Set<number>();
-  const partecipanti = new Set<number>();
-  const { data, error } = await svc
-    .from(TABLE)
-    .select("corsista_id, partecipante_id, present")
-    .eq("corso_id", corsoId)
-    .eq("present", true);
-  if (!error) {
-    for (const r of (data ?? []) as { corsista_id: number | null; partecipante_id: number | null }[]) {
-      if (r.corsista_id != null) corsisti.add(r.corsista_id);
-      if (r.partecipante_id != null) partecipanti.add(r.partecipante_id);
-    }
-  }
-  return { corsisti, partecipanti };
-}
-
-/**
- * PUBLIC (share token): ONE button — send the confirmation magic-link to every
- * PRESENT attendee (per the appello) that has an email. Sends are LIVE
- * (delivery is the verification step). Skips nothing silently: returns counts.
- */
-export async function sendConfirmLinksToAllAction(
-  token: string,
-): Promise<{ ok: boolean; total?: number; sent?: number; noEmail?: number; notPresent?: number; error?: string }> {
-  const corsoId = courseIdFromToken(token);
-  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
-  if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) {
-    return { ok: false, error: "Troppe richieste, riprova tra poco." };
-  }
-
-  const svc = getSupabaseServiceClient();
-  const present = await presentSubjects(svc, corsoId);
-  let total = 0;
-  let sent = 0;
-  let noEmail = 0;
-  let notPresent = 0;
-
-  // Enrolled corsisti — subject ref = the ENROLLMENT id (where the snapshot lives),
-  // presence keyed by corsista_id.
-  const { data: iscr } = await svc
-    .from(ISCR_TABLE)
-    .select("id, corsista_id")
-    .eq("corso_id", corsoId);
-  for (const r of (iscr ?? []) as { id: number; corsista_id: number }[]) {
-    total++;
-    if (!present.corsisti.has(r.corsista_id)) {
-      notPresent++;
-      continue;
-    }
-    const subject = await loadConfirmSubject(String(corsoId), "corsista", String(r.id));
-    if (!subject) continue;
-    if (!subject.email) {
-      noEmail++;
-      continue;
-    }
-    const res = await deliverConfirmLink({
-      courseId: String(corsoId),
-      kind: "corsista",
-      subjectId: String(r.id),
-      toEmail: subject.email,
-      name: subject.fullName,
-      courseName: subject.courseName,
-    });
-    if (res.sentTo) {
-      sent++;
-      await stampConfirmSent(String(corsoId), "corsista", String(r.id)).catch(() => {});
-    }
-  }
-
-  // Companions — same presence rule, keyed by their own id.
-  const { data: parts, error: pErr } = await svc
-    .from(PART_TABLE)
-    .select("id, email")
-    .eq("corso_id", corsoId);
-  if (!pErr) {
-    for (const p of (parts ?? []) as { id: number; email?: string | null }[]) {
-      total++;
-      if (!present.partecipanti.has(p.id)) {
-        notPresent++;
-        continue;
-      }
-      if (!(p.email ?? "").trim()) {
-        noEmail++;
-        continue;
-      }
-      const subject = await loadConfirmSubject(String(corsoId), "partecipante", String(p.id));
-      if (!subject) continue;
-      const res = await deliverConfirmLink({
-        courseId: String(corsoId),
-        kind: "partecipante",
-        subjectId: String(p.id),
-        toEmail: subject.email,
-        name: subject.fullName,
-        courseName: subject.courseName,
-      });
-      if (res.sentTo) {
-        sent++;
-        await stampConfirmSent(String(corsoId), "partecipante", String(p.id)).catch(() => {});
-      }
-    }
-  }
-
-  return { ok: true, total, sent, noEmail, notPresent };
-}
-
 export interface VerificationState {
   email: string;
   phone: string;
@@ -732,14 +621,20 @@ export async function setAttendeePhoneAction(
 }
 
 /**
- * PUBLIC (share token): mint + send the confirmation magic-link for one
- * attendee — LIVE, straight to their email (delivery is the verification
- * step). The link is always returned for the WhatsApp/SMS fallback.
+ * PUBLIC (share token): send the confirmation for one attendee — two channels,
+ * both counted as "sent" (they flip the state to "in attesa"):
+ *   via "email" (default): mint + email the magic link (delivery proves the
+ *     inbox → the page opens with the email UNTOUCHABLE);
+ *   via "link": mint ONLY — the educator copies the link and hands it over
+ *     via WhatsApp/SMS (extra-platform); the page keeps the email editable
+ *     and everything locks once the student submits.
+ * Refused once the student has confirmed (the data is final).
  * Returns sentAtIso (server truth) so the chip timestamp is immediate.
  */
 export async function sendAttendeeConfirmLinkAction(
   token: string,
   ref: ConfirmRef,
+  via: "email" | "link" = "email",
 ): Promise<{ ok: boolean; url?: string; sentTo?: string; sentAtIso?: string; error?: string; schema?: boolean }> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
@@ -749,22 +644,37 @@ export async function sendAttendeeConfirmLinkAction(
   const guard = await confirmRefInCourse(svc, corsoId, ref);
   if (!guard.ok) return guard;
 
+  // Confirmed = final. No channel can re-open it.
+  const state = await readConfirmState(svc, corsoId, ref);
+  if (state.confirmedAt) {
+    return { ok: false, error: "Dati già confermati — non serve reinviare." };
+  }
+
   const subject = await loadConfirmSubject(String(corsoId), ref.kind, String(ref.id));
   if (!subject) return { ok: false, error: "Destinatario non trovato." };
 
-  const res = await deliverConfirmLink({
-    courseId: String(corsoId),
-    kind: ref.kind,
-    subjectId: String(ref.id),
-    toEmail: subject.email,
-    name: subject.fullName,
-    courseName: subject.courseName,
-  });
-  // The educator "sent" either way: by email (sentTo) or by handing over the
-  // returned link — both flip the state to "in attesa".
+  let url: string | undefined;
+  let sentTo: string | undefined;
+  let error: string | undefined;
+  if (via === "link") {
+    url = buildConfirmUrl(String(corsoId), ref.kind, String(ref.id), "manual");
+  } else {
+    const res = await deliverConfirmLink({
+      courseId: String(corsoId),
+      kind: ref.kind,
+      subjectId: String(ref.id),
+      toEmail: subject.email,
+      name: subject.fullName,
+      courseName: subject.courseName,
+    });
+    url = res.url;
+    sentTo = res.sentTo;
+    error = res.error;
+  }
+
   const sentAtIso = new Date().toISOString();
   await stampConfirmSent(String(corsoId), ref.kind, String(ref.id)).catch(() => {});
-  return { ok: true, sentAtIso, ...res };
+  return { ok: true, sentAtIso, url, sentTo, error };
 }
 
 /**
@@ -829,47 +739,3 @@ export async function correctAndResendAction(
   return { ok: true, sentAtIso, ...res };
 }
 
-/**
- * PUBLIC (share token): re-open a CONFIRMED attendee — clears the confirmation
- * and immediately sends a fresh link (old links become spent-or-superseded).
- * The only way out of the "confermato" state.
- */
-export async function requestNewConfirmationAction(
-  token: string,
-  ref: ConfirmRef,
-): Promise<{ ok: boolean; url?: string; sentTo?: string; sentAtIso?: string; error?: string; schema?: boolean }> {
-  const corsoId = courseIdFromToken(token);
-  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
-  if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
-
-  const svc = getSupabaseServiceClient();
-  const guard = await confirmRefInCourse(svc, corsoId, ref);
-  if (!guard.ok) return guard;
-
-  const state = await readConfirmState(svc, corsoId, ref);
-  if (!state.confirmedAt) {
-    return { ok: false, error: "Questo studente non ha ancora confermato." };
-  }
-
-  const table = ref.kind === "corsista" ? ISCR_TABLE : PART_TABLE;
-  const { error } = await svc
-    .from(table)
-    .update({ email_confirmed_at: null })
-    .eq("id", ref.id)
-    .eq("corso_id", corsoId);
-  if (error) return { ok: false, error: error.message };
-
-  const subject = await loadConfirmSubject(String(corsoId), ref.kind, String(ref.id));
-  if (!subject) return { ok: false, error: "Destinatario non trovato." };
-  const res = await deliverConfirmLink({
-    courseId: String(corsoId),
-    kind: ref.kind,
-    subjectId: String(ref.id),
-    toEmail: subject.email,
-    name: subject.fullName,
-    courseName: subject.courseName,
-  });
-  const sentAtIso = new Date().toISOString();
-  await stampConfirmSent(String(corsoId), ref.kind, String(ref.id)).catch(() => {});
-  return { ok: true, sentAtIso, ...res };
-}

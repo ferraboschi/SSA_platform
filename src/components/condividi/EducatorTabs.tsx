@@ -24,8 +24,6 @@ import {
   setAttendeePhoneAction,
   sendAttendeeConfirmLinkAction,
   correctAndResendAction,
-  requestNewConfirmationAction,
-  sendConfirmLinksToAllAction,
   getVerificationStatesAction,
   type AttendanceMap,
   type AttendanceSubject,
@@ -194,8 +192,6 @@ function AppelloTab({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState<string | null>(null);
-  const [allBusy, setAllBusy] = useState(false);
-  const [allNote, setAllNote] = useState<string | null>(null);
   const chains = useRef<Map<string, Promise<void>>>(new Map());
 
   const dayList = useMemo(() => Array.from({ length: Math.max(1, dayCount) }, (_, i) => i + 1), [dayCount]);
@@ -246,33 +242,7 @@ function AppelloTab({
     chains.current.set(key, tail);
   }
 
-  const sendAll = async () => {
-    if (allBusy) return;
-    setAllBusy(true);
-    setAllNote(null);
-    const res = await sendConfirmLinksToAllAction(token).catch(
-      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof sendConfirmLinksToAllAction>>,
-    );
-    setAllBusy(false);
-    if (!res.ok) {
-      setAllNote(res.error || "Invio non riuscito. Riprova tra un minuto.");
-      return;
-    }
-    const nowIso = new Date().toISOString();
-    setStudents((prev) =>
-      prev.map((x) =>
-        x.email && presentAny(subjKey(x)) && !x.emailConfirmed
-          ? { ...x, confirmSent: true, confirmSentAt: newerIso(x.confirmSentAt, nowIso) }
-          : x,
-      ),
-    );
-    setAllNote(
-      `Inviate ${res.sent ?? 0} conferme${res.noEmail ? ` · ${res.noEmail} senza email` : ""}${res.notPresent ? ` · ${res.notPresent} assenti (saltati)` : ""}.`,
-    );
-  };
-
   const presentCount = students.filter((s) => !!attendance[subjKey(s)]?.[day]).length;
-  const pendingConfirm = students.filter((s) => presentAny(subjKey(s)) && !s.emailConfirmed).length;
 
   return (
     <div>
@@ -293,20 +263,11 @@ function AppelloTab({
       <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 10px", lineHeight: 1.5 }}>
         {readOnly
           ? "Appello non ancora disponibile."
-          : `Tocca chi è presente ${dayCount > 1 ? `al giorno ${day}` : "oggi"} — si salva da solo. Presenti: ${presentCount}/${students.length}. Verde = dati confermati dallo studente.`}
+          : `Chiama l'appello e tocca chi è presente ${dayCount > 1 ? `(giorno ${day})` : ""} — si salva da solo. Presenti: ${presentCount}/${students.length}. Chi è presente può ricevere subito l'email di conferma dati. Verde = dati confermati.`}
       </p>
       {error && (
         <p style={{ color: "var(--danger-fg)", fontSize: 12.5, margin: "0 0 10px" }} role="alert">
           {error}
-        </p>
-      )}
-
-      <button type="button" className="edu-btn primary edu-bulk" onClick={sendAll} disabled={allBusy || readOnly}>
-        {allBusy ? "Invio…" : `Invia conferma ai presenti${pendingConfirm ? ` (${pendingConfirm})` : ""}`}
-      </button>
-      {allNote && (
-        <p role="status" style={{ fontSize: 12.5, color: "var(--text-3)", margin: "0 0 10px" }}>
-          {allNote}
         </p>
       )}
 
@@ -432,7 +393,6 @@ function VerifyActions({
     onUpdated({
       confirmSent: true,
       confirmSentAt: newerIso(s.confirmSentAt, res.sentAtIso ?? new Date().toISOString()),
-      ...(state === "confermato" ? { emailConfirmed: false, emailConfirmedAt: null } : {}),
     });
     if (res.sentTo) setNote(successNote);
     else {
@@ -457,20 +417,32 @@ function VerifyActions({
     applySendResult(res, `Email inviata a ${res.sentTo} — in attesa di conferma.`);
   };
 
-  const requestNew = async () => {
+  // "Se non l'ha ricevuta": mint the link and copy it — the educator hands it
+  // over via WhatsApp/SMS, outside the platform.
+  const copyManualLink = async () => {
     if (busy) return;
     setBusy(true);
     setNote(null);
     setLink(null);
-    const res = await requestNewConfirmationAction(token, ref).catch(
-      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof requestNewConfirmationAction>>,
+    const res = await sendAttendeeConfirmLinkAction(token, ref, "link").catch(
+      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof sendAttendeeConfirmLinkAction>>,
     );
     setBusy(false);
-    if (!res.ok) {
-      setNote(res.error || "Invio non riuscito. Riprova tra un minuto.");
+    if (!res.ok || !res.url) {
+      setNote(res.error || "Generazione non riuscita. Riprova tra un minuto.");
       return;
     }
-    applySendResult(res, "Nuovo link inviato — in attesa di una nuova conferma.");
+    onUpdated({
+      confirmSent: true,
+      confirmSentAt: newerIso(s.confirmSentAt, res.sentAtIso ?? new Date().toISOString()),
+    });
+    try {
+      await navigator.clipboard.writeText(res.url);
+      setNote("Link copiato — invialo via WhatsApp o SMS.");
+    } catch {
+      setLink(res.url);
+      setNote("Link generato:");
+    }
   };
 
   const saveFree = async () => {
@@ -582,41 +554,31 @@ function VerifyActions({
         </div>
       ) : (
         <>
-          {state !== "assente" && (
+          {(state === "verificare" || state === "attesa") && (
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-              {state === "verificare" && (
-                <>
-                  <button type="button" className="edu-btn" onClick={openEdit} disabled={busy}>
-                    Correggi
-                  </button>
-                  <button
-                    type="button"
-                    className="edu-btn primary"
-                    onClick={send}
-                    disabled={busy || !s.email}
-                    title={!s.email ? "Aggiungi un'email per inviare la conferma." : undefined}
-                  >
-                    {busy ? "…" : "Invia conferma"}
-                  </button>
-                </>
-              )}
-              {state === "attesa" && (
-                <>
-                  <button type="button" className="edu-btn" onClick={openEdit} disabled={busy}>
-                    Correggi e rinvia
-                  </button>
-                  <button type="button" className="edu-btn primary" onClick={send} disabled={busy}>
-                    {busy ? "…" : "Reinvia"}
-                  </button>
-                </>
-              )}
-              {state === "confermato" && (
-                <button type="button" className="edu-btn" onClick={requestNew} disabled={busy}>
-                  {busy ? "…" : "Richiedi nuova conferma"}
-                </button>
-              )}
+              <button
+                type="button"
+                className="edu-btn"
+                onClick={openEdit}
+                disabled={busy}
+              >
+                {state === "attesa" ? "Correggi e rinvia" : "Correggi"}
+              </button>
+              <button type="button" className="edu-btn" onClick={copyManualLink} disabled={busy}>
+                {busy ? "…" : "Copia link"}
+              </button>
+              <button
+                type="button"
+                className="edu-btn primary"
+                onClick={send}
+                disabled={busy || !s.email}
+                title={!s.email ? "Aggiungi un'email per inviare la conferma." : undefined}
+              >
+                {busy ? "…" : state === "attesa" ? "Reinvia email" : "Invia email"}
+              </button>
             </div>
           )}
+          {/* Confermato: the data is FINAL — read-only, no actions. */}
           {state === "verificare" && !s.email && (
             <p className="edu-hint">Aggiungi un&apos;email per inviare la conferma.</p>
           )}
