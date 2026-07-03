@@ -1,7 +1,7 @@
 // Personal exam-link invite: build the bound URL + branded HTML + deliver it.
 // Server-only; used by the educator-share send actions (share-links).
 import "server-only";
-import { appConfig, examEmailConfig } from "@/lib/integrations/config";
+import { appConfig } from "@/lib/integrations/config";
 import { getEmailService } from "@/lib/integrations/email";
 import { signExamToken, type ExamTestKey } from "./token";
 import { expiryForChoice, type ExamLinkTtlChoice } from "./lifecycle";
@@ -75,8 +75,6 @@ export interface DeliverExamInviteArgs {
   toEmail: string;
   name: string;
   courseName: string;
-  /** Test-mode routing (staff inbox); omit on the public share path → link only. */
-  fallbackTo?: string;
   /** Link duration: "eod" (default, dies end of send day) or "7d" (keep alive). */
   ttl?: ExamLinkTtlChoice;
 }
@@ -84,41 +82,33 @@ export interface DeliverExamInviteResult {
   /** Always returned so the caller has a Copia-link / WhatsApp-SMS fallback. */
   url: string;
   sentTo?: string;
-  live: boolean;
   error?: string;
 }
 
 /**
- * Mint the personal exam link + (go-live gated) send it. When
- * EXAM_RESULT_EMAILS_LIVE is off, no student is emailed: it routes to `fallbackTo`
- * (staff) or, absent that, returns the link for manual WhatsApp/SMS delivery.
+ * Mint the personal exam link + email it to the student. Educator-triggered
+ * invites deliver LIVE (owner decision, same as the confirm-data emails) —
+ * only the automated exam RESULT emails keep the EXAM_RESULT_EMAILS_LIVE gate.
  */
 export async function deliverExamInvite(a: DeliverExamInviteArgs): Promise<DeliverExamInviteResult> {
   const url = buildPersonalExamUrl(a.courseId, a.testKey, a.subject, a.ttl ?? "eod");
-  const live = examEmailConfig.live;
-  const dest = live ? a.toEmail.trim() : (a.fallbackTo ?? "").trim();
+  const dest = a.toEmail.trim();
   if (!dest) {
-    return {
-      url,
-      live,
-      error: live
-        ? "Nessuna email nota — usa il link (WhatsApp/SMS)."
-        : "Modalità test — email non inviata, usa il link.",
-    };
+    return { url, error: "Nessuna email nota — usa il link (WhatsApp/SMS)." };
   }
   try {
     const html = renderExamInviteEmailHtml(a.name, a.courseName, a.testLabel, url);
     const r = await getEmailService().send({
       to: dest,
-      subject: live ? `${a.testLabel} — SSA` : `[PROVA] ${a.testLabel} — SSA`,
+      subject: `${a.testLabel} — SSA`,
       html,
       tag: "exam-invite",
     });
     if (r.status === "skipped") {
-      return { url, live, error: "Email non configurata (Resend assente) — usa il link." };
+      return { url, error: "Email non configurata (Resend assente) — usa il link." };
     }
-    return { url, live, sentTo: dest };
+    return { url, sentTo: dest };
   } catch {
-    return { url, live, error: "Invio non riuscito — usa il link (Copia)." };
+    return { url, error: "Invio non riuscito — usa il link (Copia)." };
   }
 }

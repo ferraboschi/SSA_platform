@@ -11,9 +11,10 @@
 //
 // The verification flow is AIRTIGHT (see lib/share-links/verification-state):
 // free edits only before the first send; while a link is out, corrections
-// happen exclusively via the atomic correct-and-resend; a confirmed student
-// re-opens only through "Richiedi nuova conferma". The same rules are
-// enforced server-side in attendance-actions.ts.
+// happen exclusively via the atomic correct-and-resend; a confirmed student's
+// data is locked forever, and the confirmation also counts as presence (their
+// last marked day can't be unchecked). The same rules are enforced
+// server-side in attendance-actions.ts.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -120,7 +121,7 @@ export default function EducatorTabs({
               const st = states[subjKey(s)];
               if (!st) return s;
               const sentAt = newerIso(s.confirmSentAt, st.sentAtIso);
-              const confirmedAt = st.confirmedAtIso; // server truth (may clear via richiedi-nuova)
+              const confirmedAt = st.confirmedAtIso; // server truth (confirmed is final)
               return {
                 ...s,
                 email: st.email || s.email,
@@ -193,6 +194,9 @@ function AppelloTab({
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState<string | null>(null);
   const chains = useRef<Map<string, Promise<void>>>(new Map());
+  // Mirror of `pending` readable from the poll interval (state would be stale
+  // inside the closure): while any write is in flight, polls must not merge.
+  const pendingRef = useRef<Set<string>>(new Set());
 
   const dayList = useMemo(() => Array.from({ length: Math.max(1, dayCount) }, (_, i) => i + 1), [dayCount]);
 
@@ -212,6 +216,28 @@ function AppelloTab({
     };
   }, [token]);
 
+  // LIVE APPELLO: re-poll attendance every 12s so two devices sharing the
+  // link see each other's taps (and the guard below judges fresh state).
+  // Skipped while any local write is in flight — a poll snapshot must never
+  // clobber an optimistic toggle.
+  useEffect(() => {
+    let alive = true;
+    const id = setInterval(() => {
+      if (pendingRef.current.size > 0) return;
+      getAttendanceAction(token)
+        .then((res) => {
+          if (!alive || !res.ok || !res.attendance) return;
+          if (pendingRef.current.size > 0) return;
+          setAttendance(res.attendance);
+        })
+        .catch(() => {});
+    }, 12_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [token]);
+
   const presentAny = (subj: string) => Object.values(attendance[subj] ?? {}).some(Boolean);
   const cellKey = (subj: string, d: number) => `${subj}:${d}`;
 
@@ -219,8 +245,31 @@ function AppelloTab({
     if (readOnly) return;
     const subj = subjKey(subject);
     const key = cellKey(subj, day);
+    // VERIFICA ⇒ PRESENZA: the confirm email leaves from the appello, so once
+    // a link is OUT (or confirmed) that student's LAST marked presence can't
+    // be removed — it would contradict the persistent "Inviata/Confermato"
+    // fact. Other days stay freely correctable. Mirrors the server guard —
+    // refused with an explanation, never a dead tap.
+    if (!next) {
+      const stu = students.find((x) => subjKey(x) === subj);
+      const confirmed = Boolean(stu && (stu.emailConfirmedAt || stu.emailConfirmed));
+      const sent = Boolean(stu && (stu.confirmSentAt || stu.confirmSent));
+      if (stu && (confirmed || sent)) {
+        const days = attendance[subj] ?? {};
+        const hasOther = Object.entries(days).some(([d, v]) => v && Number(d) !== day);
+        if (!hasOther) {
+          setError(
+            confirmed
+              ? `${stu.name || "Studente"} ha confermato i dati: la conferma vale come presenza, quindi almeno una giornata resta "Presente".`
+              : `L'email di conferma per ${stu.name || "questa persona"} è partita da questo appello: finché la verifica è in corso, l'ultima presenza resta segnata.`,
+          );
+          return;
+        }
+      }
+    }
     const prev = !!attendance[subj]?.[day];
     setAttendance((m) => ({ ...m, [subj]: { ...(m[subj] ?? {}), [day]: next } }));
+    pendingRef.current.add(key);
     setPending((s) => new Set(s).add(key));
     setError(null);
     const run = async () => {
@@ -232,6 +281,7 @@ function AppelloTab({
         if (res.schema) setReadOnly(true);
         else setError(res.error || "Salvataggio non riuscito, riprova.");
       }
+      pendingRef.current.delete(key);
       setPending((s) => {
         const n = new Set(s);
         n.delete(key);

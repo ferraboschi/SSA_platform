@@ -200,6 +200,19 @@ export async function setAttendanceAction(
     return { ok: false, error: "Giornata non valida." };
   }
 
+  // VERIFICA ⇒ PRESENZA (owner's rule): the confirm email leaves from the
+  // appello, so once a link is out or the data is confirmed, removing that
+  // student's LAST marked presence would contradict a persistent fact. Other
+  // days stay freely correctable (a day-2 mis-tap must be undoable).
+  const LOCK_ERROR =
+    "La verifica email è partita dall'appello: almeno una giornata di presenza deve restare segnata.";
+  if (!present) {
+    const locked = await isSubjectVerificationLocked(svc, corsoId, kind, id);
+    if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, dayCount))) {
+      return { ok: false, error: LOCK_ERROR };
+    }
+  }
+
   const row: {
     corso_id: number;
     corsista_id: number | null;
@@ -217,6 +230,19 @@ export async function setAttendanceAction(
   if (error) {
     if (isMissingTable(error)) return { ok: false, schema: true, error: "Appello non disponibile (migrazione mancante)." };
     return { ok: false, error: error.message };
+  }
+
+  // POST-WRITE RE-CHECK (races): two devices unchecking different days — or an
+  // uncheck racing the student's confirm — can each pass the pre-check yet
+  // together void the invariant. Re-verify AFTER the write; on violation,
+  // restore this day and refuse. Any interleaving ends with ≥1 presence
+  // (worst case both restore — fail closed).
+  if (!present) {
+    const locked = await isSubjectVerificationLocked(svc, corsoId, kind, id);
+    if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, dayCount))) {
+      await svc.from(TABLE).upsert({ ...row, present: true, updated_at: new Date().toISOString() }, { onConflict });
+      return { ok: false, error: LOCK_ERROR };
+    }
   }
   return { ok: true };
 }
@@ -377,6 +403,59 @@ async function confirmRefInCourse(
 }
 
 /** Server-truth confirm state for a subject (two-tier, pre-migration → nulls). */
+/** Is the SUBJECT's verification in flight or done (confirm link out OR data
+ *  confirmed)? Keyed the attendance way (corsista_id / partecipante id),
+ *  unlike readConfirmState (iscrizione id). Two-tier select degrades on a
+ *  pre-migration DB; fails open — without the columns nobody is locked. */
+async function isSubjectVerificationLocked(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  corsoId: number,
+  kind: "corsista" | "partecipante",
+  id: number,
+): Promise<boolean> {
+  const from = () =>
+    kind === "corsista"
+      ? svc.from(ISCR_TABLE).select("email_confirmed_at, confirm_sent_at").eq("corso_id", corsoId).eq("corsista_id", id)
+      : svc.from(PART_TABLE).select("email_confirmed_at, confirm_sent_at").eq("corso_id", corsoId).eq("id", id);
+  const rich = await from().maybeSingle();
+  if (!rich.error) {
+    const r = rich.data as { email_confirmed_at: string | null; confirm_sent_at: string | null } | null;
+    return Boolean(r?.email_confirmed_at || r?.confirm_sent_at);
+  }
+  const base =
+    kind === "corsista"
+      ? await svc.from(ISCR_TABLE).select("email_confirmed_at").eq("corso_id", corsoId).eq("corsista_id", id).maybeSingle()
+      : await svc.from(PART_TABLE).select("email_confirmed_at").eq("corso_id", corsoId).eq("id", id).maybeSingle();
+  if (base.error) return false;
+  return Boolean((base.data as { email_confirmed_at: string | null } | null)?.email_confirmed_at);
+}
+
+/** Does the subject have ANOTHER day marked present (besides `exceptDay`)?
+ *  Bounded to the course's REAL days — a stray out-of-range row must never
+ *  satisfy the invariant on behalf of the visible roster. */
+async function hasOtherPresentDay(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  corsoId: number,
+  kind: "corsista" | "partecipante",
+  id: number,
+  exceptDay: number,
+  dayCount: number,
+): Promise<boolean> {
+  const col = kind === "corsista" ? "corsista_id" : "partecipante_id";
+  const { data, error } = await svc
+    .from(TABLE)
+    .select("day_no")
+    .eq("corso_id", corsoId)
+    .eq(col, id)
+    .eq("present", true)
+    .neq("day_no", exceptDay)
+    .gte("day_no", 1)
+    .lte("day_no", dayCount)
+    .limit(1);
+  if (error) return false;
+  return (data ?? []).length > 0;
+}
+
 async function readConfirmState(
   svc: ReturnType<typeof getSupabaseServiceClient>,
   corsoId: number,
@@ -460,7 +539,7 @@ export async function setAttendeeEmailAction(
   // student has confirmed.
   const state = await readConfirmState(svc, corsoId, ref);
   if (state.confirmedAt) {
-    return { ok: false, error: "Dati già confermati — usa 'Richiedi nuova conferma'." };
+    return { ok: false, error: "Dati già confermati — non sono più modificabili." };
   }
   if (state.sentAt) {
     return { ok: false, error: "Conferma già inviata — usa 'Correggi e rinvia'." };
@@ -585,7 +664,7 @@ export async function setAttendeePhoneAction(
   // Same server-side lock as the email: free edits only before a send.
   const state = await readConfirmState(svc, corsoId, ref);
   if (state.confirmedAt) {
-    return { ok: false, error: "Dati già confermati — usa 'Richiedi nuova conferma'." };
+    return { ok: false, error: "Dati già confermati — non sono più modificabili." };
   }
   if (state.sentAt) {
     return { ok: false, error: "Conferma già inviata — usa 'Correggi e rinvia'." };
@@ -682,7 +761,7 @@ export async function sendAttendeeConfirmLinkAction(
  * email/phone once a confirmation link is out. Updates the snapshot, clears
  * the confirmed flag, sends the fresh link and stamps, in one round-trip: the
  * stored email can never drift from the last link sent. Refused after the
- * student confirmed (use requestNewConfirmationAction).
+ * student confirmed — confirmed data is final.
  */
 export async function correctAndResendAction(
   token: string,
@@ -704,7 +783,7 @@ export async function correctAndResendAction(
 
   const state = await readConfirmState(svc, corsoId, ref);
   if (state.confirmedAt) {
-    return { ok: false, error: "Dati già confermati — usa 'Richiedi nuova conferma'." };
+    return { ok: false, error: "Dati già confermati — non sono più modificabili." };
   }
 
   const wrote = await writeAttendeeEmail(svc, corsoId, ref, clean);

@@ -9,6 +9,7 @@ import {
   getExamProgressAction,
   type SubjectProgress,
 } from "@/lib/share-links/exam-send-actions";
+import { newerIso } from "@/lib/share-links/verification-state";
 
 // Local prop shapes (structurally match the loader types) so this client
 // component never imports the server-only loader module.
@@ -60,9 +61,18 @@ export default function ExamSendPanel({
     Object.fromEntries(tests.map((t) => [t.key, t.closedAt])),
   );
   const [lifeBusy, setLifeBusy] = useState(false);
-  // LIVE PROGRESS for the selected test, keyed by subject (`c<id>` / `p<id>`).
-  // Polled every 10s while the tab is open — the educator watches the bars move.
-  const [progress, setProgress] = useState<Record<string, SubjectProgress>>({});
+  // LIVE PROGRESS + persisted SEND STAMPS for the selected test, keyed by
+  // subject (`c<id>` / `p<id>`). Polled every 10s while the tab is open — the
+  // educator watches the bars move and the "Inviato" stamps survive reloads.
+  // Stored WITH the test they belong to: rows read them only when the key
+  // matches, so a sub-tab switch can never paint another test's data.
+  const [live, setLive] = useState<{
+    key: string;
+    progress: Record<string, SubjectProgress>;
+    sends: Record<string, string>;
+  }>({ key: "", progress: {}, sends: {} });
+  // Bumped after "Invia a tutti" so the fresh per-row stamps show at once.
+  const [refresh, setRefresh] = useState(0);
   const selKey = test?.key ?? "";
   const selConfigured = Boolean(test?.configured);
   useEffect(() => {
@@ -71,7 +81,9 @@ export default function ExamSendPanel({
     const tick = () => {
       getExamProgressAction(token, selKey)
         .then((r) => {
-          if (alive && r.ok && r.progress) setProgress(r.progress);
+          if (!alive || !r.ok) return;
+          if (!r.progress && !r.sends) return; // rate-limited tick — keep what we have
+          setLive({ key: selKey, progress: r.progress ?? {}, sends: r.sends ?? {} });
         })
         .catch(() => {});
     };
@@ -81,7 +93,7 @@ export default function ExamSendPanel({
       alive = false;
       clearInterval(id);
     };
-  }, [token, selKey, selConfigured]);
+  }, [token, selKey, selConfigured, refresh]);
 
   if (!test) return null;
   const isClosed = Boolean(closed[test.key]);
@@ -124,13 +136,12 @@ export default function ExamSendPanel({
       setAllNote(res.error || "Invio non riuscito.");
       return;
     }
-    if (!res.live) {
-      setAllNote(`Modalità test: nessun invio (${res.total ?? 0} studenti). Usa "Invia" per copiare i singoli link.`);
-    } else {
-      setAllNote(
-        `Inviate ${res.sent ?? 0}/${res.total ?? 0}${res.noEmail ? ` · ${res.noEmail} senza email` : ""}.`,
-      );
-    }
+    setAllNote(
+      `Inviate ${res.sent ?? 0}/${res.total ?? 0}${res.noEmail ? ` · ${res.noEmail} senza email` : ""}.`,
+    );
+    // Pull the just-persisted per-row stamps NOW, not at the next 10s tick —
+    // the summary and the rows must never contradict each other.
+    setRefresh((n) => n + 1);
   };
 
   return (
@@ -148,7 +159,11 @@ export default function ExamSendPanel({
           <button
             key={t.key}
             type="button"
-            onClick={() => setSel(t.key)}
+            onClick={() => {
+              setSel(t.key);
+              // A send summary belongs to the test it was sent for.
+              setAllNote(null);
+            }}
             aria-pressed={sel === t.key}
             style={{
               fontSize: 12.5,
@@ -294,17 +309,24 @@ export default function ExamSendPanel({
             Nessuno studente iscritto.
           </div>
         ) : (
-          roster.map((s, i) => (
-            <StudentSendRow
-              key={`${s.kind}-${s.id}`}
-              token={token}
-              testKey={test.key}
-              ttl={ttl}
-              person={s}
-              progress={progress[`${s.kind === "corsista" ? "c" : "p"}${s.id}`]}
-              last={i === roster.length - 1}
-            />
-          ))
+          roster.map((s, i) => {
+            const subjK = `${s.kind === "corsista" ? "c" : "p"}${s.id}`;
+            const forThisTest = live.key === test.key;
+            return (
+              <StudentSendRow
+                // test.key in the key → per-test remount, so notes/links/stamps
+                // from one test never linger on another.
+                key={`${test.key}-${s.kind}-${s.id}`}
+                token={token}
+                testKey={test.key}
+                ttl={ttl}
+                person={s}
+                progress={forThisTest ? live.progress[subjK] : undefined}
+                sentAt={forThisTest ? live.sends[subjK] : undefined}
+                last={i === roster.length - 1}
+              />
+            );
+          })
         )}
       </div>
       </>
@@ -353,6 +375,7 @@ function StudentSendRow({
   ttl,
   person,
   progress,
+  sentAt,
   last,
 }: {
   token: string;
@@ -360,12 +383,18 @@ function StudentSendRow({
   ttl: "eod" | "7d";
   person: Person;
   progress: SubjectProgress | undefined;
+  /** Persisted stamp of the last delivered email for THIS test (ISO). */
+  sentAt: string | undefined;
   last: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Optimistic echo of a send done in THIS session, merged newer-wins with
+  // the polled stamp (a later "Invia a tutti" must not be masked by it).
+  const [justSentAt, setJustSentAt] = useState<string | null>(null);
+  const sent = newerIso(justSentAt, sentAt ?? null);
 
   const send = async () => {
     if (busy) return;
@@ -382,8 +411,10 @@ function StudentSendRow({
       setNote(res.error || "Invio non riuscito.");
       return;
     }
-    if (res.sentTo) setNote(`Inviata a ${res.sentTo}`);
-    else {
+    if (res.sentTo) {
+      setNote(`Inviata a ${res.sentTo}`);
+      setJustSentAt(res.sentAt ?? new Date().toISOString());
+    } else {
       setNote(res.error ?? null);
       if (res.url) setLink(res.url);
     }
@@ -399,11 +430,16 @@ function StudentSendRow({
     }
   };
 
+  // Honest four-state label: nothing sent → "Non inviato"; email out but the
+  // student hasn't opened it → the persistent "Inviato HH:MM" stamp; then the
+  // live run states. Colors follow the platform semantics (warning = waiting).
   const stateLabel = progress?.submittedAt
     ? `Consegnato ${timeIt(progress.submittedAt)}`
     : progress
       ? `In corso · dom. ${progress.question}/${progress.total}`
-      : "Non iniziato";
+      : sent
+        ? `Inviato ${timeIt(sent)}`
+        : "Non inviato";
 
   return (
     <div
@@ -467,7 +503,9 @@ function StudentSendRow({
                 ? "var(--success-fg)"
                 : progress
                   ? "var(--indigo-600)"
-                  : "var(--text-4)",
+                  : sent
+                    ? "var(--warning-fg)"
+                    : "var(--text-4)",
             }}
           >
             {stateLabel}
@@ -513,8 +551,10 @@ function StudentSendRow({
                 Stato: {progress.submittedAt ? "Consegnato — in valutazione negli Esiti" : "In corso"}
               </span>
             </>
+          ) : sent ? (
+            <span>Link inviato alle {timeIt(sent)} — non ha ancora aperto il test.</span>
           ) : (
-            <span>Non ha ancora aperto il test.</span>
+            <span>Link non ancora inviato: usa &quot;Invia&quot;.</span>
           )}
           {!person.emailConfirmed && (
             <span style={{ color: "var(--warning-fg)" }}>

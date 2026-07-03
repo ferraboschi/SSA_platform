@@ -2,15 +2,17 @@
 
 // Send PERSONAL exam links from the educator SHARE LINK (no login → authorized by
 // the course share token). Each link is bound to one corsista (token `s`) so the
-// exam submission ties back to the right student, and it's delivered to that
-// student's confirmed/target email — go-live gated (never a student in test mode;
-// the link is returned for a WhatsApp/SMS fallback). Same token-auth posture as
+// exam submission ties back to the right student, and it's delivered LIVE to that
+// student's confirmed/target email (owner decision — the URL is still returned
+// for a WhatsApp/SMS fallback). Every delivered send is STAMPED in the send log
+// so the "Inviato HH:MM" indication survives reloads. Same token-auth posture as
 // the appello: re-verify the token, derive the course from it, bind the corsista
 // to THIS course before any send.
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyShareToken } from "./token";
 import { deliverExamInvite } from "@/lib/exam-links/invite-email";
+import { recordExamSend, getExamSends } from "@/lib/exam-links/send-log";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
 import { loadPublicExam, type PublicRunnerQuestion } from "@/lib/exam-links/load";
@@ -118,7 +120,8 @@ export interface SendExamLinkResult {
   ok: boolean;
   url?: string;
   sentTo?: string;
-  live?: boolean;
+  /** ISO stamp of THIS delivered send (mirrors the persisted send log). */
+  sentAt?: string;
   error?: string;
 }
 
@@ -167,12 +170,16 @@ export async function sendPersonalExamLinkAction(
     courseName: await courseName(svc, corsoId),
     ttl: ttlChoice(ttl),
   });
+  if (res.sentTo) {
+    const at = new Date().toISOString();
+    await recordExamSend(corsoId, t, `${k === "corsista" ? "c" : "p"}${cid}`, res.sentTo, at);
+    return { ok: true, ...res, sentAt: at };
+  }
   return { ok: true, ...res };
 }
 
 export interface SendExamLinksAllResult {
   ok: boolean;
-  live?: boolean;
   total?: number;
   sent?: number;
   noEmail?: number;
@@ -220,7 +227,6 @@ export async function sendPersonalExamLinksToAllAction(
 
   let sent = 0;
   let noEmail = 0;
-  let live = false;
   for (const r of rows) {
     const email = enrolledEmail.get(r.corsista_id) || (r.corsista?.email ?? "").trim();
     if (!email) {
@@ -237,8 +243,10 @@ export async function sendPersonalExamLinksToAllAction(
       courseName: cname,
       ttl: ttlChoice(ttl),
     });
-    live = res.live;
-    if (res.sentTo) sent++;
+    if (res.sentTo) {
+      sent++;
+      await recordExamSend(corsoId, t, `c${r.corsista_id}`, res.sentTo, new Date().toISOString());
+    }
   }
 
   // Companions ("doppio") with a CONFIRMED email get their own personal link.
@@ -268,12 +276,14 @@ export async function sendPersonalExamLinksToAllAction(
           courseName: cname,
           ttl: ttlChoice(ttl),
         });
-        live = res.live;
-        if (res.sentTo) sent++;
+        if (res.sentTo) {
+          sent++;
+          await recordExamSend(corsoId, t, `p${pr.id}`, res.sentTo, new Date().toISOString());
+        }
       }
     }
   }
-  return { ok: true, live, total: rows.length + companions, sent, noEmail };
+  return { ok: true, total: rows.length + companions, sent, noEmail };
 }
 
 // ── Live progress (educator's per-student bar) ──────────────────────────────
@@ -295,13 +305,19 @@ export interface SubjectProgress {
 
 /**
  * PUBLIC (share token): live progress for every student on one test, keyed by
- * subject (`c<corsistaId>` / `p<partecipanteId>`). Polled by the Esami tab.
+ * subject (`c<corsistaId>` / `p<partecipanteId>`), plus the persisted send
+ * stamps (subject → ISO of the last delivered email). Polled by the Esami tab.
  * Missing table (pre-migration) → empty map.
  */
 export async function getExamProgressAction(
   token: string,
   testKey: string,
-): Promise<{ ok: boolean; progress?: Record<string, SubjectProgress>; error?: string }> {
+): Promise<{
+  ok: boolean;
+  progress?: Record<string, SubjectProgress>;
+  sends?: Record<string, string>;
+  error?: string;
+}> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
   if (limiter.isLimited("progress", token, 30)) return { ok: true, progress: undefined };
@@ -309,6 +325,7 @@ export async function getExamProgressAction(
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
 
   const svc = getSupabaseServiceClient();
+  const sends = await getExamSends(corsoId, t);
   type ProgRow = {
     corsista_id: number | null;
     partecipante_id: number | null;
@@ -334,7 +351,7 @@ export async function getExamProgressAction(
       .eq("corso_id", corsoId)
       .eq("test_key", t);
     rows = base.data as ProgRow[] | null;
-    if (base.error) return { ok: true, progress: {} }; // pre-migration → no bars
+    if (base.error) return { ok: true, progress: {}, sends }; // pre-migration → no bars
   }
 
   // Live auto-grading on READ: one template load per call (answers included),
@@ -373,7 +390,7 @@ export async function getExamProgressAction(
       wrong,
     };
   }
-  return { ok: true, progress };
+  return { ok: true, progress, sends };
 }
 
 // ── Lifecycle: close a test for everyone / reopen ───────────────────────────
