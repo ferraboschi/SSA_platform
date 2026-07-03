@@ -17,6 +17,11 @@ export interface ConfirmTokenPayload {
   k: ConfirmSubjectKind;
   /** Subject id — corsi_iscrizioni.id (corsista) or corsi_partecipanti.id. */
   i: string;
+  /** Delivery channel: "email" = the link was DELIVERED to this address, so
+   *  receiving it proves inbox ownership → the email field is locked on the
+   *  page. "manual" (or absent, legacy) = handed over via WhatsApp/SMS/copy →
+   *  the email stays editable and gets confirmed by typing it. */
+  ch?: "email" | "manual";
   /** Optional forced language for the page. */
   l?: string;
   /** Expiry, epoch seconds. */

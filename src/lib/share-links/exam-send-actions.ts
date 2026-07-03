@@ -12,6 +12,7 @@ import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyShareToken } from "./token";
 import { deliverExamInvite } from "@/lib/exam-links/invite-email";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
+import { loadTemplateTests } from "@/lib/exam-links/template-tests";
 import type { ExamTestKey } from "@/lib/exam-links/token";
 
 const limiter = createFixedWindowLimiter(60_000);
@@ -42,6 +43,23 @@ async function courseName(svc: Svc, corsoId: number): Promise<string> {
     .eq("id", corsoId)
     .maybeSingle();
   return (data?.short_title as string) || (data?.full_title as string) || "Corso SSA";
+}
+
+/** Server-side twin of the UI's "da configurare" state: a test with no
+ *  questions in the family template must never be SENT (an empty exam would
+ *  reach students). Returns an error string, or null when sendable. */
+async function unconfiguredError(
+  svc: Svc,
+  corsoId: number,
+  testKey: string,
+): Promise<string | null> {
+  const { data } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
+  const family = (data?.type as string) === "shochu" ? "shochu" : "nihonshu";
+  const tests = await loadTemplateTests(family);
+  const t = tests.find((x) => x.key === testKey);
+  if (!t) return "Questo test non esiste per questo tipo di corso.";
+  if (!t.configured) return "Test non ancora configurato (nessuna domanda).";
+  return null;
 }
 
 // Guard + resolve a companion's name + confirmed email. Course-bound (null on
@@ -129,6 +147,8 @@ export async function sendPersonalExamLinkAction(
   const k = kind === "partecipante" ? "partecipante" : "corsista";
 
   const svc = getSupabaseServiceClient();
+  const notReady = await unconfiguredError(svc, corsoId, t);
+  if (notReady) return { ok: false, error: notReady };
   const target =
     k === "corsista"
       ? await corsistaTarget(svc, corsoId, cid)
@@ -172,6 +192,8 @@ export async function sendPersonalExamLinksToAllAction(
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
 
   const svc = getSupabaseServiceClient();
+  const notReady = await unconfiguredError(svc, corsoId, t);
+  if (notReady) return { ok: false, error: notReady };
   const cname = await courseName(svc, corsoId);
 
   const { data } = await svc

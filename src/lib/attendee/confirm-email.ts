@@ -21,15 +21,18 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => map[c]);
 }
 
-/** Mint a fresh confirmation magic-link URL for one attendee. */
+/** Mint a fresh confirmation magic-link URL for one attendee.
+ *  `channel`: "email" locks the email field on the page (delivery proves the
+ *  inbox); "manual" (WhatsApp/SMS/copy) keeps it editable. */
 export function buildConfirmUrl(
   courseId: string,
   kind: ConfirmSubjectKind,
   subjectId: string,
+  channel: "email" | "manual",
   lang?: string,
 ): string {
   const exp = Math.floor(Date.now() / 1000) + CONFIRM_LINK_TTL_HOURS * 3600;
-  const token = signConfirmToken({ c: courseId, k: kind, i: subjectId, l: lang, e: exp });
+  const token = signConfirmToken({ c: courseId, k: kind, i: subjectId, ch: channel, l: lang, e: exp });
   return `${appConfig.baseUrl.replace(/\/$/, "")}/conferma/${token}`;
 }
 
@@ -64,7 +67,8 @@ export interface DeliverConfirmArgs {
   fallbackTo?: string;
 }
 export interface DeliverConfirmResult {
-  /** Always returned so the caller has a Copia-link / WhatsApp-SMS fallback. */
+  /** MANUAL-channel link (editable email) — always returned so the caller has a
+   *  Copia-link / WhatsApp-SMS fallback. */
   url: string;
   sentTo?: string;
   live: boolean;
@@ -76,9 +80,13 @@ export interface DeliverConfirmResult {
  * EXAM_RESULT_EMAILS_LIVE is off, no email reaches a real attendee — it either
  * routes to `fallbackTo` (staff) or isn't sent at all (link returned for manual
  * WhatsApp/SMS delivery).
+ *
+ * Two distinct links: the one INSIDE the email carries channel "email" (the
+ * page locks the email field — delivery proved the inbox); the returned copy
+ * link carries "manual" (email editable, confirmed by typing).
  */
 export async function deliverConfirmLink(a: DeliverConfirmArgs): Promise<DeliverConfirmResult> {
-  const url = buildConfirmUrl(a.courseId, a.kind, a.subjectId, a.lang);
+  const url = buildConfirmUrl(a.courseId, a.kind, a.subjectId, "manual", a.lang);
   const live = examEmailConfig.live;
   const dest = live ? a.toEmail.trim() : (a.fallbackTo ?? "").trim();
   if (!dest) {
@@ -91,7 +99,8 @@ export async function deliverConfirmLink(a: DeliverConfirmArgs): Promise<Deliver
     };
   }
   try {
-    const html = renderConfirmEmailHtml(a.name, a.courseName, url);
+    const emailUrl = buildConfirmUrl(a.courseId, a.kind, a.subjectId, "email", a.lang);
+    const html = renderConfirmEmailHtml(a.name, a.courseName, emailUrl);
     const r = await getEmailService().send({
       to: dest,
       subject: live ? "Conferma i tuoi dati — SSA" : "[PROVA] Conferma dati — SSA",

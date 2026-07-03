@@ -71,12 +71,13 @@ function isMissingTable(err: { message?: string } | null | undefined): boolean {
   );
 }
 
-/** Roll-call days for a course: Certificato = 3, everything else = 1.
+/** Roll-call days for a course: Certificato = 3, Shochu = 2, everything else = 1.
  *  (Kept in sync with SharedCourse.dayCount in src/lib/share-links/load.ts.) */
 async function courseDayCount(corsoId: number): Promise<number> {
   const svc = getSupabaseServiceClient();
   const { data } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
-  return (data?.type as string | undefined) === "certificato" ? 3 : 1;
+  const type = data?.type as string | undefined;
+  return type === "certificato" ? 3 : type === "shochu" ? 2 : 1;
 }
 
 /** Unified presence subject: a corsista (`c<id>`) or a companion (`p<id>`). */
@@ -407,6 +408,56 @@ export async function setAttendeeEmailAction(
   const { error } = await svc
     .from(ref.kind === "corsista" ? ISCR_TABLE : PART_TABLE)
     .update(patch)
+    .eq("id", ref.id)
+    .eq("corso_id", corsoId);
+  if (error) {
+    if (isMissingTable(error)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/**
+ * PUBLIC (share token): the educator corrects an attendee's PHONE. For a
+ * corsista it updates corsisti.phone (the global identity — so the correction
+ * propagates everywhere the number appears); for a companion, its own row.
+ */
+export async function setAttendeePhoneAction(
+  token: string,
+  ref: ConfirmRef,
+  phone: string,
+): Promise<{ ok: boolean; error?: string; schema?: boolean }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("email", token, RATE_LIMIT_EMAIL)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+
+  const clean = String(phone ?? "").trim();
+  if (!clean || clean.length > 40) return { ok: false, error: "Numero non valido." };
+
+  const svc = getSupabaseServiceClient();
+  const guard = await confirmRefInCourse(svc, corsoId, ref);
+  if (!guard.ok) return guard;
+
+  if (ref.kind === "corsista") {
+    // Resolve the enrollment → corsista, then update the global identity row.
+    const { data: enr, error: enrErr } = await svc
+      .from(ISCR_TABLE)
+      .select("corsista_id")
+      .eq("id", ref.id)
+      .eq("corso_id", corsoId)
+      .maybeSingle();
+    if (enrErr || !enr) return { ok: false, error: "Iscrizione non trovata." };
+    const { error } = await svc
+      .from("corsisti")
+      .update({ phone: clean })
+      .eq("id", (enr as { corsista_id: number }).corsista_id);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  }
+
+  const { error } = await svc
+    .from(PART_TABLE)
+    .update({ phone: clean })
     .eq("id", ref.id)
     .eq("corso_id", corsoId);
   if (error) {

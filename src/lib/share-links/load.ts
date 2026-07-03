@@ -19,6 +19,7 @@ import {
   type ExamTestKey,
 } from "@/lib/exam-links/token";
 import { getCourseClosures } from "@/lib/exam-links/lifecycle";
+import { loadTemplateTests } from "@/lib/exam-links/template-tests";
 
 export interface SharedSake {
   code: string;
@@ -66,7 +67,11 @@ export interface SharedExamTest {
   label: string;
   /** The official final exam vs a day mini-test. */
   isFinal: boolean;
-  /** Ready-to-share student class link (/esame/<signed token>). */
+  /** Whether the template has questions for this test. Unconfigured tests are
+   *  shown as structure ("da configurare") and cannot be sent. */
+  configured: boolean;
+  /** Ready-to-share student class link (/esame/<signed token>); "" when the
+   *  test is not configured. */
   url: string;
   /** Lifecycle: ISO timestamp if the educator closed this test, else null. */
   closedAt: string | null;
@@ -327,50 +332,31 @@ export async function loadSharedCourse(
 
   const type = corso.type as CourseTypeKey;
 
-  // Exam section: only certificato (nihonshu) / shochu bear an exam. Surface the
-  // configured tests (day mini-tests that actually have questions, then the final
-  // exam) each with a signed class link the educator can share with students.
-  // Tokens are stateless (the link IS the grant), so we mint them here server-side.
+  // Exam section: only certificato (nihonshu) / shochu bear an exam. The FIXED
+  // structure (Giorno 1..N, Feedback, Esame finale) always shows — unconfigured
+  // tests are "da configurare" with no link. Configured tests get a signed class
+  // link; tokens are stateless (the link IS the grant), minted here server-side.
   const examFamily: "nihonshu" | "shochu" | null =
     type === "certificato" ? "nihonshu" : type === "shochu" ? "shochu" : null;
   let exam: SharedExamTest[] | null = null;
   if (examFamily) {
-    const dbFamily = examFamily === "shochu" ? "shochu" : "certificato";
-    const { data: tpl } = await sb
-      .from("exam_templates")
-      .select("data")
-      .eq("family", dbFamily)
-      .order("id", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const tplData = (tpl?.data ?? {}) as {
-      questions?: unknown[];
-      miniTests?: { day: number; questions?: unknown[] }[];
-      feedback?: { questions?: unknown[] };
-    };
     const base = appConfig.baseUrl.replace(/\/$/, "");
     const now = Math.floor(Date.now() / 1000);
     const exp = now + EXAM_LINK_TTL_HOURS.exam * 3600;
-    const closures = await getCourseClosures(Number(corso.id));
+    const [templateTests, closures] = await Promise.all([
+      loadTemplateTests(examFamily),
+      getCourseClosures(Number(corso.id)),
+    ]);
     const link = (testKey: ExamTestKey) =>
       `${base}/esame/${signExamToken({ c: String(corso.id), t: testKey, m: "exam", ia: now, e: exp })}`;
-    // Order mirrors the run order the educator expects: day mini-tests, then the
-    // feedback, then the official final exam.
-    const tests: SharedExamTest[] = [];
-    const push = (key: ExamTestKey, label: string, isFinal: boolean) =>
-      tests.push({ key, label, isFinal, url: link(key), closedAt: closures[key] ?? null });
-    for (const mt of (tplData.miniTests ?? []).slice().sort((a, b) => a.day - b.day)) {
-      if ((mt.questions?.length ?? 0) > 0) {
-        push(`day${mt.day}`, `Test giorno ${mt.day}`, false);
-      }
-    }
-    if ((tplData.feedback?.questions?.length ?? 0) > 0) {
-      push("feedback", "Feedback", false);
-    }
-    if ((tplData.questions?.length ?? 0) > 0) {
-      push("final", "Esame finale", true);
-    }
-    exam = tests.length ? tests : null;
+    exam = templateTests.map((t) => ({
+      key: t.key,
+      label: t.label,
+      isFinal: t.isFinal,
+      configured: t.configured,
+      url: t.configured ? link(t.key) : "",
+      closedAt: closures[t.key] ?? null,
+    }));
   }
 
   const totalSakes = days.reduce((n, d) => n + d.sakes.length, 0);
@@ -387,7 +373,9 @@ export async function loadSharedCourse(
     educator,
     hasExam: EXAM_COURSE_TYPES.includes(type),
     exam,
-    dayCount: type === "certificato" ? 3 : 1,
+    // Roll-call days: Certificato = 3, Shochu = 2, everything else = 1.
+    // (Kept in sync with courseDayCount in attendance-actions.ts.)
+    dayCount: type === "certificato" ? 3 : type === "shochu" ? 2 : 1,
     totalSakes,
     totalSakeCost,
     days,

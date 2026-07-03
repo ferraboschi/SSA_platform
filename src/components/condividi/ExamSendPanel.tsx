@@ -14,6 +14,8 @@ interface ExamTest {
   key: string;
   label: string;
   isFinal: boolean;
+  /** False = the template has no questions yet: structure shown, sending off. */
+  configured: boolean;
   url: string;
   closedAt: string | null;
 }
@@ -26,11 +28,11 @@ interface Person {
 }
 
 /**
- * Educator "Esami" panel on the public share page: per test (day mini-tests /
- * feedback / final), send each enrolled student their PERSONAL exam link by email
- * (or copy it for WhatsApp/SMS when there's no email). Also offers the general
- * class link (email-gated) to paste in a group chat. Companions can't yet get a
- * personal exam link (the token binds a corsista id only).
+ * Educator "Esami" panel on the public share page. FIXED sub-tab per test
+ * (Giorno 1..N / Feedback / Esame finale — unconfigured ones shown muted, not
+ * sendable). Per test: send each attendee (corsisti AND "doppio" companions)
+ * their PERSONAL exam link by email, or copy it for WhatsApp/SMS; plus the
+ * general class link (email-gated) for the group chat.
  */
 export default function ExamSendPanel({
   token,
@@ -115,7 +117,8 @@ export default function ExamSendPanel({
         copia il link generale per la chat di classe.
       </p>
 
-      {/* Test sub-tabs */}
+      {/* Test sub-tabs — the FIXED structure (Giorno 1..N, Feedback, Esame):
+          unconfigured tests stay visible but muted. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
         {tests.map((t) => (
           <button
@@ -125,19 +128,43 @@ export default function ExamSendPanel({
             style={{
               fontSize: 12.5,
               fontWeight: 600,
-              padding: "6px 12px",
+              minHeight: 40,
+              padding: "8px 14px",
               borderRadius: 999,
               cursor: "pointer",
               border: `1px solid ${sel === t.key ? "var(--indigo-600, #4f46e5)" : "var(--border, #e5e7eb)"}`,
               background: sel === t.key ? "var(--indigo-600, #4f46e5)" : "transparent",
-              color: sel === t.key ? "#fff" : "var(--text-2, #374151)",
+              color: sel === t.key ? "#fff" : t.configured ? "var(--text-2, #374151)" : "var(--text-4, #9ca3af)",
             }}
           >
             {t.label}
+            {!t.configured && " ⚠︎"}
           </button>
         ))}
       </div>
 
+      {/* Unconfigured test: structure only, nothing sendable. */}
+      {!test.configured && (
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: 10,
+            border: "1px dashed var(--border, #e5e7eb)",
+            background: "var(--surface-2, #f9fafb)",
+            fontSize: 12.5,
+            color: "var(--text-3, #6b7280)",
+            lineHeight: 1.5,
+            marginBottom: 8,
+          }}
+        >
+          <strong>{test.label}</strong> non è ancora configurato: non ha domande.
+          La segreteria lo prepara nella <em>Libreria esami &amp; test</em> della
+          piattaforma — appena pronto, qui compariranno i pulsanti di invio.
+        </div>
+      )}
+
+      {test.configured && (
+      <>
       {/* Lifecycle: duration for new sends + close/reopen for everyone. */}
       <div
         style={{
@@ -252,6 +279,8 @@ export default function ExamSendPanel({
           ))
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

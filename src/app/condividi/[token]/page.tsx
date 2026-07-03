@@ -6,12 +6,10 @@
 import type { Metadata } from "next";
 import { verifyShareToken } from "@/lib/share-links/token";
 import { loadSharedCourse } from "@/lib/share-links/load";
-import AttendanceRoster from "@/components/condividi/AttendanceRoster";
-import ExamSendPanel from "@/components/condividi/ExamSendPanel";
+import EducatorTabs from "@/components/condividi/EducatorTabs";
 import { loadPlannerState } from "@/lib/pianificatore-server";
 import type { PlannerSaved } from "@/lib/pianificatore";
 import { COURSE_TYPES } from "@/lib/domain/constants";
-import { formatEuro } from "@/lib/format";
 import "@/components/esame-pubblico/exam-public.css";
 
 export const metadata: Metadata = {
@@ -82,152 +80,24 @@ export default async function Page({
           </div>
         </div>
 
-        {/* Materials summary */}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+        {/* Compact summary */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
           <Stat label="Iscritti" value={String(course.students.filter((s) => s.kind === "corsista").length)} />
-          <Stat label="Giornate" value={String(course.days.length)} />
+          <Stat label="Giornate" value={String(course.dayCount)} />
           <Stat label="Sake totali" value={String(course.totalSakes)} />
-          <Stat label="Costo sake" value={formatEuro(Math.round(course.totalSakeCost))} />
           <Stat label="Esame finale" value={course.hasExam ? "Sì" : "No"} />
         </div>
 
-        {/* Enrolled students roster + roll-call (appello). The client component
-            gets ONLY the signed token — it derives the course + writes via
-            token-verified server actions (never a service client / raw id). */}
-        <AttendanceRoster token={token} students={course.students} dayCount={course.dayCount} />
-
-        {/* Program */}
-        <h2 style={{ fontSize: 15, margin: "0 0 12px" }}>Programma & sake</h2>
-        {course.days.length === 0 && (
-          <p style={{ color: "var(--text-3)", fontSize: 13, fontStyle: "italic" }}>
-            Il programma non è ancora stato pubblicato.
-          </p>
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {course.days.map((d) => (
-            <div
-              key={d.day}
-              style={{
-                border: "1px solid var(--border, #e5e7eb)",
-                borderRadius: 12,
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  padding: "10px 14px",
-                  background: "var(--surface-2, #f4f5f7)",
-                  borderBottom: "1px solid var(--border, #e5e7eb)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <span
-                  style={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: 7,
-                    background: "var(--indigo-50, #eef2ff)",
-                    color: "var(--indigo-600, #4f46e5)",
-                    display: "grid",
-                    placeItems: "center",
-                    fontWeight: 700,
-                    fontSize: 12,
-                  }}
-                >
-                  G{d.day}
-                </span>
-                <span style={{ fontWeight: 600, fontSize: 14 }}>{d.name}</span>
-                <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--text-4, #9ca3af)" }}>
-                  {d.sakes.length} sake
-                </span>
-              </div>
-              {d.sakes.length === 0 ? (
-                <div style={{ padding: "12px 14px", fontSize: 12.5, color: "var(--text-4, #9ca3af)", fontStyle: "italic" }}>
-                  Nessun sake assegnato a questa giornata.
-                </div>
-              ) : (
-                d.sakes.map((s, i) => (
-                  <div
-                    key={`${s.code}-${i}`}
-                    style={{
-                      padding: "10px 14px",
-                      borderBottom:
-                        i === d.sakes.length - 1 ? "none" : "1px solid var(--border-2, #f0f1f3)",
-                    }}
-                  >
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      {s.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={s.image}
-                          alt=""
-                          width={42}
-                          height={42}
-                          style={{ borderRadius: 6, objectFit: "cover", flexShrink: 0, background: "var(--surface-2, #f3f4f6)" }}
-                        />
-                      ) : (
-                        <span
-                          style={{
-                            width: 42,
-                            height: 42,
-                            borderRadius: 6,
-                            background: "var(--surface-2, #f3f4f6)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 9,
-                            color: "var(--text-4, #9ca3af)",
-                            flexShrink: 0,
-                            textAlign: "center",
-                            padding: 2,
-                          }}
-                        >
-                          {s.code || "—"}
-                        </span>
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 600 }}>
-                          {s.url ? (
-                            <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>
-                              {s.name}
-                            </a>
-                          ) : (
-                            s.name
-                          )}
-                        </div>
-                        <div style={{ fontSize: 11.5, color: "var(--text-3, #6b7280)", marginTop: 2 }}>
-                          {[s.type, s.sakagura, s.size ? `${s.size}ml` : "", s.code]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </div>
-                      </div>
-                      {(s.qty > 0 || s.cost > 0) && (
-                        <div style={{ textAlign: "right", flexShrink: 0, fontSize: 11.5, color: "var(--text-3, #6b7280)" }}>
-                          {s.qty > 0 && (
-                            <div>
-                              <b>{s.qty}</b> bott.
-                            </div>
-                          )}
-                          {s.cost > 0 && <div>{formatEuro(Math.round(s.cost * (s.qty || 1)))}</div>}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Exam section — per-test personal-link sending + a general class link
-            (last, per the educator page layout). Only for exam-bearing courses. */}
-        {course.exam && course.exam.length > 0 && (
-          <div style={{ marginTop: 24 }}>
-            <ExamSendPanel token={token} tests={course.exam} students={course.students} />
-          </div>
-        )}
+        {/* The 4 tabs: Appello (by day) · Verifica email · Programma · Esami.
+            The client component gets ONLY the signed token — every write goes
+            through token-verified server actions (never a raw course id). */}
+        <EducatorTabs
+          token={token}
+          students={course.students}
+          dayCount={course.dayCount}
+          days={course.days}
+          tests={course.exam}
+        />
 
         <div
           style={{
