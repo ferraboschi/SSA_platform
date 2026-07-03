@@ -285,7 +285,7 @@ function AppelloTab({
           const canAdd =
             !readOnly && s.kind === "corsista" && tickets >= 2 && used < tickets - 1 && s.iscrizioneId != null;
           return (
-            <div key={subj} className="edu-rowwrap" data-state={state}>
+            <div key={subj} className="edu-rowwrap" data-state={state} data-present={checked}>
               <div className="edu-rowgrid">
                 {/* Presence zone — the tap target for the roll-call. */}
                 <button

@@ -372,7 +372,10 @@
 .edu-rowwrap[data-state="verificare"] { border-left-color: var(--indigo); }
 .edu-rowwrap[data-state="attesa"]     { border-left-color: var(--warning); }
 .edu-rowwrap[data-state="confermato"] { border-left-color: var(--success); }
-.edu-rowwrap[data-state="assente"] .edu-presence,
+/* Dimming follows TODAY's presence (the checkbox), on every row including
+   confirmed ones — the visible feedback that a presence tap took effect.
+   The verification chip/stripe never dim: sends/confirms don't un-happen. */
+.edu-rowwrap[data-present="false"] .edu-presence { opacity: 0.55; }
 .edu-rowwrap[data-state="assente"] .edu-actions { opacity: 0.55; }
 
 .edu-rowgrid {

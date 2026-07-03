@@ -3,13 +3,17 @@
 // in attendance-actions.ts.
 //
 // States (owner-approved, airtight):
-//   assente     → not present at the appello (and never confirmed): locked.
+//   assente     → never marked present and nothing sent yet: the appello IS
+//                 the flow, so sending is not available.
 //   verificare  → present, nothing sent yet: email/phone freely editable,
 //                 action "Invia conferma".
 //   attesa      → a confirmation link is OUT: email/phone LOCKED; actions
 //                 "Reinvia" or "Correggi e rinvia" (atomic update+send).
-//   confermato  → the student completed the confirmation: everything locked;
-//                 only "Richiedi nuova conferma" re-opens (back to attesa).
+//   confermato  → the student completed the confirmation: data locked forever.
+//
+// This is the VERIFICATION axis only. Per-day presence is an independent fact
+// (the checkbox): once something was sent or confirmed, toggling presence must
+// never change or hide the chip — send/confirm timestamps don't un-happen.
 //
 // INVARIANT: the stored email is always the address the LAST link was sent to
 // — edits after a send only happen inside the atomic correct-and-resend.
@@ -22,8 +26,8 @@ export function deriveVerificationState(
   confirmedAtIso: string | null,
 ): VerificationStateId {
   if (confirmedAtIso) return "confermato";
-  if (!present) return "assente";
   if (sentAtIso) return "attesa";
+  if (!present) return "assente";
   return "verificare";
 }
 

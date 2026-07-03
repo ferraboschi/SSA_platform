@@ -10,15 +10,15 @@ import {
 const NOW = new Date("2026-07-03T15:00:00");
 
 describe("deriveVerificationState (the airtight flow)", () => {
-  it("absent and never confirmed → assente (locked)", () => {
+  it("absent and nothing ever sent → assente (sending unavailable)", () => {
     expect(deriveVerificationState(false, null, null)).toBe("assente");
-    expect(deriveVerificationState(false, "2026-07-03T10:00:00Z", null)).toBe("assente");
   });
   it("present, nothing sent → verificare (free edit)", () => {
     expect(deriveVerificationState(true, null, null)).toBe("verificare");
   });
-  it("present, link out → attesa (locked, resend only)", () => {
+  it("link out → attesa, even if presence is toggled off after the send", () => {
     expect(deriveVerificationState(true, "2026-07-03T10:00:00Z", null)).toBe("attesa");
+    expect(deriveVerificationState(false, "2026-07-03T10:00:00Z", null)).toBe("attesa");
   });
   it("confirmed wins over everything (even if absent today)", () => {
     expect(deriveVerificationState(false, null, "2026-07-03T11:00:00Z")).toBe("confermato");
