@@ -136,7 +136,7 @@ export default function ExamSendPanel({
   return (
     <div style={{ marginBottom: 22 }}>
       <h2 style={{ fontSize: 15, margin: "0 0 4px" }}>Esami · link per gli studenti</h2>
-      <p style={{ fontSize: 12, color: "var(--text-3, #6b7280)", margin: "0 0 12px", lineHeight: 1.5 }}>
+      <p style={{ fontSize: 12, color: "var(--text-3)", margin: "0 0 12px", lineHeight: 1.5 }}>
         Invia a ogni studente il suo link personale (all&apos;email confermata), oppure
         copia il link generale per la chat di classe.
       </p>
@@ -157,9 +157,9 @@ export default function ExamSendPanel({
               padding: "8px 14px",
               borderRadius: 999,
               cursor: "pointer",
-              border: `1px solid ${sel === t.key ? "var(--indigo-600, #4f46e5)" : "var(--border, #e5e7eb)"}`,
-              background: sel === t.key ? "var(--indigo-600, #4f46e5)" : "transparent",
-              color: sel === t.key ? "#fff" : t.configured ? "var(--text-2, #374151)" : "var(--text-4, #9ca3af)",
+              border: `1px solid ${sel === t.key ? "var(--indigo-600)" : "var(--border)"}`,
+              background: sel === t.key ? "var(--indigo-600)" : "transparent",
+              color: sel === t.key ? "#fff" : t.configured ? "var(--text-2)" : "var(--text-4)",
             }}
           >
             {t.label}
@@ -176,10 +176,10 @@ export default function ExamSendPanel({
           style={{
             padding: "12px 14px",
             borderRadius: 10,
-            border: "1px dashed var(--border, #e5e7eb)",
-            background: "var(--surface-2, #f9fafb)",
+            border: "1px dashed var(--border)",
+            background: "var(--surface-2)",
             fontSize: 12.5,
-            color: "var(--text-3, #6b7280)",
+            color: "var(--text-3)",
             lineHeight: 1.5,
             marginBottom: 8,
           }}
@@ -202,17 +202,17 @@ export default function ExamSendPanel({
           marginBottom: 8,
           padding: "8px 10px",
           borderRadius: 8,
-          background: isClosed ? "var(--red-50, #fef2f2)" : "var(--surface-2, #f9fafb)",
-          border: `1px solid ${isClosed ? "var(--red-200, #fecaca)" : "var(--border, #e5e7eb)"}`,
+          background: isClosed ? "var(--danger-bg)" : "var(--surface-2)",
+          border: `1px solid ${isClosed ? "var(--danger-bg)" : "var(--border)"}`,
         }}
       >
         {isClosed ? (
-          <span style={{ fontSize: 12, color: "var(--red-600, #dc2626)", fontWeight: 600, flex: "1 1 auto" }}>
+          <span style={{ fontSize: 12, color: "var(--danger-fg)", fontWeight: 600, flex: "1 1 auto" }}>
             Test chiuso — i link inviati non funzionano più. Un nuovo invio riapre l&apos;accesso.
           </span>
         ) : (
           <>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-3, #6b7280)", flexShrink: 0 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-3)", flexShrink: 0 }}>
               Durata link
             </span>
             <select
@@ -222,8 +222,8 @@ export default function ExamSendPanel({
                 fontSize: 12,
                 padding: "5px 8px",
                 borderRadius: 7,
-                border: "1px solid var(--border, #e5e7eb)",
-                background: "var(--surface, #fff)",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
                 flex: "0 1 auto",
               }}
             >
@@ -248,7 +248,7 @@ export default function ExamSendPanel({
           marginBottom: 8,
         }}
       >
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-3, #6b7280)", flexShrink: 0 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-3)", flexShrink: 0 }}>
           Link generale
         </span>
         <input
@@ -262,8 +262,8 @@ export default function ExamSendPanel({
             fontSize: 11,
             padding: "6px 9px",
             borderRadius: 7,
-            border: "1px solid var(--border, #e5e7eb)",
-            background: "var(--surface-2, #f4f5f7)",
+            border: "1px solid var(--border)",
+            background: "var(--surface-2)",
           }}
         />
         <button
@@ -278,19 +278,19 @@ export default function ExamSendPanel({
         </button>
       </div>
       {allNote && (
-        <p style={{ fontSize: 11.5, color: "var(--text-3, #6b7280)", margin: "0 0 12px" }}>{allNote}</p>
+        <p style={{ fontSize: 11.5, color: "var(--text-3)", margin: "0 0 12px" }}>{allNote}</p>
       )}
 
       {/* Per-student send */}
       <div
         style={{
-          border: "1px solid var(--border, #e5e7eb)",
+          border: "1px solid var(--border)",
           borderRadius: 10,
           overflow: "hidden",
         }}
       >
         {roster.length === 0 ? (
-          <div style={{ padding: "12px 14px", fontSize: 12.5, color: "var(--text-4, #9ca3af)" }}>
+          <div style={{ padding: "12px 14px", fontSize: 12.5, color: "var(--text-4)" }}>
             Nessuno studente iscritto.
           </div>
         ) : (
@@ -313,26 +313,19 @@ export default function ExamSendPanel({
   );
 }
 
-// Compact live-progress bar: green when submitted, indigo while running.
+// Compact live-progress bar — platform tokens: indigo while running, green
+// (success) ONLY when submitted.
 function ProgressBar({ p }: { p: SubjectProgress | undefined }) {
   const pct = p ? p.pct : 0;
-  const color = p?.submittedAt ? "var(--green-500, #22c55e)" : "var(--indigo-600, #4f46e5)";
   return (
     <div
       role="progressbar"
       aria-valuenow={pct}
       aria-valuemin={0}
       aria-valuemax={100}
-      style={{
-        flex: "1 1 90px",
-        minWidth: 70,
-        height: 8,
-        borderRadius: 999,
-        background: "var(--surface-3, #e5e7eb)",
-        overflow: "hidden",
-      }}
+      className={`edu-progress${p?.submittedAt ? " submitted" : ""}`}
     >
-      <div style={{ width: `${pct}%`, height: "100%", background: color, transition: "width .5s" }} />
+      <div className="edu-progress-fill" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -348,9 +341,9 @@ function miniBtn(primary: boolean): React.CSSProperties {
     padding: "6px 12px",
     borderRadius: 7,
     cursor: "pointer",
-    border: primary ? "none" : "1px solid var(--border, #e5e7eb)",
-    background: primary ? "var(--indigo-600, #4f46e5)" : "transparent",
-    color: primary ? "#fff" : "var(--text-2, #374151)",
+    border: primary ? "none" : "1px solid var(--border)",
+    background: primary ? "var(--indigo-600)" : "transparent",
+    color: primary ? "#fff" : "var(--text-2)",
   };
 }
 
@@ -407,7 +400,7 @@ function StudentSendRow({
   };
 
   const stateLabel = progress?.submittedAt
-    ? "Consegnato ✓"
+    ? `Consegnato ${timeIt(progress.submittedAt)}`
     : progress
       ? `In corso · dom. ${progress.question}/${progress.total}`
       : "Non iniziato";
@@ -416,7 +409,7 @@ function StudentSendRow({
     <div
       style={{
         padding: "9px 12px",
-        borderBottom: last ? "none" : "1px solid var(--border-2, #f0f1f3)",
+        borderBottom: last ? "none" : "1px solid var(--border-2)",
         display: "flex",
         flexDirection: "column",
         gap: 3,
@@ -452,13 +445,13 @@ function StudentSendRow({
               height: 7,
               borderRadius: "50%",
               flexShrink: 0,
-              background: person.emailConfirmed ? "var(--green-500, #22c55e)" : "var(--amber-400, #f59e0b)",
+              background: person.emailConfirmed ? "var(--success)" : "var(--warning)",
             }}
           />
           <span style={{ fontSize: 13, fontWeight: 600, flexShrink: 0, maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {person.name || "—"}
             {person.kind === "partecipante" && (
-              <span style={{ marginLeft: 4, fontSize: 10.5, fontWeight: 500, color: "var(--text-4, #9ca3af)", fontStyle: "italic" }}>
+              <span style={{ marginLeft: 4, fontSize: 10.5, fontWeight: 500, color: "var(--text-4)", fontStyle: "italic" }}>
                 (ospite)
               </span>
             )}
@@ -471,10 +464,10 @@ function StudentSendRow({
               fontWeight: 600,
               flexShrink: 0,
               color: progress?.submittedAt
-                ? "var(--green-600, #059669)"
+                ? "var(--success-fg)"
                 : progress
-                  ? "var(--indigo-600, #4f46e5)"
-                  : "var(--text-4, #9ca3af)",
+                  ? "var(--indigo-600)"
+                  : "var(--text-4)",
             }}
           >
             {stateLabel}
@@ -492,9 +485,9 @@ function StudentSendRow({
             padding: "8px 10px",
             margin: "4px 0 2px 15px",
             borderRadius: 8,
-            background: "var(--surface-2, #f9fafb)",
+            background: "var(--surface-2)",
             fontSize: 11.5,
-            color: "var(--text-2, #374151)",
+            color: "var(--text-2)",
           }}
         >
           {progress ? (
@@ -504,9 +497,9 @@ function StudentSendRow({
               </span>
               {progress.correct != null && (
                 <span>
-                  Risposte: <strong style={{ color: "var(--green-600, #059669)" }}>{progress.correct} corrette</strong>
+                  Risposte: <strong style={{ color: "var(--success-fg)" }}>{progress.correct} corrette</strong>
                   {" · "}
-                  <strong style={{ color: "var(--red-600, #dc2626)" }}>{progress.wrong} sbagliate</strong>
+                  <strong style={{ color: "var(--danger-fg)" }}>{progress.wrong} sbagliate</strong>
                   {" "}(correzione automatica in tempo reale)
                 </span>
               )}
@@ -524,14 +517,14 @@ function StudentSendRow({
             <span>Non ha ancora aperto il test.</span>
           )}
           {!person.emailConfirmed && (
-            <span style={{ color: "var(--amber-500, #d97706)" }}>
-              ⚠︎ Dati non ancora confermati dallo studente — completa la verifica nell&apos;Appello.
+            <span style={{ color: "var(--warning-fg)" }}>
+              Dati non confermati — completa la verifica nell&apos;Appello.
             </span>
           )}
         </div>
       )}
       {note && (
-        <div style={{ fontSize: 11, color: "var(--text-3, #6b7280)", paddingLeft: 15 }}>
+        <div style={{ fontSize: 11, color: "var(--text-3)", paddingLeft: 15 }}>
           {note}
           {link && (
             <>
@@ -542,7 +535,7 @@ function StudentSendRow({
                 style={{
                   fontSize: 11,
                   fontWeight: 600,
-                  color: "var(--indigo-600, #4f46e5)",
+                  color: "var(--indigo-600)",
                   background: "transparent",
                   border: "none",
                   padding: 0,

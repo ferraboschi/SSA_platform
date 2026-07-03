@@ -50,9 +50,11 @@ export interface SharedStudent {
   email: string;
   /** Whether the attendee confirmed their email at course start (green tick). */
   emailConfirmed: boolean;
-  /** Whether a confirmation link was already SENT (the "mail non ancora
-   *  confermata" middle state). False pre-migration. */
+  /** Whether a confirmation link was already SENT. False pre-migration. */
   confirmSent: boolean;
+  /** Server-truth timestamps for the state chips (null pre-migration). */
+  confirmSentAt: string | null;
+  emailConfirmedAt: string | null;
   phone: string;
   /** Corsista rows only: the enrollment id (drives the public companion-add). */
   iscrizioneId?: number;
@@ -248,7 +250,13 @@ export async function loadSharedCourse(
   // sanitization). Two-tier selects: WITH confirm_sent_at first, then without
   // (so a DB that has the 140000 migration but not the 20260703 one still
   // shows confirmed states), then nothing (pre-migration roster still works).
-  type Snap = { email: string; confirmed: boolean; sent: boolean };
+  type Snap = {
+    email: string;
+    confirmed: boolean;
+    sent: boolean;
+    sentAt: string | null;
+    confirmedAt: string | null;
+  };
   const enrolledEmail = new Map<number, Snap>();
   {
     type Row = {
@@ -275,6 +283,8 @@ export async function loadSharedCourse(
         email: (r.enrolled_email ?? "").trim(),
         confirmed: Boolean(r.email_confirmed_at),
         sent: Boolean(r.confirm_sent_at),
+        sentAt: r.confirm_sent_at ?? null,
+        confirmedAt: r.email_confirmed_at ?? null,
       });
     }
   }
@@ -304,6 +314,8 @@ export async function loadSharedCourse(
         email: (r.email ?? "").trim(),
         confirmed: Boolean(r.email_confirmed_at),
         sent: Boolean(r.confirm_sent_at),
+        sentAt: r.confirm_sent_at ?? null,
+        confirmedAt: r.email_confirmed_at ?? null,
       });
     }
   }
@@ -330,6 +342,8 @@ export async function loadSharedCourse(
       email: snap?.email || (c.email ?? ""),
       emailConfirmed: snap?.confirmed ?? false,
       confirmSent: snap?.sent ?? false,
+      confirmSentAt: snap?.sentAt ?? null,
+      emailConfirmedAt: snap?.confirmedAt ?? null,
       phone: c.phone ?? "",
       iscrizioneId: r.id,
       tickets,
@@ -346,6 +360,8 @@ export async function loadSharedCourse(
         email: csnap?.email ?? "",
         emailConfirmed: csnap?.confirmed ?? false,
         confirmSent: csnap?.sent ?? false,
+        confirmSentAt: csnap?.sentAt ?? null,
+        emailConfirmedAt: csnap?.confirmedAt ?? null,
         phone: comp.phone,
         guestOf: c.full_name ?? "",
       });

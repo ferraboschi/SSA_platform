@@ -1,18 +1,19 @@
 "use client";
 
-// The educator share page, organized in 3 TABS (mobile-first — the educator
-// runs the whole course from their phone):
-//   1. Appello   — attendance BY DAY **merged with the email verification**:
-//                  tap who's present; a present student's name turns colored
-//                  and the row opens to send the confirmation email / correct
-//                  email+phone. When the student completes the confirmation
-//                  the row flips green LIVE (polled) — the circle closes.
-//   2. Programma — the sake programme by day, photos + inline details.
-//   3. Esami     — the ExamSendPanel (fixed sub-tabs, live progress bars).
+// The educator share page — 3 tabs, mobile-first, styled STRICTLY on the
+// platform design system (tokens.css + the shared .badge/.btn language):
+//   1. Appello   — attendance by day MERGED with email verification. Tap who's
+//                  present; every row always shows its verification state
+//                  (chip with server timestamp) and exactly the actions that
+//                  state allows. Green = confirmed, and nothing else.
+//   2. Programma — sake programme by day, photos + inline details.
+//   3. Esami     — ExamSendPanel (fixed sub-tabs, live progress bars).
 //
-// SECURITY: this client only ever holds the SIGNED TOKEN — every write goes
-// through token-verified server actions that re-derive the course and enforce
-// ownership (see attendance-actions.ts).
+// The verification flow is AIRTIGHT (see lib/share-links/verification-state):
+// free edits only before the first send; while a link is out, corrections
+// happen exclusively via the atomic correct-and-resend; a confirmed student
+// re-opens only through "Richiedi nuova conferma". The same rules are
+// enforced server-side in attendance-actions.ts.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,11 +23,19 @@ import {
   setAttendeeEmailAction,
   setAttendeePhoneAction,
   sendAttendeeConfirmLinkAction,
+  correctAndResendAction,
+  requestNewConfirmationAction,
   sendConfirmLinksToAllAction,
   getVerificationStatesAction,
   type AttendanceMap,
   type AttendanceSubject,
 } from "@/lib/share-links/attendance-actions";
+import {
+  deriveVerificationState,
+  chipLabel,
+  newerIso,
+  type VerificationStateId,
+} from "@/lib/share-links/verification-state";
 import ExamSendPanel from "./ExamSendPanel";
 
 // Local prop shapes (structurally match the loader types) so this client
@@ -37,8 +46,9 @@ export interface Student {
   name: string;
   email: string;
   emailConfirmed: boolean;
-  /** A confirmation link was already sent → "mail non ancora confermata". */
   confirmSent: boolean;
+  confirmSentAt: string | null;
+  emailConfirmedAt: string | null;
   phone: string;
   iscrizioneId?: number;
   tickets?: number;
@@ -74,6 +84,13 @@ type TabId = "appello" | "programma" | "esami";
 
 const subjKey = (s: Pick<Student, "kind" | "id">) => `${s.kind === "corsista" ? "c" : "p"}${s.id}`;
 
+const CHIP_CLASS: Record<VerificationStateId, string> = {
+  assente: "badge badge-neutral",
+  verificare: "badge badge-indigo",
+  attesa: "badge badge-warning",
+  confermato: "badge badge-success",
+};
+
 export default function EducatorTabs({
   token,
   students: initialStudents,
@@ -90,8 +107,9 @@ export default function EducatorTabs({
   const [tab, setTab] = useState<TabId>("appello");
   const [students, setStudents] = useState<Student[]>(initialStudents);
 
-  // LIVE verification states: poll so that when a student completes the
-  // confirmation the educator SEES the green flip without reloading.
+  // LIVE verification states: poll so the educator SEES the green flip the
+  // moment a student completes the confirmation. Newer-wins merge — a poll
+  // computed before a local send can never revert its timestamp.
   useEffect(() => {
     let alive = true;
     const tick = () => {
@@ -102,15 +120,18 @@ export default function EducatorTabs({
           setStudents((prev) =>
             prev.map((s) => {
               const st = states[subjKey(s)];
-              return st
-                ? {
-                    ...s,
-                    email: st.email || s.email,
-                    phone: st.phone || s.phone,
-                    emailConfirmed: st.confirmed,
-                    confirmSent: st.sent || s.confirmSent,
-                  }
-                : s;
+              if (!st) return s;
+              const sentAt = newerIso(s.confirmSentAt, st.sentAtIso);
+              const confirmedAt = st.confirmedAtIso; // server truth (may clear via richiedi-nuova)
+              return {
+                ...s,
+                email: st.email || s.email,
+                phone: st.phone || s.phone,
+                confirmSentAt: sentAt,
+                confirmSent: Boolean(sentAt),
+                emailConfirmedAt: confirmedAt,
+                emailConfirmed: Boolean(confirmedAt),
+              };
             }),
           );
         })
@@ -131,8 +152,6 @@ export default function EducatorTabs({
 
   return (
     <div>
-      {/* Plain toggle buttons (aria-pressed), NOT an ARIA tablist: native
-          button semantics match the actual behavior (no arrow-key roving). */}
       <div className="edu-tabs">
         {tabs.map((t) => (
           <button
@@ -150,31 +169,14 @@ export default function EducatorTabs({
         <AppelloTab token={token} students={students} setStudents={setStudents} dayCount={dayCount} />
       )}
       {tab === "programma" && <ProgrammaTab days={days} />}
-      {tab === "esami" && tests && (
-        <ExamSendPanel token={token} tests={tests} students={students} />
-      )}
+      {tab === "esami" && tests && <ExamSendPanel token={token} tests={tests} students={students} />}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1 · APPELLO + VERIFICA — one place. Tap who's present (per day); a present
-// student's name turns colored and the row expands to the verification panel
-// (send confirmation / correct email+phone). Absent students stay locked.
+// 1 · APPELLO — attendance + verification, every state always visible.
 // ─────────────────────────────────────────────────────────────────────────────
-
-// Name/state colors: absent+unconfirmed → neutral; present+unconfirmed → amber
-// (waiting on them); confirmed → green. "Il nome diventa colorato".
-function rowState(s: Student, present: boolean) {
-  if (s.emailConfirmed)
-    return { name: "var(--green-600, #059669)", label: "Dati confermati ✓", color: "var(--green-600, #059669)" };
-  if (!present)
-    return { name: "var(--text, #111827)", label: "", color: "var(--text-4, #9ca3af)" };
-  if (s.confirmSent)
-    return { name: "var(--amber-500, #d97706)", label: "Mail non ancora confermata", color: "var(--amber-500, #d97706)" };
-  return { name: "var(--amber-500, #d97706)", label: "Mail non confermata", color: "var(--amber-500, #d97706)" };
-}
-
 function AppelloTab({
   token,
   students,
@@ -192,7 +194,6 @@ function AppelloTab({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState<string | null>(null);
-  const [openVerify, setOpenVerify] = useState<string | null>(null);
   const [allBusy, setAllBusy] = useState(false);
   const [allNote, setAllNote] = useState<string | null>(null);
   const chains = useRef<Map<string, Promise<void>>>(new Map());
@@ -215,9 +216,7 @@ function AppelloTab({
     };
   }, [token]);
 
-  // Present on ANY day → verifiable.
   const presentAny = (subj: string) => Object.values(attendance[subj] ?? {}).some(Boolean);
-
   const cellKey = (subj: string, d: number) => `${subj}:${d}`;
 
   function toggle(subject: AttendanceSubject, next: boolean) {
@@ -256,11 +255,16 @@ function AppelloTab({
     );
     setAllBusy(false);
     if (!res.ok) {
-      setAllNote(res.error || "Invio non riuscito.");
+      setAllNote(res.error || "Invio non riuscito. Riprova tra un minuto.");
       return;
     }
+    const nowIso = new Date().toISOString();
     setStudents((prev) =>
-      prev.map((x) => (x.email && presentAny(subjKey(x)) ? { ...x, confirmSent: true } : x)),
+      prev.map((x) =>
+        x.email && presentAny(subjKey(x)) && !x.emailConfirmed
+          ? { ...x, confirmSent: true, confirmSentAt: newerIso(x.confirmSentAt, nowIso) }
+          : x,
+      ),
     );
     setAllNote(
       `Inviate ${res.sent ?? 0} conferme${res.noEmail ? ` · ${res.noEmail} senza email` : ""}${res.notPresent ? ` · ${res.notPresent} assenti (saltati)` : ""}.`,
@@ -286,28 +290,22 @@ function AppelloTab({
           ))}
         </div>
       )}
-      <p style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", margin: "0 0 10px" }}>
+      <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 10px", lineHeight: 1.5 }}>
         {readOnly
           ? "Appello non ancora disponibile."
-          : `Tocca chi è presente ${dayCount > 1 ? `al giorno ${day}` : "oggi"} — si salva da solo. Presenti: ${presentCount}/${students.length}. Chi è presente diventa verificabile: apri la sua riga per inviare la conferma dei dati.`}
+          : `Tocca chi è presente ${dayCount > 1 ? `al giorno ${day}` : "oggi"} — si salva da solo. Presenti: ${presentCount}/${students.length}. Verde = dati confermati dallo studente.`}
       </p>
       {error && (
-        <p style={{ color: "var(--red-600, #dc2626)", fontSize: 12, margin: "0 0 10px" }} role="alert">
+        <p style={{ color: "var(--danger-fg)", fontSize: 12.5, margin: "0 0 10px" }} role="alert">
           {error}
         </p>
       )}
 
-      <button
-        type="button"
-        className="edu-btn primary"
-        onClick={sendAll}
-        disabled={allBusy || readOnly}
-        style={{ width: "100%", marginBottom: 8 }}
-      >
+      <button type="button" className="edu-btn primary edu-bulk" onClick={sendAll} disabled={allBusy || readOnly}>
         {allBusy ? "Invio…" : `Invia conferma ai presenti${pendingConfirm ? ` (${pendingConfirm})` : ""}`}
       </button>
       {allNote && (
-        <p role="status" style={{ fontSize: 12, color: "var(--text-3, #6b7280)", margin: "0 0 10px" }}>
+        <p role="status" style={{ fontSize: 12.5, color: "var(--text-3)", margin: "0 0 10px" }}>
           {allNote}
         </p>
       )}
@@ -320,71 +318,49 @@ function AppelloTab({
           const checked = !!attendance[subj]?.[day];
           const disabled = readOnly || pending.has(key);
           const present = presentAny(subj);
-          const st = rowState(s, present);
+          const state = deriveVerificationState(present, s.confirmSentAt, s.emailConfirmedAt);
           const tickets = s.tickets ?? 1;
           const used = s.companionsUsed ?? 0;
           const canAdd =
             !readOnly && s.kind === "corsista" && tickets >= 2 && used < tickets - 1 && s.iscrizioneId != null;
-          const verifyOpen = openVerify === subj;
           return (
-            <div key={subj}>
-              <div style={{ display: "flex", alignItems: "stretch" }}>
+            <div key={subj} className="edu-rowwrap" data-state={state}>
+              <div className="edu-rowgrid">
+                {/* Presence zone — the tap target for the roll-call. */}
                 <button
                   type="button"
-                  className={`edu-row edu-row-tap ${checked ? "present" : ""}`}
+                  className="edu-presence"
                   disabled={disabled}
                   aria-pressed={checked}
                   onClick={() => toggle({ kind: s.kind, id: s.id }, !checked)}
-                  style={{ flex: 1, minWidth: 0 }}
                 >
                   <span className={`edu-check ${checked ? "on" : ""}`} aria-hidden>
                     {checked ? "✓" : ""}
                   </span>
                   <span className="edu-row-main">
-                    <span className="edu-row-name" style={{ color: st.name }}>
+                    <span className="edu-row-name" style={state === "confermato" ? { color: "var(--success-fg)" } : undefined}>
                       {s.name || "—"}
                       {s.kind === "partecipante" && (
                         <span className="edu-guest"> (ospite{s.guestOf ? ` di ${s.guestOf}` : ""})</span>
                       )}
                     </span>
-                    <span className="edu-row-sub" style={st.label ? { color: st.color, fontWeight: 600 } : undefined}>
-                      {st.label || (checked ? "Presente" : "Assente")}
-                    </span>
+                    <span className="edu-row-sub">{checked ? "Presente" : "Assente"}</span>
                   </span>
                 </button>
-                {/* Verification panel toggle — enabled once present (or already confirmed). */}
-                <button
-                  type="button"
-                  onClick={() => setOpenVerify(verifyOpen ? null : subj)}
-                  aria-expanded={verifyOpen}
-                  aria-label={`Verifica dati di ${s.name}`}
-                  disabled={!present && !s.emailConfirmed}
-                  style={{
-                    width: 48,
-                    flexShrink: 0,
-                    background: "transparent",
-                    border: "none",
-                    borderLeft: "1px solid var(--border-2, #f0f1f3)",
-                    color: !present && !s.emailConfirmed ? "var(--border-strong, #d1d5db)" : st.color,
-                    fontSize: 16,
-                    cursor: !present && !s.emailConfirmed ? "default" : "pointer",
-                  }}
-                >
-                  {verifyOpen ? "▴" : "✉︎"}
-                </button>
-              </div>
-              {verifyOpen && (
-                <VerifyPanel
+                <span className={CHIP_CLASS[state]} style={{ justifySelf: "start", whiteSpace: "nowrap" }}>
+                  {chipLabel(state, s.confirmSentAt, s.emailConfirmedAt)}
+                </span>
+                <VerifyActions
                   token={token}
                   student={s}
-                  present={present}
+                  state={state}
                   onUpdated={(patch) =>
                     setStudents((prev) =>
                       prev.map((x) => (x.kind === s.kind && x.id === s.id ? { ...x, ...patch } : x)),
                     )
                   }
                 />
-              )}
+              </div>
               {canAdd && addOpen !== subj && (
                 <button type="button" className="edu-addlink" onClick={() => setAddOpen(subj)}>
                   + Aggiungi partecipante (biglietto doppio)
@@ -409,6 +385,8 @@ function AppelloTab({
                         email: "",
                         emailConfirmed: false,
                         confirmSent: false,
+                        confirmSentAt: null,
+                        emailConfirmedAt: null,
                         phone: companion.phone,
                         guestOf: s.name,
                       });
@@ -426,17 +404,17 @@ function AppelloTab({
   );
 }
 
-/** Inline verification panel under a present student's row: email + phone
- *  (correctable), send/resend the confirmation, copy-link fallback. */
-function VerifyPanel({
+/** Contact line + the EXACT buttons the state allows (+ the edit form, which
+ *  is the only thing that expands). */
+function VerifyActions({
   token,
   student: s,
-  present,
+  state,
   onUpdated,
 }: {
   token: string;
   student: Student;
-  present: boolean;
+  state: VerificationStateId;
   onUpdated: (patch: Partial<Student>) => void;
 }) {
   const refId = s.kind === "corsista" ? s.iscrizioneId : s.id;
@@ -447,10 +425,55 @@ function VerifyPanel({
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
 
-  if (refId == null) return null;
+  if (refId == null) return <span />;
   const ref = { kind: s.kind, id: refId };
 
-  const save = async () => {
+  const applySendResult = (res: { sentTo?: string; sentAtIso?: string; url?: string; error?: string }, successNote: string) => {
+    onUpdated({
+      confirmSent: true,
+      confirmSentAt: newerIso(s.confirmSentAt, res.sentAtIso ?? new Date().toISOString()),
+      ...(state === "confermato" ? { emailConfirmed: false, emailConfirmedAt: null } : {}),
+    });
+    if (res.sentTo) setNote(successNote);
+    else {
+      setNote(res.error ?? null);
+      if (res.url) setLink(res.url);
+    }
+  };
+
+  const send = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    setLink(null);
+    const res = await sendAttendeeConfirmLinkAction(token, ref).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof sendAttendeeConfirmLinkAction>>,
+    );
+    setBusy(false);
+    if (!res.ok) {
+      setNote(res.error || "Invio non riuscito. Riprova tra un minuto.");
+      return;
+    }
+    applySendResult(res, `Email inviata a ${res.sentTo} — in attesa di conferma.`);
+  };
+
+  const requestNew = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    setLink(null);
+    const res = await requestNewConfirmationAction(token, ref).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof requestNewConfirmationAction>>,
+    );
+    setBusy(false);
+    if (!res.ok) {
+      setNote(res.error || "Invio non riuscito. Riprova tra un minuto.");
+      return;
+    }
+    applySendResult(res, "Nuovo link inviato — in attesa di una nuova conferma.");
+  };
+
+  const saveFree = async () => {
     if (busy) return;
     setBusy(true);
     setNote(null);
@@ -461,66 +484,70 @@ function VerifyPanel({
       const r = await setAttendeeEmailAction(token, ref, draftEmail.trim()).catch(
         () => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string },
       );
-      if (r.ok) onUpdated({ email: draftEmail.trim().toLowerCase(), emailConfirmed: false });
-      else err = r.error || "Salvataggio email non riuscito.";
+      if (r.ok) onUpdated({ email: draftEmail.trim().toLowerCase() });
+      else err = r.error || "Salvataggio non riuscito, riprova.";
     }
     if (!err && phoneChanged) {
       const r = await setAttendeePhoneAction(token, ref, draftPhone.trim()).catch(
         () => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string },
       );
       if (r.ok) onUpdated({ phone: draftPhone.trim() });
-      else err = r.error || "Salvataggio telefono non riuscito.";
+      else err = r.error || "Salvataggio non riuscito, riprova.";
     }
     setBusy(false);
     if (err) setNote(err);
-    else {
-      setEditing(false);
-      if (emailChanged) setNote(`D'ora in poi invierò a: ${draftEmail.trim().toLowerCase()}`);
-    }
+    else setEditing(false);
   };
 
-  const send = async () => {
+  const saveAndResend = async () => {
     if (busy) return;
     setBusy(true);
     setNote(null);
     setLink(null);
-    const res = await sendAttendeeConfirmLinkAction(token, ref).catch(
-      () => ({ ok: false, error: "Errore di rete." }) as {
-        ok: boolean; url?: string; sentTo?: string; error?: string;
-      },
-    );
+    const res = await correctAndResendAction(token, ref, {
+      email: draftEmail.trim(),
+      phone: draftPhone.trim(),
+    }).catch(() => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof correctAndResendAction>>);
     setBusy(false);
     if (!res.ok) {
-      setNote(res.error || "Invio non riuscito.");
+      setNote(res.error || "Invio non riuscito. Riprova tra un minuto.");
       return;
     }
-    onUpdated({ confirmSent: true });
-    if (res.sentTo) setNote(`Email inviata a ${res.sentTo} ✓ — in attesa di conferma.`);
-    else {
-      setNote(res.error ?? null);
-      if (res.url) setLink(res.url);
-    }
+    setEditing(false);
+    onUpdated({ email: draftEmail.trim().toLowerCase(), phone: draftPhone.trim() });
+    applySendResult(res, `Email aggiornata a ${draftEmail.trim().toLowerCase()} · nuovo link inviato.`);
   };
 
   const copyLink = async () => {
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
-      setNote("Link copiato ✓ — invialo via WhatsApp o SMS.");
+      setNote("Link copiato — invialo via WhatsApp o SMS.");
     } catch {
       window.prompt("Copia il link:", link);
     }
   };
 
+  const openEdit = () => {
+    setDraftEmail(s.email);
+    setDraftPhone(s.phone);
+    setEditing(true);
+    setNote(null);
+  };
+
   return (
-    <div style={{ padding: "10px 14px 14px", background: "var(--surface-2, #f9fafb)" }}>
-      {s.emailConfirmed && (
-        <p style={{ fontSize: 12.5, color: "var(--green-600, #059669)", margin: "0 0 8px", fontWeight: 600 }}>
-          ✓ Lo studente ha confermato i suoi dati.
-        </p>
-      )}
+    <div className="edu-actions">
+      <div className="edu-contact">
+        <span className="edu-contact-line">
+          <span className="edu-contact-k">Email:</span> {s.email || <em>nessuna email</em>}
+        </span>
+        <span className="edu-contact-line">
+          <span className="edu-contact-k">Tel:</span> {s.phone || <em>nessun numero</em>}
+        </span>
+      </div>
+
       {editing ? (
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
           <input
             type="email"
             inputMode="email"
@@ -538,52 +565,69 @@ function VerifyPanel({
             placeholder="Telefono"
             maxLength={40}
           />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" className="edu-btn primary" onClick={save} disabled={busy || !draftEmail.trim()}>
-              {busy ? "…" : "Salva"}
-            </button>
-            <button
-              type="button"
-              className="edu-btn"
-              onClick={() => {
-                setEditing(false);
-                setDraftEmail(s.email);
-                setDraftPhone(s.phone);
-              }}
-              disabled={busy}
-            >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {state === "attesa" ? (
+              <button type="button" className="edu-btn primary" onClick={saveAndResend} disabled={busy || !draftEmail.trim()}>
+                {busy ? "…" : "Salva e rinvia"}
+              </button>
+            ) : (
+              <button type="button" className="edu-btn primary" onClick={saveFree} disabled={busy || !draftEmail.trim()}>
+                {busy ? "…" : "Salva"}
+              </button>
+            )}
+            <button type="button" className="edu-btn" onClick={() => setEditing(false)} disabled={busy}>
               Annulla
             </button>
           </div>
         </div>
       ) : (
         <>
-          <div className="edu-contact" style={{ marginTop: 0 }}>
-            <span className="edu-contact-line">✉️ {s.email || <em>nessuna email</em>}</span>
-            <span className="edu-contact-line">📞 {s.phone || <em>nessun numero</em>}</span>
-          </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="edu-btn"
-              onClick={() => {
-                setDraftEmail(s.email);
-                setDraftPhone(s.phone);
-                setEditing(true);
-                setNote(null);
-              }}
-              disabled={busy || !present}
-            >
-              Correggi
-            </button>
-            <button type="button" className="edu-btn primary" onClick={send} disabled={busy || !present}>
-              {busy ? "…" : s.confirmSent && !s.emailConfirmed ? "Reinvia" : "Invia conferma"}
-            </button>
-          </div>
+          {state !== "assente" && (
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              {state === "verificare" && (
+                <>
+                  <button type="button" className="edu-btn" onClick={openEdit} disabled={busy}>
+                    Correggi
+                  </button>
+                  <button
+                    type="button"
+                    className="edu-btn primary"
+                    onClick={send}
+                    disabled={busy || !s.email}
+                    title={!s.email ? "Aggiungi un'email per inviare la conferma." : undefined}
+                  >
+                    {busy ? "…" : "Invia conferma"}
+                  </button>
+                </>
+              )}
+              {state === "attesa" && (
+                <>
+                  <button type="button" className="edu-btn" onClick={openEdit} disabled={busy}>
+                    Correggi e rinvia
+                  </button>
+                  <button type="button" className="edu-btn primary" onClick={send} disabled={busy}>
+                    {busy ? "…" : "Reinvia"}
+                  </button>
+                </>
+              )}
+              {state === "confermato" && (
+                <button type="button" className="edu-btn" onClick={requestNew} disabled={busy}>
+                  {busy ? "…" : "Richiedi nuova conferma"}
+                </button>
+              )}
+            </div>
+          )}
+          {state === "verificare" && !s.email && (
+            <p className="edu-hint">Aggiungi un&apos;email per inviare la conferma.</p>
+          )}
+          {state === "attesa" && (
+            <p className="edu-hint edu-hint--lock">Email e telefono bloccati fino alla conferma dello studente.</p>
+          )}
         </>
       )}
+
       {note && (
-        <div role="status" style={{ fontSize: 12, color: "var(--text-3, #6b7280)", marginTop: 8 }}>
+        <div role="status" style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 6 }}>
           {note}
           {link && (
             <>
@@ -662,8 +706,7 @@ function AddParticipantForm({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2 · PROGRAMMA — sakes by day, photo + INLINE expandable details (info from
-// the Sake Company Shopify catalog; no page navigation).
+// 2 · PROGRAMMA — sakes by day, photo + inline expandable details.
 // ─────────────────────────────────────────────────────────────────────────────
 function ProgrammaTab({ days }: { days: DayRow[] }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -678,7 +721,7 @@ function ProgrammaTab({ days }: { days: DayRow[] }) {
           <div className="edu-daycard-head">
             <span className="edu-daybadge">G{d.day}</span>
             <span style={{ fontWeight: 600, fontSize: 14 }}>{d.name || `Giorno ${d.day}`}</span>
-            <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--text-4, #9ca3af)" }}>
+            <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--text-4)" }}>
               {d.sakes.length} sake
             </span>
           </div>
@@ -691,7 +734,7 @@ function ProgrammaTab({ days }: { days: DayRow[] }) {
               const id = `${d.day}-${s.code}-${i}`;
               const expanded = open === id;
               return (
-                <div key={id} style={{ borderTop: i === 0 ? "none" : "1px solid var(--border-2, #f0f1f3)" }}>
+                <div key={id} style={{ borderTop: i === 0 ? "none" : "1px solid var(--border-2)" }}>
                   <button
                     type="button"
                     className="edu-row edu-row-tap"
@@ -710,7 +753,7 @@ function ProgrammaTab({ days }: { days: DayRow[] }) {
                         {[s.type, s.size ? `${s.size}ml` : ""].filter(Boolean).join(" · ")}
                       </span>
                     </span>
-                    <span aria-hidden style={{ color: "var(--text-4, #9ca3af)", flexShrink: 0 }}>
+                    <span aria-hidden style={{ color: "var(--text-4)", flexShrink: 0 }}>
                       {expanded ? "▴" : "▾"}
                     </span>
                   </button>
@@ -747,8 +790,8 @@ function ProgrammaTab({ days }: { days: DayRow[] }) {
 function Fact({ k, v }: { k: string; v: string }) {
   return (
     <div style={{ display: "flex", gap: 8, fontSize: 12.5 }}>
-      <dt style={{ color: "var(--text-4, #9ca3af)", minWidth: 74 }}>{k}</dt>
-      <dd style={{ margin: 0, color: "var(--text-2, #374151)", fontWeight: 500 }}>{v}</dd>
+      <dt style={{ color: "var(--text-4)", minWidth: 74 }}>{k}</dt>
+      <dd style={{ margin: 0, color: "var(--text-2)", fontWeight: 500 }}>{v}</dd>
     </div>
   );
 }

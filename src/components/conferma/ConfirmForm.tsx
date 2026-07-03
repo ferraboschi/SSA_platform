@@ -70,8 +70,8 @@ export function ConfirmForm({
             width: 48,
             height: 48,
             borderRadius: "50%",
-            background: "var(--green-50, #ecfdf5)",
-            color: "var(--green-600, #059669)",
+            background: "var(--success-bg)",
+            color: "var(--success-fg)",
             display: "grid",
             placeItems: "center",
             margin: "0 auto 12px",
@@ -81,12 +81,12 @@ export function ConfirmForm({
           ✓
         </div>
         <h2 style={{ fontSize: 18, margin: "0 0 6px" }}>Dati confermati</h2>
-        <p style={{ fontSize: 13.5, color: "var(--text-3, #6b7280)", margin: 0, lineHeight: 1.55 }}>
+        <p style={{ fontSize: 13.5, color: "var(--text-3)", margin: 0, lineHeight: 1.55 }}>
           Grazie{name ? `, ${name.split(" ")[0]}` : ""}. Riceverai i test e l&apos;esame
           all&apos;indirizzo <strong>{email}</strong>.
         </p>
         {addressSaved && address.trim() && (
-          <p style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", margin: "8px 0 0", lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: "8px 0 0", lineHeight: 1.5 }}>
             Spediremo eventuali materiali a: <strong>{address.trim()}</strong>
           </p>
         )}
@@ -97,7 +97,7 @@ export function ConfirmForm({
   return (
     <div>
       <h1 style={{ fontSize: "clamp(19px, 4vw, 23px)", margin: "0 0 4px" }}>Conferma i tuoi dati</h1>
-      <p style={{ fontSize: 13, color: "var(--text-3, #6b7280)", margin: "0 0 18px", lineHeight: 1.5 }}>
+      <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 18px", lineHeight: 1.5 }}>
         Corso <strong>{courseName}</strong>. Controlla e completa i tuoi dati:
         servono per i test, l&apos;esame e l&apos;eventuale spedizione di materiali.
         Tutti i campi sono obbligatori.
@@ -159,7 +159,7 @@ export function ConfirmForm({
             gap: 8,
             marginTop: 8,
             fontSize: 12.5,
-            color: "var(--text-2, #374151)",
+            color: "var(--text-2)",
             lineHeight: 1.45,
             cursor: "pointer",
           }}
@@ -168,7 +168,7 @@ export function ConfirmForm({
             type="checkbox"
             checked={addressConfirmed}
             onChange={(e) => setAddressConfirmed(e.target.checked)}
-            style={{ width: 18, height: 18, marginTop: 1, accentColor: "var(--indigo-600, #4f46e5)", flexShrink: 0 }}
+            style={{ width: 18, height: 18, marginTop: 1, accentColor: "var(--indigo-600)", flexShrink: 0 }}
           />
           <span>
             Confermo di abitare all&apos;indirizzo indicato
@@ -182,12 +182,12 @@ export function ConfirmForm({
       </Field>
 
       {alreadyConfirmed && !error && (
-        <p style={{ fontSize: 12, color: "var(--text-4, #9ca3af)", margin: "0 0 10px" }}>
+        <p style={{ fontSize: 12, color: "var(--text-4)", margin: "0 0 10px" }}>
           Avevi già confermato — puoi aggiornare i dati se serve.
         </p>
       )}
       {error && (
-        <p style={{ fontSize: 12.5, color: "var(--red-600, #dc2626)", margin: "0 0 10px" }} role="alert">
+        <p style={{ fontSize: 12.5, color: "var(--danger-fg)", margin: "0 0 10px" }} role="alert">
           {error}
         </p>
       )}
@@ -203,15 +203,15 @@ export function ConfirmForm({
           fontWeight: 600,
           borderRadius: 10,
           border: "none",
-          background: busy || !complete ? "var(--surface-3, #e5e7eb)" : "var(--indigo-600, #4f46e5)",
-          color: busy || !complete ? "var(--text-4, #9ca3af)" : "#fff",
+          background: busy || !complete ? "var(--border-2)" : "var(--indigo-600)",
+          color: busy || !complete ? "var(--text-4)" : "#fff",
           cursor: busy || !complete ? "default" : "pointer",
         }}
       >
         {busy ? "Salvataggio…" : "Conferma i miei dati"}
       </button>
       {!complete && (
-        <p style={{ fontSize: 11.5, color: "var(--text-4, #9ca3af)", margin: "8px 0 0", textAlign: "center" }}>
+        <p style={{ fontSize: 11.5, color: "var(--text-4)", margin: "8px 0 0", textAlign: "center" }}>
           Compila tutti i campi e conferma l&apos;indirizzo per proseguire.
         </p>
       )}
@@ -223,8 +223,8 @@ const ro: React.CSSProperties = {
   width: "100%",
   padding: "11px 12px",
   fontSize: 15,
-  background: "var(--surface-2, #f4f5f7)",
-  color: "var(--text-2, #374151)",
+  background: "var(--surface-2)",
+  color: "var(--text-2)",
 };
 const field: React.CSSProperties = {
   width: "100%",
@@ -249,7 +249,7 @@ function Field({
           display: "block",
           fontSize: 11.5,
           fontWeight: 600,
-          color: "var(--text-3, #6b7280)",
+          color: "var(--text-3)",
           margin: "0 0 4px",
           textTransform: "uppercase",
           letterSpacing: ".04em",
@@ -264,6 +264,6 @@ function Field({
 
 function Hint({ children }: { children: React.ReactNode }) {
   return (
-    <p style={{ fontSize: 11, color: "var(--text-4, #9ca3af)", margin: "4px 0 0" }}>{children}</p>
+    <p style={{ fontSize: 11, color: "var(--text-4)", margin: "4px 0 0" }}>{children}</p>
   );
 }

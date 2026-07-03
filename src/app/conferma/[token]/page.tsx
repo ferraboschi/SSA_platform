@@ -40,8 +40,8 @@ export default async function Page({
               width: 48,
               height: 48,
               borderRadius: "50%",
-              background: "var(--green-50, #ecfdf5)",
-              color: "var(--green-600, #059669)",
+              background: "var(--success-bg)",
+              color: "var(--success-fg)",
               display: "grid",
               placeItems: "center",
               margin: "0 auto 12px",
@@ -51,7 +51,7 @@ export default async function Page({
             ✓
           </div>
           <h1 style={{ fontSize: 20, margin: "0 0 8px" }}>Dati già confermati</h1>
-          <p style={{ fontSize: 13.5, color: "var(--text-3, #6b7280)", margin: 0, lineHeight: 1.55 }}>
+          <p style={{ fontSize: 13.5, color: "var(--text-3)", margin: 0, lineHeight: 1.55 }}>
             {subject.fullName ? `${subject.fullName.split(" ")[0]}, i` : "I"} tuoi dati per il corso{" "}
             <strong>{subject.courseName}</strong> risultano già confermati. Se devi correggerli,
             chiedi all&apos;educator di reinviarti un nuovo link.
@@ -70,7 +70,7 @@ export default async function Page({
             fontWeight: 700,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
-            color: "var(--indigo-600, #4f46e5)",
+            color: "var(--indigo-600)",
             marginBottom: 14,
           }}
         >
@@ -98,7 +98,7 @@ function Invalid() {
       <div className="exam-public-card" style={{ textAlign: "center", maxWidth: 440 }}>
         <div style={{ fontSize: 32, marginBottom: 8 }}>⌛</div>
         <h1 style={{ fontSize: 20, margin: "0 0 8px" }}>Link non valido o scaduto</h1>
-        <p style={{ fontSize: 13.5, color: "var(--text-3, #6b7280)", margin: 0, lineHeight: 1.55 }}>
+        <p style={{ fontSize: 13.5, color: "var(--text-3)", margin: 0, lineHeight: 1.55 }}>
           Chiedi alla segreteria o al tuo educator di reinviarti il link di conferma.
         </p>
       </div>
