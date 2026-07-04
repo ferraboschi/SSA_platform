@@ -9,10 +9,16 @@ import { monthIndexIt } from "@/lib/dates/italian-months";
 // Re-exported for the many call sites that import it from here (and via lib/corsi).
 export { monthIndexIt };
 
-// The prototype hero/reminders anchor "today" to 25 May 2026 (Monday, week 22).
-export const DASH_TODAY = new Date(2026, 4, 25);
-export const DASH_WEEK = 22;
 const DAY_MS = 86_400_000;
+
+// ISO-8601 week number (weeks start Monday; week 1 contains the first Thursday).
+export function isoWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7; // Sunday → 7 so Monday starts the week
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum); // shift to the Thursday of this week
+  const yearStart = Date.UTC(d.getUTCFullYear(), 0, 1);
+  return Math.ceil(((d.getTime() - yearStart) / DAY_MS + 1) / 7);
+}
 
 export const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -113,23 +119,9 @@ export interface ShipmentReminder {
   enrolled: number;
   shipBy: number;
 }
-export interface BookStockReminder {
-  sku: string;
-  qty: number;
-  days: number;
-}
-export interface SakeExamReminder {
-  courseId: string;
-  shortTitle: string;
-  stock: number;
-  need: number;
-}
 
 export interface RemindersData {
   shipments: ShipmentReminder[];
-  bookStock: BookStockReminder[];
-  sakeExam: SakeExamReminder[];
-  total: number;
 }
 
 export interface ReportCourse {
@@ -177,6 +169,8 @@ export function buildDashboard(
   educators: Educator[],
   thresholds: DashThresholds,
 ): DashboardData {
+  // Day-based reminders anchor to the real current date at call time.
+  const today = new Date();
   const active = courses.filter((c) => c.lifecycle === "pubblicato");
   const past = courses.filter((c) => c.lifecycle === "passato");
 
@@ -282,7 +276,7 @@ export function buildDashboard(
   const shipments: ShipmentReminder[] = active
     .filter((c) => c.mode === "online")
     .map((c) => {
-      const days = Math.round((courseStart(c).getTime() - DASH_TODAY.getTime()) / DAY_MS);
+      const days = Math.round((courseStart(c).getTime() - today.getTime()) / DAY_MS);
       return { course: c, daysToStart: days, shipBy: days - thresholds.shipDays };
     })
     .filter((r) => r.daysToStart > 0 && r.daysToStart <= 25)
@@ -294,30 +288,6 @@ export function buildDashboard(
       enrolled: r.course.enrolled,
       shipBy: r.shipBy,
     }));
-
-  // Book stock is mock/hardcoded in the prototype (no inventory source yet).
-  const bookStock: BookStockReminder[] = [
-    { sku: "Manuale SSA v3", qty: 12, days: 5 },
-    { sku: "Booklet Introduttivo", qty: 38, days: 12 },
-    { sku: "Manuale Shochu", qty: 4, days: 2 },
-  ].filter((b) => b.qty < thresholds.bookMin);
-
-  const sakeExam: SakeExamReminder[] = active
-    .filter((c) => c.exam)
-    .slice(0, 1)
-    .map((c) => {
-      const need = c.exam?.totalQuestions || 30;
-      return {
-        courseId: c.id,
-        shortTitle: c.shortTitle,
-        need,
-        stock: Math.round(need * (thresholds.sakeExamPct / 100)),
-      };
-    });
-
-  // Two fixed "other" ops (mock) — counted toward the open total.
-  const otherOpsCount = 2;
-  const total = shipments.length + bookStock.length + sakeExam.length + otherOpsCount;
 
   const liveCourse = courses.find((c) => c.examLive && c.examLive.length > 0);
   const examLive = liveCourse ? { id: liveCourse.id, shortTitle: liveCourse.shortTitle } : null;
@@ -359,7 +329,7 @@ export function buildDashboard(
     recent,
     topEducators,
     community,
-    reminders: { shipments, bookStock, sakeExam, total },
+    reminders: { shipments },
     examLive,
     reportCourses,
   };

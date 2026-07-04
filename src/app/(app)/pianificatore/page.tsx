@@ -86,14 +86,16 @@ export default async function Page() {
     qualifications: quals[i],
   }));
 
-  // Exam pass rate over all recorded results (fallback to a reasonable default).
+  // Exam pass rate over all confirmed results — course.examResults is the live
+  // per-course aggregate the Supabase adapter fills from graded enrollments
+  // (fallback to a reasonable default until any course has results).
   let passed = 0;
   let total = 0;
   for (const c of courses) {
-    for (const r of c.examResults2 ?? []) {
-      total++;
-      if (r.status === "passed") passed++;
-    }
+    const r = c.examResults;
+    if (!r) continue;
+    passed += r.passed;
+    total += r.passed + r.retrial + r.failed;
   }
   const examPassRate = total ? passed / total : 0.78;
 

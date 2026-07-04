@@ -24,14 +24,10 @@ import type { PrevYearItem } from "@/app/(app)/pianificatore/page";
 import type { AddAt, AddExtra } from "./types";
 import { PL_Views } from "./views";
 import { PL_EngagementPanel, PL_SignalsPanel, PL_YoYPanel } from "./panels";
-import {
-  PL_ActionModal,
-  PL_AddModal,
-  PL_ShareModal,
-  PL_TargetCard,
-  type AddForm,
-  type TargetCardData,
-} from "./modals";
+import { PL_ActionModal } from "./PL_ActionModal";
+import { PL_AddModal, type AddForm } from "./PL_AddModal";
+import { PL_ShareModal } from "./PL_ShareModal";
+import { PL_TargetCard, type TargetCardData } from "./PL_TargetCard";
 
 const PL_LS = "ssa_pian_v3";
 

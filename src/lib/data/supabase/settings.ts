@@ -20,19 +20,6 @@ export function makeSettingsRepo(ctx: RepoContext): SettingsRepository {
       return { ...DEFAULT_THRESHOLDS, ...value };
     },
 
-    async setThresholds(patch) {
-      const current = await this.getThresholds();
-      const next = { ...current, ...patch };
-      const { error } = await svc
-        .from("settings_kv")
-        .upsert(
-          { key: "dash_thresholds", value: next },
-          { onConflict: "key" },
-        );
-      if (error) throw error;
-      return next;
-    },
-
     async getDismissedNotifications() {
       const { data, error } = await sb
         .from("settings_kv")

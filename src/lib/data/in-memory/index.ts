@@ -67,7 +67,7 @@ export function createInMemoryDataSource(
   // Mutable overlays (prototype kept these in localStorage).
   const qualOverrides = new Map<string, CourseTypeKey[]>();
   const profileOverrides = new Map<string, Partial<User>>();
-  let thresholds: DashThresholds = { ...DEFAULT_THRESHOLDS };
+  const thresholds: DashThresholds = { ...DEFAULT_THRESHOLDS };
   let stockAlerts: StockAlert[] = [];
   let currentUserId = users[0]?.id ?? "lorenzo";
 
@@ -230,10 +230,6 @@ export function createInMemoryDataSource(
   const dismissedNotifs = new Set<string>();
   const settingsRepo: SettingsRepository = {
     async getThresholds() {
-      return { ...thresholds };
-    },
-    async setThresholds(patch) {
-      thresholds = { ...thresholds, ...patch };
       return { ...thresholds };
     },
     async getDismissedNotifications() {

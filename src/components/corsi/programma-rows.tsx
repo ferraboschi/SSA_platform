@@ -9,7 +9,7 @@ import {
   LOW_STOCK,
   type ScCatalogItem,
 } from "@/components/sake/SakeProductPicker";
-import type { SakeState, CostLine } from "./ProgrammaEconomiaSection";
+import type { SakeState, CostLine } from "./programma-types";
 
 export function SakeRow({
   sake: s,

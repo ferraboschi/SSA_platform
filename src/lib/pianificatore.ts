@@ -121,10 +121,6 @@ export const fmtDayFull = (s: string) => {
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
 };
 
-// week of month (0..4) from a day-of-month 1..31
-export const weekOfMonth = (day: number) =>
-  Math.min(4, Math.floor(((day || 1) - 1) / 7));
-
 export { shopifyAdminProductsUrl as shopifyUrl } from "@/lib/integrations/shopify/admin-url";
 
 let _seq = 100;

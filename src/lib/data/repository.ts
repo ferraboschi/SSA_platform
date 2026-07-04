@@ -89,7 +89,6 @@ export interface NotificationService {
 
 export interface SettingsRepository {
   getThresholds(): Promise<DashThresholds>;
-  setThresholds(patch: Partial<DashThresholds>): Promise<DashThresholds>;
   /** Ids of notifications the operator silenced via the bell. */
   getDismissedNotifications(): Promise<string[]>;
   /** Silence (true) or restore (false) a notification by id. */

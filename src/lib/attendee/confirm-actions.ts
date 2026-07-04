@@ -1,11 +1,9 @@
 "use server";
 
-import { getSession } from "@/lib/auth/session";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { verifyConfirmToken, isConfirmLinkSpent, type ConfirmSubjectKind } from "./confirm-token";
+import { verifyConfirmToken, isConfirmLinkSpent } from "./confirm-token";
 import { normEmail, isValidEmail, normAddress, normDeliveryNotes } from "./confirm-normalize";
-import { loadConfirmSubject, stampConfirmSent } from "./confirm";
-import { deliverConfirmLink } from "./confirm-email";
+import { loadConfirmSubject } from "./confirm";
 
 export interface ConfirmAttendeeInput {
   email: string;
@@ -119,49 +117,4 @@ export async function confirmAttendeeAction(
   }
 
   return { ok: true, addressSaved };
-}
-
-export interface SendConfirmLinkInput {
-  courseId: string;
-  kind: ConfirmSubjectKind;
-  subjectId: string;
-  lang?: string;
-}
-export interface SendConfirmLinkResult {
-  ok: boolean;
-  /** Always returned so the UI has a Copia-link / WhatsApp fallback. */
-  url?: string;
-  /** Who the email actually went to. */
-  sentTo?: string;
-  error?: string;
-}
-
-/**
- * Staff action: mint a confirmation magic-link for one attendee and email it
- * (LIVE — delivery is the verification step). The link is always returned so
- * it can be copied for WhatsApp/SMS.
- */
-export async function sendConfirmLinkAction(
-  input: SendConfirmLinkInput,
-): Promise<SendConfirmLinkResult> {
-  const session = await getSession();
-  const roleKey = session?.user?.roleKey;
-  if (roleKey !== "admin" && roleKey !== "manager") {
-    return { ok: false, error: "Non autorizzato." };
-  }
-
-  const subject = await loadConfirmSubject(input.courseId, input.kind, input.subjectId);
-  if (!subject) return { ok: false, error: "Destinatario non trovato." };
-
-  const res = await deliverConfirmLink({
-    courseId: input.courseId,
-    kind: input.kind,
-    subjectId: input.subjectId,
-    toEmail: subject.email,
-    name: subject.fullName,
-    courseName: subject.courseName,
-    lang: input.lang,
-  });
-  await stampConfirmSent(input.courseId, input.kind, input.subjectId).catch(() => {});
-  return { ok: true, ...res };
 }

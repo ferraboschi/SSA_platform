@@ -6,7 +6,7 @@ import { formatEuro } from "@/lib/format";
 import { getSession } from "@/lib/auth/session";
 import { getDataSource } from "@/lib/data";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
-import { buildDashboard, capitalize, DASH_TODAY, DASH_WEEK, monthIndexIt, monthLabel } from "@/lib/dashboard";
+import { buildDashboard, capitalize, isoWeek, monthIndexIt, monthLabel } from "@/lib/dashboard";
 import { loadCourseEconomics } from "@/lib/economics";
 import { isLegacyInvoiced } from "@/lib/economics/types";
 import {
@@ -84,9 +84,10 @@ export default async function DashboardPage() {
   const avgPerCourse = kpis.activeCount ? (kpis.totalEnrolled / kpis.activeCount).toFixed(1) : "0";
   const marginPct = kpis.totalRevenue ? Math.round((kpis.totalMargin / kpis.totalRevenue) * 100) : 0;
 
-  const weekday = capitalize(new Intl.DateTimeFormat(locale, { weekday: "long" }).format(DASH_TODAY));
-  const fullMonth = capitalize(new Intl.DateTimeFormat(locale, { month: "long" }).format(DASH_TODAY));
-  const eyebrowDate = `${weekday} · ${DASH_TODAY.getDate()} ${fullMonth} ${DASH_TODAY.getFullYear()} · ${format(dt.week, { n: DASH_WEEK })}`;
+  const today = new Date();
+  const weekday = capitalize(new Intl.DateTimeFormat(locale, { weekday: "long" }).format(today));
+  const fullMonth = capitalize(new Intl.DateTimeFormat(locale, { month: "long" }).format(today));
+  const eyebrowDate = `${weekday} · ${today.getDate()} ${fullMonth} ${today.getFullYear()} · ${format(dt.week, { n: isoWeek(today) })}`;
 
   return (
     <div className="page">

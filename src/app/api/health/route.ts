@@ -66,18 +66,18 @@ export async function GET() {
     /* diagnostic best-effort */
   }
 
-  // Resumable-proctored-exam migration diagnostic (20260608120000): confirms the
-  // exam_sessions table exists AND carries the session_secret column — i.e. the
-  // migration is actually applied, so the proctored flow + per-session secret
-  // are live (not falling back to "migrazione mancante").
-  let examSessionsTable = false;
-  let sessionSecretCol = false;
+  // Live-exam-progress migration diagnostic (20260703120000 + 20260703130000):
+  // confirms the exam_progress table exists AND carries the answers column —
+  // i.e. both migrations are applied, so the educator's live progress bar and
+  // per-answer counts work (not silently degraded).
+  let examProgressTable = false;
+  let progressAnswersCol = false;
   try {
     const svc = getSupabaseServiceClient();
-    const r1 = await svc.from("exam_sessions").select("id", { head: true }).limit(1);
-    examSessionsTable = !r1.error;
-    const r2 = await svc.from("exam_sessions").select("session_secret", { head: true }).limit(1);
-    sessionSecretCol = !r2.error;
+    const r1 = await svc.from("exam_progress").select("id", { head: true }).limit(1);
+    examProgressTable = !r1.error;
+    const r2 = await svc.from("exam_progress").select("answers", { head: true }).limit(1);
+    progressAnswersCol = !r2.error;
   } catch {
     /* diagnostic best-effort */
   }
@@ -186,7 +186,7 @@ export async function GET() {
     sake: { priceCodes, catalogTotal, catalogWithCost },
     rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
     examLinks: { studentLinksTable, studentLinksRows, submissionsCorsistaCol },
-    examSessions: { table: examSessionsTable, sessionSecretCol },
+    examProgress: { table: examProgressTable, answersCol: progressAnswersCol },
     courseStatus,
     exam: { shochu: shochuExam, certificato: certExam },
     shopifyDiscounts: { canWriteDiscounts, scopes: shopifyScopes, error: scopesError },

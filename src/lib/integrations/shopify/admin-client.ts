@@ -220,18 +220,6 @@ export async function listAllProducts(): Promise<AdminProduct[]> {
 }
 
 /**
- * The `custom.sake_educator` metafield value for a product (the course's
- * educator name, as shown on the website), or null. The value may carry a bio
- * after the name — the caller resolves it against the educators table.
- */
-export async function getProductEducatorMetafield(
-  productId: number | string,
-): Promise<string | null> {
-  const mf = await getProductCustomMetafields(productId);
-  return mf.sake_educator?.trim() || null;
-}
-
-/**
  * All `custom.*` metafields of a product as a flat { key: value } map. SSA stores
  * the course's real metadata here — `tipologia_di_corso`, `luogo_e_orari`
  * (event date), `termine_iscrizioni` (deadline, carries the year), `luogo`,

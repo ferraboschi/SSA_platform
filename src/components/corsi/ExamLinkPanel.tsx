@@ -26,9 +26,11 @@ function testsForFamily(family: "nihonshu" | "shochu"): TestDef[] {
 type LinkState = Record<string, { url: string; copied?: boolean }>;
 
 /**
- * Exam links — one place. Per test: ONE "Link d'esame" (the class link to paste
- * in Zoom chat → students pick their name + waiting room → educator admits in the
- * Esiti tab) and ONE "Anteprima" (full run to the computed outcome, nothing saved).
+ * Exam links — one place. Per test: ONE "Link d'esame" (the shared class link:
+ * whoever opens it enters the email confirmed at course start; on a match a
+ * personal link is minted and they land directly in their own exam — the Esiti
+ * tab shows live progress and results) and ONE "Anteprima" (full run to the
+ * computed outcome, nothing saved).
  */
 export function ExamLinkPanel({
   courseId,

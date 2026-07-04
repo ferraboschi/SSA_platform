@@ -51,11 +51,6 @@
   padding: 3px 8px;
   border-radius: 999px;
 }
-.exam-public-langs {
-  margin-left: auto;
-  display: flex;
-  gap: 4px;
-}
 .exam-public-clock {
   margin-left: auto;
   font-size: 13px;
@@ -100,21 +95,6 @@
   gap: 10px;
   justify-content: flex-end;
   flex-wrap: wrap;
-}
-.exam-public-lang {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 7px;
-  border: 1px solid var(--border, #e5e7eb);
-  background: var(--surface, #fff);
-  color: var(--text-2, #555);
-  cursor: pointer;
-}
-.exam-public-lang.active {
-  background: var(--indigo-600, #4f46e5);
-  color: #fff;
-  border-color: var(--indigo-600, #4f46e5);
 }
 .exam-public-course {
   font-size: clamp(18px, 4vw, 22px);
@@ -331,30 +311,6 @@
   border-color: var(--indigo);
   color: var(--text-on-dark);
 }
-
-.edu-days {
-  display: flex;
-  gap: 6px;
-  margin: 0 0 12px;
-}
-.edu-day {
-  flex: 1;
-  min-height: 44px;
-  padding: 10px 8px;
-  border-radius: var(--r-3);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-2);
-  font-size: 13.5px;
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-}
-.edu-day.active {
-  background: var(--indigo-50);
-  border-color: var(--indigo);
-  color: var(--indigo-600);
-}
-
 
 .edu-list {
   border: 1px solid var(--border);

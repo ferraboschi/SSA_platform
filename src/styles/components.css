@@ -212,18 +212,6 @@
   z-index: 30;
 }
 
-.crumbs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-3);
-}
-.crumbs a { color: var(--text-3); transition: color var(--dur-fast); }
-.crumbs a:hover { color: var(--text); }
-.crumbs .sep { color: var(--text-mute); }
-.crumbs .current { color: var(--text); font-weight: var(--fw-medium); }
-
 .topbar-search {
   flex: 1;
   max-width: 720px;
@@ -322,14 +310,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.search-result-hint {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-4);
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
 .search-foot {
   position: sticky;
   bottom: 0;
@@ -352,55 +332,6 @@
   margin-right: 3px;
 }
 
-/* ---- Reminder rows (dashboard ops) ---- */
-.reminder-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 8px;
-  border-radius: 5px;
-  text-decoration: none;
-  color: inherit;
-  transition: background var(--dur-fast);
-}
-a.reminder-row:hover { background: var(--surface-2); }
-.reminder-deadline {
-  min-width: 38px;
-  height: 38px;
-  border-radius: 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-2);
-  display: grid;
-  place-items: center;
-  align-content: center;
-  font-size: 9px;
-  color: var(--text-3);
-  text-align: center;
-  line-height: 1.1;
-  padding: 4px 6px;
-  flex-shrink: 0;
-}
-.reminder-deadline .num { font-size: 14px; font-weight: 600; color: var(--text); display: block; }
-.reminder-deadline.urgent {
-  background: var(--danger-bg);
-  border-color: var(--danger);
-  color: var(--danger-fg);
-}
-.reminder-deadline.urgent .num { color: var(--danger-fg); }
-.reminder-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.reminder-sub {
-  font-size: 11px;
-  color: var(--text-3);
-  margin-top: 1px;
-  line-height: 1.35;
-}
 .tb-status {
   display: inline-flex;
   align-items: center;
@@ -429,8 +360,6 @@ a.reminder-row:hover { background: var(--surface-2); }
   width: 100%;
   margin: 0 auto;
 }
-.page-narrow { max-width: 1080px; }
-
 /* Hamburger (mobile only — hidden on desktop) */
 .topbar-menu-btn { display: none; }
 
@@ -552,7 +481,6 @@ a.reminder-row:hover { background: var(--surface-2); }
 .btn-danger:hover { background: var(--danger-fg); }
 
 .btn-sm { height: 26px; padding: 0 10px; font-size: 12px; }
-.btn-lg { height: 36px; padding: 0 14px; font-size: 13.5px; }
 .btn-icon { width: 32px; padding: 0; }
 .btn-icon.btn-sm { width: 26px; }
 
@@ -583,7 +511,6 @@ a.reminder-row:hover { background: var(--surface-2); }
   color: var(--text-2);
   letter-spacing: var(--ls-normal);
 }
-.field-hint { font-size: 11.5px; color: var(--text-3); }
 
 /* ====== Card ====== */
 .card {
@@ -698,8 +625,6 @@ a.reminder-row:hover { background: var(--surface-2); }
 .table tbody tr:hover { background: var(--surface-hover); }
 .table tbody tr.clickable { cursor: pointer; }
 
-.table-num { font-variant-numeric: tabular-nums; }
-.table-actions { width: 1%; white-space: nowrap; }
 .col-resize-handle:hover { background: var(--indigo-50); }
 .col-resize-handle:hover > span { background: var(--indigo); }
 
@@ -778,16 +703,14 @@ a.reminder-row:hover { background: var(--surface-2); }
 
 /* Generic responsive grid utility (replaces inline repeat(N) where applied). */
 .rgrid-4 { display: grid; grid-template-columns: repeat(4, 1fr); }
-.rgrid-3 { display: grid; grid-template-columns: repeat(3, 1fr); }
-.rgrid-2 { display: grid; grid-template-columns: repeat(2, 1fr); }
 
 @media (max-width: 900px) {
   .kpi-grid.cols-4, .kpi-grid.cols-5, .kpi-grid.cols-3,
-  .rgrid-4, .rgrid-3 { grid-template-columns: repeat(2, 1fr); }
+  .rgrid-4 { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 520px) {
   .kpi-grid.cols-3, .kpi-grid.cols-4, .kpi-grid.cols-5,
-  .rgrid-4, .rgrid-3, .rgrid-2 { grid-template-columns: 1fr; }
+  .rgrid-4 { grid-template-columns: 1fr; }
 }
 
 .kpi {
