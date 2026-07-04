@@ -35,8 +35,60 @@ export const COURSE_TYPE_SHORT_LABEL: Record<CourseTypeKey, string> = {
   mixology: "Mix.",
 };
 
-// Course types that culminate in a final exam.
-export const EXAM_COURSE_TYPES: CourseTypeKey[] = ["certificato", "shochu"];
+// ---------------------------------------------------------------------------
+// Course profile — ONE source of truth for how a course type behaves: expected
+// day count per delivery mode, whether it has a final exam, and which feedback
+// questionnaire (short/long) it uses. The REAL day count is always the course's
+// editable program (`program.days.length`); `expectedDays` here is only the
+// baseline for the "days don't match" advisory alarm and the fallback when a
+// course has no program yet. Change these numbers to change the baseline — the
+// operator can still add/remove days freely per course.
+export type DeliveryModeKey = "presenza" | "online";
+export type FeedbackVariant = "short" | "long";
+
+export interface CourseProfile {
+  expectedDays: Record<DeliveryModeKey, number>;
+  hasExam: boolean;
+  feedback: FeedbackVariant;
+}
+
+export const COURSE_PROFILE: Record<CourseTypeKey, CourseProfile> = {
+  certificato: { expectedDays: { presenza: 3, online: 9 }, hasExam: true, feedback: "long" },
+  shochu: { expectedDays: { presenza: 2, online: 4 }, hasExam: true, feedback: "long" },
+  introduttivo: { expectedDays: { presenza: 1, online: 3 }, hasExam: false, feedback: "short" },
+  masterclass: { expectedDays: { presenza: 1, online: 2 }, hasExam: false, feedback: "short" },
+  mixology: { expectedDays: { presenza: 1, online: 2 }, hasExam: false, feedback: "short" },
+};
+
+/** Expected teaching-day count for the alarm/baseline (NOT the real count). */
+export function expectedDays(type: CourseTypeKey, mode: DeliveryModeKey): number {
+  return COURSE_PROFILE[type]?.expectedDays[mode] ?? 1;
+}
+/** Does this course type culminate in a final exam? */
+export function courseHasExam(type: CourseTypeKey): boolean {
+  return COURSE_PROFILE[type]?.hasExam ?? false;
+}
+/** Which end-of-course feedback questionnaire this type uses (all types have
+ *  feedback; it is always optional to fill in). */
+export function feedbackVariant(type: CourseTypeKey): FeedbackVariant {
+  return COURSE_PROFILE[type]?.feedback ?? "short";
+}
+/** The course's REAL day count: its editable program wins; else the expected
+ *  baseline for its type + mode. `programDays` = program.days.length (or null). */
+export function courseDayCount(
+  type: CourseTypeKey,
+  mode: DeliveryModeKey,
+  programDays?: number | null,
+): number {
+  if (typeof programDays === "number" && programDays > 0) return programDays;
+  return expectedDays(type, mode);
+}
+
+// Course types that culminate in a final exam — derived from COURSE_PROFILE so
+// there is a single source (was a hand-kept literal ["certificato","shochu"]).
+export const EXAM_COURSE_TYPES: CourseTypeKey[] = (
+  Object.keys(COURSE_PROFILE) as CourseTypeKey[]
+).filter(courseHasExam);
 
 export interface StatusMeta {
   label: string;

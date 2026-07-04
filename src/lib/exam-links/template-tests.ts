@@ -7,6 +7,7 @@
 // loader and the send actions so UI and server enforcement can't drift.
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { expectedDays } from "@/lib/domain";
 import type { ExamTestKey } from "./token";
 
 export interface TemplateTest {
@@ -18,9 +19,11 @@ export interface TemplateTest {
   configured: boolean;
 }
 
-/** Day-test count per family: certificato (nihonshu) = 3, shochu = 2. */
+/** Baseline day-test count per exam family, from the course profile (presenza
+ *  baseline: certificato = 3, shochu = 2). The actual tabs shown also grow to
+ *  cover any extra mini-tests stored in the template (see loadTemplateTests). */
 export function familyDayCount(family: "nihonshu" | "shochu"): number {
-  return family === "shochu" ? 2 : 3;
+  return expectedDays(family === "shochu" ? "shochu" : "certificato", "presenza");
 }
 
 export async function loadTemplateTests(
@@ -47,7 +50,10 @@ export async function loadTemplateTests(
   }
 
   const tests: TemplateTest[] = [];
-  for (let day = 1; day <= familyDayCount(family); day++) {
+  // Show the baseline days, and grow to cover any extra mini-tests the operator
+  // added to the template (so a longer online course's day-tests all appear).
+  const dayCount = Math.max(familyDayCount(family), tplData.miniTests?.length ?? 0);
+  for (let day = 1; day <= dayCount; day++) {
     tests.push({
       key: `day${day}`,
       label: `Test giorno ${day}`,

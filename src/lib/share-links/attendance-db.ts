@@ -13,6 +13,9 @@ import "server-only";
 // the migrations are applied.
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { courseDayCount, courseHasExam } from "@/lib/domain";
+import type { CourseTypeKey } from "@/lib/domain";
+import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { verifyShareToken } from "./token";
 
 export const TABLE = "corsi_presenze";
@@ -37,18 +40,20 @@ export function isMissingTable(err: { message?: string } | null | undefined): bo
   );
 }
 
-/** Roll-call days for a course: Certificato = 3, Shochu = 2, everything else = 1.
- *  (Kept in sync with SharedCourse.dayCount in src/lib/share-links/load.ts.)
- *  Courses with an exam (certificato/shochu) also get ONE extra roll-call day
- *  for the exam day itself (day_no = dayCount + 1, the owner's "Giorno esame"
- *  appello) — `examDay` is that number, or null when there's no exam. */
+/** Roll-call days for a course = its REAL editable program length (fallback:
+ *  the expected baseline for type + mode). Courses with an exam also get ONE
+ *  extra roll-call day for the exam day itself (day_no = dayCount + 1, the
+ *  owner's "Giorno esame" appello) — `examDay` is that number, or null when
+ *  there's no exam. Single source: courseDayCount/courseHasExam (@/lib/domain)
+ *  + the course program overlay. */
 export async function courseDayInfo(corsoId: number): Promise<{ dayCount: number; examDay: number | null }> {
   const svc = getSupabaseServiceClient();
-  const { data } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
-  const type = data?.type as string | undefined;
-  const dayCount = type === "certificato" ? 3 : type === "shochu" ? 2 : 1;
-  const hasExam = type === "certificato" || type === "shochu";
-  return { dayCount, examDay: hasExam ? dayCount + 1 : null };
+  const { data } = await svc.from("corsi").select("type, delivery_mode").eq("id", corsoId).maybeSingle();
+  const type = ((data?.type as string) ?? "introduttivo") as CourseTypeKey;
+  const mode = data?.delivery_mode === "online" ? "online" : "presenza";
+  const program = (await loadCourseProgram()).get(String(corsoId));
+  const dayCount = courseDayCount(type, mode, program?.days?.length ?? null);
+  return { dayCount, examDay: courseHasExam(type) ? dayCount + 1 : null };
 }
 
 export function subjectKey(kind: "corsista" | "partecipante", id: number): string {

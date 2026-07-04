@@ -8,7 +8,7 @@
 // only be shared with the course's educator.
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { COURSE_TYPES, EXAM_COURSE_TYPES } from "@/lib/domain";
+import { COURSE_TYPES, courseDayCount, courseHasExam } from "@/lib/domain";
 import type { CourseTypeKey } from "@/lib/domain";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
@@ -459,11 +459,17 @@ export async function loadSharedCourse(
     place: corso.delivery_mode === "online" ? "Online" : corso.city || "",
     date: `${corso.month ?? ""} ${corso.year ?? ""}`.trim(),
     educator,
-    hasExam: EXAM_COURSE_TYPES.includes(type),
+    hasExam: courseHasExam(type),
     exam,
-    // Roll-call days: Certificato = 3, Shochu = 2, everything else = 1.
-    // (Kept in sync with courseDayCount in attendance-actions.ts.)
-    dayCount: type === "certificato" ? 3 : type === "shochu" ? 2 : 1,
+    // Roll-call days = the course's REAL program length (the operator adds/removes
+    // days freely); falls back to the expected baseline for type+mode when no
+    // program exists yet. This is what makes a 9-day Certificato Online show 9
+    // appello/day tabs instead of a hardcoded 3.
+    dayCount: courseDayCount(
+      type,
+      corso.delivery_mode === "online" ? "online" : "presenza",
+      days.length,
+    ),
     totalSakes,
     totalSakeCost,
     days,
