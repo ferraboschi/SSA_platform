@@ -1,10 +1,132 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon, Badge } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import type { ExamQuestion, ExamQuestionType } from "@/lib/domain";
 import { QUESTION_EST_SEC } from "@/lib/esami";
+
+/**
+ * Category picker: a real click-to-open dropdown listing every known category
+ * (the reusable list + every value already used across the exam's questions),
+ * plus an inline "new category" field. Replaces the old HTML datalist, which
+ * only revealed options while typing. The category assigns the question to an
+ * exam area, so it must be obvious and one-click.
+ */
+function CategorySelect({
+  value,
+  options,
+  onSelect,
+  onCreate,
+}: {
+  value: string;
+  options: string[];
+  onSelect: (v: string) => void;
+  onCreate: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const create = () => {
+    const clean = draft.trim();
+    if (!clean) return;
+    onCreate(clean);
+    onSelect(clean);
+    setDraft("");
+    setOpen(false);
+  };
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="input"
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", width: "100%" }}
+      >
+        <span style={{ color: value ? "var(--text)" : "var(--text-4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {value || "Scegli una categoria…"}
+        </span>
+        <Icon name="chevron-d" size={12} className="text-3" />
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            zIndex: 60,
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            boxShadow: "var(--sh-popover)",
+            maxHeight: 280,
+            overflow: "auto",
+            padding: 4,
+          }}
+        >
+          {options.length === 0 && (
+            <div className="text-3" style={{ padding: "6px 10px", fontSize: 12 }}>Nessuna categoria ancora</div>
+          )}
+          {options.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => {
+                onSelect(c);
+                setOpen(false);
+              }}
+              style={{
+                display: "flex",
+                width: "100%",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                padding: "7px 10px",
+                border: "none",
+                background: c === value ? "var(--indigo-50)" : "transparent",
+                borderRadius: 6,
+                cursor: "pointer",
+                textAlign: "left",
+                fontSize: 12.5,
+                color: "var(--text)",
+              }}
+            >
+              {c}
+              {c === value && <Icon name="check" size={12} style={{ color: "var(--indigo-600)" }} />}
+            </button>
+          ))}
+          <div style={{ borderTop: "1px solid var(--border)", marginTop: 4, paddingTop: 6, display: "flex", gap: 6 }}>
+            <input
+              className="input"
+              placeholder="Nuova categoria…"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  create();
+                }
+              }}
+              style={{ height: 32, fontSize: 12 }}
+            />
+            <button type="button" className="btn btn-sm btn-primary" onClick={create} disabled={!draft.trim()} title="Aggiungi categoria">
+              <Icon name="plus" size={11} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // "match" is authorable in theory but the student runner has no match UI (it
 // falls through to a blank textarea → unanswerable, silently manual-graded), so
@@ -354,24 +476,24 @@ export function QuestionDetail({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
         <div className="field">
           <div className="field-label">{t.categoria}</div>
-          {/* Pick-or-type combobox: a native datalist offers every known
-              category for this family, but the field stays free text so a
-              brand-new one can be typed — committed to the shared list on
-              blur (owner: avoid duplicate/typo'd categories across sections). */}
-          <input
-            className="input"
-            list="exam-cat-options"
-            value={q.cat}
-            onChange={(e) => onChange({ cat: e.target.value })}
-            onBlur={(e) => onCommitCategory(e.target.value)}
-            placeholder="Scegli o scrivi una categoria…"
-          />
-          {cats && (
-            <datalist id="exam-cat-options">
-              {cats.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+          {/* Click-to-open dropdown of every known category (reusable list +
+              those already used across the exam) with an inline "add new" — the
+              category assigns the question to an exam area. Where categorization
+              doesn't apply (feedback) it degrades to a plain text input. */}
+          {cats ? (
+            <CategorySelect
+              value={q.cat}
+              options={cats}
+              onSelect={(v) => onChange({ cat: v })}
+              onCreate={(v) => onCommitCategory(v)}
+            />
+          ) : (
+            <input
+              className="input"
+              value={q.cat}
+              onChange={(e) => onChange({ cat: e.target.value })}
+              placeholder="—"
+            />
           )}
         </div>
         <div className="field">

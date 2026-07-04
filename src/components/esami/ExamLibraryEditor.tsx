@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Badge } from "@/components/ui";
+import { plOverlay, plDialog } from "@/components/pianificatore/modal-styles";
 import { useT, format } from "@/lib/i18n";
 import type {
   ExamFamily,
@@ -103,7 +104,12 @@ export function ExamLibraryEditor({
   });
   const [fam, setFam] = useState<ExamFamily>("nihonshu");
   const [section, setSection] = useState<Section>("day0");
-  const [active, setActive] = useState(0);
+  // The question opened in the edit modal (null = list view). Replaces the old
+  // always-visible right pane: a question now opens full-width with prev/next.
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  // Drag-and-drop reorder state (HTML5 DnD — no external lib).
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
@@ -145,18 +151,35 @@ export function ExamLibraryEditor({
       const di = parseInt(section.slice(3), 10) || 0;
       if (di >= drafts[f].miniTests.length) setSection("day0");
     }
-    setActive(0);
+    setOpenIdx(null);
     setFam(f);
   };
   const selectSection = (s: Section) => {
-    setActive(0);
+    setOpenIdx(null);
     setSection(s);
   };
 
   const questions = sectionQuestions(tpl, section);
-  // Categories are selectable everywhere EXCEPT feedback (owner: day1/day2/
-  // day3/esame need them; feedback questions don't).
-  const cats: string[] | null = section === "feedback" ? null : categories[fam];
+  // The category dropdown offers every category KNOWN for this family: the
+  // reusable list (exam_categories) UNION every category actually used across
+  // the family's questions (final + mini-tests + feedback) — so a value like
+  // "degustazione" already on the 100 questions is always pickable, not just
+  // the ones seeded in the table. Categories don't apply to feedback.
+  const allCats = useMemo(() => {
+    const set = new Set<string>(categories[fam] ?? []);
+    const collect = (qs: ExamQuestion[]) => {
+      for (const q of qs) {
+        const c = (q.cat ?? "").trim();
+        if (c) set.add(c);
+      }
+    };
+    const tf = drafts[fam];
+    collect(tf.finalExam.questions);
+    for (const m of tf.miniTests) collect(m.questions);
+    collect(tf.feedback.questions);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [categories, drafts, fam]);
+  const cats: string[] | null = section === "feedback" ? null : allCats;
 
   // Header label + meta for the active section.
   let headerName = "";
@@ -205,16 +228,16 @@ export function ExamLibraryEditor({
     const q = newQuestion(type);
     if (cats && cats.length) q.cat = cats[0];
     setQuestions([...questions, q]);
-    setActive(questions.length);
+    setOpenIdx(questions.length); // open the new question straight away
   };
   const removeQuestion = (i: number) => {
     setQuestions(questions.filter((_, x) => x !== i));
-    setActive((a) => Math.max(0, Math.min(a, questions.length - 2)));
+    setOpenIdx(null);
   };
   const duplicateQuestion = (i: number) => {
     const copy: ExamQuestion = { ...questions[i], id: genId() };
     setQuestions([...questions.slice(0, i + 1), copy, ...questions.slice(i + 1)]);
-    setActive(i + 1);
+    setOpenIdx(i + 1);
   };
   const moveQuestion = (i: number, dir: number) => {
     const j = i + dir;
@@ -222,7 +245,18 @@ export function ExamLibraryEditor({
     const arr = questions.slice();
     [arr[i], arr[j]] = [arr[j], arr[i]];
     setQuestions(arr);
-    setActive(j);
+  };
+  // Drag-and-drop: pull the dragged question OUT and splice it at the drop row,
+  // so a drag across several rows lands exactly where it's dropped.
+  const dropQuestion = (to: number) => {
+    const from = dragFrom;
+    setDragFrom(null);
+    setDragOver(null);
+    if (from == null || from === to) return;
+    const arr = questions.slice();
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    setQuestions(arr);
   };
   const updateQuestion = (i: number, patch: Partial<ExamQuestion>) => {
     setQuestions(questions.map((q, x) => (x === i ? { ...q, ...patch } : q)));
@@ -269,7 +303,24 @@ export function ExamLibraryEditor({
     });
   };
 
-  const activeQ = questions[active] ?? null;
+  // The question currently open in the modal (guarded: index may go stale after
+  // a delete/section switch — clamp to null).
+  const modalQ = openIdx != null ? (questions[openIdx] ?? null) : null;
+
+  // Modal keyboard: Esc closes, ←/→ move between questions (unless typing in a
+  // field, where the arrows must move the caret instead).
+  useEffect(() => {
+    if (openIdx == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+      if (e.key === "Escape") setOpenIdx(null);
+      else if (!typing && e.key === "ArrowLeft") setOpenIdx((i) => (i == null ? i : Math.max(0, i - 1)));
+      else if (!typing && e.key === "ArrowRight") setOpenIdx((i) => (i == null ? i : Math.min(questions.length - 1, i + 1)));
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [openIdx, questions.length]);
 
   // Preview links for the current section against a representative course.
   const previewCourseId = previewCourse?.[fam];
@@ -413,98 +464,196 @@ export function ExamLibraryEditor({
         </div>
       </div>
 
-      {/* Editor: list + detail */}
-      <div className="card" style={{ overflow: "hidden", display: "grid", gridTemplateColumns: "320px 1fr", minHeight: 560 }}>
-        {/* LEFT */}
-        <div style={{ background: "var(--surface-2)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column" }}>
-          <div style={{ flex: 1, overflow: "auto", maxHeight: 640 }}>
-            {questions.length === 0 ? (
-              <div className="text-3" style={{ padding: 18, fontSize: 12.5 }}>{t.emptySection}</div>
-            ) : (
-              questions.map((qq, qi) => {
-                const sel = qi === active;
-                return (
-                  <div
-                    key={qq.id}
+      {/* Question list — full width, drag-to-reorder, click a row to edit it in
+          a modal. Each row shows category, points and the "important" star. */}
+      <div className="card" style={{ overflow: "hidden" }}>
+        {questions.length === 0 ? (
+          <div className="text-3" style={{ padding: 18, fontSize: 12.5 }}>{t.emptySection}</div>
+        ) : (
+          questions.map((qq, qi) => {
+            const isDragging = dragFrom === qi;
+            const isDropTarget = dragOver === qi && dragFrom != null && dragFrom !== qi;
+            return (
+              <div
+                key={qq.id}
+                draggable
+                onDragStart={() => setDragFrom(qi)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragOver !== qi) setDragOver(qi);
+                }}
+                onDrop={() => dropQuestion(qi)}
+                onDragEnd={() => {
+                  setDragFrom(null);
+                  setDragOver(null);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderBottom: "1px solid var(--border-2)",
+                  borderTop: isDropTarget ? "2px solid var(--indigo)" : "2px solid transparent",
+                  background: isDragging ? "var(--indigo-50)" : "transparent",
+                  opacity: isDragging ? 0.6 : 1,
+                }}
+              >
+                <span
+                  title="Trascina per riordinare"
+                  style={{ cursor: "grab", color: "var(--text-4)", display: "flex", flexShrink: 0 }}
+                >
+                  <Icon name="grip" size={15} />
+                </span>
+                <span className="mono" style={{ fontSize: 10.5, color: "var(--text-4)", minWidth: 22, flexShrink: 0 }}>
+                  {(qi + 1).toString().padStart(2, "0")}
+                </span>
+                <button
+                  onClick={() => setOpenIdx(qi)}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    padding: 0,
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span
                     style={{
-                      display: "flex",
-                      alignItems: "stretch",
-                      borderBottom: "1px solid var(--border-2)",
-                      background: sel ? "var(--surface)" : "transparent",
-                      borderLeft: sel ? "3px solid var(--indigo)" : "3px solid transparent",
+                      fontSize: 13,
+                      color: "var(--text)",
+                      lineHeight: 1.35,
+                      overflow: "hidden",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
                     }}
                   >
-                    <button
-                      onClick={() => setActive(qi)}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 8,
-                        padding: "10px 8px 10px 12px",
-                        textAlign: "left",
-                        background: "transparent",
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span className="mono" style={{ fontSize: 10.5, color: "var(--text-4)", minWidth: 20, paddingTop: 1 }}>
-                        {(qi + 1).toString().padStart(2, "0")}
+                    {qq.text || "—"}
+                  </span>
+                  <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <Badge tone="neutral">{esami.qt[qq.type]}</Badge>
+                    {qq.cat && (
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          color: "var(--indigo-600)",
+                          background: "var(--indigo-50)",
+                          border: "1px solid var(--indigo-100)",
+                          borderRadius: 20,
+                          padding: "1px 8px",
+                        }}
+                      >
+                        {qq.cat}
                       </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "var(--text)",
-                            lineHeight: 1.35,
-                            overflow: "hidden",
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                          }}
-                        >
-                          {qq.text || "—"}
-                        </div>
-                        <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
-                          <Badge tone="neutral">{esami.qt[qq.type]}</Badge>
-                          {qq.important && <Badge tone="oro">★</Badge>}
-                        </div>
-                      </div>
-                    </button>
-                    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 6px", gap: 2 }}>
-                      <button className="reorder-btn" title={t.moveUp} disabled={qi === 0} onClick={() => moveQuestion(qi, -1)}>
-                        <Icon name="arrow-up" size={12} />
-                      </button>
-                      <button className="reorder-btn" title={t.moveDown} disabled={qi === questions.length - 1} onClick={() => moveQuestion(qi, 1)}>
-                        <Icon name="arrow-dn" size={12} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-            <AddQuestionRow onAdd={addQuestion} />
+                    )}
+                  </span>
+                </button>
+                <span
+                  title={`${qq.points} punti`}
+                  style={{ fontSize: 11, fontWeight: 700, color: "var(--text-2)", flexShrink: 0, minWidth: 34, textAlign: "right" }}
+                >
+                  {qq.points} pt
+                </span>
+                <span style={{ width: 20, flexShrink: 0, textAlign: "center" }}>
+                  {qq.important ? <Badge tone="oro">★</Badge> : null}
+                </span>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 }}>
+                  <button className="reorder-btn" title={t.moveUp} disabled={qi === 0} onClick={() => moveQuestion(qi, -1)}>
+                    <Icon name="arrow-up" size={12} />
+                  </button>
+                  <button className="reorder-btn" title={t.moveDown} disabled={qi === questions.length - 1} onClick={() => moveQuestion(qi, 1)}>
+                    <Icon name="arrow-dn" size={12} />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+        <AddQuestionRow onAdd={addQuestion} />
+      </div>
+
+      {/* Full-screen question editor modal, with prev/next. */}
+      {modalQ && openIdx != null && (
+        <div style={plOverlay} onClick={() => setOpenIdx(null)}>
+          <div
+            style={{ ...plDialog, maxWidth: 860, maxHeight: "92vh", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                padding: "14px 18px",
+                borderBottom: "1px solid var(--border)",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <strong style={{ fontSize: 14 }}>
+                  Domanda {openIdx + 1} di {questions.length}
+                </strong>
+                {modalQ.cat && (
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      color: "var(--indigo-600)",
+                      background: "var(--indigo-50)",
+                      border: "1px solid var(--indigo-100)",
+                      borderRadius: 20,
+                      padding: "1px 8px",
+                    }}
+                  >
+                    {modalQ.cat}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button
+                  className="btn btn-sm"
+                  disabled={openIdx === 0}
+                  onClick={() => setOpenIdx((i) => (i == null ? i : Math.max(0, i - 1)))}
+                  title="Domanda precedente (←)"
+                >
+                  <Icon name="arrow-l" size={12} />
+                  Prec.
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={openIdx === questions.length - 1}
+                  onClick={() => setOpenIdx((i) => (i == null ? i : Math.min(questions.length - 1, i + 1)))}
+                  title="Domanda successiva (→)"
+                >
+                  Succ.
+                  <Icon name="chevron" size={12} />
+                </button>
+                <button className="btn btn-icon btn-sm btn-ghost" onClick={() => setOpenIdx(null)} title="Chiudi (Esc)">
+                  <Icon name="x" size={14} />
+                </button>
+              </div>
+            </div>
+            <div style={{ padding: 22, overflow: "auto" }}>
+              <QuestionDetail
+                q={modalQ}
+                cats={cats}
+                onChange={(patch) => updateQuestion(openIdx, patch)}
+                onChangeType={(type) => changeType(openIdx, type)}
+                onDuplicate={() => duplicateQuestion(openIdx)}
+                onDelete={() => removeQuestion(openIdx)}
+                onCommitCategory={commitCategory}
+              />
+            </div>
           </div>
         </div>
-
-        {/* RIGHT */}
-        <div style={{ padding: 24, overflow: "auto", maxHeight: 700 }}>
-          {activeQ ? (
-            <QuestionDetail
-              q={activeQ}
-              cats={cats}
-              onChange={(patch) => updateQuestion(active, patch)}
-              onChangeType={(type) => changeType(active, type)}
-              onDuplicate={() => duplicateQuestion(active)}
-              onDelete={() => removeQuestion(active)}
-              onCommitCategory={commitCategory}
-            />
-          ) : (
-            <div className="text-3" style={{ padding: 20 }}>{t.selectQuestion}</div>
-          )}
-        </div>
-      </div>
+      )}
       </>
       )}
     </div>
