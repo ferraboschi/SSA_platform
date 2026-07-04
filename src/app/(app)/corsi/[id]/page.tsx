@@ -11,6 +11,7 @@ import {
   toTemplateData,
   toEsameData,
 } from "@/lib/corsi";
+import { expectedDays } from "@/lib/domain";
 import { loadCourseEconomics } from "@/lib/economics";
 import { EMPTY_ECON } from "@/lib/economics/types";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
@@ -311,6 +312,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         templates={templates}
         esame={esame}
         examFamily={examFamily}
+        expectedDayCount={expectedDays(course.type, course.mode)}
       />
 
       {/* Danger zone */}

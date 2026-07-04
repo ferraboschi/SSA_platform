@@ -28,6 +28,7 @@ export function CourseSections({
   templates,
   esame,
   examFamily = null,
+  expectedDayCount,
 }: {
   courseId: string;
   courseTitle?: string;
@@ -40,6 +41,8 @@ export function CourseSections({
   templates: TemplateData[];
   esame: EsameData | null;
   examFamily?: "nihonshu" | "shochu" | null;
+  /** Expected day count for this course type+mode (COURSE_PROFILE baseline). */
+  expectedDayCount?: number;
 }) {
   const tr = useT();
   const t = tr.corsi.detail;
@@ -89,6 +92,7 @@ export function CourseSections({
           data={programma}
           programOverlay={programOverlay}
           templates={templates}
+          expectedDayCount={expectedDayCount}
         />
       )}
       {section === "esame" && (

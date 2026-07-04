@@ -11,6 +11,7 @@ import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
 import { deleteTemplateAction } from "@/lib/data/template-actions";
 import { saveCourseProgramAction } from "@/lib/corsi/program-actions";
 import type { CourseProgramOverlay } from "@/lib/corsi/program-overlay";
+import { validateDays, MAX_COURSE_DAYS } from "@/lib/corsi/program-validate";
 import type { SakeState, CostLine } from "./programma-types";
 import { SakeRow } from "./programma-rows";
 import { EconomiaPanel } from "./EconomiaPanel";
@@ -28,11 +29,15 @@ export function ProgrammaEconomiaSection({
   data,
   programOverlay,
   templates: initialTemplates,
+  expectedDayCount,
 }: {
   courseId: string;
   data: ProgrammaData;
   programOverlay?: CourseProgramOverlay;
   templates: TemplateData[];
+  /** Expected day count for this course type+mode (COURSE_PROFILE baseline) —
+   *  drives the "days don't match" advisory. Undefined = no baseline. */
+  expectedDayCount?: number;
 }) {
   const tr = useT();
   const t = tr.corsi.programma;
@@ -146,11 +151,12 @@ export function ProgrammaEconomiaSection({
     setDays((arr) => arr.map((d) => (d.id === dayId ? { ...d, sakes: [...d.sakes, newSake()] } : d)));
   const addDay = () =>
     setDays((arr) => {
+      if (arr.length >= MAX_COURSE_DAYS) return arr; // hard cap 1..9
       const n = arr.length + 1;
       return [...arr, { id: `day-new-${Date.now()}`, day: n, name: format(t.newDayName, { n }), sakes: [] }];
     });
   const removeDay = (dayId: string) =>
-    setDays((arr) => arr.filter((d) => d.id !== dayId).map((d, i) => ({ ...d, day: i + 1 })));
+    setDays((arr) => (arr.length <= 1 ? arr : arr.filter((d) => d.id !== dayId).map((d, i) => ({ ...d, day: i + 1 }))));
   const renameDay = (dayId: string, name: string) =>
     setDays((arr) => arr.map((d) => (d.id === dayId ? { ...d, name } : d)));
 
@@ -429,7 +435,7 @@ export function ProgrammaEconomiaSection({
                 <Icon name="copy" size={12} />
                 {t.templateBtn}
               </button>
-              <button className="btn btn-sm" onClick={addDay}>
+              <button className="btn btn-sm" onClick={addDay} disabled={days.length >= MAX_COURSE_DAYS} title={days.length >= MAX_COURSE_DAYS ? `Massimo ${MAX_COURSE_DAYS} giorni` : undefined}>
                 <Icon name="plus" size={12} />
                 {t.addDay}
               </button>
@@ -439,6 +445,31 @@ export function ProgrammaEconomiaSection({
               </button>
             </div>
           </div>
+
+          {/* Day-count advisory: real program vs the expected baseline for this
+              course type + mode (add/remove day is allowed — this only warns). */}
+          {validateDays(days.length, expectedDayCount).map((issue, i) => (
+            <div
+              key={i}
+              role="status"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 12.5,
+                lineHeight: 1.4,
+                padding: "8px 12px",
+                borderRadius: 8,
+                marginBottom: 10,
+                color: issue.level === "error" ? "var(--danger-fg)" : "var(--warning-fg)",
+                background: issue.level === "error" ? "var(--danger-bg)" : "var(--warning-bg)",
+                border: `1px solid ${issue.level === "error" ? "var(--danger-fg)" : "var(--warning-fg)"}`,
+              }}
+            >
+              <Icon name="warn" size={14} style={{ flexShrink: 0 }} />
+              <span>{issue.message}</span>
+            </div>
+          ))}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {days.map((sec) => (
