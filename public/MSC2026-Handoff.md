@@ -56,12 +56,12 @@ I dati **non sono live**: sono estratti una volta da Compify e committati.
 |---|---|
 | `src/lib/msc2026-data.json` (~242 KB) | I 403 vincitori + scheda tecnica/regione. **Importato da `shared.ts`** (`ALL`; `VISIBLE` = `ALL` senza Magnifica). |
 | `src/lib/msc2026-reports.json` (~634 KB) | I rapporti di valutazione per prodotto (chiave = `product_id`): radar, profilo qualitativo, commenti giuria. |
-| `compify-all-data.json` (root, ~20 MB) | **Dump grezzo** da Compify (`{votes, regs}`, doppio-JSON-encoded). Sorgente per rigenerare i report. |
+| `compify-all-data.json` (archiviato fuori repo: ~/Documents/SSA-archive-2026-07) | **Dump grezzo** da Compify (`{votes, regs}`, doppio-JSON-encoded). Sorgente per rigenerare i report. |
 | `scripts/build_msc_reports.py` (~297 righe) | Rigenera `msc2026-reports.json` **e** arricchisce `msc2026-data.json` (aggiunge `product_id`, split pairing best/good with) partendo dal dump grezzo. |
 
 **Per aggiornare i dati:** `python scripts/build_msc_reports.py` (legge `compify-all-data.json`, riscrive i due JSON in `src/lib/`). Le medaglie Design sono **per-categoria** (1 Best Design per categoria + i secondi come Good Design — per questo non esistono Shochu Good Design: 1 sola candidatura shochu per categoria).
 
-> ⚠️ I 3 file dati (i due `msc2026-*.json` + `compify-all-data.json`) e gli asset (sotto) al momento sono **untracked in git** — vanno inclusi nella consegna.
+> ⚠️ I 3 file dati (i due `msc2026-*.json` + `compify-all-data.json`) e gli asset (sotto) i due `msc2026-*.json` sono committati; il dump grezzo è archiviato fuori repo (~/Documents/SSA-archive-2026-07).
 
 ---
 
