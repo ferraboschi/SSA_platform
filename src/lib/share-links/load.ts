@@ -37,6 +37,11 @@ export interface SharedSake {
    *  resolved by SKU (nullable — same source as image/url). */
   aroma: string | null;
   notes: string | null;
+  region: string | null;
+  /** Alcohol by volume, as the store's own label (e.g. "15.5%"). */
+  abv: string | null;
+  /** Suggested food pairing, comma-joined when the source lists several. */
+  pairing: string | null;
 }
 export interface SharedDay {
   day: number;
@@ -136,13 +141,24 @@ export async function loadSharedCourse(
   const catBySku = new Map(catalog.filter((c) => c.sku).map((c) => [c.sku as string, c]));
   const enrich = (
     code: string,
-  ): { image: string | null; url: string | null; aroma: string | null; notes: string | null } => {
+  ): {
+    image: string | null;
+    url: string | null;
+    aroma: string | null;
+    notes: string | null;
+    region: string | null;
+    abv: string | null;
+    pairing: string | null;
+  } => {
     const it = code ? catBySku.get(code) : undefined;
     return {
       image: it?.image ?? null,
       url: it?.url ?? null,
       aroma: it?.aroma ?? null,
       notes: it?.notes ?? null,
+      region: it?.region ?? null,
+      abv: it?.abv ?? null,
+      pairing: it?.pairing ?? null,
     };
   };
 

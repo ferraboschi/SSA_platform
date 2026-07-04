@@ -5,7 +5,7 @@
 // from sakeCompanyConfig (permanent offline OAuth token).
 import "server-only";
 import { sakeCompanyConfig } from "@/lib/integrations/config";
-import { parseProductNotes } from "./product-notes";
+import { extractProductFacts, type RawMetafield } from "./product-notes";
 
 const API_VERSION = "2026-01"; // bumped: 2025-01 is past Shopify's support window (Jun 2026)
 
@@ -89,6 +89,39 @@ async function scGet(
   return { body, link: res.headers.get("Link") };
 }
 
+/** Every metafield on one product (aroma/region/ABV/pairing live here for the
+ *  current "hoculus" schema — verified live: ~3 in 4 active products).
+ *  Best-effort: a failure degrades to no metafields, never breaks the
+ *  catalog over one product's data. */
+async function fetchMetafields(productId: number): Promise<RawMetafield[]> {
+  try {
+    const { body } = await scGet(`products/${productId}/metafields.json?limit=250`);
+    return (body as { metafields?: RawMetafield[] }).metafields ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Run `fn` over `items` with at most `limit` in flight at once — metafields
+ *  are one extra request PER PRODUCT, so an unbounded Promise.all across the
+ *  whole catalog would open hundreds of connections at once. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 /** All collections (custom + smart), sorted by title. */
 export async function listCollections(): Promise<ScCollection[]> {
   const out: ScCollection[] = [];
@@ -157,22 +190,38 @@ export interface ScCatalogItem {
   aroma?: string | null;
   /** Longer narrative commentary (production, character), same source. */
   notes?: string | null;
+  region?: string | null;
+  /** Alcohol by volume, as the store's own label (e.g. "15.5%"). */
+  abv?: string | null;
+  /** Suggested food pairing, comma-joined when the source lists several. */
+  pairing?: string | null;
 }
+
+/** Metafield fetches run at this many products in flight — bounded so a
+ *  273-product catalog (verified live count) doesn't open hundreds of
+ *  connections at once, while still finishing in a reasonable time behind
+ *  the 10-minute cache (see catalog.ts). */
+const METAFIELDS_CONCURRENCY = 6;
 
 /** Full pickable catalog (all active products, flattened to variants). */
 export async function listCatalog(): Promise<ScCatalogItem[]> {
   const domain = sakeCompanyConfig.storeDomain;
   const out: ScCatalogItem[] = [];
-  // body_html carries the aroma hook + narrative commentary the educator's
-  // Programma tab shows (parseProductNotes) — same request, no extra round-trip.
+  // body_html carries the LEGACY aroma hook + narrative + <h6> fact block
+  // (parseProductNotes / extractProductFacts) — same request, no extra
+  // round-trip. The CURRENT schema lives in metafields instead (fetched
+  // per product below — Sake Company's own data is split across two eras).
   const fields = "id,handle,title,vendor,status,image,variants,body_html";
   let path: string | null = `products.json?limit=250&status=active&fields=${fields}`;
   while (path) {
     const { body, link } = await scGet(path);
     const page = (body as { products?: (ScProduct & { handle: string })[] }).products ?? [];
-    for (const p of page) {
+    const metafieldsByProduct = await mapWithConcurrency(page, METAFIELDS_CONCURRENCY, (p) =>
+      fetchMetafields(p.id),
+    );
+    page.forEach((p, i) => {
       const single = p.variants.length <= 1;
-      const { aroma, notes } = parseProductNotes(p.body_html);
+      const { aroma, notes, region, abv, pairing } = extractProductFacts(p.body_html, metafieldsByProduct[i]);
       for (const v of p.variants) {
         const variantTitle =
           v.title && v.title !== "Default Title" ? v.title : null;
@@ -192,9 +241,12 @@ export async function listCatalog(): Promise<ScCatalogItem[]> {
           price: priceNum != null && Number.isFinite(priceNum) ? priceNum : undefined,
           aroma,
           notes,
+          region,
+          abv,
+          pairing,
         });
       }
-    }
+    });
     const cursor = nextPageInfo(link);
     path = cursor ? `products.json?limit=250&page_info=${cursor}` : null;
   }

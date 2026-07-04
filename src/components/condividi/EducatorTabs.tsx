@@ -73,6 +73,11 @@ export interface SakeRow {
   /** Aroma hook + narrative commentary from the Sake Company product page. */
   aroma: string | null;
   notes: string | null;
+  region: string | null;
+  /** Alcohol by volume, as the store's own label (e.g. "15.5%"). */
+  abv: string | null;
+  /** Suggested food pairing, comma-joined when the source lists several. */
+  pairing: string | null;
 }
 export interface DayRow {
   day: number;
@@ -1004,6 +1009,8 @@ function ProgrammaTab({ days, day }: { days: DayRow[]; day: number }) {
                 <dl className="edu-sake-facts">
                   {s.type && <Fact k="Tipo" v={s.type} />}
                   {s.sakagura && <Fact k="Sakagura" v={s.sakagura} />}
+                  {s.region && <Fact k="Regione" v={s.region} />}
+                  {s.abv && <Fact k="Alcol" v={s.abv} />}
                   {s.size > 0 && <Fact k="Formato" v={`${s.size} ml`} />}
                   {s.qty > 0 && <Fact k="Bottiglie" v={String(s.qty)} />}
                   {s.code && <Fact k="Codice" v={s.code} />}
@@ -1024,6 +1031,11 @@ function ProgrammaTab({ days, day }: { days: DayRow[]; day: number }) {
                 {s.notes && (
                   <p style={{ fontSize: 12.5, color: "var(--text-2)", margin: "6px 0 0", lineHeight: 1.55 }}>
                     {s.notes}
+                  </p>
+                )}
+                {s.pairing && (
+                  <p style={{ fontSize: 12.5, color: "var(--text-2)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                    🍽️ <strong>Abbinamento:</strong> {s.pairing}
                   </p>
                 )}
                 {s.url && (

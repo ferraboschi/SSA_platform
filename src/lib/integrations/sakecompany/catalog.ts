@@ -54,8 +54,9 @@ export const getSakeCatalog = unstable_cache(
       return [];
     }
   },
-  // v10: ScCatalogItem gained aroma/notes (parsed from body_html) — bump so a
-  // stale-shaped cached entry never serves without them (AGENTS.md convention).
-  ["sake-catalog-v10"],
+  // v11: ScCatalogItem gained region/abv/pairing (from metafields + body_html)
+  // — bump so a stale-shaped cached entry never serves without them
+  // (AGENTS.md convention).
+  ["sake-catalog-v11"],
   { revalidate: 600, tags: [SAKE_CATALOG_TAG] },
 );
