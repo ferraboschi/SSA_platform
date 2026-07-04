@@ -27,6 +27,12 @@ const OUTCOME_LABEL: Record<string, string> = {
   retrial: "Recupero",
   failed: "Bocciato",
 };
+// Tone token stem per outcome — drives the confirmed-button fill (bg/fg vars).
+const OUTCOME_STEM: Record<string, "success" | "warning" | "danger"> = {
+  passed: "success",
+  retrial: "warning",
+  failed: "danger",
+};
 
 function scoreColor(s: number): string {
   return s >= 80 ? "var(--success-fg)" : s >= 70 ? "var(--warning-fg)" : "var(--danger-fg)";
@@ -155,7 +161,7 @@ export function ExamResultsClient({
       <PageHeader
         eyebrow="Esiti & correzione"
         title={`Risultati esame${courseTitle ? ` — ${courseTitle}` : ""}`}
-        sub="Consegne reali degli studenti, corrette in automatico sulle domande oggettive. Conferma l'esito: viene scritto sul profilo del corsista."
+        sub="Consegne reali degli studenti, corrette in automatico sulle domande oggettive. L'esito (Promosso/Recupero/Bocciato) è la certificazione dell'esame finale: si conferma sulla riga «final» e vale per lo studente; i mini-test giornalieri sono solo di verifica."
         actions={
           hasExam ? (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -299,6 +305,13 @@ function ResultRow({
   // companion (each persists its outcome on its own table).
   const canGrade = r.enrollmentId != null || r.partecipanteId != null;
 
+  // The certification outcome (Promosso/Recupero/Bocciato) is decided on the
+  // FINAL exam and stored ONCE per student (on their enrollment). The day tests
+  // are formative, so only the "final" row carries the outcome + confirm
+  // controls — otherwise every test row of the same student shows and edits the
+  // one shared enrollment outcome, which reads as rows moving together.
+  const isFinal = r.testKey === "final";
+
   const grade = (outcome: ExamOutcome) => {
     if (!canGrade) {
       setErr("Studente non trovato tra gli iscritti — impossibile registrare l'esito.");
@@ -346,55 +359,79 @@ function ResultRow({
           )}
         </td>
         <td>
-          {r.currentResult ? (
-            <Badge tone={OUTCOME_TONE[r.currentResult] ?? "neutral"} dot>
-              {OUTCOME_LABEL[r.currentResult] ?? r.currentResult}
-              {r.currentScore != null ? ` ${r.currentScore}%` : ""}
-            </Badge>
+          {!isFinal ? (
+            <span className="text-3" style={{ fontStyle: "italic", fontSize: 12 }}>
+              — <span style={{ fontSize: 10.5 }}>(mini-test)</span>
+            </span>
           ) : (
-            <span className="text-3" style={{ fontStyle: "italic", fontSize: 12 }}>da confermare</span>
-          )}
-          {draft && (
-            <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <Badge tone={OUTCOME_TONE[draft.verdict] ?? "neutral"}>
-                Bozza: {OUTCOME_LABEL[draft.verdict] ?? draft.verdict} {draft.combinedPct}%
-              </Badge>
-              <a
-                href={`/api/esami/${courseId}/bozza?sub=${r.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: 11.5, fontWeight: 600, color: "var(--indigo-600)" }}
-              >
-                Bozza PDF ↗
-              </a>
-            </div>
+            <>
+              {r.currentResult ? (
+                <Badge tone={OUTCOME_TONE[r.currentResult] ?? "neutral"} dot>
+                  {OUTCOME_LABEL[r.currentResult] ?? r.currentResult}
+                  {r.currentScore != null ? ` ${r.currentScore}%` : ""}
+                </Badge>
+              ) : (
+                <span className="text-3" style={{ fontStyle: "italic", fontSize: 12 }}>da confermare</span>
+              )}
+              {draft && (
+                <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <Badge tone={OUTCOME_TONE[draft.verdict] ?? "neutral"}>
+                    Bozza: {OUTCOME_LABEL[draft.verdict] ?? draft.verdict} {draft.combinedPct}%
+                  </Badge>
+                  <a
+                    href={`/api/esami/${courseId}/bozza?sub=${r.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 11.5, fontWeight: 600, color: "var(--indigo-600)" }}
+                  >
+                    Bozza PDF ↗
+                  </a>
+                </div>
+              )}
+            </>
           )}
         </td>
         <td>
-          <div style={{ display: "inline-flex", gap: 4 }}>
-            {(["passed", "retrial", "failed"] as ExamOutcome[]).map((o) => (
-              <button
-                key={o}
-                className="btn btn-xs"
-                disabled={pending || !canGrade}
-                onClick={() => grade(o)}
-                title={
-                  !canGrade
-                    ? "Studente non iscritto"
-                    : r.gradable === 0
-                      ? "Valutazione manuale — nessuna domanda a correzione automatica"
-                      : `Suggerito: ${OUTCOME_LABEL[r.suggested]}`
-                }
-                style={{
-                  borderColor: r.gradable > 0 && r.suggested === o ? `var(--${o === "passed" ? "success" : o === "retrial" ? "warning" : "danger"}-fg)` : undefined,
-                  fontWeight: r.gradable > 0 && r.suggested === o ? 700 : 400,
-                }}
-              >
-                {OUTCOME_LABEL[o]}
-              </button>
-            ))}
-          </div>
-          {err && <div style={{ color: "var(--danger-fg)", fontSize: 11, marginTop: 4 }}>{err}</div>}
+          {!isFinal ? (
+            <span className="text-3" style={{ fontSize: 12 }}>—</span>
+          ) : (
+            <>
+              <div style={{ display: "inline-flex", gap: 4 }}>
+                {(["passed", "retrial", "failed"] as ExamOutcome[]).map((o) => {
+                  const stem = OUTCOME_STEM[o];
+                  const confirmed = r.currentResult === o;
+                  const suggested = r.gradable > 0 && r.suggested === o;
+                  return (
+                    <button
+                      key={o}
+                      className="btn btn-xs"
+                      disabled={pending || !canGrade}
+                      onClick={() => grade(o)}
+                      title={
+                        !canGrade
+                          ? "Studente non iscritto"
+                          : confirmed
+                            ? `Esito confermato: ${OUTCOME_LABEL[o]}`
+                            : r.gradable === 0
+                              ? "Valutazione manuale — nessuna domanda a correzione automatica"
+                              : `Suggerito: ${OUTCOME_LABEL[r.suggested]}`
+                      }
+                      style={{
+                        // Confirmed = filled (the saved outcome); suggested = outline hint.
+                        background: confirmed ? `var(--${stem}-bg)` : undefined,
+                        borderColor: confirmed || suggested ? `var(--${stem}-fg)` : undefined,
+                        color: confirmed ? `var(--${stem}-fg)` : undefined,
+                        fontWeight: confirmed || suggested ? 700 : 400,
+                      }}
+                    >
+                      {OUTCOME_LABEL[o]}
+                    </button>
+                  );
+                })}
+              </div>
+              {err && <div style={{ color: "var(--danger-fg)", fontSize: 11, marginTop: 4 }}>{err}</div>}
+            </>
+          )}
         </td>
         <td>
           <button className="btn btn-icon btn-sm btn-ghost" onClick={onToggle} title="Vedi risposte">
