@@ -21,6 +21,41 @@ import { syncEducatorActivation } from "@/lib/educators/sync-active";
 import { generateTransferCredits, matchTransferCreditsByCode } from "@/lib/crediti/generate";
 import { logReconciliation } from "@/lib/anomalie/reconcile";
 import { MONTH_TO_NUM, MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
+import { planSeats, placeholderEmail, placeholderName } from "./seats";
+
+type Svc = ReturnType<typeof getSupabaseServiceClient>;
+
+/** Whether the multi-ticket seats migration has run (seat_index column present).
+ *  Until it has, the sync keeps its one-row-per-line behaviour. */
+async function probeSeatIndex(sb: Svc): Promise<boolean> {
+  const { error } = await sb.from("corsi_iscrizioni").select("seat_index").limit(1);
+  return !error;
+}
+
+/** Get-or-create a PLACEHOLDER corsista for an unfilled seat, keyed by a
+ *  deterministic synthetic email so a re-sync resolves the same one. */
+async function ensurePlaceholderCorsista(
+  sb: Svc,
+  email: string,
+  name: string,
+  cache: Map<string, number>,
+): Promise<number | null> {
+  const hit = cache.get(email);
+  if (hit) return hit;
+  const { data: existing } = await sb.from("corsisti").select("id").eq("email", email).maybeSingle();
+  if (existing) {
+    cache.set(email, existing.id as number);
+    return existing.id as number;
+  }
+  const { data, error } = await sb
+    .from("corsisti")
+    .insert({ email, full_name: name, historical: false, placeholder: true })
+    .select("id")
+    .single();
+  if (error || !data) return null;
+  cache.set(email, data.id as number);
+  return data.id as number;
+}
 
 export interface SyncSummary {
   ranAt: string;
@@ -452,6 +487,9 @@ export async function runShopifySync(opts?: {
 
   let purchasesUpserted = 0;
   let enrollmentsUpserted = 0;
+  // Multi-ticket seats: only expand into per-seat rows once the migration ran.
+  const hasSeats = await probeSeatIndex(sb);
+  const placeholderCache = new Map<string, number>();
   for (const o of orders) {
     if (o.cancelled_at) continue;
     if (DEAD_FINANCIAL.has(o.financial_status || "")) continue;
@@ -505,23 +543,62 @@ export async function runShopifySync(opts?: {
       // Course ticket → enrollment (mirror order/discount/payment fields).
       const corso = li.product_id ? corsoByProduct.get(li.product_id) : undefined;
       if (corso) {
-        const { error: eErr } = await sb.from("corsi_iscrizioni").upsert(
-          {
-            corso_id: corso.id,
-            corsista_id: corsistaId,
-            amount_cents: amount || corso.price,
-            historical: false,
-            order_name: o.name,
-            order_date: o.created_at,
-            discount_code: discountCode,
-            discount_cents: discountCents,
-            financial_status: o.financial_status,
-            line_item_id: li.id,
-            buyer_name: buyerName,
-          },
-          { onConflict: "corso_id,corsista_id" },
-        );
-        if (!eErr) enrollmentsUpserted++;
+        const baseRow = {
+          corso_id: corso.id,
+          historical: false,
+          order_name: o.name,
+          order_date: o.created_at,
+          discount_code: discountCode,
+          discount_cents: discountCents,
+          financial_status: o.financial_status,
+          line_item_id: li.id,
+          buyer_name: buyerName,
+        };
+        if (hasSeats && li.id != null) {
+          // One FULL enrollment row per ticket: seat 1 = the buyer (whole
+          // amount), seats 2..N = a placeholder attendee (€0) to complete later.
+          const lineId = li.id;
+          for (const seat of planSeats(qty, amount || corso.price)) {
+            if (seat.seatIndex === 1) {
+              const { error: eErr } = await sb.from("corsi_iscrizioni").upsert(
+                { ...baseRow, corsista_id: corsistaId, seat_index: 1, amount_cents: seat.amountCents },
+                { onConflict: "corso_id,corsista_id" },
+              );
+              if (!eErr) enrollmentsUpserted++;
+              continue;
+            }
+            // Extra seat: create ONCE and then leave alone, so re-syncing never
+            // overwrites a seat the operator has already completed.
+            const { data: already } = await sb
+              .from("corsi_iscrizioni")
+              .select("id")
+              .eq("corso_id", corso.id)
+              .eq("line_item_id", lineId)
+              .eq("seat_index", seat.seatIndex)
+              .maybeSingle();
+            if (already) continue;
+            const pid = await ensurePlaceholderCorsista(
+              sb,
+              placeholderEmail(o.id, lineId, seat.seatIndex),
+              placeholderName(seat.seatIndex),
+              placeholderCache,
+            );
+            if (!pid) continue;
+            const { error: eErr } = await sb
+              .from("corsi_iscrizioni")
+              .insert({ ...baseRow, corsista_id: pid, seat_index: seat.seatIndex, amount_cents: 0 });
+            if (!eErr) enrollmentsUpserted++;
+          }
+        } else {
+          // Pre-migration: one row per line (unchanged behaviour).
+          const { error: eErr } = await sb
+            .from("corsi_iscrizioni")
+            .upsert(
+              { ...baseRow, corsista_id: corsistaId, amount_cents: amount || corso.price },
+              { onConflict: "corso_id,corsista_id" },
+            );
+          if (!eErr) enrollmentsUpserted++;
+        }
       }
     }
   }

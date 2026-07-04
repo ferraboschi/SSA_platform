@@ -91,6 +91,10 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
 
       return (corsistiData as CorsistaRow[])
         .filter((c) => !c.merged_into) // hide records folded into another
+        // Hide multi-ticket PLACEHOLDER attendees ("Posto N — da completare"):
+        // real enrollment seats, not real people until completed, so they must
+        // not inflate the corsisti list/count. (Field absent pre-migration → kept.)
+        .filter((c) => !(c as { placeholder?: boolean }).placeholder)
         .map((c) => corsistaRowToDomain(c, enrollByCorsista.get(c.id) ?? []));
     },
 
