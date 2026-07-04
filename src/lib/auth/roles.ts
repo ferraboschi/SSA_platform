@@ -54,8 +54,12 @@ export function roleCan(role: RoleKey, cap: Capability): boolean {
 // ============ Per-role view priority ============
 
 export interface RoleView {
-  // Nav item ids this role never sees.
+  // Nav item ids this role never sees NOR accesses (requireNavAccess → 404).
   hidden: string[];
+  // Nav item ids left OUT OF THE MENU but still accessible by direct URL —
+  // menu decluttering, not an ACL (e.g. the standalone /esami hub for staff:
+  // exams live per-course now, yet deep links like "Apri esame" must work).
+  unlisted?: string[];
   // Preferred ordering by nav item id (applied within each group). Items omitted
   // keep their canonical declaration order, after any listed ones.
   priority: string[];
@@ -63,14 +67,15 @@ export interface RoleView {
 
 export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
   admin: {
-    // "esami" (the standalone exam-management hub) is hidden for now — exams
-    // now live per-course, so the top-level entry is redundant. The page still
-    // exists at /esami if reached directly; unhide by dropping it here.
-    hidden: ["esami"],
+    hidden: [],
+    // "esami" (the standalone exam hub) is out of the menu for now — exams
+    // live per-course — but the /esami pages stay reachable via deep links.
+    unlisted: ["esami"],
     priority: [],
   },
   manager: {
-    hidden: ["esami"],
+    hidden: [],
+    unlisted: ["esami"],
     priority: [
       "dashboard",
       "corsi",
@@ -139,7 +144,9 @@ export interface NavGroup {
 
 export function navForRole(role: RoleKey): NavGroup[] {
   const view = ROLE_VIEWS[role];
-  const hidden = new Set(view.hidden);
+  // The menu drops both truly-hidden (ACL) and unlisted (declutter) items;
+  // only `hidden` blocks page access (see requireNavAccess).
+  const hidden = new Set([...view.hidden, ...(view.unlisted ?? [])]);
   const rank = (id: string) => {
     const i = view.priority.indexOf(id);
     return i === -1 ? Number.MAX_SAFE_INTEGER : i;
