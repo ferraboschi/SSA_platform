@@ -230,13 +230,28 @@ export async function loadSharedCourse(
   // writes). Companions are appended below as their own rows.
   const { data: iscr } = await sb
     .from("corsi_iscrizioni")
-    .select("id, corsista:corsisti(id,full_name,email,phone)")
+    .select("id, line_item_id, corsista:corsisti(id,full_name,email,phone,placeholder)")
     .eq("corso_id", corso.id);
   type IscrJoin = {
     id: number;
-    corsista: { id: number; full_name: string | null; email: string | null; phone: string | null } | null;
+    line_item_id: number | null;
+    corsista: { id: number; full_name: string | null; email: string | null; phone: string | null; placeholder?: boolean } | null;
   };
   const iscrRows = (iscr ?? []) as unknown as IscrJoin[];
+
+  // Multi-ticket (F4): a line_item_id on more than one row is "expanded" — its
+  // extra seats already exist as their own rows, so the buyer must NOT also show
+  // an inflated ticket count (that would double the seat). Placeholder seats that
+  // aren't completed yet carry no real person and are skipped below.
+  const expandedLines = new Set<number>();
+  {
+    const perLine = new Map<number, number>();
+    for (const r of iscrRows) {
+      if (r.line_item_id == null) continue;
+      perLine.set(r.line_item_id, (perLine.get(r.line_item_id) ?? 0) + 1);
+    }
+    for (const [lineId, n] of perLine) if (n > 1) expandedLines.add(lineId);
+  }
 
   // Tickets per person ("doppio"): SUM purchases.quantity matched on the course
   // title (a single order line for two people is one row with quantity 2) —
@@ -373,13 +388,21 @@ export async function loadSharedCourse(
   for (const r of iscrRows) {
     const c = r.corsista;
     if (!c) continue;
+    // A not-yet-completed placeholder seat has no real attendee — it belongs to
+    // the internal roster ("Completa iscrizione"), not the educator's roll-call.
+    // Once staff fill it in (placeholder=false) it becomes a normal corsista row
+    // here automatically.
+    if (c.placeholder) continue;
     const key = (c.email || c.full_name || "").trim().toLowerCase();
     // No identifying field → unusable roster row, skip it (an empty key never
     // dedups, so blank indistinguishable students would pile up).
     if (!key) continue;
     if (seen.has(key)) continue;
     seen.add(key);
-    const tickets = seatsOverrideByIscr.get(r.id) ?? ticketCount.get(c.id) ?? 1;
+    // Expanded lines: the buyer occupies exactly one seat (the extras are their
+    // own rows), so don't inflate — otherwise the appello shows phantom slots.
+    const lineExpanded = r.line_item_id != null && expandedLines.has(r.line_item_id);
+    const tickets = lineExpanded ? 1 : (seatsOverrideByIscr.get(r.id) ?? ticketCount.get(c.id) ?? 1);
     const mine = companionsByIscr.get(r.id) ?? [];
     const snap = enrolledEmail.get(r.id);
     students.push({

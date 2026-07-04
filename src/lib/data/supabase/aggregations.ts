@@ -51,9 +51,12 @@ export interface EnrollmentJoinRow {
   /** Staff override of the inferred seat count (NULL/absent = use inferred).
    *  Absent on a pre-migration DB → falls back to the inferred count. */
   seats_override?: number | null;
+  /** Multi-ticket seat position within the order line (F4). 1 = buyer; 2..N =
+   *  the extra seats materialized as their own rows. Absent pre-migration → 1. */
+  seat_index?: number | null;
   corsista:
-    | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }
-    | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }[]
+    | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean; placeholder?: boolean }
+    | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean; placeholder?: boolean }[]
     | null;
 }
 
@@ -104,6 +107,30 @@ export function countTicketsByCorsista(
   return ticketCount;
 }
 
+/** Multi-ticket reconciliation (F4). A single order line for N people is now
+ *  materialized as N enrollment rows (seat 1 = buyer, seats 2..N = placeholders),
+ *  so a line_item_id that appears on MORE THAN ONE row is "expanded": its extra
+ *  seats already exist as real rows. For those lines the LEGACY seat inference
+ *  (purchases.quantity → tickets, and the "da compilare" companion slots) must be
+ *  suppressed, or the buyer would show "2 posti" AND a separate "Posto 2" row —
+ *  double-counting the same seat. Returns the set of expanded line_item_ids.
+ *
+ *  A line with a single row is NOT expanded (genuine single-ticket, or a
+ *  pre-migration DB where seats were never split) → the legacy inference stands,
+ *  so nothing regresses. */
+export function expandedLineItemIds(
+  rows: Pick<EnrollmentJoinRow, "line_item_id">[],
+): Set<number> {
+  const counts = new Map<number, number>();
+  for (const r of rows) {
+    if (r.line_item_id == null) continue;
+    counts.set(r.line_item_id, (counts.get(r.line_item_id) ?? 0) + 1);
+  }
+  const expanded = new Set<number>();
+  for (const [lineId, n] of counts) if (n > 1) expanded.add(lineId);
+  return expanded;
+}
+
 /** Result of the roster build: the Student[] plus the paid-only revenue sum and
  *  the exam-result tally — the three things buildFullCourse derives from the
  *  enrollment rows in one pass. */
@@ -131,9 +158,15 @@ export function buildStudentsFromEnrollments(
 ): StudentRosterResult {
   let revenue = 0;
   const examResults = { passed: 0, retrial: 0, failed: 0 };
+  // Lines whose extra seats are already materialized as their own rows (F4): the
+  // legacy seat inference is suppressed for them (see expandedLineItemIds).
+  const expanded = expandedLineItemIds(enrollJoinRows);
   const students: Student[] = enrollJoinRows.map((r) => {
     if (r.exam_result) examResults[r.exam_result]++;
     const c = Array.isArray(r.corsista) ? r.corsista[0] : r.corsista;
+    const isPlaceholder = Boolean(c?.placeholder);
+    const seatIndex = r.seat_index != null && r.seat_index >= 1 ? Math.trunc(r.seat_index) : 1;
+    const lineExpanded = r.line_item_id != null && expanded.has(r.line_item_id);
     // amount_cents is the gross line price; discount_cents is the discount
     // value. Net paid = gross − discount (clamped at 0 for 100%-off codes).
     // NOTE: this site subtracts in EURO space (gross/discountValue are shown
@@ -154,8 +187,13 @@ export function buildStudentsFromEnrollments(
     // Seat count: staff override wins over the inferred count (sum of
     // purchases.quantity). `ticketsInferred` keeps the automatic value so the
     // roster can show "auto: N" and offer a reset.
-    const ticketsInferred = ticketByCorsista.get(r.corsista_id) ?? 1;
-    const override = r.seats_override != null && r.seats_override >= 1 ? Math.trunc(r.seats_override) : null;
+    //
+    // F4: on an EXPANDED line each seat is its own row, so this row = exactly one
+    // seat — force tickets to 1 (no "doppio" badge, no "da compilare" slots) or
+    // the buyer would double with the materialized "Posto N" rows. Un-expanded
+    // lines (single-ticket / pre-migration) keep the legacy inference untouched.
+    const ticketsInferred = lineExpanded ? 1 : (ticketByCorsista.get(r.corsista_id) ?? 1);
+    const override = !lineExpanded && r.seats_override != null && r.seats_override >= 1 ? Math.trunc(r.seats_override) : null;
     const tickets = override ?? ticketsInferred;
     // The confirmed enrolled_email snapshot is the current, verified address
     // (set via /conferma) — prefer it exactly like the educator share page and
@@ -181,12 +219,35 @@ export function buildStudentsFromEnrollments(
       iscrizioneId: r.id,
       companions: companionsByIscr.get(r.id) ?? [],
       hasWhatsApp: c?.has_whatsapp ?? false,
-      nameMismatch: mismatch,
-      registrationName: mismatch ? buyer : null,
+      nameMismatch: isPlaceholder ? false : mismatch,
+      registrationName: isPlaceholder ? null : mismatch ? buyer : null,
       examResult: r.exam_result,
+      placeholder: isPlaceholder,
+      seatIndex,
     };
   });
-  return { students, revenue, examResults };
+  // Keep an order line's seats together and in seat order (buyer, then Posto 2…)
+  // so a completed/placeholder seat sits directly under its buyer. Rows without a
+  // line (manual / pre-migration) keep their first-appearance order at the end of
+  // their natural position — a stable sort preserves relative order for equal keys.
+  const orderOf = new Map<number, number>();
+  students.forEach((s, i) => {
+    const line = s.ticketCode != null ? Number(s.ticketCode) : NaN;
+    if (Number.isFinite(line) && !orderOf.has(line)) orderOf.set(line, i);
+  });
+  const stable = students.map((s, i) => ({ s, i }));
+  stable.sort((a, b) => {
+    const la = a.s.ticketCode != null ? Number(a.s.ticketCode) : NaN;
+    const lb = b.s.ticketCode != null ? Number(b.s.ticketCode) : NaN;
+    const ga = Number.isFinite(la) ? (orderOf.get(la) ?? a.i) : a.i;
+    const gb = Number.isFinite(lb) ? (orderOf.get(lb) ?? b.i) : b.i;
+    if (ga !== gb) return ga - gb; // group lines by first appearance
+    const sa = a.s.seatIndex ?? 1;
+    const sb = b.s.seatIndex ?? 1;
+    if (sa !== sb) return sa - sb; // within a line, buyer first
+    return a.i - b.i; // otherwise stable
+  });
+  return { students: stable.map((x) => x.s), revenue, examResults };
 }
 
 // ── Catalog aggregation (coursesRepo.list) ───────────────────────────────────

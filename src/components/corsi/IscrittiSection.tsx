@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
-import type { CourseCompanion, Student } from "@/lib/domain";
+import type { Student } from "@/lib/domain";
 import {
-  addPartecipanteAction,
-  removePartecipanteAction,
-  setSeatsOverrideAction,
-} from "@/lib/corsi/partecipanti-actions";
+  completeSeatAction,
+  addExtraSeatAction,
+  removeSeatAction,
+} from "@/lib/corsi/seat-actions";
 
 export function IscrittiSection({
   courseId,
@@ -22,19 +23,18 @@ export function IscrittiSection({
 }) {
   const tr = useT();
   const t = tr.corsi.iscritti;
-  // Local overlay of companions so add/remove reflect immediately without a full
-  // page reload (the server action revalidates too, but this keeps the UI snappy).
-  const [companionsById, setCompanionsById] = useState<Record<number, CourseCompanion[]>>(() => {
-    const seed: Record<number, CourseCompanion[]> = {};
-    for (const s of students) if (s.iscrizioneId != null) seed[s.iscrizioneId] = s.companions ?? [];
-    return seed;
-  });
-  const companionsFor = (s: Student): CourseCompanion[] =>
-    s.iscrizioneId != null ? (companionsById[s.iscrizioneId] ?? s.companions ?? []) : [];
+  const router = useRouter();
+  const [addingExtra, setAddingExtra] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
-  const paying = students.filter((s) => s.amount > 0).length;
-  const free = students.filter((s) => s.amount === 0).length;
-  const revenue = students.reduce((sum, s) => sum + s.amount, 0);
+  // Placeholder seats (F4) are seats still "da completare": they count toward the
+  // headcount but are not paying/free real people, so the money badges exclude
+  // them and a separate "da completare" chip surfaces them.
+  const real = students.filter((s) => !s.placeholder);
+  const pending = students.filter((s) => s.placeholder).length;
+  const paying = real.filter((s) => s.amount > 0).length;
+  const free = real.filter((s) => s.amount === 0).length;
+  const revenue = real.reduce((sum, s) => sum + s.amount, 0);
 
   const money = (n: number) => formatEuro(n, { decimals: 2 });
   const fmtDate = (iso: string) => {
@@ -43,10 +43,28 @@ export function IscrittiSection({
     return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("it-IT");
   };
 
+  async function addExtra() {
+    if (addingExtra) return;
+    setAddingExtra(true);
+    setAddError(null);
+    const res = await addExtraSeatAction(Number(courseId)).catch(
+      () => ({ ok: false }) as Awaited<ReturnType<typeof addExtraSeatAction>>,
+    );
+    setAddingExtra(false);
+    if (res.ok) router.refresh();
+    else setAddError(res.error || t.seatAddError);
+  }
+
   if (students.length === 0) {
     return (
-      <div className="card card-pad" style={{ color: "var(--text-2)" }}>
-        {t.noStudents}
+      <div>
+        <div className="card card-pad" style={{ color: "var(--text-2)" }}>
+          {t.noStudents}
+        </div>
+        <ExtraSeatButton onClick={addExtra} busy={addingExtra} label={t.seatAddExtra} />
+        {addError && (
+          <div style={{ fontSize: 11, color: "var(--danger, #dc2626)", marginTop: 4 }}>{addError}</div>
+        )}
       </div>
     );
   }
@@ -71,6 +89,11 @@ export function IscrittiSection({
         {free > 0 && (
           <Badge tone="warning" size="lg">
             {free} {t.free.toLowerCase()}
+          </Badge>
+        )}
+        {pending > 0 && (
+          <Badge tone="warning" size="lg">
+            {format(t.seatToComplete, { n: pending })}
           </Badge>
         )}
         <span style={{ fontSize: 13, color: "var(--text-2)" }}>{money(revenue)}</span>
@@ -103,6 +126,16 @@ export function IscrittiSection({
           </thead>
           <tbody>
             {students.map((s, i) => {
+              if (s.placeholder) {
+                return (
+                  <PlaceholderRow
+                    key={s.iscrizioneId ?? `ph-${i}`}
+                    courseId={courseId}
+                    student={s}
+                    t={t}
+                  />
+                );
+              }
               const paid = s.paymentStatus === "paid";
               return (
                 <tr key={s.ticketCode ?? `${s.email}-${i}`}>
@@ -126,22 +159,6 @@ export function IscrittiSection({
                           <div style={{ fontSize: 11, color: "var(--warning)" }}>
                             {format(t.buyerDiff, { name: s.buyerName })}
                           </div>
-                        )}
-                        {s.iscrizioneId != null && (
-                          <CompanionManager
-                            courseId={courseId}
-                            iscrizioneId={s.iscrizioneId}
-                            buyerName={s.name}
-                            companions={companionsFor(s)}
-                            tickets={s.tickets ?? 1}
-                            ticketsInferred={s.ticketsInferred ?? s.tickets ?? 1}
-                            amount={s.amount}
-                            onChange={(list) =>
-                              setCompanionsById((m) => ({ ...m, [s.iscrizioneId as number]: list }))
-                            }
-                            money={money}
-                            t={t}
-                          />
                         )}
                       </div>
                     </div>
@@ -217,318 +234,195 @@ export function IscrittiSection({
           </tbody>
         </table>
       </div>
+
+      <ExtraSeatButton onClick={addExtra} busy={addingExtra} label={t.seatAddExtra} />
+      {addError && (
+        <div style={{ fontSize: 11, color: "var(--danger, #dc2626)", marginTop: 4 }}>{addError}</div>
+      )}
     </div>
   );
 }
 
-// Companions ("doppio" extra attendees) for one enrollment. For a multi-ticket
-// buyer it also shows the editable seat count, the per-ticket amount, and one
-// explicit "da compilare" slot per unfilled seat — the names get filled at
-// check-in. Staff-only actions (role-guarded server-side); the course is
-// re-derived from the enrollment, never trusted from the client.
-function CompanionManager({
-  courseId,
-  iscrizioneId,
-  buyerName,
-  companions,
-  tickets,
-  ticketsInferred,
-  amount,
-  onChange,
-  money,
-  t,
-}: {
-  courseId: string;
-  iscrizioneId: number;
-  buyerName: string;
-  companions: CourseCompanion[];
-  /** Effective seat count (staff override if set, else inferred). */
-  tickets: number;
-  /** Auto-detected seat count (before override) — for the "auto: N" hint. */
-  ticketsInferred: number;
-  /** Net paid for the enrollment (for the informational per-ticket figure). */
-  amount: number;
-  onChange: (list: CourseCompanion[]) => void;
-  money: (n: number) => string;
-  t: ReturnType<typeof useT>["corsi"]["iscritti"];
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Seat count is optimistic-local so the slots update instantly; the server
-  // action revalidates the page too.
-  const [seats, setSeats] = useState(tickets);
-  const [editingSeats, setEditingSeats] = useState(false);
-  const [seatDraft, setSeatDraft] = useState(String(tickets));
-
-  const filled = companions.length;
-  // Buyer occupies seat 1; the rest are companion slots.
-  const emptySlots = Math.max(0, seats - 1 - filled);
-  const overridden = seats !== ticketsInferred;
-  const isMulti = seats > 1 || filled > 0;
-
-  async function saveSeats(next: number | null) {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    const res = await setSeatsOverrideAction(Number(courseId), iscrizioneId, next).catch(
-      () => ({ ok: false }) as Awaited<ReturnType<typeof setSeatsOverrideAction>>,
-    );
-    setBusy(false);
-    if (res.ok) {
-      const effective = next ?? ticketsInferred;
-      setSeats(effective);
-      setSeatDraft(String(effective));
-      setEditingSeats(false);
-    } else {
-      setError(res.error || t.seatsError);
-    }
-  }
-
-  async function remove(id: number) {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    const res = await removePartecipanteAction(id).catch(
-      () => ({ ok: false }) as Awaited<ReturnType<typeof removePartecipanteAction>>,
-    );
-    setBusy(false);
-    if (res.ok) onChange(companions.filter((c) => c.id !== id));
-    else setError(res.error || t.companionRemoveError);
-  }
-
-  return (
-    <div style={{ marginTop: 6 }}>
-      {/* Seat count + per-ticket amount (only when it's a multi-ticket order). */}
-      {isMulti && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 11.5, marginBottom: 3 }}>
-          {editingSeats ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={seatDraft}
-                onChange={(e) => setSeatDraft(e.target.value)}
-                disabled={busy}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveSeats(Math.max(1, Math.trunc(Number(seatDraft)) || 1));
-                  if (e.key === "Escape") { setEditingSeats(false); setSeatDraft(String(seats)); }
-                }}
-                style={{ width: 52, fontSize: 12, padding: "3px 6px", borderRadius: 6, border: "1px solid var(--border)" }}
-              />
-              <button
-                type="button"
-                className="btn btn-xs btn-primary"
-                onClick={() => saveSeats(Math.max(1, Math.trunc(Number(seatDraft)) || 1))}
-                disabled={busy}
-              >
-                {t.seatsSave}
-              </button>
-              <button type="button" className="btn btn-xs" onClick={() => { setEditingSeats(false); setSeatDraft(String(seats)); }} disabled={busy}>
-                {t.companionCancel}
-              </button>
-            </span>
-          ) : (
-            <>
-              <span style={{ fontWeight: 600, color: "var(--text-2)" }}>
-                {format(t.seatsLabel, { n: seats })}
-              </span>
-              <button
-                type="button"
-                onClick={() => { setError(null); setSeatDraft(String(seats)); setEditingSeats(true); }}
-                style={{ fontSize: 11, fontWeight: 600, color: "var(--indigo, #4f46e5)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
-              >
-                {t.seatsEdit}
-              </button>
-              {amount > 0 && (
-                <span style={{ color: "var(--text-4)" }}>· {format(t.seatsPerTicket, { v: money(amount / seats) })}</span>
-              )}
-              {overridden && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--text-4)" }}>
-                  · {format(t.seatsAuto, { n: ticketsInferred })}
-                  <button
-                    type="button"
-                    onClick={() => saveSeats(null)}
-                    disabled={busy}
-                    style={{ fontSize: 11, color: "var(--indigo, #4f46e5)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
-                  >
-                    {t.seatsReset}
-                  </button>
-                </span>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Filled companion rows. */}
-      {companions.map((c) => (
-        <div
-          key={c.id}
-          style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-2)", marginTop: 2 }}
-        >
-          <Icon name="user" size={11} className="text-3" />
-          <span style={{ fontWeight: 500 }}>{c.name}</span>
-          {c.phone && <span style={{ color: "var(--text-3)" }}>· {c.phone}</span>}
-          <span style={{ fontSize: 10.5, color: "var(--text-4)", fontStyle: "italic" }}>
-            {format(t.companionGuestOf, { name: buyerName })}
-          </span>
-          <button
-            type="button"
-            onClick={() => remove(c.id)}
-            disabled={busy}
-            title={t.companionRemove}
-            style={{ marginLeft: 2, background: "transparent", border: "none", color: "var(--danger, #dc2626)", cursor: busy ? "default" : "pointer", fontSize: 11, padding: 0, lineHeight: 1 }}
-          >
-            ✕
-          </button>
-        </div>
-      ))}
-
-      {/* Empty "da compilare" slots — one per unfilled seat. */}
-      {Array.from({ length: emptySlots }, (_, k) => (
-        <SlotRow
-          key={`slot-${filled + k}`}
-          label={format(t.slotFill, { i: filled + 2 + k, tot: seats })}
-          disabledOthers={busy}
-          courseId={courseId}
-          iscrizioneId={iscrizioneId}
-          onAdded={(comp) => onChange([...companions, comp])}
-          t={t}
-        />
-      ))}
-
-      {/* Single-ticket enrollment: keep the plain "+ aggiungi" so staff can still
-          add a late walk-in / correct a missing seat. */}
-      {!isMulti && (
-        <SlotRow
-          asLink
-          label={t.companionAddParticipant}
-          disabledOthers={busy}
-          courseId={courseId}
-          iscrizioneId={iscrizioneId}
-          onAdded={(comp) => onChange([...companions, comp])}
-          t={t}
-        />
-      )}
-
-      {error && <div style={{ fontSize: 11, color: "var(--danger, #dc2626)", marginTop: 3 }}>{error}</div>}
-    </div>
-  );
-}
-
-// One fillable slot: shows a label until tapped, then a name+phone form. On
-// success it becomes a real companion row (via the parent's onAdded).
-function SlotRow({
+// A "+ Aggiungi posto extra (fuori ordine)" course-level action — replaces the
+// old generic per-row "+ aggiungi partecipante". Creates a placeholder seat.
+function ExtraSeatButton({
+  onClick,
+  busy,
   label,
-  asLink,
+}: {
+  onClick: () => void;
+  busy: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      style={{
+        marginTop: 12,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 12,
+        fontWeight: 600,
+        color: "var(--indigo, #635BFF)",
+        background: "transparent",
+        border: "1px dashed var(--indigo, #635BFF)",
+        borderRadius: 8,
+        padding: "6px 12px",
+        cursor: busy ? "default" : "pointer",
+        opacity: busy ? 0.6 : 1,
+      }}
+    >
+      <Icon name="plus" size={13} /> {label}
+    </button>
+  );
+}
+
+// A multi-ticket seat whose person isn't filled in yet. Shows the "da completare"
+// state and an inline form to enter the real attendee (→ they become a corsista
+// and get exam links via the normal path). Staff can also drop the seat.
+function PlaceholderRow({
   courseId,
-  iscrizioneId,
-  onAdded,
-  disabledOthers,
+  student,
   t,
 }: {
-  label: string;
-  /** Render the trigger as a "+ link" (single-ticket case) vs a "da compilare" slot. */
-  asLink?: boolean;
   courseId: string;
-  iscrizioneId: number;
-  onAdded: (c: CourseCompanion) => void;
-  disabledOthers: boolean;
+  student: Student;
   t: ReturnType<typeof useT>["corsi"]["iscritti"];
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function add() {
+  const iscrId = student.iscrizioneId;
+
+  async function save() {
     const trimmed = name.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || busy || iscrId == null) return;
     setBusy(true);
     setError(null);
-    const res = await addPartecipanteAction(Number(courseId), iscrizioneId, trimmed, phone.trim()).catch(
-      () => ({ ok: false }) as Awaited<ReturnType<typeof addPartecipanteAction>>,
-    );
+    const res = await completeSeatAction(Number(courseId), iscrId, {
+      name: trimmed,
+      email: email.trim(),
+      phone: phone.trim(),
+    }).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatAction>>);
     setBusy(false);
-    if (res.ok && res.companion) {
-      onAdded({ id: res.companion.id, name: res.companion.full_name, phone: res.companion.phone });
-      setName("");
-      setPhone("");
+    if (res.ok) {
       setOpen(false);
+      router.refresh();
     } else {
-      setError(res.error || t.companionAddError);
+      setError(res.error || t.seatCompleteError);
     }
   }
 
-  if (open) {
-    return (
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 4 }}>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t.companionName}
-          maxLength={120}
-          disabled={busy}
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === "Enter") add();
-            if (e.key === "Escape") setOpen(false);
-          }}
-          style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 130 }}
-        />
-        <input
-          type="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder={t.companionPhone}
-          maxLength={40}
-          disabled={busy}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") add();
-            if (e.key === "Escape") setOpen(false);
-          }}
-          style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 110 }}
-        />
-        <button type="button" className="btn btn-sm btn-primary" onClick={add} disabled={busy || !name.trim()}>
-          {t.companionAdd}
-        </button>
-        <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
-          {t.companionCancel}
-        </button>
-        {error && <span style={{ fontSize: 11, color: "var(--danger, #dc2626)" }}>{error}</span>}
-      </div>
+  async function remove() {
+    if (busy || iscrId == null) return;
+    setBusy(true);
+    setError(null);
+    const res = await removeSeatAction(Number(courseId), iscrId).catch(
+      () => ({ ok: false }) as Awaited<ReturnType<typeof removeSeatAction>>,
     );
+    setBusy(false);
+    if (res.ok) router.refresh();
+    else setError(res.error || t.seatRemoveError);
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => { setError(null); setOpen(true); }}
-      disabled={disabledOthers}
-      style={
-        asLink
-          ? { marginTop: 2, fontSize: 11.5, fontWeight: 600, color: "var(--indigo, #4f46e5)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }
-          : {
-              marginTop: 3,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 11.5,
-              fontWeight: 600,
-              color: "var(--indigo-600, #4f46e5)",
-              background: "var(--indigo-50, #eef2ff)",
-              border: "1px dashed var(--indigo, #4f46e5)",
-              borderRadius: 6,
-              padding: "3px 8px",
-              cursor: "pointer",
-            }
-      }
-    >
-      {asLink ? `+ ${label}` : <>✎ {label}</>}
-    </button>
+    <tr style={{ background: "var(--surface-2, #f8f8fb)" }}>
+      <td>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Avatar name={`${(student.seatIndex ?? 0) + 1}`} size="md" />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 600, color: "var(--text-2)" }}>{student.name}</span>
+              <Badge tone="warning">{t.seatPending}</Badge>
+            </div>
+            {open ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 6 }}>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t.seatNamePh}
+                  maxLength={120}
+                  disabled={busy}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") save();
+                    if (e.key === "Escape") setOpen(false);
+                  }}
+                  style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 150 }}
+                />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={t.seatEmailPh}
+                  maxLength={200}
+                  disabled={busy}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") save();
+                    if (e.key === "Escape") setOpen(false);
+                  }}
+                  style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 170 }}
+                />
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder={t.seatPhonePh}
+                  maxLength={40}
+                  disabled={busy}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") save();
+                    if (e.key === "Escape") setOpen(false);
+                  }}
+                  style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 130 }}
+                />
+                <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={busy || !name.trim()}>
+                  {t.seatSave}
+                </button>
+                <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
+                  {t.seatCancel}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => { setError(null); setOpen(true); }}
+                  disabled={busy}
+                  style={{ fontSize: 11.5, fontWeight: 600, color: "var(--indigo, #635BFF)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
+                >
+                  ✎ {t.seatComplete}
+                </button>
+                <button
+                  type="button"
+                  onClick={remove}
+                  disabled={busy}
+                  title={t.seatRemove}
+                  style={{ fontSize: 11, color: "var(--danger, #dc2626)", background: "transparent", border: "none", padding: 0, cursor: busy ? "default" : "pointer" }}
+                >
+                  {t.seatRemove}
+                </button>
+              </div>
+            )}
+            {error && <div style={{ fontSize: 11, color: "var(--danger, #dc2626)", marginTop: 3 }}>{error}</div>}
+          </div>
+        </div>
+      </td>
+      <td>—</td>
+      <td style={{ textAlign: "center" }}>—</td>
+      <td style={{ color: "var(--text-4)" }}>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+    </tr>
   );
 }

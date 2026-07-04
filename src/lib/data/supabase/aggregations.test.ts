@@ -4,6 +4,7 @@ import {
   aggregateCourseEnrollments,
   buildStudentsFromEnrollments,
   countTicketsByCorsista,
+  expandedLineItemIds,
   groupAppliedCreditsByCourse,
   sumAppliedCreditsForCourse,
   type EnrollmentAggRow,
@@ -13,7 +14,7 @@ import {
 // A fully-specified enrollment-join row; individual tests override just the
 // fields they exercise so the intent of each case stays legible.
 function enroll(overrides: Partial<EnrollmentJoinRow> = {}): EnrollmentJoinRow {
-  return {
+  const base: EnrollmentJoinRow = {
     id: 1,
     corsista_id: 100,
     amount_cents: 12000,
@@ -31,8 +32,13 @@ function enroll(overrides: Partial<EnrollmentJoinRow> = {}): EnrollmentJoinRow {
       phone: "+39 333",
       has_whatsapp: true,
     },
-    ...overrides,
   };
+  const merged = { ...base, ...overrides };
+  // Each enrollment is its own Shopify order line: unless a test pins
+  // line_item_id explicitly, derive a DISTINCT one per id so multi-row cases
+  // aren't accidentally read as one "expanded" multi-ticket line (F4).
+  if (!("line_item_id" in overrides)) merged.line_item_id = 5500 + merged.id;
+  return merged;
 }
 
 describe("countTicketsByCorsista", () => {
@@ -335,6 +341,83 @@ describe("buildStudentsFromEnrollments", () => {
       noCompanions,
     );
     expect(blankSnapshot[0].email).toBe("alice@example.com");
+  });
+});
+
+describe("expandedLineItemIds (F4 multi-ticket)", () => {
+  it("flags only line_item_ids present on more than one row", () => {
+    const set = expandedLineItemIds([
+      { line_item_id: 55 },
+      { line_item_id: 55 },
+      { line_item_id: 77 },
+      { line_item_id: null },
+    ]);
+    expect(set.has(55)).toBe(true); // two rows → expanded
+    expect(set.has(77)).toBe(false); // single row → not expanded
+    expect(set.size).toBe(1);
+  });
+});
+
+describe("buildStudentsFromEnrollments — F4 seats", () => {
+  const noTickets = new Map<number, number>();
+  const noCompanions = new Map<number, CourseCompanion[]>();
+
+  it("Anna Salvagno: buyer + placeholder seat = 2 rows, no double-count, revenue on seat 1", () => {
+    const rows: EnrollmentJoinRow[] = [
+      enroll({
+        id: 10,
+        corsista_id: 100,
+        seat_index: 1,
+        line_item_id: 999,
+        amount_cents: 30000,
+        corsista: { full_name: "Anna Salvagno", email: "anna@x.it", phone: "", has_whatsapp: false },
+      }),
+      enroll({
+        id: 11,
+        corsista_id: 6926,
+        seat_index: 2,
+        line_item_id: 999,
+        amount_cents: 0,
+        financial_status: "paid",
+        corsista: { full_name: "Posto 2 — da completare", email: "seat-1-999-2@placeholder.ssa", phone: "", has_whatsapp: false, placeholder: true },
+      }),
+    ];
+    // purchases.quantity says 2 for Anna — the legacy inference that must be
+    // suppressed now that the seat is a real row.
+    const ticket = new Map<number, number>([[100, 2]]);
+    const { students, revenue } = buildStudentsFromEnrollments(rows, ticket, noCompanions);
+
+    expect(students).toHaveLength(2);
+    const anna = students.find((s) => s.name === "Anna Salvagno")!;
+    const seat2 = students.find((s) => s.placeholder)!;
+    // No "doppio" badge / no phantom slots: the buyer counts as ONE seat.
+    expect(anna.tickets).toBe(1);
+    expect(anna.isDuplicate).toBe(false);
+    expect(anna.placeholder).toBeFalsy();
+    // The placeholder seat is flagged, at seat 2, €0.
+    expect(seat2.placeholder).toBe(true);
+    expect(seat2.seatIndex).toBe(2);
+    expect(seat2.amount).toBe(0);
+    // Revenue = the single line amount (invariant).
+    expect(revenue).toBe(300);
+  });
+
+  it("orders a placeholder seat directly under its buyer", () => {
+    const rows: EnrollmentJoinRow[] = [
+      enroll({ id: 1, corsista_id: 1, seat_index: 2, line_item_id: 5, amount_cents: 0, corsista: { full_name: "Posto 2 — da completare", email: "seat-x-5-2@placeholder.ssa", phone: "", has_whatsapp: false, placeholder: true } }),
+      enroll({ id: 2, corsista_id: 2, seat_index: 1, line_item_id: 5, amount_cents: 20000, corsista: { full_name: "Mario Buyer", email: "mario@x.it", phone: "", has_whatsapp: false } }),
+    ];
+    const { students } = buildStudentsFromEnrollments(rows, noTickets, noCompanions);
+    expect(students[0].name).toBe("Mario Buyer"); // seat 1 first
+    expect(students[1].placeholder).toBe(true); // seat 2 right after
+  });
+
+  it("a single-ticket line keeps the legacy inferred ticket count (no regression)", () => {
+    const rows = [enroll({ corsista_id: 100, line_item_id: 42 })];
+    const ticket = new Map<number, number>([[100, 2]]); // e.g. a genuine un-split doppio
+    const { students } = buildStudentsFromEnrollments(rows, ticket, noCompanions);
+    expect(students[0].tickets).toBe(2);
+    expect(students[0].isDuplicate).toBe(true);
   });
 });
 

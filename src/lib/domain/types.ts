@@ -146,6 +146,14 @@ export interface Student {
   companions?: CourseCompanion[];
   /** Confirmed exam outcome for this enrollment, null until graded. */
   examResult?: "passed" | "retrial" | "failed" | null;
+  /** Multi-ticket seat (F4): a seat materialized as its own enrollment row whose
+   *  corsista is still a synthetic placeholder ("Posto N — da completare"). Staff
+   *  fill in the real person via "Completa iscrizione". False/absent = a real
+   *  enrolled person. */
+  placeholder?: boolean;
+  /** 1-based seat position within the order line (seat 1 = buyer). Absent
+   *  pre-migration → treated as seat 1. */
+  seatIndex?: number;
 }
 
 /** An extra attendee ("doppio") entered for a course enrollment. */
