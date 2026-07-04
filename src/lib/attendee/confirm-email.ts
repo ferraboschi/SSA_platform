@@ -9,6 +9,7 @@
 import "server-only";
 import { appConfig } from "@/lib/integrations/config";
 import { getEmailService } from "@/lib/integrations/email";
+import { renderBrandedEmailHtml, SUPPORT_EMAIL } from "@/lib/integrations/email/branded-template";
 import {
   signConfirmToken,
   CONFIRM_LINK_TTL_HOURS,
@@ -50,18 +51,20 @@ export function buildConfirmUrl(
   return `${appConfig.baseUrl.replace(/\/$/, "")}/conferma/${token}`;
 }
 
-/** Same visual shell as the staff invite / password-setup email (header brand
- *  line, headline, CTA button, plaintext-link fallback, quiet disclaimer). */
+/** Branded card shell (SSA badge, serif headline, black pill button) shared
+ *  with the exam-invite email — see integrations/email/branded-template.ts. */
 export function renderConfirmEmailHtml(name: string, courseName: string, url: string): string {
   const hi = name ? `${escapeHtml(name.split(" ")[0])}, ` : "";
-  return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;color:#1a1a1a">
-    <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5">Sake Sommelier Association</div>
-    <h2 style="font-size:18px;margin:8px 0 14px">Conferma i tuoi dati per il corso</h2>
-    <p style="font-size:14px;line-height:1.5">${hi}per il corso <strong>${escapeHtml(courseName)}</strong> ti chiediamo di confermare i tuoi dati: l'email è l'indirizzo a cui riceverai i mini-test e l'esame finale.</p>
-    <p style="margin:22px 0 6px"><a href="${url}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Conferma i miei dati</a></p>
-    <p style="font-size:12px;color:#6b7280;margin-top:10px">Oppure copia questo indirizzo nel browser:<br><span style="word-break:break-all;color:#4f46e5">${url}</span></p>
-    <p style="font-size:11px;color:#9ca3af;margin-top:20px">Se non aspettavi questo messaggio, puoi ignorarlo. · Sake Sommelier Association</p>
-  </div>`;
+  return renderBrandedEmailHtml({
+    heading: "Conferma i tuoi dati",
+    subtitle: `${hi}per il corso <strong>${escapeHtml(courseName)}</strong> — servono per i mini-test e l'esame finale.`,
+    ctaLabel: "Conferma i miei dati",
+    ctaUrl: url,
+    footerHtml:
+      `Il pulsante non funziona? Copia questo indirizzo: <span style="word-break:break-all">${url}</span><br>` +
+      `Se non hai richiesto questa email, puoi ignorarla.<br>` +
+      `Per assistenza scrivi a <a href="mailto:${SUPPORT_EMAIL}" style="color:#1a1a1a;text-decoration:underline">${SUPPORT_EMAIL}</a>`,
+  });
 }
 
 export interface DeliverConfirmArgs {

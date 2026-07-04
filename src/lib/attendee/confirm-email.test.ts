@@ -64,12 +64,12 @@ describe("deliverConfirmLink — live delivery (the send IS the verification)", 
     expect(mailPayload.ok && typeof mailPayload.payload.ia).toBe("number");
   });
 
-  it("uses the branded invite-style template (brand line + CTA + fallback link)", async () => {
+  it("uses the branded card template (SSA badge + CTA + fallback link)", async () => {
     const sent = installSpy();
     await deliverConfirmLink({ ...base });
     const html = sent[0].html;
-    expect(html).toContain("Sake Sommelier Association");
+    expect(html).toContain("ssa-logo.png");
     expect(html).toContain("Conferma i miei dati");
-    expect(html).toContain("Oppure copia questo indirizzo nel browser");
+    expect(html).toContain("Il pulsante non funziona?");
   });
 });

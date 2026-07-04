@@ -66,6 +66,49 @@ async function unconfiguredError(
   return null;
 }
 
+// ── Presence gate (owner's rule): an absent student must never be invited to
+// an exam test. "dayN" ties to THAT appello day specifically (Camilla absent
+// day 1 → can't get the day-1 test); "feedback"/"final" have no single day, so
+// they require having attended at least one day (they attended the course).
+
+function testDayNo(t: string): number | null {
+  const m = /^day(\d+)$/.exec(t);
+  return m ? Number(m[1]) : null;
+}
+
+/** Subject keys (`c<id>`/`p<id>`) PRESENT for this test's requirement.
+ *  `null` = attendance unknown (pre-migration/transient error) — the caller
+ *  must fail OPEN (never block a send over a DB hiccup). */
+async function loadPresentForTest(svc: Svc, corsoId: number, testKey: string): Promise<Set<string> | null> {
+  const day = testDayNo(testKey);
+  let q = svc
+    .from("corsi_presenze")
+    .select("corsista_id, partecipante_id")
+    .eq("corso_id", corsoId)
+    .eq("present", true);
+  if (day != null) q = q.eq("day_no", day);
+  const { data, error } = await q;
+  if (error) return null;
+  const present = new Set<string>();
+  for (const r of (data ?? []) as { corsista_id: number | null; partecipante_id: number | null }[]) {
+    if (r.corsista_id != null) present.add(`c${r.corsista_id}`);
+    else if (r.partecipante_id != null) present.add(`p${r.partecipante_id}`);
+  }
+  return present;
+}
+
+function isBlockedByAbsence(present: Set<string> | null, subjectKey: string): boolean {
+  if (present == null) return false; // unknown → fail open, never lock a send out
+  return !present.has(subjectKey);
+}
+
+function absentSendError(testKey: string): string {
+  const day = testDayNo(testKey);
+  return day != null
+    ? `Assente all'appello del giorno ${day}: non può ricevere questo test finché non risulta presente.`
+    : "Mai presente all'appello: non può ricevere questo invio.";
+}
+
 // Guard + resolve a companion's name + confirmed email. Course-bound (null on
 // mismatch) like corsistaTarget; degrades to no email if the column is absent.
 async function partecipanteTarget(
@@ -154,6 +197,12 @@ export async function sendPersonalExamLinkAction(
   const svc = getSupabaseServiceClient();
   const notReady = await unconfiguredError(svc, corsoId, t);
   if (notReady) return { ok: false, error: notReady };
+
+  const present = await loadPresentForTest(svc, corsoId, t);
+  if (isBlockedByAbsence(present, `${k === "corsista" ? "c" : "p"}${cid}`)) {
+    return { ok: false, error: absentSendError(t) };
+  }
+
   const target =
     k === "corsista"
       ? await corsistaTarget(svc, corsoId, cid)
@@ -183,6 +232,9 @@ export interface SendExamLinksAllResult {
   total?: number;
   sent?: number;
   noEmail?: number;
+  /** Skipped because absent at the appello (this test's day, or every day
+   *  for feedback/final) — the owner's rule: never invite an absent student. */
+  absent?: number;
   error?: string;
 }
 
@@ -204,6 +256,7 @@ export async function sendPersonalExamLinksToAllAction(
   const notReady = await unconfiguredError(svc, corsoId, t);
   if (notReady) return { ok: false, error: notReady };
   const cname = await courseName(svc, corsoId);
+  const present = await loadPresentForTest(svc, corsoId, t);
 
   const { data } = await svc
     .from("corsi_iscrizioni")
@@ -227,7 +280,12 @@ export async function sendPersonalExamLinksToAllAction(
 
   let sent = 0;
   let noEmail = 0;
+  let absent = 0;
   for (const r of rows) {
+    if (isBlockedByAbsence(present, `c${r.corsista_id}`)) {
+      absent++;
+      continue;
+    }
     const email = enrolledEmail.get(r.corsista_id) || (r.corsista?.email ?? "").trim();
     if (!email) {
       noEmail++;
@@ -265,6 +323,10 @@ export async function sendPersonalExamLinksToAllAction(
       for (const pr of (parts ?? []) as { id: number; full_name: string | null; email: string | null }[]) {
         const email = (pr.email ?? "").trim();
         if (!email) continue;
+        if (isBlockedByAbsence(present, `p${pr.id}`)) {
+          absent++;
+          continue;
+        }
         companions++;
         const res = await deliverExamInvite({
           courseId: String(corsoId),
@@ -283,7 +345,7 @@ export async function sendPersonalExamLinksToAllAction(
       }
     }
   }
-  return { ok: true, total: rows.length + companions, sent, noEmail };
+  return { ok: true, total: rows.length + companions, sent, noEmail, absent };
 }
 
 // ── Live progress (educator's per-student bar) ──────────────────────────────
@@ -316,6 +378,10 @@ export async function getExamProgressAction(
   ok: boolean;
   progress?: Record<string, SubjectProgress>;
   sends?: Record<string, string>;
+  /** Subject keys present-for-this-test — undefined = attendance unknown (the
+   *  UI must not restrict anything in that case). Drives the "Assente
+   *  all'appello" hint + disabled Invia, mirroring the server-side gate. */
+  presentForTest?: Record<string, boolean>;
   error?: string;
 }> {
   const corsoId = courseIdFromToken(token);
@@ -326,6 +392,8 @@ export async function getExamProgressAction(
 
   const svc = getSupabaseServiceClient();
   const sends = await getExamSends(corsoId, t);
+  const presentSet = await loadPresentForTest(svc, corsoId, t);
+  const presentForTest = presentSet ? Object.fromEntries([...presentSet].map((k) => [k, true])) : undefined;
   type ProgRow = {
     corsista_id: number | null;
     partecipante_id: number | null;
@@ -351,7 +419,7 @@ export async function getExamProgressAction(
       .eq("corso_id", corsoId)
       .eq("test_key", t);
     rows = base.data as ProgRow[] | null;
-    if (base.error) return { ok: true, progress: {}, sends }; // pre-migration → no bars
+    if (base.error) return { ok: true, progress: {}, sends, presentForTest }; // pre-migration → no bars
   }
 
   // Live auto-grading on READ: one template load per call (answers included),
@@ -390,7 +458,7 @@ export async function getExamProgressAction(
       wrong,
     };
   }
-  return { ok: true, progress, sends };
+  return { ok: true, progress, sends, presentForTest };
 }
 
 // ── Lifecycle: close a test for everyone / reopen ───────────────────────────

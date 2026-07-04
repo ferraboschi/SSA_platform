@@ -3,6 +3,7 @@
 import "server-only";
 import { appConfig } from "@/lib/integrations/config";
 import { getEmailService } from "@/lib/integrations/email";
+import { renderBrandedEmailHtml, SUPPORT_EMAIL } from "@/lib/integrations/email/branded-template";
 import { signExamToken, type ExamTestKey } from "./token";
 import { expiryForChoice, type ExamLinkTtlChoice } from "./lifecycle";
 
@@ -46,23 +47,25 @@ export function buildPersonalExamUrl(
   return `${appConfig.baseUrl.replace(/\/$/, "")}/esame/${token}`;
 }
 
+/** Branded card shell (SSA badge, serif headline, black pill button) shared
+ *  with the confirm-your-data email — see integrations/email/branded-template.ts. */
 export function renderExamInviteEmailHtml(
   name: string,
   courseName: string,
   testLabel: string,
   url: string,
 ): string {
-  const hi = name ? `Ciao ${escapeHtml(name)},` : "Ciao,";
-  return (
-    `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;color:#1a1a2e">` +
-    `<h2 style="font-size:18px;margin:0 0 10px">${escapeHtml(testLabel)}</h2>` +
-    `<p style="font-size:14px;line-height:1.6;margin:0 0 6px">${hi}</p>` +
-    `<p style="font-size:14px;line-height:1.6;margin:0 0 16px">Per il corso <strong>${escapeHtml(courseName)}</strong> è disponibile <strong>${escapeHtml(testLabel)}</strong>. Il link qui sotto è personale: aprilo tu, non inoltrarlo.</p>` +
-    `<p style="margin:0 0 18px"><a href="${url}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600">Apri ${escapeHtml(testLabel)}</a></p>` +
-    `<p style="font-size:12px;color:#6b7280;word-break:break-all;margin:0 0 10px">Se il pulsante non funziona, copia questo link:<br/>${url}</p>` +
-    `<p style="font-size:12px;color:#9ca3af;margin:0">Se non ti aspettavi questo messaggio, puoi ignorarlo.</p>` +
-    `</div>`
-  );
+  const hi = name ? `${escapeHtml(name.split(" ")[0])}, ` : "";
+  return renderBrandedEmailHtml({
+    heading: escapeHtml(testLabel),
+    subtitle: `${hi}per il corso <strong>${escapeHtml(courseName)}</strong> è disponibile <strong>${escapeHtml(testLabel)}</strong>. Il link è personale: aprilo tu, non inoltrarlo.`,
+    ctaLabel: `Apri ${escapeHtml(testLabel)}`,
+    ctaUrl: url,
+    footerHtml:
+      `Il pulsante non funziona? Copia questo indirizzo: <span style="word-break:break-all">${url}</span><br>` +
+      `Se non ti aspettavi questo messaggio, puoi ignorarlo.<br>` +
+      `Per assistenza scrivi a <a href="mailto:${SUPPORT_EMAIL}" style="color:#1a1a1a;text-decoration:underline">${SUPPORT_EMAIL}</a>`,
+  });
 }
 
 export interface DeliverExamInviteArgs {

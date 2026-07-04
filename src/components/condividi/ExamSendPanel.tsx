@@ -70,7 +70,8 @@ export default function ExamSendPanel({
     key: string;
     progress: Record<string, SubjectProgress>;
     sends: Record<string, string>;
-  }>({ key: "", progress: {}, sends: {} });
+    presentForTest: Record<string, boolean> | undefined;
+  }>({ key: "", progress: {}, sends: {}, presentForTest: undefined });
   // Bumped after "Invia a tutti" so the fresh per-row stamps show at once.
   const [refresh, setRefresh] = useState(0);
   const selKey = test?.key ?? "";
@@ -83,7 +84,7 @@ export default function ExamSendPanel({
         .then((r) => {
           if (!alive || !r.ok) return;
           if (!r.progress && !r.sends) return; // rate-limited tick — keep what we have
-          setLive({ key: selKey, progress: r.progress ?? {}, sends: r.sends ?? {} });
+          setLive({ key: selKey, progress: r.progress ?? {}, sends: r.sends ?? {}, presentForTest: r.presentForTest });
         })
         .catch(() => {});
     };
@@ -137,7 +138,9 @@ export default function ExamSendPanel({
       return;
     }
     setAllNote(
-      `Inviate ${res.sent ?? 0}/${res.total ?? 0}${res.noEmail ? ` · ${res.noEmail} senza email` : ""}.`,
+      `Inviate ${res.sent ?? 0}/${res.total ?? 0}` +
+        `${res.noEmail ? ` · ${res.noEmail} senza email` : ""}` +
+        `${res.absent ? ` · ${res.absent} assenti all'appello` : ""}.`,
     );
     // Pull the just-persisted per-row stamps NOW, not at the next 10s tick —
     // the summary and the rows must never contradict each other.
@@ -312,6 +315,10 @@ export default function ExamSendPanel({
           roster.map((s, i) => {
             const subjK = `${s.kind === "corsista" ? "c" : "p"}${s.id}`;
             const forThisTest = live.key === test.key;
+            // undefined = attendance unknown → never restrict; the map only
+            // lists WHO IS present, so anyone else is absent-for-this-test.
+            const presentMap = forThisTest ? live.presentForTest : undefined;
+            const absent = presentMap ? presentMap[subjK] !== true : false;
             return (
               <StudentSendRow
                 // test.key in the key → per-test remount, so notes/links/stamps
@@ -323,6 +330,7 @@ export default function ExamSendPanel({
                 person={s}
                 progress={forThisTest ? live.progress[subjK] : undefined}
                 sentAt={forThisTest ? live.sends[subjK] : undefined}
+                absent={absent}
                 last={i === roster.length - 1}
               />
             );
@@ -376,6 +384,7 @@ function StudentSendRow({
   person,
   progress,
   sentAt,
+  absent,
   last,
 }: {
   token: string;
@@ -385,6 +394,10 @@ function StudentSendRow({
   progress: SubjectProgress | undefined;
   /** Persisted stamp of the last delivered email for THIS test (ISO). */
   sentAt: string | undefined;
+  /** Absent at the appello (this test's day, or every day for feedback/final)
+   *  — the owner's rule: never invite an absent student. Mirrors the
+   *  server-side gate so the button is never a dead, confusing tap. */
+  absent: boolean;
   last: boolean;
 }) {
   const [busy, setBusy] = useState(false);
@@ -430,16 +443,20 @@ function StudentSendRow({
     }
   };
 
-  // Honest four-state label: nothing sent → "Non inviato"; email out but the
-  // student hasn't opened it → the persistent "Inviato HH:MM" stamp; then the
-  // live run states. Colors follow the platform semantics (warning = waiting).
+  // Honest state label: nothing sent → "Non inviato" (or "Assente all'appello"
+  // when that's WHY nothing can be sent yet); email out but the student
+  // hasn't opened it → the persistent "Inviato HH:MM" stamp; then the live run
+  // states. A send already delivered stays visible even if presence later
+  // flips absent — the history doesn't un-happen.
   const stateLabel = progress?.submittedAt
     ? `Consegnato ${timeIt(progress.submittedAt)}`
     : progress
       ? `In corso · dom. ${progress.question}/${progress.total}`
       : sent
         ? `Inviato ${timeIt(sent)}`
-        : "Non inviato";
+        : absent
+          ? "Assente all'appello"
+          : "Non inviato";
 
   return (
     <div
@@ -511,7 +528,13 @@ function StudentSendRow({
             {stateLabel}
           </span>
         </button>
-        <button type="button" onClick={send} disabled={busy} style={miniBtn(true)}>
+        <button
+          type="button"
+          onClick={send}
+          disabled={busy || absent}
+          title={absent ? "Assente all'appello: non può ricevere questo test." : undefined}
+          style={miniBtn(true)}
+        >
           {busy ? "…" : "Invia"}
         </button>
       </div>
@@ -559,6 +582,11 @@ function StudentSendRow({
           {!person.emailConfirmed && (
             <span style={{ color: "var(--warning-fg)" }}>
               Dati non confermati — completa la verifica nell&apos;Appello.
+            </span>
+          )}
+          {absent && (
+            <span style={{ color: "var(--warning-fg)" }}>
+              Assente all&apos;appello: segna la presenza per poter inviare questo test.
             </span>
           )}
         </div>
