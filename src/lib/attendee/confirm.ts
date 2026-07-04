@@ -46,6 +46,33 @@ export async function stampConfirmSent(
     .eq("corso_id", Number(courseId));
 }
 
+/** Run the same single-row select with progressively fewer optional columns,
+ *  returning the FIRST tier that succeeds. Each recently-migrated column gets
+ *  its own tier: a DB missing ONLY the newest column (e.g. delivery_notes,
+ *  migration 20260704000000 not yet applied) must still read enrolled_email —
+ *  jumping straight to the bare fallback silently served the OLD Shopify email
+ *  on /conferma (and as the "Invia email" target) while corrections lived in
+ *  the snapshot. Found live 2026-07-04.
+ */
+async function selectFirstTier<T>(
+  sb: ReturnType<typeof getSupabaseServiceClient>,
+  table: string,
+  tiers: string[],
+  subjectId: string,
+  courseId: string,
+): Promise<T | null> {
+  for (const columns of tiers) {
+    const { data, error } = await sb
+      .from(table)
+      .select(columns)
+      .eq("id", Number(subjectId))
+      .eq("corso_id", Number(courseId))
+      .maybeSingle();
+    if (!error) return data as T | null;
+  }
+  return null;
+}
+
 export async function loadConfirmSubject(
   courseId: string,
   kind: ConfirmSubjectKind,
@@ -62,16 +89,8 @@ export async function loadConfirmSubject(
   const courseName = corso.short_title || corso.full_title || "Corso SSA";
 
   if (kind === "corsista") {
-    // Enrollment row → its corsista + the confirmed-email snapshot. Try with the
-    // snapshot columns; fall back if the migration isn't applied yet.
-    const withSnap = await sb
-      .from("corsi_iscrizioni")
-      .select(
-        "id, enrolled_email, email_confirmed_at, delivery_address, delivery_notes, corsista:corsisti(full_name, email, phone)",
-      )
-      .eq("id", Number(subjectId))
-      .eq("corso_id", Number(courseId))
-      .maybeSingle();
+    // Enrollment row → its corsista + the confirmed-email snapshot. Tiered by
+    // migration age: no delivery_notes → no delivery columns → no snapshot.
     type Row = {
       id: number;
       enrolled_email?: string | null;
@@ -80,16 +99,13 @@ export async function loadConfirmSubject(
       delivery_notes?: string | null;
       corsista: { full_name: string | null; email: string | null; phone: string | null } | null;
     };
-    let row = withSnap.data as Row | null;
-    if (withSnap.error) {
-      const base = await sb
-        .from("corsi_iscrizioni")
-        .select("id, corsista:corsisti(full_name, email, phone)")
-        .eq("id", Number(subjectId))
-        .eq("corso_id", Number(courseId))
-        .maybeSingle();
-      row = base.data as Row | null;
-    }
+    const CORSISTA = "corsista:corsisti(full_name, email, phone)";
+    const row = await selectFirstTier<Row>(sb, "corsi_iscrizioni", [
+      `id, enrolled_email, email_confirmed_at, delivery_address, delivery_notes, ${CORSISTA}`,
+      `id, enrolled_email, email_confirmed_at, delivery_address, ${CORSISTA}`,
+      `id, enrolled_email, email_confirmed_at, ${CORSISTA}`,
+      `id, ${CORSISTA}`,
+    ], subjectId, courseId);
     if (!row?.corsista) return null;
     return {
       courseId: String(corso.id),
@@ -107,12 +123,7 @@ export async function loadConfirmSubject(
   }
 
   // Companion ("doppio"): name/phone live on the row; email is its own column.
-  const withEmail = await sb
-    .from("corsi_partecipanti")
-    .select("id, full_name, phone, email, email_confirmed_at, delivery_address, delivery_notes")
-    .eq("id", Number(subjectId))
-    .eq("corso_id", Number(courseId))
-    .maybeSingle();
+  // Same migration-age tiers as the corsista branch.
   type PRow = {
     id: number;
     full_name: string | null;
@@ -122,16 +133,12 @@ export async function loadConfirmSubject(
     delivery_address?: string | null;
     delivery_notes?: string | null;
   };
-  let prow = withEmail.data as PRow | null;
-  if (withEmail.error) {
-    const base = await sb
-      .from("corsi_partecipanti")
-      .select("id, full_name, phone")
-      .eq("id", Number(subjectId))
-      .eq("corso_id", Number(courseId))
-      .maybeSingle();
-    prow = base.data as PRow | null;
-  }
+  const prow = await selectFirstTier<PRow>(sb, "corsi_partecipanti", [
+    "id, full_name, phone, email, email_confirmed_at, delivery_address, delivery_notes",
+    "id, full_name, phone, email, email_confirmed_at, delivery_address",
+    "id, full_name, phone, email, email_confirmed_at",
+    "id, full_name, phone",
+  ], subjectId, courseId);
   if (!prow) return null;
   return {
     courseId: String(corso.id),
