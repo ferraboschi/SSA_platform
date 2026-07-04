@@ -6,6 +6,9 @@
 // NOT returned — only prompt + options.
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { feedbackVariant } from "@/lib/domain";
+import type { CourseTypeKey } from "@/lib/domain";
+import { loadFeedbackSet } from "@/lib/esami/feedback-sets-actions";
 import type { ExamTestKey } from "./token";
 
 export type RunnerI18n = Partial<Record<"en" | "ja", { text: string; options: string[] }>>;
@@ -151,10 +154,11 @@ export async function loadPublicExam(
 
   const { data: corso } = await sb
     .from("corsi")
-    .select("id, short_title, city, delivery_mode, month, year, educator_id")
+    .select("id, short_title, city, delivery_mode, month, year, educator_id, type")
     .eq("id", Number(courseId))
     .maybeSingle();
   if (!corso) return null;
+  const courseType = ((corso.type as string) ?? "introduttivo") as CourseTypeKey;
 
   let educator = "";
   if (corso.educator_id) {
@@ -166,35 +170,43 @@ export async function loadPublicExam(
     educator = edu?.full_name ?? "";
   }
 
-  // DB exam_templates.family is 'certificato' | 'shochu'.
-  const dbFamily = family === "shochu" ? "shochu" : "certificato";
-  const { data: tpl } = await sb
-    .from("exam_templates")
-    .select("id, data")
-    .eq("family", dbFamily)
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
   let questions: PublicRunnerQuestion[] = [];
-  if (tpl) {
-    const data = tpl.data as {
-      questions?: QJson[];
-      miniTests?: MiniJson[];
-      feedback?: { questions?: QJson[] };
-      translations?: TransMap;
-    };
-    const trans = data.translations;
-    if (testKey === "final") {
-      questions = mapQuestions(data.questions ?? [], `q-${tpl.id}`, includeAnswers, trans);
-    } else if (testKey === "feedback") {
-      questions = mapQuestions(data.feedback?.questions ?? [], `q-${tpl.id}-fb`, includeAnswers, trans);
-    } else {
-      const m = /^day(\d+)$/.exec(testKey);
-      if (m) {
-        const day = Number(m[1]);
-        const mt = (data.miniTests ?? []).find((x) => x.day === day);
-        questions = mapQuestions(mt?.questions ?? [], `q-${tpl.id}-d${day}`, includeAnswers, trans);
+  if (testKey === "feedback") {
+    // Feedback is VARIANT-based (short/long) and family-independent, so every
+    // course type has feedback (Intro/Masterclass too). The variant is chosen
+    // from the course type; the "long" set falls back to the certificato
+    // template's feedback until saved standalone (so nothing is lost).
+    const variant = feedbackVariant(courseType);
+    const setQs = await loadFeedbackSet(variant);
+    questions = mapQuestions(setQs as unknown as QJson[], `q-fb-${variant}`, includeAnswers, undefined);
+  } else {
+    // final / dayN → the per-family exam template (unchanged). DB
+    // exam_templates.family is 'certificato' | 'shochu'.
+    const dbFamily = family === "shochu" ? "shochu" : "certificato";
+    const { data: tpl } = await sb
+      .from("exam_templates")
+      .select("id, data")
+      .eq("family", dbFamily)
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (tpl) {
+      const data = tpl.data as {
+        questions?: QJson[];
+        miniTests?: MiniJson[];
+        feedback?: { questions?: QJson[] };
+        translations?: TransMap;
+      };
+      const trans = data.translations;
+      if (testKey === "final") {
+        questions = mapQuestions(data.questions ?? [], `q-${tpl.id}`, includeAnswers, trans);
+      } else {
+        const m = /^day(\d+)$/.exec(testKey);
+        if (m) {
+          const day = Number(m[1]);
+          const mt = (data.miniTests ?? []).find((x) => x.day === day);
+          questions = mapQuestions(mt?.questions ?? [], `q-${tpl.id}-d${day}`, includeAnswers, trans);
+        }
       }
     }
   }

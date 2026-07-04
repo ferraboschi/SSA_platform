@@ -19,6 +19,7 @@ import { createExamLink } from "@/lib/exam-links/actions";
 import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
 import { translateExamTemplateAction } from "@/lib/esami/ai-actions";
 import { ExamEmailTemplatesEditor } from "@/components/esami/ExamEmailTemplatesEditor";
+import { FeedbackSetsEditor } from "@/components/esami/FeedbackSetsEditor";
 import { QuestionDetail, AddQuestionRow } from "@/components/esami/QuestionDetail";
 import type { ExamEmailTemplates, UpcomingCourseLine } from "@/lib/esami/exam-email";
 
@@ -356,7 +357,9 @@ export function ExamLibraryEditor({
 
       {/* Macro family — not applicable to Mail Template (one shared set, not
           per-family), so it's hidden while that section is active. */}
-      {section !== "mail" && (
+      {/* Macro family — not applicable to Mail Template nor Feedback (both are
+          org-wide, not per-family), so hidden while those sections are active. */}
+      {section !== "mail" && section !== "feedback" && (
         <div className="segmented" style={{ marginBottom: 14 }}>
           <button className={fam === "nihonshu" ? "on" : ""} onClick={() => selectFam("nihonshu")}>
             {esami.famNihonshu}
@@ -404,6 +407,8 @@ export function ExamLibraryEditor({
 
       {section === "mail" ? (
         <ExamEmailTemplatesEditor initial={emailTemplates} testTo={testTo} upcoming={upcomingCourses} />
+      ) : section === "feedback" ? (
+        <FeedbackSetsEditor />
       ) : (
       <>
       {/* Header + save */}
