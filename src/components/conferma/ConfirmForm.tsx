@@ -11,7 +11,9 @@ import { GoogleAddressInput } from "@/components/address/AddressInput";
  *    editable when the link was handed over via WhatsApp/SMS/copy;
  *  • phone — editable, propagates everywhere the number appears;
  *  • delivery address — Google Places autocomplete when the key is set, plus an
- *    explicit written confirmation checkbox.
+ *    explicit written confirmation checkbox;
+ *  • delivery notes — FREE, optional (citofono name if different, courier
+ *    instructions).
  * On success the educator sees a green tick for this attendee.
  */
 export function ConfirmForm({
@@ -21,6 +23,7 @@ export function ConfirmForm({
   email: initialEmail,
   emailLocked,
   deliveryAddress: initialAddress,
+  deliveryNotes: initialNotes,
   courseName,
   alreadyConfirmed,
 }: {
@@ -30,6 +33,7 @@ export function ConfirmForm({
   email: string;
   emailLocked: boolean;
   deliveryAddress: string;
+  deliveryNotes: string;
   courseName: string;
   alreadyConfirmed: boolean;
 }) {
@@ -38,6 +42,7 @@ export function ConfirmForm({
   const [phone, setPhone] = useState(initialPhone);
   const [address, setAddress] = useState(initialAddress);
   const [addressConfirmed, setAddressConfirmed] = useState(false);
+  const [notes, setNotes] = useState(initialNotes);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [addressSaved, setAddressSaved] = useState(false);
@@ -54,6 +59,7 @@ export function ConfirmForm({
       phone,
       deliveryAddress: address,
       addressConfirmed,
+      deliveryNotes: notes,
     });
     setBusy(false);
     if (res.ok) {
@@ -100,7 +106,7 @@ export function ConfirmForm({
       <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 18px", lineHeight: 1.5 }}>
         Corso <strong>{courseName}</strong>. Controlla e completa i tuoi dati:
         servono per i test, l&apos;esame e l&apos;eventuale spedizione di materiali.
-        Tutti i campi sono obbligatori.
+        Tutti i campi sono obbligatori, tranne le note per la consegna.
       </p>
 
       <Field label="Nome e cognome" htmlFor={`${uid}-nome`}>
@@ -179,6 +185,19 @@ export function ConfirmForm({
             ) : null}
           </span>
         </label>
+      </Field>
+
+      <Field label="Note per la consegna (facoltative)" htmlFor={`${uid}-note`}>
+        <textarea
+          id={`${uid}-note`}
+          className="input"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Es. nome sul citofono se diverso dal cognome, piano, altre indicazioni per il corriere"
+          maxLength={200}
+          rows={2}
+          style={{ ...field, resize: "vertical", fontFamily: "inherit" }}
+        />
       </Field>
 
       {alreadyConfirmed && !error && (

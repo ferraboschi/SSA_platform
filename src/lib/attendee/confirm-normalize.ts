@@ -11,6 +11,7 @@ export function isValidEmail(s: string): boolean {
 }
 
 export const MAX_ADDRESS_LEN = 300;
+export const MAX_NOTES_LEN = 200;
 
 export type AddressNorm =
   | { ok: true; value: string | undefined }
@@ -24,6 +25,18 @@ export function normAddress(s: string | undefined): AddressNorm {
   if (!collapsed) return { ok: true, value: undefined };
   if (collapsed.length > MAX_ADDRESS_LEN) {
     return { ok: false, error: "Indirizzo troppo lungo." };
+  }
+  return { ok: true, value: collapsed };
+}
+
+/** Normalize the OPTIONAL delivery notes (citofono name, courier
+ *  instructions). Same "empty → undefined" convention as normAddress — a
+ *  blank re-confirm never wipes a previously saved note. */
+export function normDeliveryNotes(s: string | undefined): AddressNorm {
+  const collapsed = (s ?? "").replace(/\s+/g, " ").trim();
+  if (!collapsed) return { ok: true, value: undefined };
+  if (collapsed.length > MAX_NOTES_LEN) {
+    return { ok: false, error: "Note troppo lunghe." };
   }
   return { ok: true, value: collapsed };
 }

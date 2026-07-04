@@ -84,6 +84,7 @@ export default async function Page({
           // Delivered BY EMAIL → the address is proven by receipt → locked.
           emailLocked={res.payload.ch === "email"}
           deliveryAddress={subject.deliveryAddress}
+          deliveryNotes={subject.deliveryNotes}
           courseName={subject.courseName}
           alreadyConfirmed={subject.confirmed}
         />

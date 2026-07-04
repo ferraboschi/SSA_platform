@@ -3,7 +3,7 @@
 import { getSession } from "@/lib/auth/session";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyConfirmToken, isConfirmLinkSpent, type ConfirmSubjectKind } from "./confirm-token";
-import { normEmail, isValidEmail, normAddress } from "./confirm-normalize";
+import { normEmail, isValidEmail, normAddress, normDeliveryNotes } from "./confirm-normalize";
 import { loadConfirmSubject, stampConfirmSent } from "./confirm";
 import { deliverConfirmLink } from "./confirm-email";
 
@@ -13,6 +13,8 @@ export interface ConfirmAttendeeInput {
   deliveryAddress: string;
   /** The written confirmation: "Confermo di abitare all'indirizzo indicato". */
   addressConfirmed: boolean;
+  /** OPTIONAL: citofono name if different from the surname, courier notes. */
+  deliveryNotes?: string;
 }
 
 /**
@@ -66,13 +68,17 @@ export async function confirmAttendeeAction(
     return { ok: false, error: "Conferma l'indirizzo spuntando la casella." };
   }
 
+  // DELIVERY NOTES — optional (citofono name if different, courier notes).
+  const notes = normDeliveryNotes(input.deliveryNotes);
+  if (!notes.ok) return { ok: false, error: notes.error };
+
   const now = new Date().toISOString();
   const table = k === "corsista" ? "corsi_iscrizioni" : "corsi_partecipanti";
   const base =
     k === "corsista"
       ? { enrolled_email: clean, email_confirmed_at: now }
       : { email: clean, email_confirmed_at: now };
-  const withAddr = { ...base, delivery_address: addr.value };
+  const withAddr = { ...base, delivery_address: addr.value, delivery_notes: notes.value };
 
   let { error } = await svc
     .from(table)
@@ -80,9 +86,10 @@ export async function confirmAttendeeAction(
     .eq("id", Number(i))
     .eq("corso_id", Number(c));
   // Pre-migration degrade: the email confirmation (the primary act) must still
-  // succeed when delivery_address doesn't exist yet — retry without it.
+  // succeed when delivery_address/delivery_notes don't exist yet — retry
+  // without them.
   let addressSaved = true;
-  if (error && /delivery_address|column/i.test(error.message)) {
+  if (error && /delivery_address|delivery_notes|column/i.test(error.message)) {
     addressSaved = false;
     ({ error } = await svc
       .from(table)
