@@ -195,8 +195,8 @@ export function ConfirmForm({
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Es. nome sul citofono se diverso dal cognome, piano, altre indicazioni per il corriere"
           maxLength={200}
-          rows={2}
-          style={{ ...field, resize: "vertical", fontFamily: "inherit" }}
+          rows={4}
+          style={{ ...field, minHeight: 104, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
         />
       </Field>
 

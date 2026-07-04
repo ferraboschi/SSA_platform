@@ -385,14 +385,19 @@
 .edu-hint { font-size: 12px; color: var(--text-4); margin: 6px 0 0; }
 .edu-hint--lock { color: var(--warning-fg); }
 
-/* Desktop: one line per row — [presence+name] [chip] [actions]. */
+/* Desktop: one line per row — [presence+name] [chip] [actions]. The three
+   columns top-align so the name, the state chip, and the first action line
+   (email) all sit on the same row. The name is nudged to the top of its
+   48px tap target (instead of vertically centred) so it lines up with the
+   chip and email rather than floating mid-cell. */
 @media (min-width: 900px) {
   .edu-rowgrid {
     grid-template-columns: minmax(220px, 1fr) max-content minmax(300px, 1.2fr);
     gap: 16px;
     align-items: start;
   }
-  .edu-rowgrid > .badge { margin-top: 14px; }
+  .edu-rowgrid > .edu-presence { align-items: flex-start; min-height: 0; }
+  .edu-rowgrid > .badge { align-self: start; }
 }
 
 .edu-empty {
