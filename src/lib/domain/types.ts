@@ -134,8 +134,12 @@ export interface Student {
   buyerName?: string | null;
   /** True when this person has more than one ticket on the course (→ align participant). */
   isDuplicate?: boolean;
-  /** Number of tickets this person holds for the course. */
+  /** Number of tickets (seats) this person holds — staff override if set, else
+   *  inferred from purchases.quantity. Drives how many companion slots to fill. */
   tickets?: number;
+  /** The AUTOMATICALLY inferred seat count (sum of purchases.quantity), before
+   *  any staff override — lets the roster show "auto: N" and offer a reset. */
+  ticketsInferred?: number;
   /** Enrollment (corsi_iscrizioni) id — drives companion ("doppio") management. */
   iscrizioneId?: number;
   /** Extra attendees entered for this enrollment (a buyer of >=2 seats). */

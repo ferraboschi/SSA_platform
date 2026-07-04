@@ -76,6 +76,7 @@ export function makeCoursesRepo(
        *  pre-migration fallback, undefined then and the aggregation falls
        *  back to corsisti.email, same as everywhere else this is resolved. */
       enrolled_email?: string | null;
+      seats_override?: number | null;
       corsista:
         | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }
         | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }[]
@@ -84,16 +85,35 @@ export function makeCoursesRepo(
     const rows = (iscr ?? []) as unknown as IscrJoin[];
 
     // Duplicate detection ("doppio"): how many course tickets each person holds,
-    // from purchases matched on the course product title.
+    // from purchases matched on the course product title — SUMMING quantity so a
+    // single order line for two people counts as two seats.
     const { data: pur } = await sb
       .from("purchases")
-      .select("corsista_id")
+      .select("corsista_id,quantity")
       .eq("cluster", "corso")
       .eq("product_title", row.full_title);
     const ticketCount = countTicketsByCorsista(
-      (pur ?? []) as { corsista_id: number }[],
+      (pur ?? []) as { corsista_id: number; quantity?: number | null }[],
       row.full_title,
     );
+
+    // Staff seat-count overrides — a SEPARATE query so a pre-migration DB
+    // (seats_override column absent) degrades to "no overrides" without
+    // dropping the rich roster fields (a two-tier fallback on the main select
+    // would lose them all). Merge onto the rows before the aggregation reads
+    // r.seats_override.
+    {
+      const { data: ovr, error: ovrErr } = await sb
+        .from("corsi_iscrizioni")
+        .select("id, seats_override")
+        .eq("corso_id", row.id);
+      if (!ovrErr && ovr) {
+        const byId = new Map<number, number | null>(
+          (ovr as { id: number; seats_override: number | null }[]).map((o) => [o.id, o.seats_override]),
+        );
+        for (const r of rows) r.seats_override = byId.get(r.id) ?? null;
+      }
+    }
 
     // Companion attendees ("doppio") per enrollment. Degrades gracefully to an
     // empty map if the corsi_partecipanti table/migration is not yet applied.

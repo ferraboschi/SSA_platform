@@ -236,16 +236,34 @@ export async function loadSharedCourse(
   };
   const iscrRows = (iscr ?? []) as unknown as IscrJoin[];
 
-  // Tickets per person ("doppio"): count purchases matched on the course title,
-  // mirroring the internal roster (src/lib/data/supabase/index.ts ~L694-704).
+  // Tickets per person ("doppio"): SUM purchases.quantity matched on the course
+  // title (a single order line for two people is one row with quantity 2) —
+  // mirroring the internal roster (aggregations.ts countTicketsByCorsista).
   const ticketCount = new Map<number, number>();
   const { data: pur } = await sb
     .from("purchases")
-    .select("corsista_id")
+    .select("corsista_id,quantity")
     .eq("cluster", "corso")
     .eq("product_title", corso.full_title ?? "");
-  for (const p of (pur ?? []) as { corsista_id: number }[]) {
-    ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + 1);
+  for (const p of (pur ?? []) as { corsista_id: number; quantity?: number | null }[]) {
+    const qty = Number.isFinite(Number(p.quantity)) && Number(p.quantity) > 0 ? Math.trunc(Number(p.quantity)) : 1;
+    ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + qty);
+  }
+
+  // Staff seat-count overrides (corsi_iscrizioni.seats_override) keyed by
+  // enrollment id — separate query, graceful pre-migration. When set it wins
+  // over the inferred count, so the appello shows the right number of slots.
+  const seatsOverrideByIscr = new Map<number, number>();
+  {
+    const { data: ovr, error: ovrErr } = await sb
+      .from("corsi_iscrizioni")
+      .select("id, seats_override")
+      .eq("corso_id", corso.id);
+    if (!ovrErr && ovr) {
+      for (const o of ovr as { id: number; seats_override: number | null }[]) {
+        if (o.seats_override != null && o.seats_override >= 1) seatsOverrideByIscr.set(o.id, Math.trunc(o.seats_override));
+      }
+    }
   }
 
   // Existing companions per enrollment (graceful degrade if the table/migration
@@ -359,7 +377,7 @@ export async function loadSharedCourse(
     if (!key) continue;
     if (seen.has(key)) continue;
     seen.add(key);
-    const tickets = ticketCount.get(c.id) ?? 1;
+    const tickets = seatsOverrideByIscr.get(r.id) ?? ticketCount.get(c.id) ?? 1;
     const mine = companionsByIscr.get(r.id) ?? [];
     const snap = enrolledEmail.get(r.id);
     students.push({

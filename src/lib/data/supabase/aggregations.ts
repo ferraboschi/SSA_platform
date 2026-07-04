@@ -22,9 +22,12 @@ import { isPaidRevenue, netPaidEuros } from "@/lib/economics/revenue";
 // ── Input row shapes (plain PostgREST rows; no client, no IO) ────────────────
 
 /** A purchases row as fetched for ticket counting (cluster/product_title already
- *  filtered by the query). Only the corsista id is needed here. */
+ *  filtered by the query). `quantity` is the real Shopify seat count for the
+ *  line (an order for two people = one row with quantity 2); it defaults to 1
+ *  on a pre-quantity row. */
 export interface PurchaseTicketRow {
   corsista_id: number;
+  quantity?: number | null;
 }
 
 /** An enrollment joined to its corsista, as fetched by buildFullCourse. Mirrors
@@ -45,6 +48,9 @@ export interface EnrollmentJoinRow {
    *  corsisti.email everywhere else it's resolved (share-links/load.ts,
    *  exam-send-actions.ts); absent on a pre-migration DB. */
   enrolled_email?: string | null;
+  /** Staff override of the inferred seat count (NULL/absent = use inferred).
+   *  Absent on a pre-migration DB → falls back to the inferred count. */
+  seats_override?: number | null;
   corsista:
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }[]
@@ -76,8 +82,11 @@ export interface CreditByCourseRow {
 // ── Per-course aggregations (buildFullCourse) ────────────────────────────────
 
 /** Duplicate detection ("doppio"): how many course tickets each person holds,
- *  from purchases matched on the course product title. Replicates the L693-701
- *  loop exactly — a map from corsista id → ticket count.
+ *  from purchases matched on the course product title — a map from corsista id
+ *  → seat count. SUMS `quantity` (default 1), not the row count: a single
+ *  order line paying for two people is ONE purchases row with quantity 2, and
+ *  counting rows would read it as one ticket (the bug this fixes). Multiple
+ *  separate order rows still sum correctly.
  *
  *  The `courseFullTitle` parameter documents that the caller has already filtered
  *  the purchase rows on `product_title === courseFullTitle` (and cluster "corso")
@@ -89,7 +98,8 @@ export function countTicketsByCorsista(
   void courseFullTitle;
   const ticketCount = new Map<number, number>();
   for (const p of purchaseRows) {
-    ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + 1);
+    const qty = Number.isFinite(Number(p.quantity)) && Number(p.quantity) > 0 ? Math.trunc(Number(p.quantity)) : 1;
+    ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + qty);
   }
   return ticketCount;
 }
@@ -141,7 +151,12 @@ export function buildStudentsFromEnrollments(
     const mismatch = Boolean(
       buyer && buyer.trim().toLowerCase() !== participant.trim().toLowerCase(),
     );
-    const tickets = ticketByCorsista.get(r.corsista_id) ?? 1;
+    // Seat count: staff override wins over the inferred count (sum of
+    // purchases.quantity). `ticketsInferred` keeps the automatic value so the
+    // roster can show "auto: N" and offer a reset.
+    const ticketsInferred = ticketByCorsista.get(r.corsista_id) ?? 1;
+    const override = r.seats_override != null && r.seats_override >= 1 ? Math.trunc(r.seats_override) : null;
+    const tickets = override ?? ticketsInferred;
     // The confirmed enrolled_email snapshot is the current, verified address
     // (set via /conferma) — prefer it exactly like the educator share page and
     // the exam-invite sender already do; corsisti.email (Shopify identity) is
@@ -162,6 +177,7 @@ export function buildStudentsFromEnrollments(
       buyerName: buyer,
       isDuplicate: tickets > 1,
       tickets,
+      ticketsInferred,
       iscrizioneId: r.id,
       companions: companionsByIscr.get(r.id) ?? [],
       hasWhatsApp: c?.has_whatsapp ?? false,

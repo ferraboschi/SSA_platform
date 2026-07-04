@@ -348,20 +348,36 @@ export async function addPartecipanteFromLinkAction(
     return { ok: false, error: "Iscrizione non valida per questo corso." };
   }
 
-  // (4) seatsBought = # of course tickets this person holds, from purchases
-  // matched on the course full_title (mirror of index.ts ~L694-704). The public
-  // link may ONLY fill DOUBLES.
+  // (4) seatsBought = # of course seats this person holds. SUM purchases.quantity
+  // (a single order line for two people is one row with quantity 2 — counting
+  // rows would read it as 1 and block the legit companion). A staff seat-count
+  // OVERRIDE (corsi_iscrizioni.seats_override) wins when set. The public link may
+  // ONLY fill DOUBLES.
   const { data: corso } = await svc.from("corsi").select("full_title").eq("id", corsoId).maybeSingle();
   const fullTitle = (corso?.full_title as string | undefined) ?? "";
   let seatsBought = 1;
   if (fullTitle) {
-    const { count } = await svc
+    const { data: purRows } = await svc
       .from("purchases")
-      .select("corsista_id", { count: "exact", head: true })
+      .select("quantity")
       .eq("cluster", "corso")
       .eq("product_title", fullTitle)
       .eq("corsista_id", enr.corsista_id);
-    if (typeof count === "number" && count > 0) seatsBought = count;
+    const summed = (purRows ?? []).reduce((n, p) => {
+      const q = Number((p as { quantity?: number | null }).quantity);
+      return n + (Number.isFinite(q) && q > 0 ? Math.trunc(q) : 1);
+    }, 0);
+    if (summed > 0) seatsBought = summed;
+  }
+  // Override (separate read, graceful if the column is absent).
+  {
+    const { data: ovr, error: ovrErr } = await svc
+      .from("corsi_iscrizioni")
+      .select("seats_override")
+      .eq("id", iscrId)
+      .maybeSingle();
+    const o = !ovrErr ? (ovr as { seats_override?: number | null } | null)?.seats_override : null;
+    if (o != null && o >= 1) seatsBought = Math.trunc(o);
   }
   if (seatsBought < 2) {
     return { ok: false, error: "Solo gli ordini con più biglietti possono aggiungere partecipanti." };

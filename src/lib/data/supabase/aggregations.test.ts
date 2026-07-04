@@ -60,6 +60,33 @@ describe("countTicketsByCorsista", () => {
     const map = countTicketsByCorsista([], "Corso Che Non Combacia");
     expect(map.size).toBe(0);
   });
+
+  it("SUMS quantity: one order line for two people (quantity=2) counts as 2 seats", () => {
+    // The bug this fixes: a single qty=2 line is ONE row; counting rows read it
+    // as 1 ticket and hid the second person. Summing quantity catches it.
+    const map = countTicketsByCorsista(
+      [{ corsista_id: 100, quantity: 2 }, { corsista_id: 200, quantity: 1 }],
+      "Corso Certificato Milano",
+    );
+    expect(map.get(100)).toBe(2);
+    expect(map.get(200)).toBe(1);
+  });
+
+  it("mixes quantity and multiple rows correctly", () => {
+    const map = countTicketsByCorsista(
+      [{ corsista_id: 100, quantity: 2 }, { corsista_id: 100, quantity: 1 }],
+      "Corso Certificato Milano",
+    );
+    expect(map.get(100)).toBe(3); // one qty-2 line + one qty-1 line
+  });
+
+  it("treats missing/invalid quantity as 1 (pre-quantity row)", () => {
+    const map = countTicketsByCorsista(
+      [{ corsista_id: 100 }, { corsista_id: 100, quantity: null }, { corsista_id: 100, quantity: 0 }],
+      "Corso Certificato Milano",
+    );
+    expect(map.get(100)).toBe(3); // each malformed row counts as 1
+  });
 });
 
 describe("buildStudentsFromEnrollments", () => {
@@ -191,9 +218,32 @@ describe("buildStudentsFromEnrollments", () => {
       noCompanions,
     );
     expect(students[0].tickets).toBe(2);
+    expect(students[0].ticketsInferred).toBe(2);
     expect(students[0].isDuplicate).toBe(true);
     expect(students[1].tickets).toBe(1); // default when absent from the map
     expect(students[1].isDuplicate).toBe(false);
+  });
+
+  it("seats_override wins over the inferred count; ticketsInferred keeps the auto value", () => {
+    const inferred = new Map<number, number>([[100, 1]]); // Shopify says 1…
+    const { students } = buildStudentsFromEnrollments(
+      [enroll({ id: 1, corsista_id: 100, seats_override: 3 })], // …staff overrides to 3
+      inferred,
+      noCompanions,
+    );
+    expect(students[0].tickets).toBe(3); // effective = override
+    expect(students[0].ticketsInferred).toBe(1); // auto value preserved
+    expect(students[0].isDuplicate).toBe(true);
+  });
+
+  it("ignores an invalid seats_override (< 1), falling back to inferred", () => {
+    const inferred = new Map<number, number>([[100, 2]]);
+    const { students } = buildStudentsFromEnrollments(
+      [enroll({ id: 1, corsista_id: 100, seats_override: 0 })],
+      inferred,
+      noCompanions,
+    );
+    expect(students[0].tickets).toBe(2);
   });
 
   it("attaches companions to the matching enrollment (empty array otherwise)", () => {

@@ -90,6 +90,68 @@ export async function addPartecipanteAction(
   }
 }
 
+/** Max seats one enrollment can be set to — a sanity ceiling, not a business
+ *  rule (a real order is 1–2, occasionally a small group). */
+const MAX_SEATS = 20;
+
+/** Staff sets (or clears) the seat-count OVERRIDE for an enrollment. Pass
+ *  null to revert to the automatically inferred count (sum of purchases.
+ *  quantity). This drives how many "da compilare" companion slots appear at
+ *  check-in — it does NOT touch revenue (the full paid amount stays on the
+ *  single enrollment row; seats are informational only). */
+export async function setSeatsOverrideAction(
+  corsoId: number,
+  iscrizioneId: number,
+  seats: number | null,
+): Promise<{ ok: boolean; seats?: number | null; error?: string; schema?: boolean }> {
+  if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
+
+  const corso = Number(corsoId);
+  const iscrId = Number(iscrizioneId);
+  if (!Number.isInteger(corso) || corso <= 0) return { ok: false, error: "Corso non valido." };
+  if (!Number.isInteger(iscrId) || iscrId <= 0) return { ok: false, error: "Iscrizione non valida." };
+
+  let value: number | null = null;
+  if (seats != null) {
+    const n = Math.trunc(Number(seats));
+    if (!Number.isInteger(n) || n < 1 || n > MAX_SEATS) {
+      return { ok: false, error: `Numero biglietti non valido (1–${MAX_SEATS}).` };
+    }
+    value = n;
+  }
+
+  try {
+    const svc = getSupabaseServiceClient();
+    // Enrollment must belong to the given course (don't trust the client pairing).
+    const { data: enr, error: enrErr } = await svc
+      .from("corsi_iscrizioni")
+      .select("id, corso_id")
+      .eq("id", iscrId)
+      .maybeSingle();
+    if (enrErr) {
+      if (isMissingTable(enrErr)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+      return { ok: false, error: enrErr.message };
+    }
+    if (!enr || Number(enr.corso_id) !== corso) {
+      return { ok: false, error: "Iscrizione non valida per questo corso." };
+    }
+
+    const { error: updErr } = await svc
+      .from("corsi_iscrizioni")
+      .update({ seats_override: value })
+      .eq("id", iscrId);
+    if (updErr) {
+      if (isMissingTable(updErr)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+      return { ok: false, error: updErr.message };
+    }
+
+    revalidatePath(`/corsi/${corso}`);
+    return { ok: true, seats: value };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Salvataggio non riuscito." };
+  }
+}
+
 /** Staff removes a companion attendee (cascades its appello rows). */
 export async function removePartecipanteAction(
   partecipanteId: number,

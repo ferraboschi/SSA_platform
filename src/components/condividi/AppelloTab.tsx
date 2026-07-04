@@ -169,8 +169,11 @@ export default function AppelloTab({
           const state = deriveVerificationState(present, s.confirmSentAt, s.emailConfirmedAt);
           const tickets = s.tickets ?? 1;
           const used = s.companionsUsed ?? 0;
+          // Unfilled companion seats (buyer occupies seat 1): one "da compilare"
+          // slot each, filled at check-in.
+          const emptySlots = Math.max(0, tickets - 1 - used);
           const canAdd =
-            !readOnly && s.kind === "corsista" && tickets >= 2 && used < tickets - 1 && s.iscrizioneId != null;
+            !readOnly && s.kind === "corsista" && emptySlots > 0 && s.iscrizioneId != null;
           return (
             <div key={subj} className="edu-rowwrap" data-state={state} data-present={checked}>
               <div className="edu-rowgrid">
@@ -211,7 +214,9 @@ export default function AppelloTab({
               </div>
               {canAdd && addOpen !== subj && (
                 <button type="button" className="edu-addlink" onClick={() => setAddOpen(subj)}>
-                  + Aggiungi partecipante (biglietto doppio)
+                  ✎ {emptySlots === 1
+                    ? "1 ospite da compilare — inserisci il nome"
+                    : `${emptySlots} ospiti da compilare — inserisci i nomi`}
                 </button>
               )}
               {canAdd && addOpen === subj && s.iscrizioneId != null && (
