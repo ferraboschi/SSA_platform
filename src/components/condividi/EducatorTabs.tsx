@@ -66,6 +66,9 @@ export interface SakeRow {
   qty: number;
   image: string | null;
   url: string | null;
+  /** Aroma hook + narrative commentary from the Sake Company product page. */
+  aroma: string | null;
+  notes: string | null;
 }
 export interface DayRow {
   day: number;
@@ -934,6 +937,24 @@ function ProgrammaTab({ days }: { days: DayRow[] }) {
                         {s.qty > 0 && <Fact k="Bottiglie" v={String(s.qty)} />}
                         {s.code && <Fact k="Codice" v={s.code} />}
                       </dl>
+                      {s.aroma && (
+                        <p
+                          style={{
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            color: "var(--indigo-600)",
+                            margin: "10px 0 0",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          🌸 {s.aroma}
+                        </p>
+                      )}
+                      {s.notes && (
+                        <p style={{ fontSize: 12.5, color: "var(--text-2)", margin: "6px 0 0", lineHeight: 1.55 }}>
+                          {s.notes}
+                        </p>
+                      )}
                       {s.url && (
                         <a href={s.url} target="_blank" rel="noopener noreferrer" className="edu-linkbtn">
                           Scheda completa su Sake Company ↗

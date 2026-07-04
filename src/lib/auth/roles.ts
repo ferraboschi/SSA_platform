@@ -63,15 +63,17 @@ export interface RoleView {
 
 export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
   admin: {
-    hidden: [],
+    // "esami" (the standalone exam-management hub) is hidden for now — exams
+    // now live per-course, so the top-level entry is redundant. The page still
+    // exists at /esami if reached directly; unhide by dropping it here.
+    hidden: ["esami"],
     priority: [],
   },
   manager: {
-    hidden: [],
+    hidden: ["esami"],
     priority: [
       "dashboard",
       "corsi",
-      "esami",
       "pianificatore",
       "corsisti",
       "educator",

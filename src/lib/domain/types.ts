@@ -140,6 +140,8 @@ export interface Student {
   iscrizioneId?: number;
   /** Extra attendees entered for this enrollment (a buyer of >=2 seats). */
   companions?: CourseCompanion[];
+  /** Confirmed exam outcome for this enrollment, null until graded. */
+  examResult?: "passed" | "retrial" | "failed" | null;
 }
 
 /** An extra attendee ("doppio") entered for a course enrollment. */

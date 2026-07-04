@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Badge } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import type {
-  ExamCategory,
   ExamFamily,
   ExamQuestion,
   ExamQuestionType,
@@ -14,6 +13,7 @@ import type {
 } from "@/lib/domain";
 import { QUESTION_EST_SEC, estimateSeconds, formatEstimate } from "@/lib/esami";
 import { saveExamTemplateAction } from "@/lib/esami/actions";
+import { listExamCategoriesAction, addExamCategoryAction } from "@/lib/esami/categories-actions";
 import { createExamLink } from "@/lib/exam-links/actions";
 import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
 import { translateExamTemplateAction } from "@/lib/esami/ai-actions";
@@ -112,14 +112,41 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
   const [fam, setFam] = useState<ExamFamily>("nihonshu");
   const [section, setSection] = useState<Section>("day0");
   const [active, setActive] = useState(0);
-  const [unlocked, setUnlocked] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
 
+  // Reusable category list per family (owner: pick-or-type combobox, no more
+  // free-text duplicates). Fetched once — both families, so switching the
+  // macro-family tab never needs a refetch.
+  const [categories, setCategories] = useState<Record<ExamFamily, string[]>>({
+    nihonshu: [],
+    shochu: [],
+  });
+  useEffect(() => {
+    let alive = true;
+    Promise.all([listExamCategoriesAction("nihonshu"), listExamCategoriesAction("shochu")]).then(
+      ([nihonshu, shochu]) => {
+        if (alive) setCategories({ nihonshu, shochu });
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const commitCategory = (label: string) => {
+    const clean = label.trim();
+    if (!clean) return;
+    setCategories((prev) => {
+      const cur = prev[fam] ?? [];
+      if (cur.some((c) => c.toLowerCase() === clean.toLowerCase())) return prev;
+      return { ...prev, [fam]: [...cur, clean].sort((a, b) => a.localeCompare(b)) };
+    });
+    addExamCategoryAction(fam, clean).catch(() => {});
+  };
+
   const tpl = drafts[fam];
   const miniDays = tpl.miniTests;
-  const ro = !unlocked;
 
   const selectFam = (f: ExamFamily) => {
     if (section.startsWith("day")) {
@@ -135,7 +162,9 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
   };
 
   const questions = sectionQuestions(tpl, section);
-  const cats: ExamCategory[] | null = section === "esame" ? tpl.finalExam.cats : null;
+  // Categories are selectable everywhere EXCEPT feedback (owner: day1/day2/
+  // day3/esame need them; feedback questions don't).
+  const cats: string[] | null = section === "feedback" ? null : categories[fam];
 
   // Header label + meta for the active section.
   let headerName = "";
@@ -146,7 +175,7 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
   } else if (section === "esame") {
     headerName = tpl.finalExam.name;
     headerMeta = format(t.headerMetaEsame, {
-      c: tpl.finalExam.cats.length,
+      c: categories[fam]?.length || tpl.finalExam.cats.length,
       n: questions.length,
       est: formatEstimate(estimateSeconds(questions)),
     });
@@ -182,7 +211,7 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
 
   const addQuestion = (type: ExamQuestionType) => {
     const q = newQuestion(type);
-    if (cats && cats.length) q.cat = cats[0].id;
+    if (cats && cats.length) q.cat = cats[0];
     setQuestions([...questions, q]);
     setActive(questions.length);
   };
@@ -281,60 +310,6 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
         </div>
       </div>
 
-      {/* Lock banner */}
-      <div
-        className="card card-pad"
-        style={{
-          marginBottom: 18,
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          background: unlocked ? "var(--warning-bg)" : "var(--surface-2)",
-          border: "1px solid " + (unlocked ? "var(--warning)" : "var(--border)"),
-          boxShadow: "none",
-        }}
-      >
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 8,
-            background: unlocked ? "var(--warning)" : "var(--navy)",
-            color: "white",
-            display: "grid",
-            placeItems: "center",
-            flexShrink: 0,
-          }}
-        >
-          <Icon name={unlocked ? "unlock" : "lock"} size={17} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 13.5 }}>{unlocked ? t.unlockedTitle : t.lockedTitle}</div>
-          <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 2 }}>
-            {unlocked ? t.unlockedBody : t.lockedBody}
-          </div>
-        </div>
-        <button className={`btn btn-sm ${unlocked ? "" : "btn-primary"}`} onClick={() => setUnlocked((u) => !u)}>
-          <Icon name={unlocked ? "lock" : "unlock"} size={12} />
-          {unlocked ? t.lock : t.unlock}
-        </button>
-      </div>
-      <div
-        style={{
-          marginTop: -8,
-          marginBottom: 18,
-          paddingLeft: 4,
-          fontSize: 11,
-          color: "var(--text-4)",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-        }}
-      >
-        <Icon name="info" size={11} />
-        {t.roleNote}
-      </div>
-
       {/* Macro family */}
       <div className="segmented" style={{ marginBottom: 14 }}>
         <button className={fam === "nihonshu" ? "on" : ""} onClick={() => selectFam("nihonshu")}>
@@ -405,41 +380,30 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
           ) : (
             <span className="text-3" style={{ fontSize: 11 }}>{t.noPreviewCourse}</span>
           )}
-          {unlocked && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <button
-                className="btn btn-sm"
-                onClick={runTranslate}
-                disabled={translating}
-                title="Traduci tutte le domande in inglese e giapponese (una volta, con AI). Le traduzioni vengono salvate."
-              >
-                <Icon name="globe" size={12} />
-                {translating ? "Traduco…" : "Traduci (AI)"}
-              </button>
-              {translateMsg && (
-                <span style={{ fontSize: 11, color: translateMsg.includes("✓") ? "var(--success-fg)" : "var(--danger-fg)" }}>
-                  {translateMsg}
-                </span>
-              )}
-            </span>
-          )}
-          {unlocked ? (
-            <>
-              <span style={{ fontSize: 12, color: saveErr ? "var(--danger-fg)" : dirty ? "var(--warning-fg)" : "var(--success-fg)", display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <Icon name={saveErr ? "warn" : dirty ? "edit" : "check"} size={12} />
-                {saveErr ? saveErr : saving ? t.saving : dirty ? t.unsaved : t.saved}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <button
+              className="btn btn-sm"
+              onClick={runTranslate}
+              disabled={translating}
+              title="Traduci tutte le domande in inglese e giapponese (una volta, con AI). Le traduzioni vengono salvate."
+            >
+              <Icon name="globe" size={12} />
+              {translating ? "Traduco…" : "Traduci (AI)"}
+            </button>
+            {translateMsg && (
+              <span style={{ fontSize: 11, color: translateMsg.includes("✓") ? "var(--success-fg)" : "var(--danger-fg)" }}>
+                {translateMsg}
               </span>
-              <button className="btn btn-sm btn-primary" onClick={save} disabled={saving || !dirty}>
-                <Icon name="save" size={12} />
-                {t.save}
-              </button>
-            </>
-          ) : (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}>
-              <Icon name="lock" size={12} />
-              {t.readOnly}
-            </span>
-          )}
+            )}
+          </span>
+          <span style={{ fontSize: 12, color: saveErr ? "var(--danger-fg)" : dirty ? "var(--warning-fg)" : "var(--success-fg)", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name={saveErr ? "warn" : dirty ? "edit" : "check"} size={12} />
+            {saveErr ? saveErr : saving ? t.saving : dirty ? t.unsaved : t.saved}
+          </span>
+          <button className="btn btn-sm btn-primary" onClick={save} disabled={saving || !dirty}>
+            <Icon name="save" size={12} />
+            {t.save}
+          </button>
         </div>
       </div>
 
@@ -502,21 +466,19 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
                         </div>
                       </div>
                     </button>
-                    {!ro && (
-                      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 6px", gap: 2 }}>
-                        <button className="reorder-btn" title={t.moveUp} disabled={qi === 0} onClick={() => moveQuestion(qi, -1)}>
-                          <Icon name="arrow-up" size={12} />
-                        </button>
-                        <button className="reorder-btn" title={t.moveDown} disabled={qi === questions.length - 1} onClick={() => moveQuestion(qi, 1)}>
-                          <Icon name="arrow-dn" size={12} />
-                        </button>
-                      </div>
-                    )}
+                    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 6px", gap: 2 }}>
+                      <button className="reorder-btn" title={t.moveUp} disabled={qi === 0} onClick={() => moveQuestion(qi, -1)}>
+                        <Icon name="arrow-up" size={12} />
+                      </button>
+                      <button className="reorder-btn" title={t.moveDown} disabled={qi === questions.length - 1} onClick={() => moveQuestion(qi, 1)}>
+                        <Icon name="arrow-dn" size={12} />
+                      </button>
+                    </div>
                   </div>
                 );
               })
             )}
-            {!ro && <AddQuestionRow onAdd={addQuestion} />}
+            <AddQuestionRow onAdd={addQuestion} />
           </div>
         </div>
 
@@ -525,12 +487,12 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
           {activeQ ? (
             <QuestionDetail
               q={activeQ}
-              readOnly={ro}
               cats={cats}
               onChange={(patch) => updateQuestion(active, patch)}
               onChangeType={(type) => changeType(active, type)}
               onDuplicate={() => duplicateQuestion(active)}
               onDelete={() => removeQuestion(active)}
+              onCommitCategory={commitCategory}
             />
           ) : (
             <div className="text-3" style={{ padding: 20 }}>{t.selectQuestion}</div>
@@ -567,25 +529,27 @@ function AddQuestionRow({ onAdd }: { onAdd: (type: ExamQuestionType) => void }) 
 
 function QuestionDetail({
   q,
-  readOnly,
   cats,
   onChange,
   onChangeType,
   onDuplicate,
   onDelete,
+  onCommitCategory,
 }: {
   q: ExamQuestion;
-  readOnly: boolean;
-  cats: ExamCategory[] | null;
+  /** Known category labels for this family/section; null where categorization
+   *  doesn't apply (feedback). */
+  cats: string[] | null;
   onChange: (patch: Partial<ExamQuestion>) => void;
   onChangeType: (type: ExamQuestionType) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  /** Persist a newly-typed category so it's reusable everywhere from now on. */
+  onCommitCategory: (label: string) => void;
 }) {
   const t = useT().esami.qEditor;
   const te = useT().esami.editor;
   const qt = useT().esami.qt;
-  const ro = readOnly;
   const est = QUESTION_EST_SEC[q.type] || 10;
   const correctNums = ((q.correct ?? []) as Array<number | string>).filter(
     (c): c is number => typeof c === "number",
@@ -615,41 +579,35 @@ function QuestionDetail({
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {ro ? (
-            <Badge tone="indigo">{qt[q.type]}</Badge>
-          ) : (
-            <select
-              className="select"
-              value={q.type}
-              onChange={(e) => onChangeType(e.target.value as ExamQuestionType)}
-              style={{ height: 30, width: "auto", fontSize: 12.5, fontWeight: 600 }}
-            >
-              {/* Keep the current type selectable even if it's filtered out
-                  (e.g. a legacy "match" question) so the dropdown still shows
-                  its own value; new selection of "match" stays impossible. */}
-              {AUTHORABLE_QT(Object.entries(qt))
-                .concat(q.type === "match" ? [["match", qt.match]] : [])
-                .map(([k, l]) => (
-                  <option key={k} value={k}>{l}</option>
-                ))}
-            </select>
-          )}
+          <select
+            className="select"
+            value={q.type}
+            onChange={(e) => onChangeType(e.target.value as ExamQuestionType)}
+            style={{ height: 30, width: "auto", fontSize: 12.5, fontWeight: 600 }}
+          >
+            {/* Keep the current type selectable even if it's filtered out
+                (e.g. a legacy "match" question) so the dropdown still shows
+                its own value; new selection of "match" stays impossible. */}
+            {AUTHORABLE_QT(Object.entries(qt))
+              .concat(q.type === "match" ? [["match", qt.match]] : [])
+              .map(([k, l]) => (
+                <option key={k} value={k}>{l}</option>
+              ))}
+          </select>
           <span className="mono" style={{ fontSize: 11, color: "var(--text-4)", display: "inline-flex", alignItems: "center", gap: 4 }}>
             <Icon name="clock" size={11} />
             {format(t.stima, { s: est })}
           </span>
           {q.important && <Badge tone="oro">{t.importante}</Badge>}
         </div>
-        {!ro && (
-          <div style={{ display: "flex", gap: 6 }}>
-            <button className="btn btn-sm" title={te.duplicateQuestion} onClick={onDuplicate}>
-              <Icon name="copy" size={12} />
-            </button>
-            <button className="btn btn-sm btn-ghost" title={te.deleteQuestion} onClick={onDelete}>
-              <Icon name="trash" size={12} />
-            </button>
-          </div>
-        )}
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn btn-sm" title={te.duplicateQuestion} onClick={onDuplicate}>
+            <Icon name="copy" size={12} />
+          </button>
+          <button className="btn btn-sm btn-ghost" title={te.deleteQuestion} onClick={onDelete}>
+            <Icon name="trash" size={12} />
+          </button>
+        </div>
       </div>
 
       {/* How this question type works (for the operator building the exam). */}
@@ -680,9 +638,7 @@ function QuestionDetail({
           className="textarea"
           value={q.text}
           rows={3}
-          readOnly={ro}
           onChange={(e) => onChange({ text: e.target.value })}
-          style={ro ? { background: "var(--surface-2)", color: "var(--text-2)", cursor: "default" } : undefined}
         />
       </div>
 
@@ -691,9 +647,7 @@ function QuestionDetail({
           <button
             key={l}
             className={`pill ${q.lang === l ? "on" : ""}`}
-            disabled={ro}
-            onClick={() => !ro && onChange({ lang: l })}
-            style={ro && q.lang !== l ? { opacity: 0.5 } : undefined}
+            onClick={() => onChange({ lang: l })}
           >
             {l.toUpperCase()}
           </button>
@@ -709,7 +663,7 @@ function QuestionDetail({
           <span>
             {q.type === "open" ? t.labelOpen : q.type === "match" ? t.labelMatch : q.type === "order" ? t.labelOrder : t.labelOptions}
           </span>
-          {!ro && (q.type === "single" || q.type === "multi" || q.type === "truefalse" || q.type === "image") && (
+          {(q.type === "single" || q.type === "multi" || q.type === "truefalse" || q.type === "image") && (
             <span style={{ fontSize: 11, color: "var(--text-4)", fontWeight: 400 }}>{te.markCorrectHint}</span>
           )}
         </div>
@@ -718,15 +672,13 @@ function QuestionDetail({
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {q.type === "image" && (
               <div style={{ marginBottom: 8 }}>
-                {!ro && (
-                  <input
-                    className="input"
-                    placeholder="URL immagine (es. https://…/etichetta.jpg)"
-                    value={q.imageId ?? ""}
-                    onChange={(e) => onChange({ imageId: e.target.value })}
-                    style={{ marginBottom: 8 }}
-                  />
-                )}
+                <input
+                  className="input"
+                  placeholder="URL immagine (es. https://…/etichetta.jpg)"
+                  value={q.imageId ?? ""}
+                  onChange={(e) => onChange({ imageId: e.target.value })}
+                  style={{ marginBottom: 8 }}
+                />
                 {q.imageId ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -756,8 +708,7 @@ function QuestionDetail({
                 >
                   <button
                     type="button"
-                    disabled={ro}
-                    onClick={() => !ro && toggleCorrect(i)}
+                    onClick={() => toggleCorrect(i)}
                     title="Segna corretta"
                     style={{
                       width: 18,
@@ -769,7 +720,7 @@ function QuestionDetail({
                       background: isC ? "var(--success)" : "transparent",
                       color: "white",
                       flexShrink: 0,
-                      cursor: ro ? "default" : "pointer",
+                      cursor: "pointer",
                       padding: 0,
                     }}
                   >
@@ -778,11 +729,10 @@ function QuestionDetail({
                   <input
                     className="input"
                     value={opt}
-                    readOnly={ro}
                     onChange={(e) => setOption(i, e.target.value)}
-                    style={{ flex: 1, border: "none", height: "auto", padding: 0, background: "transparent", cursor: ro ? "default" : undefined }}
+                    style={{ flex: 1, border: "none", height: "auto", padding: 0, background: "transparent" }}
                   />
-                  {!ro && q.type !== "truefalse" && (
+                  {q.type !== "truefalse" && (
                     <button className="btn btn-icon btn-sm btn-ghost" onClick={() => removeOption(i)}>
                       <Icon name="trash" size={11} />
                     </button>
@@ -790,7 +740,7 @@ function QuestionDetail({
                 </div>
               );
             })}
-            {!ro && q.type !== "truefalse" && (
+            {q.type !== "truefalse" && (
               <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={addOption}>
                 <Icon name="plus" size={11} />
                 {t.addOption}
@@ -818,9 +768,7 @@ function QuestionDetail({
             <input
               className="input"
               value={((q.correct ?? []) as Array<number | string>).join(", ")}
-              readOnly={ro}
               onChange={(e) => onChange({ correct: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-              style={ro ? { background: "var(--surface-2)", cursor: "default" } : undefined}
             />
           </div>
         )}
@@ -828,33 +776,27 @@ function QuestionDetail({
         {q.type === "match" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {(q.pairs ?? []).map((p, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: ro ? "1fr 24px 1fr" : "1fr 24px 1fr 28px", gap: 8, alignItems: "center" }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 24px 1fr 28px", gap: 8, alignItems: "center" }}>
                 <input
                   className="input"
                   value={p.l}
-                  readOnly={ro}
                   onChange={(e) => onChange({ pairs: (q.pairs ?? []).map((x, xi) => (xi === i ? { ...x, l: e.target.value } : x)) })}
                 />
                 <div style={{ textAlign: "center", color: "var(--text-4)" }}>↔</div>
                 <input
                   className="input"
                   value={p.r}
-                  readOnly={ro}
                   onChange={(e) => onChange({ pairs: (q.pairs ?? []).map((x, xi) => (xi === i ? { ...x, r: e.target.value } : x)) })}
                 />
-                {!ro && (
-                  <button className="btn btn-icon btn-sm btn-ghost" onClick={() => onChange({ pairs: (q.pairs ?? []).filter((_, xi) => xi !== i) })}>
-                    <Icon name="trash" size={11} />
-                  </button>
-                )}
+                <button className="btn btn-icon btn-sm btn-ghost" onClick={() => onChange({ pairs: (q.pairs ?? []).filter((_, xi) => xi !== i) })}>
+                  <Icon name="trash" size={11} />
+                </button>
               </div>
             ))}
-            {!ro && (
-              <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => onChange({ pairs: [...(q.pairs ?? []), { l: "", r: "" }] })}>
-                <Icon name="plus" size={11} />
-                {t.addOption}
-              </button>
-            )}
+            <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => onChange({ pairs: [...(q.pairs ?? []), { l: "", r: "" }] })}>
+              <Icon name="plus" size={11} />
+              {t.addOption}
+            </button>
           </div>
         )}
 
@@ -866,23 +808,18 @@ function QuestionDetail({
                 <input
                   className="input"
                   value={it}
-                  readOnly={ro}
                   onChange={(e) => onChange({ items: (q.items ?? []).map((x, xi) => (xi === i ? e.target.value : x)) })}
-                  style={{ flex: 1, border: "none", height: "auto", padding: 0, background: "transparent", cursor: ro ? "default" : undefined }}
+                  style={{ flex: 1, border: "none", height: "auto", padding: 0, background: "transparent" }}
                 />
-                {!ro && (
-                  <button className="btn btn-icon btn-sm btn-ghost" onClick={() => onChange({ items: (q.items ?? []).filter((_, xi) => xi !== i) })}>
-                    <Icon name="trash" size={11} />
-                  </button>
-                )}
+                <button className="btn btn-icon btn-sm btn-ghost" onClick={() => onChange({ items: (q.items ?? []).filter((_, xi) => xi !== i) })}>
+                  <Icon name="trash" size={11} />
+                </button>
               </div>
             ))}
-            {!ro && (
-              <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => onChange({ items: [...(q.items ?? []), ""] })}>
-                <Icon name="plus" size={11} />
-                {t.addOption}
-              </button>
-            )}
+            <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => onChange({ items: [...(q.items ?? []), ""] })}>
+              <Icon name="plus" size={11} />
+              {t.addOption}
+            </button>
           </div>
         )}
       </div>
@@ -892,26 +829,24 @@ function QuestionDetail({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
         <div className="field">
           <div className="field-label">{t.categoria}</div>
-          {cats && cats.length ? (
-            <select
-              className="select"
-              value={q.cat}
-              disabled={ro}
-              onChange={(e) => onChange({ cat: e.target.value })}
-            >
-              {!cats.some((c) => c.id === q.cat) && <option value={q.cat}>{q.cat || "—"}</option>}
+          {/* Pick-or-type combobox: a native datalist offers every known
+              category for this family, but the field stays free text so a
+              brand-new one can be typed — committed to the shared list on
+              blur (owner: avoid duplicate/typo'd categories across sections). */}
+          <input
+            className="input"
+            list="exam-cat-options"
+            value={q.cat}
+            onChange={(e) => onChange({ cat: e.target.value })}
+            onBlur={(e) => onCommitCategory(e.target.value)}
+            placeholder="Scegli o scrivi una categoria…"
+          />
+          {cats && (
+            <datalist id="exam-cat-options">
               {cats.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
+                <option key={c} value={c} />
               ))}
-            </select>
-          ) : (
-            <input
-              className="input"
-              value={q.cat}
-              readOnly={ro}
-              onChange={(e) => onChange({ cat: e.target.value })}
-              style={ro ? { background: "var(--surface-2)", cursor: "default" } : undefined}
-            />
+            </datalist>
           )}
         </div>
         <div className="field">
@@ -920,9 +855,7 @@ function QuestionDetail({
             className="input"
             type="number"
             value={q.points}
-            readOnly={ro}
             onChange={(e) => onChange({ points: Math.max(0, Number(e.target.value) || 0) })}
-            style={ro ? { background: "var(--surface-2)", cursor: "default" } : undefined}
           />
         </div>
         <div className="field">
@@ -931,7 +864,6 @@ function QuestionDetail({
             <input
               type="checkbox"
               checked={!!q.important}
-              disabled={ro}
               onChange={(e) => onChange({ important: e.target.checked })}
             />
             {t.importanteCheck}

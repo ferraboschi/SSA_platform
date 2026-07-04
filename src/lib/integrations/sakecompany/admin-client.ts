@@ -5,6 +5,7 @@
 // from sakeCompanyConfig (permanent offline OAuth token).
 import "server-only";
 import { sakeCompanyConfig } from "@/lib/integrations/config";
+import { parseProductNotes } from "./product-notes";
 
 const API_VERSION = "2026-01"; // bumped: 2025-01 is past Shopify's support window (Jun 2026)
 
@@ -30,6 +31,7 @@ export interface ScProduct {
   status: string;
   image: { src: string } | null;
   variants: ScVariant[];
+  body_html?: string | null;
 }
 
 function base(): string {
@@ -150,19 +152,27 @@ export interface ScCatalogItem {
   price?: number;
   /** Product type from Airtable (e.g. "Junmai Ginjo"), merged by SKU. */
   productType?: string | null;
+  /** Short aroma/tasting hook, extracted from the Shopify product description
+   *  (owner: show it to the educator on the Programma tab). */
+  aroma?: string | null;
+  /** Longer narrative commentary (production, character), same source. */
+  notes?: string | null;
 }
 
 /** Full pickable catalog (all active products, flattened to variants). */
 export async function listCatalog(): Promise<ScCatalogItem[]> {
   const domain = sakeCompanyConfig.storeDomain;
   const out: ScCatalogItem[] = [];
-  const fields = "id,handle,title,vendor,status,image,variants";
+  // body_html carries the aroma hook + narrative commentary the educator's
+  // Programma tab shows (parseProductNotes) — same request, no extra round-trip.
+  const fields = "id,handle,title,vendor,status,image,variants,body_html";
   let path: string | null = `products.json?limit=250&status=active&fields=${fields}`;
   while (path) {
     const { body, link } = await scGet(path);
     const page = (body as { products?: (ScProduct & { handle: string })[] }).products ?? [];
     for (const p of page) {
       const single = p.variants.length <= 1;
+      const { aroma, notes } = parseProductNotes(p.body_html);
       for (const v of p.variants) {
         const variantTitle =
           v.title && v.title !== "Default Title" ? v.title : null;
@@ -180,6 +190,8 @@ export async function listCatalog(): Promise<ScCatalogItem[]> {
           url: `https://${domain}/products/${p.handle}`,
           handle: p.handle,
           price: priceNum != null && Number.isFinite(priceNum) ? priceNum : undefined,
+          aroma,
+          notes,
         });
       }
     }

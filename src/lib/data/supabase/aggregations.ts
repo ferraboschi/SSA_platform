@@ -41,6 +41,10 @@ export interface EnrollmentJoinRow {
   financial_status: string | null;
   line_item_id: number | null;
   buyer_name: string | null;
+  /** Confirmed-email snapshot (course-start /conferma flow) — preferred over
+   *  corsisti.email everywhere else it's resolved (share-links/load.ts,
+   *  exam-send-actions.ts); absent on a pre-migration DB. */
+  enrolled_email?: string | null;
   corsista:
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }[]
@@ -138,9 +142,14 @@ export function buildStudentsFromEnrollments(
       buyer && buyer.trim().toLowerCase() !== participant.trim().toLowerCase(),
     );
     const tickets = ticketByCorsista.get(r.corsista_id) ?? 1;
+    // The confirmed enrolled_email snapshot is the current, verified address
+    // (set via /conferma) — prefer it exactly like the educator share page and
+    // the exam-invite sender already do; corsisti.email (Shopify identity) is
+    // only the fallback for a student who never confirmed.
+    const resolvedEmail = (r.enrolled_email ?? "").trim() || (c?.email ?? "");
     return {
       name: participant,
-      email: c?.email ?? "",
+      email: resolvedEmail,
       phone: c?.phone ?? "",
       orderNumber: r.order_name ?? "",
       orderDate: r.order_date ?? "",
@@ -158,6 +167,7 @@ export function buildStudentsFromEnrollments(
       hasWhatsApp: c?.has_whatsapp ?? false,
       nameMismatch: mismatch,
       registrationName: mismatch ? buyer : null,
+      examResult: r.exam_result,
     };
   });
   return { students, revenue, examResults };

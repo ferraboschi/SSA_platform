@@ -4,20 +4,33 @@ import { Icon } from "@/components/ui";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import type { Student } from "@/lib/domain";
 
+const EXAM_RESULT_LABEL: Record<string, string> = {
+  passed: "Promosso",
+  retrial: "Da riprovare",
+  failed: "Non superato",
+};
+
 export function CourseExportButtons({
   courseId,
   title,
   students,
   labelStudents,
   labelSake,
+  labelPromossi,
   sakeNoTemplateMsg,
+  examsDone,
 }: {
   courseId: string;
   title: string;
   students: Student[];
   labelStudents: string;
   labelSake: string;
+  labelPromossi: string;
   sakeNoTemplateMsg: string;
+  /** Gates "Excel studenti promossi" — visible always, clickable only once the
+   *  course's exams are graded (owner: don't offer a promoted-students list
+   *  before there's anything to report). */
+  examsDone: boolean;
 }) {
   const slug = title.replace(/[^\w-]+/g, "-").toLowerCase();
 
@@ -32,8 +45,18 @@ export function CourseExportButtons({
           s.phone,
           Math.round(s.amount),
           s.discountCode ?? "",
-          "",
+          s.examResult ? EXAM_RESULT_LABEL[s.examResult] : "",
         ]),
+      ),
+    );
+
+  const passed = students.filter((s) => s.examResult === "passed");
+  const exportPromossi = () =>
+    downloadCsv(
+      `promossi-${slug}`,
+      toCsv(
+        ["Nome", "Email", "Telefono"],
+        passed.map((s) => [s.name, s.email, s.phone]),
       ),
     );
 
@@ -73,6 +96,15 @@ export function CourseExportButtons({
       <button className="btn" onClick={exportSakes}>
         <Icon name="download" size={13} />
         {labelSake}
+      </button>
+      <button
+        className="btn"
+        onClick={exportPromossi}
+        disabled={!examsDone || passed.length === 0}
+        title={!examsDone ? "Disponibile a esami conclusi" : undefined}
+      >
+        <Icon name="download" size={13} />
+        {labelPromossi}
       </button>
     </>
   );

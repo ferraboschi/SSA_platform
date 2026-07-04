@@ -1,7 +1,11 @@
 "use server";
 
 // Persist an edited family exam template (questions / mini-tests / feedback).
-// Admin & manager only — same gate as exam-link creation.
+// Open to ANY signed-in staff member — owner: no more admin/manager-only lock
+// on this page. Still requires an actual session (not the unauthenticated
+// "guest" placeholder) — a server action is independently POST-invokable by
+// its id regardless of which nav items are hidden, so this is the one real
+// gate against an anonymous caller, not a per-role restriction.
 
 import { revalidatePath } from "next/cache";
 import { getDataSource } from "@/lib/data";
@@ -17,10 +21,7 @@ export async function saveExamTemplateAction(
   template: ExamTemplate,
 ): Promise<SaveExamResult> {
   const session = await getSession();
-  const role = session.user.roleKey;
-  if (role !== "admin" && role !== "manager") {
-    return { ok: false, error: "Non autorizzato." };
-  }
+  if (session.user.roleKey === "guest") return { ok: false, error: "Non autorizzato." };
   try {
     const ds = await getDataSource();
     await ds.examTemplates.save(template);

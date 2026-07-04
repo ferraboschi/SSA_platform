@@ -18,11 +18,13 @@ export function SakeRow({
   noteOpen,
   catItem,
   need,
+  isDropTarget,
   onToggleNote,
   onUpdate,
   onRemove,
   onDragStart,
   onDragOver,
+  onDragLeave,
   onDrop,
 }: {
   sake: SakeState;
@@ -31,11 +33,14 @@ export function SakeRow({
   noteOpen: boolean;
   catItem?: ScCatalogItem;
   need?: number;
+  /** A dragged sake is currently hovering THIS row — show where it will land. */
+  isDropTarget?: boolean;
   onToggleNote: () => void;
   onUpdate: (patch: Partial<SakeState>) => void;
   onRemove: () => void;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
   onDrop: () => void;
 }) {
   const tr = useT();
@@ -53,18 +58,22 @@ export function SakeRow({
   return (
     <div
       onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
       onDrop={onDrop}
       title={lowStock ? `${t.stockKo} · ${stock} pz` : undefined}
       style={{
         borderBottom: isLast ? "none" : "1px solid var(--border-2)",
         borderLeft: lowStock ? "3px solid var(--danger-fg, #b42318)" : "3px solid transparent",
+        borderTop: isDropTarget ? "2px solid var(--indigo)" : "2px solid transparent",
         opacity: dragging ? 0.4 : 1,
         background: dragging
           ? "var(--indigo-50)"
-          : lowStock
-            ? "var(--danger-bg, #fde8e6)"
-            : "transparent",
-        transition: "background var(--dur-fast)",
+          : isDropTarget
+            ? "var(--indigo-50)"
+            : lowStock
+              ? "var(--danger-bg, #fde8e6)"
+              : "transparent",
+        transition: "background var(--dur-fast), border-color var(--dur-fast)",
       }}
     >
       <div style={{ display: "grid", gridTemplateColumns: "22px 40px 1fr auto auto", gap: 10, alignItems: "center", padding: "10px 16px" }}>
@@ -99,9 +108,18 @@ export function SakeRow({
           <Icon name="grip" size={14} />
         </div>
 
-        <div className="ph-img" style={{ width: 40, height: 50, borderRadius: 3, fontSize: 9 }}>
-          {s.code}
-        </div>
+        {catItem?.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={catItem.image}
+            alt=""
+            style={{ width: 40, height: 50, borderRadius: 3, objectFit: "cover" }}
+          />
+        ) : (
+          <div className="ph-img" style={{ width: 40, height: 50, borderRadius: 3, fontSize: 9 }}>
+            {s.code}
+          </div>
+        )}
 
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>

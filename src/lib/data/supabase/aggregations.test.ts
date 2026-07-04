@@ -261,6 +261,31 @@ describe("buildStudentsFromEnrollments", () => {
     expect(students[0].email).toBe("arr@example.com");
     expect(students[0].hasWhatsApp).toBe(true);
   });
+
+  it("prefers the confirmed enrolled_email snapshot over corsisti.email (owner: Excel iscritti showed the stale Shopify address)", () => {
+    const { students } = buildStudentsFromEnrollments(
+      [enroll({ enrolled_email: "confermata@example.com" })],
+      noTickets,
+      noCompanions,
+    );
+    expect(students[0].email).toBe("confermata@example.com");
+  });
+
+  it("falls back to corsisti.email when enrolled_email is absent (pre-migration) or blank", () => {
+    const { students: withoutSnapshot } = buildStudentsFromEnrollments(
+      [enroll()],
+      noTickets,
+      noCompanions,
+    );
+    expect(withoutSnapshot[0].email).toBe("alice@example.com");
+
+    const { students: blankSnapshot } = buildStudentsFromEnrollments(
+      [enroll({ enrolled_email: "" })],
+      noTickets,
+      noCompanions,
+    );
+    expect(blankSnapshot[0].email).toBe("alice@example.com");
+  });
 });
 
 describe("aggregateCourseEnrollments", () => {

@@ -8,6 +8,7 @@ import type { ProgrammaData, TemplateData } from "@/lib/corsi";
 import type { Sake } from "@/lib/domain";
 import {
   StockBadge,
+  SakeProductPicker,
   LOW_STOCK,
   type ScCatalogItem,
 } from "@/components/sake/SakeProductPicker";
@@ -71,6 +72,8 @@ export function ProgrammaEconomiaSection({
   const [saving, startSave] = useTransition();
   const [openNote, setOpenNote] = useState<string | null>(null);
   const [templateModal, setTemplateModal] = useState(false);
+  // Which stock-check row (by SKU) has its "sostituisci prodotto" picker open.
+  const [replacingSku, setReplacingSku] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateData[]>(initialTemplates);
   const [savedToast, setSavedToast] = useState<string | null>(null);
 
@@ -78,8 +81,16 @@ export function ProgrammaEconomiaSection({
   const handleDragStart = (dayId: string, sakeId: string) => {
     dragRef.current = { dayId, sakeId };
   };
-  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
+  // Row-level drop indicator (owner: couldn't see WHERE a dragged sake would
+  // land) — tracks which row is currently hovered, mirroring the existing
+  // day-card dragOverDay pattern one level deeper.
+  const [dragOverSake, setDragOverSake] = useState<string | null>(null);
+  const handleDragOver = (e: React.DragEvent, sakeId: string) => {
+    e.preventDefault();
+    setDragOverSake(sakeId);
+  };
   const handleDrop = (targetDayId: string, targetSakeId: string) => {
+    setDragOverSake(null);
     if (!dragRef.current) return;
     const { dayId: srcDay, sakeId: srcSake } = dragRef.current;
     if (srcDay === targetDayId && srcSake === targetSakeId) return;
@@ -102,6 +113,30 @@ export function ProgrammaEconomiaSection({
       arr.map((d) =>
         d.id === dayId ? { ...d, sakes: d.sakes.map((s) => (s.id === sakeId ? { ...s, ...patch } : s)) } : d,
       ),
+    );
+
+  // Replace a product EVERYWHERE it's used (owner: same SKU can appear on
+  // several days) — the stock-check list and the day-by-day plan share this
+  // one `days` state, so a single update here updates both views at once.
+  // Bottle size/qty/note are per-row facts and stay untouched; identity fields
+  // (code/name/producer/type/cost) come from the newly picked catalog item.
+  const replaceSakeEverywhere = (oldCode: string, item: ScCatalogItem) =>
+    setDays((arr) =>
+      arr.map((d) => ({
+        ...d,
+        sakes: d.sakes.map((s) =>
+          s.code === oldCode
+            ? {
+                ...s,
+                code: item.sku ?? s.code,
+                name: item.name,
+                sakagura: item.vendor ?? s.sakagura,
+                type: item.productType ?? s.type,
+                cost: item.cost || item.price || s.cost,
+              }
+            : s,
+        ),
+      })),
     );
   const removeSake = (dayId: string, sakeId: string) =>
     setDays((arr) =>
@@ -137,6 +172,7 @@ export function ProgrammaEconomiaSection({
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
   const handleDayDrop = (targetDayId: string) => {
     setDragOverDay(null);
+    setDragOverSake(null);
     if (!dragRef.current) return;
     const { dayId: srcDay, sakeId: srcSake } = dragRef.current;
     setDays((arr) => {
@@ -539,11 +575,13 @@ export function ProgrammaEconomiaSection({
                       noteOpen={openNote === s.id}
                       catItem={s.code ? catBySku.get(s.code) : undefined}
                       need={bottlesPerSku}
+                      isDropTarget={dragOverSake === s.id}
                       onToggleNote={() => setOpenNote(openNote === s.id ? null : s.id)}
                       onUpdate={(p) => updateSake(sec.id, s.id, p)}
                       onRemove={() => removeSake(sec.id, s.id)}
                       onDragStart={() => handleDragStart(sec.id, s.id)}
-                      onDragOver={handleDragOver}
+                      onDragOver={(e) => handleDragOver(e, s.id)}
+                      onDragLeave={() => setDragOverSake((cur) => (cur === s.id ? null : cur))}
                       onDrop={() => handleDrop(sec.id, s.id)}
                     />
                   ))}
@@ -771,25 +809,43 @@ export function ProgrammaEconomiaSection({
                     borderLeft: `3px solid ${
                       r.insufficient ? "var(--danger)" : r.low ? "var(--warning)" : "transparent"
                     }`,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
                   }}
                 >
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {r.item?.name ?? r.sake.name}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {r.item?.name ?? r.sake.name}
+                      </div>
+                      <div className="mono" style={{ fontSize: 10, color: "var(--text-4)" }}>
+                        {r.sake.code} · {t.stockNeed} {r.need} {t.stockBottles}
+                        {r.insufficient && (
+                          <span style={{ color: "var(--danger-fg)", fontWeight: 600 }}>
+                            {" "}· {t.stockSubstitute}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="mono" style={{ fontSize: 10, color: "var(--text-4)" }}>
-                      {r.sake.code} · {t.stockNeed} {r.need} {t.stockBottles}
-                      {r.insufficient && (
-                        <span style={{ color: "var(--danger-fg)", fontWeight: 600 }}>
-                          {" "}· {t.stockSubstitute}
-                        </span>
-                      )}
-                    </div>
+                    <StockBadge stock={r.stock} />
+                    <button
+                      className="btn btn-icon btn-sm btn-ghost"
+                      title={t.stockReplace}
+                      onClick={() => setReplacingSku((cur) => (cur === r.sake.code ? null : r.sake.code))}
+                    >
+                      <Icon name="refresh" size={12} />
+                    </button>
                   </div>
-                  <StockBadge stock={r.stock} />
+                  {replacingSku === r.sake.code && (
+                    <div style={{ marginTop: 8 }}>
+                      <SakeProductPicker
+                        placeholder={t.stockReplaceSearch}
+                        excludeSkus={[r.sake.code]}
+                        onPick={(item) => {
+                          replaceSakeEverywhere(r.sake.code, item);
+                          setReplacingSku(null);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
           </div>

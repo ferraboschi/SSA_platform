@@ -33,6 +33,10 @@ export interface SharedSake {
   /** Sake Company product image + storefront URL, resolved by SKU (nullable). */
   image: string | null;
   url: string | null;
+  /** Aroma hook + narrative commentary from the Sake Company product page,
+   *  resolved by SKU (nullable — same source as image/url). */
+  aroma: string | null;
+  notes: string | null;
 }
 export interface SharedDay {
   day: number;
@@ -130,9 +134,16 @@ export async function loadSharedCourse(
   // Sake image + storefront URL, resolved by SKU from the (cached) SC catalog.
   const catalog = await getSakeCatalog().catch(() => []);
   const catBySku = new Map(catalog.filter((c) => c.sku).map((c) => [c.sku as string, c]));
-  const enrich = (code: string): { image: string | null; url: string | null } => {
+  const enrich = (
+    code: string,
+  ): { image: string | null; url: string | null; aroma: string | null; notes: string | null } => {
     const it = code ? catBySku.get(code) : undefined;
-    return { image: it?.image ?? null, url: it?.url ?? null };
+    return {
+      image: it?.image ?? null,
+      url: it?.url ?? null,
+      aroma: it?.aroma ?? null,
+      notes: it?.notes ?? null,
+    };
   };
 
   // The operator's "Programma & Economia" edits persist to a settings_kv OVERLAY

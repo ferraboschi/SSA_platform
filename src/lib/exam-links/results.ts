@@ -86,7 +86,14 @@ export async function loadCourseExamResults(
   };
 
   type CorsistaRow = { id: number; full_name: string | null; email: string | null };
-  type EnrollmentRow = { id: number; exam_result: string | null; exam_score_pct: number | null };
+  type EnrollmentRow = {
+    id: number;
+    exam_result: string | null;
+    exam_score_pct: number | null;
+    /** Confirmed-email snapshot (course-start /conferma) — preferred over
+     *  corsisti.email, same rule as the roster and the exam-invite sender. */
+    enrolled_email?: string | null;
+  };
 
   // BATCH (avoid N+1): collect all corsista_ids across submissions, then fetch
   // the corsisti rows and this course's enrollments once, keyed by corsista_id.
@@ -138,20 +145,34 @@ export async function loadCourseExamResults(
   const corsistiById = new Map<number, CorsistaRow>();
   const enrollmentByCorsistaId = new Map<number, EnrollmentRow>();
   if (corsistaIds.length > 0) {
-    const [{ data: corRows }, { data: enrRows }] = await Promise.all([
+    const [{ data: corRows }, enrResult] = await Promise.all([
       svc.from("corsisti").select("id, full_name, email").in("id", corsistaIds),
       svc
         .from("corsi_iscrizioni")
-        .select("id, corsista_id, exam_result, exam_score_pct")
+        .select("id, corsista_id, exam_result, exam_score_pct, enrolled_email")
         .eq("corso_id", Number(courseId))
         .in("corsista_id", corsistaIds),
     ]);
+    // Pre-migration degrade: retry without enrolled_email so identities still
+    // resolve (just via corsisti.email, same as before this column existed).
+    let enrRows: Array<EnrollmentRow & { corsista_id: number }> | null = enrResult.data as
+      | Array<EnrollmentRow & { corsista_id: number }>
+      | null;
+    if (enrResult.error) {
+      const base = await svc
+        .from("corsi_iscrizioni")
+        .select("id, corsista_id, exam_result, exam_score_pct")
+        .eq("corso_id", Number(courseId))
+        .in("corsista_id", corsistaIds);
+      enrRows = base.data as Array<EnrollmentRow & { corsista_id: number }> | null;
+    }
     for (const r of (corRows ?? []) as CorsistaRow[]) corsistiById.set(r.id, r);
-    for (const r of (enrRows ?? []) as Array<EnrollmentRow & { corsista_id: number }>) {
+    for (const r of enrRows ?? []) {
       enrollmentByCorsistaId.set(r.corsista_id, {
         id: r.id,
         exam_result: r.exam_result,
         exam_score_pct: r.exam_score_pct,
+        enrolled_email: r.enrolled_email,
       });
     }
   }
@@ -232,15 +253,22 @@ export async function loadCourseExamResults(
     // collected no registration fields (name/email would otherwise be "—").
     if (s.corsista_id != null) {
       const cor = corsistiById.get(s.corsista_id) ?? null;
+      const enrollment = enrollmentByCorsistaId.get(s.corsista_id) ?? null;
       if (cor) {
         // AUTHORITATIVE: a proctored submission is tied to the verified enrolled
-        // student, so their corsista name/email win over anything in registration
-        // — never show (or route a certificate to) a student-typed value.
+        // student, so their identity wins over anything in registration — never
+        // show (or route a certificate to) a student-typed value. The confirmed
+        // enrolled_email snapshot (course-start /conferma) is the CURRENT address
+        // and takes priority over corsisti.email (the Shopify identity, which can
+        // drift — this is the same divergence the owner spotted between the
+        // educator page and this results view); corsisti.email is the fallback
+        // for a student who never confirmed.
         const c = cor as { full_name: string | null; email: string | null };
         if (c.full_name) name = c.full_name;
-        if (c.email) email = c.email.toLowerCase().trim();
+        const resolvedEmail = (enrollment?.enrolled_email ?? "").trim() || (c.email ?? "");
+        if (resolvedEmail) email = resolvedEmail.toLowerCase().trim();
       }
-      applyEnrollment(enrollmentByCorsistaId.get(s.corsista_id) ?? null);
+      applyEnrollment(enrollment);
     }
 
     // FALLBACK: legacy / non-proctored submissions only have an email → match it

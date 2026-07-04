@@ -43,7 +43,7 @@ export function makeCoursesRepo(
     // the base columns if the enrichment migration hasn't been applied yet, so
     // the iscritti list never disappears.
     const RICH_ISCR =
-      "id,corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,buyer_name,corsista:corsisti(full_name,email,phone,has_whatsapp)";
+      "id,corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,buyer_name,enrolled_email,corsista:corsisti(full_name,email,phone,has_whatsapp)";
     const BASE_ISCR =
       "id,corsista_id,amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)";
     const iscr = (
@@ -72,6 +72,10 @@ export function makeCoursesRepo(
       financial_status: string | null;
       line_item_id: number | null;
       buyer_name: string | null;
+      /** Confirmed-email snapshot (set via /conferma) — absent on the BASE
+       *  pre-migration fallback, undefined then and the aggregation falls
+       *  back to corsisti.email, same as everywhere else this is resolved. */
+      enrolled_email?: string | null;
       corsista:
         | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }
         | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean }[]

@@ -124,7 +124,7 @@ export function ShareEducatorButton({ courseId }: { courseId: string }) {
                   </button>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-                  <a className="btn btn-sm" href={url}>
+                  <a className="btn btn-sm" href={url} target="_blank" rel="noopener noreferrer">
                     <Icon name="external" size={12} />
                     {s.open}
                   </a>

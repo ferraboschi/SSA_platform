@@ -204,7 +204,15 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               students={course.students}
               labelStudents={td.excelStudents}
               labelSake={td.excelSake}
+              labelPromossi={td.excelPromossi}
               sakeNoTemplateMsg={td.excelSakeNoTemplate}
+              examsDone={
+                course.lifecycle === "passato" ||
+                Boolean(
+                  course.examResults &&
+                    course.examResults.passed + course.examResults.retrial + course.examResults.failed > 0,
+                )
+              }
             />
             <div style={{ flex: 1 }} />
             <Badge tone={econ.invoiced ? "success" : "neutral"} size="lg" dot>
