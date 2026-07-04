@@ -46,6 +46,9 @@ export interface OpenAnswerGradingInput {
   /** Max points the question is worth. */
   maxPoints: number;
   lang?: string;
+  /** KB section/chapter to constrain retrieval to (maps to rag_documents.family
+   *  today). Omit to retrieve over the whole corpus — behavior unchanged. */
+  kbSection?: string;
 }
 
 export interface GradeSuggestion {

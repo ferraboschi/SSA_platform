@@ -13,7 +13,8 @@ export const anthropicConfig = {
   },
 };
 
-// Strong, fast default; override per-call if needed.
+// Strong, fast default; override per-call, or per-deploy via ANTHROPIC_MODEL
+// (read lazily at call time, like the API key — never baked in at build).
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 interface ClaudeContentBlock {
@@ -38,7 +39,7 @@ export async function callClaude(opts: {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: opts.model ?? DEFAULT_MODEL,
+      model: opts.model ?? (process.env.ANTHROPIC_MODEL || DEFAULT_MODEL),
       max_tokens: opts.maxTokens ?? 8192,
       ...(opts.system ? { system: opts.system } : {}),
       messages: [{ role: "user", content: opts.user }],

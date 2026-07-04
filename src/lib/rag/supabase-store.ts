@@ -17,13 +17,18 @@ interface MatchRow {
 }
 
 export class SupabaseVectorStore implements VectorStore {
-  async query(embedding: EmbeddingVector, k: number): Promise<RetrievedChunk[]> {
+  async query(
+    embedding: EmbeddingVector,
+    k: number,
+    filter?: { family?: string },
+  ): Promise<RetrievedChunk[]> {
     try {
       const svc = getSupabaseServiceClient();
+      // The deployed SQL already accepts family_filter (null = whole corpus).
       const { data, error } = await svc.rpc("match_rag_chunks", {
         query_embedding: embedding,
         match_count: k,
-        family_filter: null,
+        family_filter: filter?.family ?? null,
       });
       if (error || !Array.isArray(data)) return [];
       const rows = data as MatchRow[];

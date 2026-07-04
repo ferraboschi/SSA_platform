@@ -27,6 +27,11 @@ SERVICE_KEY  = env["SUPABASE_SERVICE_ROLE_KEY"]
 OPENAI_KEY   = env["EMBEDDINGS_API_KEY"]
 DBX_TOKEN    = env["DROPBOX_ACCESS_TOKEN"]
 MODEL        = env.get("EMBEDDINGS_MODEL", "text-embedding-3-small")
+# Env-overridable endpoint, fallback to the real one (AGENTS.md convention —
+# same variable src/lib/rag/embeddings.ts uses). Real env wins over .env.local.
+OPENAI_API_URL = (os.environ.get("OPENAI_API_URL")
+                  or env.get("OPENAI_API_URL")
+                  or "https://api.openai.com/v1/embeddings")
 
 SB_H = {"apikey": SERVICE_KEY, "Authorization": f"Bearer {SERVICE_KEY}",
         "Content-Type": "application/json", "Prefer": "return=representation"}
@@ -45,7 +50,7 @@ def sb(method, path, data=None, extra=None):
 
 def embed(texts):
     body = json.dumps({"model": MODEL, "input": texts}).encode()
-    req = urllib.request.Request("https://api.openai.com/v1/embeddings",
+    req = urllib.request.Request(OPENAI_API_URL,
         data=body, headers={"Authorization": f"Bearer {OPENAI_KEY}",
         "Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req) as r:
@@ -100,7 +105,10 @@ def chunk_text(text, target=1400, overlap=200):
     return [c.strip() for c in chunks if len(c.strip()) > 30]
 
 # ── Corpus ────────────────────────────────────────────────────────────────────
-# (source, titolo, family, modo-download, path)
+# Entry: (modo-download, path, titolo, family[, section]). The optional 5th
+# "section" — a KB section/chapter key — when set is written to the family
+# column instead of the default, so grading can constrain retrieval per section
+# (gradeOpenAnswer kbSection / rag-grade-test ?section=).
 TMP = "/tmp/ssa-rag"
 os.makedirs(TMP, exist_ok=True)
 CORPUS = [
@@ -120,7 +128,12 @@ def main():
     print("Pulisco RAG esistente…")
     sb("DELETE", "rag_documents?id=gt.0")
     total = 0
-    for mode, src, title, family in CORPUS:
+    for entry in CORPUS:
+        mode, src, title, family = entry[:4]
+        # Optional per-document section overrides the default family.
+        section = entry[4] if len(entry) > 4 else None
+        if section:
+            family = section
         fname = src.split("/")[-1]
         dest = os.path.join(TMP, fname)
         try:

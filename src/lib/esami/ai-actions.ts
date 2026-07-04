@@ -133,6 +133,9 @@ export async function gradeOpenAnswerAction(input: {
   modelAnswer?: string;
   studentAnswer: string;
   maxPoints: number;
+  /** KB section (the question's category) to constrain retrieval to; omit to
+   *  search the whole corpus. */
+  kbSection?: string;
 }): Promise<GradeOpenResult> {
   if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
   if (!anthropicConfig.isConfigured) return { ok: false, error: "AI non configurata." };
@@ -144,6 +147,7 @@ export async function gradeOpenAnswerAction(input: {
       answer: input.studentAnswer,
       rubricKey: input.modelAnswer,
       maxPoints: input.maxPoints,
+      kbSection: input.kbSection,
     });
     return {
       ok: true,

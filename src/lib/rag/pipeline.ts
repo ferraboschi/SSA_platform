@@ -33,9 +33,11 @@ export async function ingestDocuments(
 export async function retrieve(
   query: string,
   k = 4,
+  /** Optional KB-section constraint, passed through to the store untouched. */
+  filter?: { family?: string },
 ): Promise<RetrievedChunk[]> {
   const provider = getEmbeddingProvider();
   const store = getVectorStore();
   const [embedding] = await provider.embed([query]);
-  return store.query(embedding, k);
+  return store.query(embedding, k, filter);
 }

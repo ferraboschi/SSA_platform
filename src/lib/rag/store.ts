@@ -6,7 +6,13 @@ import type { EmbeddedChunk, EmbeddingVector, RetrievedChunk } from "./types";
 
 export interface VectorStore {
   upsert(chunks: EmbeddedChunk[]): Promise<void>;
-  query(embedding: EmbeddingVector, k: number): Promise<RetrievedChunk[]>;
+  /** `filter.family` narrows retrieval to one KB section (rag_documents.family);
+   *  omitted → the whole corpus, exactly as before the filter existed. */
+  query(
+    embedding: EmbeddingVector,
+    k: number,
+    filter?: { family?: string },
+  ): Promise<RetrievedChunk[]>;
   count(): Promise<number>;
   clear(): Promise<void>;
 }
@@ -35,9 +41,13 @@ export class InMemoryVectorStore implements VectorStore {
   async query(
     embedding: EmbeddingVector,
     k: number,
+    filter?: { family?: string },
   ): Promise<RetrievedChunk[]> {
     const scored: RetrievedChunk[] = [];
     for (const chunk of this.chunks.values()) {
+      // Mirror the pgvector store's family_filter: chunks inherit the document
+      // metadata, so metadata.family is the section key here.
+      if (filter?.family && chunk.metadata?.family !== filter.family) continue;
       scored.push({ chunk, score: cosineSimilarity(embedding, chunk.embedding) });
     }
     scored.sort((a, b) => b.score - a.score);

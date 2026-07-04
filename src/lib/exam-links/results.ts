@@ -6,11 +6,14 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadPublicExam, type PublicRunnerQuestion } from "./load";
-import { gradeAnswers, type ExamOutcome, type GradedAnswer } from "./grading";
+import { gradeAnswers, type ExamOutcome, type GradedAnswer as PureGradedAnswer } from "./grading";
 import type { ExamTestKey } from "./token";
 
 // Re-exported so existing importers keep `from "@/lib/exam-links/results"`.
-export type { ExamOutcome, GradedAnswer };
+export type { ExamOutcome };
+/** The pure grader's per-question breakdown, plus the question's category — the
+ *  KB-section key the results UI uses to constrain AI grading retrieval. */
+export type GradedAnswer = PureGradedAnswer & { cat?: string };
 
 export interface GradedSubmission {
   id: number;
@@ -200,7 +203,16 @@ export async function loadCourseExamResults(
     const ans = s.answers ?? {};
 
     // Auto-correction (pure, fully unit-tested in grading.test.ts).
-    const { detail, gradable, manual, autoScore, suggested } = gradeAnswers(questions, ans, s.lang ?? undefined);
+    const { detail: pureDetail, gradable, manual, autoScore, suggested } = gradeAnswers(questions, ans, s.lang ?? undefined);
+
+    // Attach each question's category (KB-section key) so the results UI can
+    // scope AI grading of open answers to the right knowledge-base chapter.
+    const catByQid = new Map<string, string>();
+    for (const q of questions) if (q.cat) catByQid.set(q.id, q.cat);
+    const detail: GradedAnswer[] = pureDetail.map((d) => {
+      const cat = catByQid.get(d.qid);
+      return cat ? { ...d, cat } : d;
+    });
 
     let enrollmentId: number | null = null;
     let currentResult: string | null = null;

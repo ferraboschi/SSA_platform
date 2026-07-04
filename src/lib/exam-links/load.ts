@@ -14,6 +14,9 @@ export interface PublicRunnerQuestion {
   type: string;
   text: string;
   options: string[];
+  /** Question category (exam_categories label) — the KB-section key that lets
+   *  AI grading constrain retrieval to the right chapter. */
+  cat?: string;
   /** Stored EN/JA translations (Claude, one-time) — runner renders by language. */
   i18n?: RunnerI18n;
   /** Correct answers — option INDICES for choice questions, accepted STRINGS for
@@ -44,6 +47,7 @@ interface QJson {
   options?: string[];
   correct?: Array<number | string>;
   imageId?: string;
+  cat?: string;
 }
 interface MiniJson {
   day: number;
@@ -102,6 +106,7 @@ function mapQuestions(
         type: q.type,
         text: q.text ?? "",
         options,
+        ...(q.cat ? { cat: q.cat } : {}),
         ...(i18n ? { i18n } : {}),
         ...(image ? { image } : {}),
         ...(includeAnswers ? { correct } : {}),

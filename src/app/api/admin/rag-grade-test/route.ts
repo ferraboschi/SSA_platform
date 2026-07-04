@@ -16,7 +16,11 @@ import { hasRole } from "@/lib/auth/guard";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const secret = new URL(req.url).searchParams.get("secret");
+  const params = new URL(req.url).searchParams;
+  const secret = params.get("secret");
+  // Optional KB-section constraint (rag_documents.family) — lets us verify the
+  // filtered retrieval path end-to-end; absent → whole corpus, as always.
+  const section = params.get("section") || undefined;
   const bySecret = Boolean(process.env.SYNC_SECRET) && secret === process.env.SYNC_SECRET;
   const byAdmin = await hasRole(["admin"]).catch(() => false);
   if (!bySecret && !byAdmin) {
@@ -47,7 +51,7 @@ export async function GET(req: Request) {
   const results = [];
   for (const c of cases) {
     try {
-      const r = await gradeOpenAnswer({ question, answer: c.answer, maxPoints });
+      const r = await gradeOpenAnswer({ question, answer: c.answer, maxPoints, kbSection: section });
       results.push({
         case: c.label,
         score: r.suggestedPoints,
@@ -67,5 +71,6 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, question, results });
+  // Echo the section only when one was requested (response unchanged otherwise).
+  return NextResponse.json({ ok: true, question, ...(section ? { section } : {}), results });
 }

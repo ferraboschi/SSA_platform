@@ -37,10 +37,18 @@ export class ClaudeGradingModel implements GradingModel {
     const passages = context
       .map((c, i) => `[[${i + 1}]] (${c.chunk.title})\n${c.chunk.text}`)
       .join("\n\n");
+    // When retrieval was constrained to a KB section, name it so the rationale
+    // references the right chapter. Empty when absent → prompt unchanged.
+    const sectionNote = input.kbSection
+      ? `I passaggi provengono dalla sezione "${input.kbSection}" della knowledge base: ` +
+        "nella motivazione fai riferimento a quella sezione. "
+      : "";
     const system =
       "Sei un esaminatore della Sake Sommelier Association. Correggi la risposta aperta " +
       "ESCLUSIVAMENTE in base ai passaggi della knowledge base forniti, che sono l'unica " +
-      "fonte di verità. NON usare conoscenze esterne. Se i passaggi non coprono la domanda, " +
+      "fonte di verità. NON usare conoscenze esterne. " +
+      sectionNote +
+      "Se i passaggi non coprono la domanda, " +
       "assegna un punteggio prudente e dillo. Rispondi SOLO con JSON " +
       '{"score": number (0..max), "confidence": number (0..1), "rationale": string (in italiano), ' +
       '"citations": number[] (i numeri [[n]] dei passaggi usati)}. Niente commento, niente code fence.';
@@ -154,7 +162,22 @@ export async function gradeOpenAnswer(
   const query = input.rubricKey
     ? `${input.question} ${input.rubricKey}`
     : input.question;
-  const retrieved = await retrieve(query, k);
+  // A KB section constrains retrieval to that chapter's documents; absent →
+  // whole corpus (filter undefined → RPC family_filter null, as before).
+  let retrieved = await retrieve(
+    query,
+    k,
+    input.kbSection ? { family: input.kbSection } : undefined,
+  );
+  // Section fallback: today the whole corpus is tagged 'generale', so a section
+  // that doesn't exist (yet) would return zero chunks and force a refusal on
+  // every categorized question. An empty SECTION is a tagging gap, not a
+  // relevance judgement — retry unfiltered so grading behaves exactly as
+  // before sections existed. Once the corpus is section-tagged, the filtered
+  // path wins and this branch never runs.
+  if (retrieved.length === 0 && input.kbSection) {
+    retrieved = await retrieve(query, k);
+  }
   // Keep only on-topic passages. If nothing relevant comes back, REFUSE: a
   // missing/misconfigured corpus must never silently produce a hallucinated
   // grade — the answer goes to manual review with score 0 / confidence 0.

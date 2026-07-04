@@ -176,7 +176,8 @@ export function ExamResultsClient({
 
 // AI-grade an open answer, GROUNDED in the SSA knowledge base (advisory — the
 // educator confirms). Surfaces score, whether it was grounded, and feedback.
-function AiGradeButton({ prompt, answer }: { prompt: string; answer: string }) {
+// kbSection (the question's category) scopes retrieval to that KB chapter.
+function AiGradeButton({ prompt, answer, kbSection }: { prompt: string; answer: string; kbSection?: string }) {
   const [pending, start] = useTransition();
   const [res, setRes] = useState<GradeOpenResult | null>(null);
   return (
@@ -186,7 +187,7 @@ function AiGradeButton({ prompt, answer }: { prompt: string; answer: string }) {
         disabled={pending}
         onClick={() =>
           start(async () => {
-            setRes(await gradeOpenAnswerAction({ prompt, studentAnswer: answer, maxPoints: 5 }));
+            setRes(await gradeOpenAnswerAction({ prompt, studentAnswer: answer, maxPoints: 5, kbSection }));
           })
         }
       >
@@ -340,7 +341,7 @@ function ResultRow({
                     {a.ok === null &&
                       (a.type === "open" || a.type === "fill") &&
                       a.given &&
-                      a.given !== "—" && <AiGradeButton prompt={a.text} answer={a.given} />}
+                      a.given !== "—" && <AiGradeButton prompt={a.text} answer={a.given} kbSection={a.cat} />}
                   </div>
                 </div>
               ))}
