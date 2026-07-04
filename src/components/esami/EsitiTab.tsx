@@ -56,6 +56,7 @@ export function EsitiTab({
             courseId={courseId}
             courseTitle={courseTitle}
             hasExam
+            family={family}
             results={data.results}
             feedback={data.feedback}
             adminEmail={data.adminEmail}

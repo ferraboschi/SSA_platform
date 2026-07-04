@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState, useTransition } from "react";
 import { Icon, Badge } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import {
@@ -9,6 +10,7 @@ import {
   type ExamHubData,
   type ExamHubItem,
 } from "@/lib/esami";
+import { kbStatusAction, syncKbAction } from "@/lib/rag/kb-actions";
 
 export function EsamiHub({ data }: { data: ExamHubData }) {
   const t = useT().esami.hub;
@@ -21,6 +23,7 @@ export function EsamiHub({ data }: { data: ExamHubData }) {
           <p className="page-sub">{t.sub}</p>
         </div>
         <div className="page-actions">
+          <KbSyncControl />
           <Link className="btn" href="/esami/editor">
             <Icon name="mail" size={13} />
             Modelli email esito
@@ -65,6 +68,62 @@ export function EsamiHub({ data }: { data: ExamHubData }) {
         empty={t.listFattiEmpty}
       />
     </div>
+  );
+}
+
+/** Refresh the grading knowledge base from the GitHub sake wiki. Admin-only
+ *  affordance with hardcoded Italian strings (the sync replies in Italian and
+ *  its status line is not part of the i18n dictionary). Status loads on mount
+ *  and fails soft: no data → no line, never an error state. */
+function KbSyncControl() {
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  const [errored, setErrored] = useState(false);
+  const [status, setStatus] = useState<{ docs: number; lastSync: string | null } | null>(null);
+
+  const loadStatus = () =>
+    kbStatusAction()
+      .then((s) => {
+        if (s.ok) setStatus({ docs: s.githubDocs + s.otherDocs, lastSync: s.lastSync });
+      })
+      .catch(() => {});
+
+  useEffect(() => {
+    void loadStatus();
+  }, []);
+
+  const run = () =>
+    start(async () => {
+      setMsg(null);
+      try {
+        const r = await syncKbAction();
+        setErrored(!r.ok);
+        setMsg(r.ok ? `KB aggiornata: ${r.docs} documenti, ${r.chunks} frammenti` : r.error ?? "Sincronizzazione non riuscita.");
+        if (r.ok) await loadStatus();
+      } catch {
+        setErrored(true);
+        setMsg("Sincronizzazione non riuscita.");
+      }
+    });
+
+  const line =
+    msg ??
+    (status
+      ? `KB: ${status.docs} documenti${
+          status.lastSync ? ` · ultimo agg. ${new Date(status.lastSync).toLocaleDateString("it-IT")}` : ""
+        }`
+      : null);
+
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+      <button className="btn" onClick={run} disabled={pending}>
+        <Icon name="refresh" size={13} />
+        {pending ? "Sincronizzo…" : "Aggiorna KB da GitHub"}
+      </button>
+      {line && (
+        <span style={{ fontSize: 11, color: msg && errored ? "var(--danger-fg)" : "var(--text-3)" }}>{line}</span>
+      )}
+    </span>
   );
 }
 

@@ -17,6 +17,12 @@ export interface PublicRunnerQuestion {
   /** Question category (exam_categories label) — the KB-section key that lets
    *  AI grading constrain retrieval to the right chapter. */
   cat?: string;
+  /** Question weight from the template (points ?? 1) — the Correggi engine sums
+   *  scores by points, so it must travel with the question like `cat` does. */
+  points?: number;
+  /** Flagged "importante" in the template — wrong answers on these questions
+   *  lead the correction report. */
+  important?: boolean;
   /** Stored EN/JA translations (Claude, one-time) — runner renders by language. */
   i18n?: RunnerI18n;
   /** Correct answers — option INDICES for choice questions, accepted STRINGS for
@@ -48,6 +54,8 @@ interface QJson {
   correct?: Array<number | string>;
   imageId?: string;
   cat?: string;
+  points?: number;
+  important?: boolean;
 }
 interface MiniJson {
   day: number;
@@ -106,6 +114,8 @@ function mapQuestions(
         type: q.type,
         text: q.text ?? "",
         options,
+        points: q.points ?? 1,
+        ...(q.important ? { important: true } : {}),
         ...(q.cat ? { cat: q.cat } : {}),
         ...(i18n ? { i18n } : {}),
         ...(image ? { image } : {}),
@@ -123,6 +133,8 @@ function mapQuestions(
       type: choices.length === 0 ? "open" : correctCount > 1 ? "multi" : "single",
       text: q.prompt ?? "",
       options: choices.map((c) => c.text),
+      // Legacy questions predate weights → every question counts one point.
+      points: 1,
       ...(i18n ? { i18n } : {}),
       ...(includeAnswers ? { correct } : {}),
     };

@@ -7,6 +7,11 @@ import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
 import { gradeEnrollmentAction, gradePartecipanteAction } from "@/lib/exam-links/grading-actions";
 import { certifiedScore } from "@/lib/exam-links/grading";
 import { gradeOpenAnswerAction, type GradeOpenResult } from "@/lib/esami/ai-actions";
+import {
+  runCourseCorrectionAction,
+  getCourseCorrectionAction,
+} from "@/lib/esami/correction-actions";
+import type { CorrectionDraft } from "@/lib/esami/correction-types";
 import { FeedbackSummary } from "./FeedbackSummary";
 import { SendResultsSection, type ConfirmedResultRow } from "./SendResultsSection";
 import type { ExamOutcome, GradedSubmission } from "@/lib/exam-links/results";
@@ -31,6 +36,7 @@ export function ExamResultsClient({
   courseId,
   courseTitle,
   hasExam,
+  family = null,
   results,
   feedback,
   adminEmail = "",
@@ -41,6 +47,8 @@ export function ExamResultsClient({
   courseId: string;
   courseTitle: string;
   hasExam: boolean;
+  /** Exam family — enables the batch "Correggi" run (final exam). */
+  family?: "nihonshu" | "shochu" | null;
   results: GradedSubmission[];
   feedback?: FeedbackAggregateResult | null;
   adminEmail?: string;
@@ -79,6 +87,49 @@ export function ExamResultsClient({
   const [live, setLive] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
+  // Correction drafts (the "Correggi" run output), keyed by submission id.
+  // Loaded lazily on mount; refreshed after a run. Advisory only — staff still
+  // confirms the official verdict with the buttons on each row.
+  const [drafts, setDrafts] = useState<Record<number, CorrectionDraft>>({});
+  const [correcting, startCorrection] = useTransition();
+  const [correctionMsg, setCorrectionMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getCourseCorrectionAction(courseId)
+      .then((r) => {
+        if (alive && r.drafts) setDrafts(r.drafts as Record<number, CorrectionDraft>);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [courseId]);
+
+  const runCorrection = () => {
+    if (!family || correcting) return;
+    setCorrectionMsg(null);
+    startCorrection(async () => {
+      try {
+        const res = await runCourseCorrectionAction(courseId, family);
+        if (!res.ok) {
+          setCorrectionMsg(res.error || "Correzione non riuscita.");
+          return;
+        }
+        const run = res.run;
+        setCorrectionMsg(
+          `Corretti ${run?.graded ?? 0}/${run?.total ?? 0} esami — bozze pronte` +
+            (run?.failures?.length ? ` · ${run.failures.length} con errori` : "") +
+            ".",
+        );
+        const fresh = await getCourseCorrectionAction(courseId).catch(() => null);
+        if (fresh?.drafts) setDrafts(fresh.drafts as Record<number, CorrectionDraft>);
+      } catch {
+        setCorrectionMsg("Correzione non riuscita, riprova.");
+      }
+    });
+  };
+
   // LIVE monitor: re-fetch real submissions every 25s while enabled. Disabled
   // when embedded in a tab (a full router.refresh there would refetch the whole
   // course page without updating this client-loaded data).
@@ -107,7 +158,7 @@ export function ExamResultsClient({
         sub="Consegne reali degli studenti, corrette in automatico sulle domande oggettive. Conferma l'esito: viene scritto sul profilo del corsista."
         actions={
           hasExam ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span style={{ fontSize: 12, color: "var(--text-3)" }}>
                 {results.length} consegne · {confirmedCount} confermate
                 {lastRefresh ? ` · agg. ${lastRefresh.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}` : ""}
@@ -120,10 +171,26 @@ export function ExamResultsClient({
                 <span className={`s-dot ${live ? "success pulse" : ""}`} style={{ marginRight: 5 }} />
                 {live ? "LIVE" : "in pausa"}
               </button>
+              {family && (
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={runCorrection}
+                  disabled={correcting}
+                  title="Corregge tutti gli esami finali consegnati: domande oggettive in automatico, domande aperte con AI basata sulla knowledge base SSA. Genera una bozza di esito per studente — l'esito ufficiale lo confermi tu."
+                >
+                  <Icon name="check" size={12} />
+                  {correcting ? "Correggo…" : "Correggi"}
+                </button>
+              )}
             </div>
           ) : undefined
         }
       />
+      {correctionMsg && (
+        <p style={{ fontSize: 12.5, color: "var(--text-2)", margin: "10px 0 0" }} role="status">
+          {correctionMsg}
+        </p>
+      )}
 
       {!hasExam ? (
         <div className="card card-pad" style={{ marginTop: 16 }}>
@@ -155,6 +222,7 @@ export function ExamResultsClient({
                   key={r.id}
                   r={r}
                   courseId={courseId}
+                  draft={drafts[r.id]}
                   expanded={expanded === r.id}
                   onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
                   onChanged={onChanged}
@@ -210,12 +278,15 @@ function AiGradeButton({ prompt, answer, kbSection }: { prompt: string; answer: 
 function ResultRow({
   r,
   courseId,
+  draft,
   expanded,
   onToggle,
   onChanged,
 }: {
   r: GradedSubmission;
   courseId: string;
+  /** The "Correggi" run's draft for this submission, when one exists. */
+  draft?: CorrectionDraft;
   expanded: boolean;
   onToggle: () => void;
   onChanged?: () => void;
@@ -282,6 +353,21 @@ function ResultRow({
             </Badge>
           ) : (
             <span className="text-3" style={{ fontStyle: "italic", fontSize: 12 }}>da confermare</span>
+          )}
+          {draft && (
+            <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <Badge tone={OUTCOME_TONE[draft.verdict] ?? "neutral"}>
+                Bozza: {OUTCOME_LABEL[draft.verdict] ?? draft.verdict} {draft.combinedPct}%
+              </Badge>
+              <a
+                href={`/api/esami/${courseId}/bozza?sub=${r.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 11.5, fontWeight: 600, color: "var(--indigo-600)" }}
+              >
+                Bozza PDF ↗
+              </a>
+            </div>
           )}
         </td>
         <td>

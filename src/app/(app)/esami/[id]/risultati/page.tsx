@@ -33,6 +33,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       courseId={course.id}
       courseTitle={course.shortTitle}
       hasExam={!!family}
+      family={family}
       results={results}
       feedback={feedback}
       adminEmail={session?.user?.email ?? ""}
