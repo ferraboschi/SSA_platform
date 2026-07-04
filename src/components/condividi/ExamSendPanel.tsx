@@ -13,7 +13,7 @@ import { newerIso } from "@/lib/share-links/verification-state";
 
 // Local prop shapes (structurally match the loader types) so this client
 // component never imports the server-only loader module.
-interface ExamTest {
+export interface ExamTest {
   key: string;
   label: string;
   isFinal: boolean;
@@ -31,23 +31,22 @@ interface Person {
 }
 
 /**
- * Educator "Esami" panel on the public share page. FIXED sub-tab per test
- * (Giorno 1..N / Feedback / Esame finale — unconfigured ones shown muted, not
- * sendable). Per test: send each attendee (corsisti AND "doppio" companions)
- * their PERSONAL exam link by email, or copy it for WhatsApp/SMS; plus the
- * general class link (email-gated) for the group chat.
+ * Educator "invia link" panel for ONE test, on the public share page. The
+ * caller picks which test to show (the day tab is the only "selector" now —
+ * Giorno 1/2/3 each show their own day test, Giorno 3 also shows Feedback,
+ * Giorno esame shows the final exam). Per test: send each attendee (corsisti
+ * AND "doppio" companions) their PERSONAL exam link by email, or copy it for
+ * WhatsApp/SMS; plus the general class link (email-gated) for the group chat.
  */
 export default function ExamSendPanel({
   token,
-  tests,
+  test,
   students,
 }: {
   token: string;
-  tests: ExamTest[];
+  test: ExamTest;
   students: Person[];
 }) {
-  const [sel, setSel] = useState(tests[0]?.key ?? "");
-  const test = tests.find((t) => t.key === sel) ?? tests[0];
   // Everyone gets a personal link: corsisti AND companions ("doppio"). A
   // companion without an email can't be emailed — their row shows a hint.
   const roster = students;
@@ -56,35 +55,36 @@ export default function ExamSendPanel({
   const [allNote, setAllNote] = useState<string | null>(null);
   // Link duration for sends: default end-of-day; "7d" keeps it alive (feedback).
   const [ttl, setTtl] = useState<"eod" | "7d">("eod");
-  // Closure state per test, seeded from the loader and updated optimistically.
-  const [closed, setClosed] = useState<Record<string, string | null>>(() =>
-    Object.fromEntries(tests.map((t) => [t.key, t.closedAt])),
-  );
+  // Closure state for this test, seeded from the loader and updated optimistically.
+  const [closed, setClosed] = useState<string | null>(test.closedAt);
   const [lifeBusy, setLifeBusy] = useState(false);
-  // LIVE PROGRESS + persisted SEND STAMPS for the selected test, keyed by
-  // subject (`c<id>` / `p<id>`). Polled every 10s while the tab is open — the
-  // educator watches the bars move and the "Inviato" stamps survive reloads.
-  // Stored WITH the test they belong to: rows read them only when the key
-  // matches, so a sub-tab switch can never paint another test's data.
+  // LIVE PROGRESS + persisted SEND STAMPS for this test, keyed by subject
+  // (`c<id>` / `p<id>`). Polled every 10s while the tab is open — the educator
+  // watches the bars move and the "Inviato" stamps survive reloads.
   const [live, setLive] = useState<{
-    key: string;
     progress: Record<string, SubjectProgress>;
     sends: Record<string, string>;
     presentForTest: Record<string, boolean> | undefined;
-  }>({ key: "", progress: {}, sends: {}, presentForTest: undefined });
+  }>({ progress: {}, sends: {}, presentForTest: undefined });
   // Bumped after "Invia a tutti" so the fresh per-row stamps show at once.
   const [refresh, setRefresh] = useState(0);
-  const selKey = test?.key ?? "";
-  const selConfigured = Boolean(test?.configured);
+  const testKey = test.key;
+  const configured = test.configured;
+
+  // The caller keys this component by test.key (see EducatorTabs.tsx), so
+  // switching to a different test (day tab) fully REMOUNTS it — every
+  // useState above re-initializes from the fresh `test` prop, with no manual
+  // reset needed.
+
   useEffect(() => {
-    if (!selKey || !selConfigured) return;
+    if (!testKey || !configured) return;
     let alive = true;
     const tick = () => {
-      getExamProgressAction(token, selKey)
+      getExamProgressAction(token, testKey)
         .then((r) => {
           if (!alive || !r.ok) return;
           if (!r.progress && !r.sends) return; // rate-limited tick — keep what we have
-          setLive({ key: selKey, progress: r.progress ?? {}, sends: r.sends ?? {}, presentForTest: r.presentForTest });
+          setLive({ progress: r.progress ?? {}, sends: r.sends ?? {}, presentForTest: r.presentForTest });
         })
         .catch(() => {});
     };
@@ -94,22 +94,21 @@ export default function ExamSendPanel({
       alive = false;
       clearInterval(id);
     };
-  }, [token, selKey, selConfigured, refresh]);
+  }, [token, testKey, configured, refresh]);
 
-  if (!test) return null;
-  const isClosed = Boolean(closed[test.key]);
+  const isClosed = Boolean(closed);
 
   const toggleClosure = async () => {
     if (lifeBusy) return;
     setLifeBusy(true);
     setAllNote(null);
     const action = isClosed ? reopenExamLinksAction : closeExamLinksAction;
-    const res = await action(token, test.key).catch(
+    const res = await action(token, testKey).catch(
       () => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string },
     );
     setLifeBusy(false);
     if (res.ok) {
-      setClosed((m) => ({ ...m, [test.key]: isClosed ? null : new Date().toISOString() }));
+      setClosed(isClosed ? null : new Date().toISOString());
     } else {
       setAllNote(res.error || "Operazione non riuscita.");
     }
@@ -129,7 +128,7 @@ export default function ExamSendPanel({
     if (allBusy) return;
     setAllBusy(true);
     setAllNote(null);
-    const res = await sendPersonalExamLinksToAllAction(token, test.key, ttl).catch(
+    const res = await sendPersonalExamLinksToAllAction(token, testKey, ttl).catch(
       () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof sendPersonalExamLinksToAllAction>>,
     );
     setAllBusy(false);
@@ -149,47 +148,13 @@ export default function ExamSendPanel({
 
   return (
     <div style={{ marginBottom: 22 }}>
-      <h2 style={{ fontSize: 15, margin: "0 0 4px" }}>Esami · link per gli studenti</h2>
       <p style={{ fontSize: 12, color: "var(--text-3)", margin: "0 0 12px", lineHeight: 1.5 }}>
         Invia a ogni studente il suo link personale (all&apos;email confermata), oppure
         copia il link generale per la chat di classe.
       </p>
 
-      {/* Test sub-tabs — the FIXED structure (Giorno 1..N, Feedback, Esame):
-          unconfigured tests stay visible but muted. */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-        {tests.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => {
-              setSel(t.key);
-              // A send summary belongs to the test it was sent for.
-              setAllNote(null);
-            }}
-            aria-pressed={sel === t.key}
-            style={{
-              fontSize: 12.5,
-              fontWeight: 600,
-              minHeight: 40,
-              padding: "8px 14px",
-              borderRadius: 999,
-              cursor: "pointer",
-              border: `1px solid ${sel === t.key ? "var(--indigo-600)" : "var(--border)"}`,
-              background: sel === t.key ? "var(--indigo-600)" : "transparent",
-              color: sel === t.key ? "#fff" : t.configured ? "var(--text-2)" : "var(--text-4)",
-            }}
-          >
-            {t.label}
-            {!t.configured && (
-              <span role="img" aria-label="non configurato"> ⚠︎</span>
-            )}
-          </button>
-        ))}
-      </div>
-
       {/* Unconfigured test: structure only, nothing sendable. */}
-      {!test.configured && (
+      {!configured && (
         <div
           style={{
             padding: "12px 14px",
@@ -208,7 +173,7 @@ export default function ExamSendPanel({
         </div>
       )}
 
-      {test.configured && (
+      {configured && (
       <>
       {/* Lifecycle: duration for new sends + close/reopen for everyone. */}
       <div
@@ -314,22 +279,21 @@ export default function ExamSendPanel({
         ) : (
           roster.map((s, i) => {
             const subjK = `${s.kind === "corsista" ? "c" : "p"}${s.id}`;
-            const forThisTest = live.key === test.key;
             // undefined = attendance unknown → never restrict; the map only
             // lists WHO IS present, so anyone else is absent-for-this-test.
-            const presentMap = forThisTest ? live.presentForTest : undefined;
+            const presentMap = live.presentForTest;
             const absent = presentMap ? presentMap[subjK] !== true : false;
             return (
               <StudentSendRow
-                // test.key in the key → per-test remount, so notes/links/stamps
+                // testKey in the key → per-test remount, so notes/links/stamps
                 // from one test never linger on another.
-                key={`${test.key}-${s.kind}-${s.id}`}
+                key={`${testKey}-${s.kind}-${s.id}`}
                 token={token}
-                testKey={test.key}
+                testKey={testKey}
                 ttl={ttl}
                 person={s}
-                progress={forThisTest ? live.progress[subjK] : undefined}
-                sentAt={forThisTest ? live.sends[subjK] : undefined}
+                progress={live.progress[subjK]}
+                sentAt={live.sends[subjK]}
                 absent={absent}
                 last={i === roster.length - 1}
               />

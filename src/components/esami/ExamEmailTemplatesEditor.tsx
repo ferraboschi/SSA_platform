@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { Icon } from "@/components/ui";
 import {
   renderExamEmail,
@@ -100,27 +99,26 @@ export function ExamEmailTemplatesEditor({
   );
 
   return (
-    <div className="page">
-      <Link className="btn btn-sm btn-ghost" href="/esami" style={{ marginBottom: 14 }}>
-        <Icon name="arrow" size={12} style={{ transform: "rotate(180deg)" }} />
-        Torna agli esami
-      </Link>
-      <div className="page-header">
-        <div className="page-title-block">
-          <div className="eyebrow">Esami</div>
-          <h1 className="page-title">Modelli email esito</h1>
-          <p className="page-sub">
-            Personalizza le 3 email inviate allo studente in base all&apos;esito.
-            Usa le variabili per inserire automaticamente nome, corso e punteggio.
-            Il certificato PDF resta allegato in automatico.
-          </p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-primary" disabled={savePending} onClick={save}>
-            <Icon name="save" size={13} />
-            {savePending ? "Salvo…" : "Salva modelli"}
-          </button>
-        </div>
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 16,
+        }}
+      >
+        <p className="text-3" style={{ fontSize: 13, lineHeight: 1.5, margin: 0, maxWidth: 560 }}>
+          Personalizza le 3 email inviate allo studente in base all&apos;esito.
+          Usa le variabili per inserire automaticamente nome, corso e punteggio.
+          Il certificato PDF resta allegato in automatico.
+        </p>
+        <button className="btn btn-primary" disabled={savePending} onClick={save}>
+          <Icon name="save" size={13} />
+          {savePending ? "Salvo…" : "Salva modelli"}
+        </button>
       </div>
 
       {/* Outcome tabs */}

@@ -26,7 +26,7 @@ export const EXAM_OUTCOMES: ExamOutcome[] = ["passed", "retrial", "failed"];
 
 export const OUTCOME_LABEL_IT: Record<ExamOutcome, string> = {
   passed: "Promosso",
-  retrial: "Recupero",
+  retrial: "Rimandato",
   failed: "Bocciato",
 };
 

@@ -105,11 +105,12 @@ export function ExamLinkPanel({
           lineHeight: 1.55,
         }}
       >
-        <strong>Esame da remoto.</strong> Genera <strong>un</strong> link d&apos;esame e incollalo nella
-        chat Zoom della classe: ogni studente sceglie il proprio nome ed entra in
-        sala d&apos;attesa. Lo <strong>ammetti dalla tab “Esiti”</strong> dopo averlo riconosciuto in
-        video. L&apos;<strong>anteprima</strong> percorre l&apos;esame fino all&apos;esito (nulla viene salvato).
-        I link scadono.
+        <strong>Link d&apos;esame generale.</strong> Chi lo apre inserisce l&apos;email che ha
+        confermato all&apos;inizio del corso: se corrisponde, entra direttamente nel proprio
+        esame personale — nessuna sala d&apos;attesa, nessun riconoscimento video.
+        In alternativa l&apos;educator può inviare a ogni studente il suo link personale
+        dalla pagina <strong>Condividi</strong>. L&apos;<strong>anteprima</strong> percorre l&apos;esame
+        fino all&apos;esito (nulla viene salvato). I link scadono.
       </div>
 
       <div className="table-wrap">

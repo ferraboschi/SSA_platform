@@ -6,6 +6,7 @@
 // email-verified personal links — see ExamGate.)
 import { useCallback, useEffect, useState } from "react";
 import { ExamResultsClient } from "./ExamResultsClient";
+import { LiveExamProgress } from "./LiveExamProgress";
 import {
   getCourseExamResultsAction,
   type CourseExamResultsData,
@@ -49,17 +50,20 @@ export function EsitiTab({
       ) : !data ? (
         <div className="card card-pad text-3">Caricamento esiti…</div>
       ) : (
-        <ExamResultsClient
-          courseId={courseId}
-          courseTitle={courseTitle}
-          hasExam
-          results={data.results}
-          feedback={data.feedback}
-          adminEmail={data.adminEmail}
-          emailsLive={data.emailsLive}
-          embedded
-          onChanged={reload}
-        />
+        <>
+          <LiveExamProgress courseId={courseId} />
+          <ExamResultsClient
+            courseId={courseId}
+            courseTitle={courseTitle}
+            hasExam
+            results={data.results}
+            feedback={data.feedback}
+            adminEmail={data.adminEmail}
+            emailsLive={data.emailsLive}
+            embedded
+            onChanged={reload}
+          />
+        </>
       )}
     </div>
   );

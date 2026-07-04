@@ -21,7 +21,7 @@ export function EsamiHub({ data }: { data: ExamHubData }) {
           <p className="page-sub">{t.sub}</p>
         </div>
         <div className="page-actions">
-          <Link className="btn" href="/esami/email-templates">
+          <Link className="btn" href="/esami/editor">
             <Icon name="mail" size={13} />
             Modelli email esito
           </Link>

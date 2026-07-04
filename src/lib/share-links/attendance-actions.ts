@@ -73,12 +73,17 @@ function isMissingTable(err: { message?: string } | null | undefined): boolean {
 }
 
 /** Roll-call days for a course: Certificato = 3, Shochu = 2, everything else = 1.
- *  (Kept in sync with SharedCourse.dayCount in src/lib/share-links/load.ts.) */
-async function courseDayCount(corsoId: number): Promise<number> {
+ *  (Kept in sync with SharedCourse.dayCount in src/lib/share-links/load.ts.)
+ *  Courses with an exam (certificato/shochu) also get ONE extra roll-call day
+ *  for the exam day itself (day_no = dayCount + 1, the owner's "Giorno esame"
+ *  appello) — `examDay` is that number, or null when there's no exam. */
+async function courseDayInfo(corsoId: number): Promise<{ dayCount: number; examDay: number | null }> {
   const svc = getSupabaseServiceClient();
   const { data } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
   const type = data?.type as string | undefined;
-  return type === "certificato" ? 3 : type === "shochu" ? 2 : 1;
+  const dayCount = type === "certificato" ? 3 : type === "shochu" ? 2 : 1;
+  const hasExam = type === "certificato" || type === "shochu";
+  return { dayCount, examDay: hasExam ? dayCount + 1 : null };
 }
 
 /** Postgres unique-violation code (concurrent-insert race, see writePresence). */
@@ -253,9 +258,11 @@ export async function setAttendanceAction(
     }
   }
 
-  // BOUND day_no to 1..dayCount for the course's actual type.
-  const dayCount = await courseDayCount(corsoId);
-  if (!Number.isInteger(day) || day < 1 || day > dayCount) {
+  // BOUND day_no to 1..dayCount (or 1..examDay when the course has an exam —
+  // the extra slot is the "Giorno esame" appello).
+  const { dayCount, examDay } = await courseDayInfo(corsoId);
+  const maxDay = examDay ?? dayCount;
+  if (!Number.isInteger(day) || day < 1 || day > maxDay) {
     return { ok: false, error: "Giornata non valida." };
   }
 
@@ -267,7 +274,7 @@ export async function setAttendanceAction(
     "La verifica email è partita dall'appello: almeno una giornata di presenza deve restare segnata.";
   if (!present) {
     const locked = await isSubjectVerificationLocked(svc, corsoId, kind, id);
-    if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, dayCount))) {
+    if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, maxDay))) {
       return { ok: false, error: LOCK_ERROR };
     }
   }
@@ -298,7 +305,7 @@ export async function setAttendanceAction(
   // (worst case both restore — fail closed).
   if (!present) {
     const locked = await isSubjectVerificationLocked(svc, corsoId, kind, id);
-    if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, dayCount))) {
+    if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, maxDay))) {
       await writePresence(svc, { ...row, present: true, updated_at: new Date().toISOString() });
       return { ok: false, error: LOCK_ERROR };
     }
@@ -554,15 +561,16 @@ async function isSubjectVerificationLocked(
 }
 
 /** Does the subject have ANOTHER day marked present (besides `exceptDay`)?
- *  Bounded to the course's REAL days — a stray out-of-range row must never
- *  satisfy the invariant on behalf of the visible roster. */
+ *  Bounded to the course's REAL days (program days + the exam day, when the
+ *  course has one) — a stray out-of-range row must never satisfy the
+ *  invariant on behalf of the visible roster. */
 async function hasOtherPresentDay(
   svc: ReturnType<typeof getSupabaseServiceClient>,
   corsoId: number,
   kind: "corsista" | "partecipante",
   id: number,
   exceptDay: number,
-  dayCount: number,
+  maxDay: number,
 ): Promise<boolean> {
   const col = kind === "corsista" ? "corsista_id" : "partecipante_id";
   const { data, error } = await svc
@@ -573,7 +581,7 @@ async function hasOtherPresentDay(
     .eq("present", true)
     .neq("day_no", exceptDay)
     .gte("day_no", 1)
-    .lte("day_no", dayCount)
+    .lte("day_no", maxDay)
     .limit(1);
   if (error) return false;
   return (data ?? []).length > 0;

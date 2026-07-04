@@ -17,13 +17,20 @@ import { listExamCategoriesAction, addExamCategoryAction } from "@/lib/esami/cat
 import { createExamLink } from "@/lib/exam-links/actions";
 import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
 import { translateExamTemplateAction } from "@/lib/esami/ai-actions";
+import { ExamEmailTemplatesEditor } from "@/components/esami/ExamEmailTemplatesEditor";
+import type { ExamEmailTemplates, UpcomingCourseLine } from "@/lib/esami/exam-email";
 
-type Section = "esame" | "feedback" | `day${number}`;
+type Section = "esame" | "feedback" | "mail" | `day${number}`;
 
 export interface ExamLibraryEditorProps {
   templates: Record<ExamFamily, ExamTemplate>;
   /** Representative course id per family, to mint preview links. */
   previewCourse?: Partial<Record<ExamFamily, string>>;
+  /** "Mail Template" section, right after "Esame" — Bocciato/Rimandato/
+   *  Promosso outcome emails (not per-family: one shared set for the org). */
+  emailTemplates: ExamEmailTemplates;
+  testTo: string;
+  upcomingCourses: UpcomingCourseLine[];
 }
 
 const cloneTpl = (t: ExamTemplate): ExamTemplate =>
@@ -85,7 +92,13 @@ function sectionQuestions(t: ExamTemplate, sec: Section): ExamQuestion[] {
   return t.miniTests[di]?.questions ?? [];
 }
 
-export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEditorProps) {
+export function ExamLibraryEditor({
+  templates,
+  previewCourse,
+  emailTemplates,
+  testTo,
+  upcomingCourses,
+}: ExamLibraryEditorProps) {
   const esami = useT().esami;
   const t = esami.editor;
   const router = useRouter();
@@ -310,15 +323,18 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
         </div>
       </div>
 
-      {/* Macro family */}
-      <div className="segmented" style={{ marginBottom: 14 }}>
-        <button className={fam === "nihonshu" ? "on" : ""} onClick={() => selectFam("nihonshu")}>
-          {esami.famNihonshu}
-        </button>
-        <button className={fam === "shochu" ? "on" : ""} onClick={() => selectFam("shochu")}>
-          {esami.famShochu}
-        </button>
-      </div>
+      {/* Macro family — not applicable to Mail Template (one shared set, not
+          per-family), so it's hidden while that section is active. */}
+      {section !== "mail" && (
+        <div className="segmented" style={{ marginBottom: 14 }}>
+          <button className={fam === "nihonshu" ? "on" : ""} onClick={() => selectFam("nihonshu")}>
+            {esami.famNihonshu}
+          </button>
+          <button className={fam === "shochu" ? "on" : ""} onClick={() => selectFam("shochu")}>
+            {esami.famShochu}
+          </button>
+        </div>
+      )}
 
       {/* Sub-section tabs */}
       <div className="tabs" style={{ marginBottom: 18, overflowX: "auto", flexWrap: "nowrap" }}>
@@ -346,8 +362,19 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
         >
           {t.esame}
         </button>
+        <button
+          className={`tab ${section === "mail" ? "active" : ""}`}
+          onClick={() => selectSection("mail")}
+          style={{ whiteSpace: "nowrap" }}
+        >
+          Mail Template
+        </button>
       </div>
 
+      {section === "mail" ? (
+        <ExamEmailTemplatesEditor initial={emailTemplates} testTo={testTo} upcoming={upcomingCourses} />
+      ) : (
+      <>
       {/* Header + save */}
       <div
         className="card card-pad"
@@ -499,6 +526,8 @@ export function ExamLibraryEditor({ templates, previewCourse }: ExamLibraryEdito
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

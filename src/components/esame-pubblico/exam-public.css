@@ -536,26 +536,9 @@
   border-radius: var(--r-4);
   overflow: hidden;
 }
-.edu-daycard-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-}
-.edu-daybadge {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-3);
-  background: var(--indigo-50);
-  color: var(--indigo-600);
-  display: grid;
-  place-items: center;
-  font-weight: var(--fw-bold);
-  font-size: 12px;
-  flex-shrink: 0;
-}
+/* Scroll target for an expanding sake row (EducatorTabs' ProgrammaTab): keeps
+   the card clear of the sticky .edu-tabs bar when scrolled into view. */
+.edu-sake-row { scroll-margin-top: 64px; }
 .edu-sake-thumb {
   width: 48px;
   height: 48px;

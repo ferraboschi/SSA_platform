@@ -1,14 +1,22 @@
 import { getDataSource } from "@/lib/data";
 import { requireNavAccess } from "@/lib/auth/guard";
+import { getSession } from "@/lib/auth/session";
 import type { ExamFamily, ExamTemplate } from "@/lib/domain";
 import { ExamLibraryEditor } from "@/components/esami/ExamLibraryEditor";
+import { loadExamEmailTemplates } from "@/lib/esami/exam-email-store";
+import { getUpcomingCourseLines } from "@/lib/esami/upcoming-courses";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
   await requireNavAccess("esami");
-  const ds = await getDataSource();
-  const [list, courses] = await Promise.all([ds.examTemplates.list(), ds.courses.list()]);
+  const [ds, session] = await Promise.all([getDataSource(), getSession()]);
+  const [list, courses, emailTemplates, upcomingCourses] = await Promise.all([
+    ds.examTemplates.list(),
+    ds.courses.list(),
+    loadExamEmailTemplates(),
+    getUpcomingCourseLines(4),
+  ]);
   const templates = Object.fromEntries(list.map((tpl) => [tpl.family, tpl])) as Record<
     ExamFamily,
     ExamTemplate
@@ -25,5 +33,13 @@ export default async function Page() {
     shochu: pick("shochu"),
   };
 
-  return <ExamLibraryEditor templates={templates} previewCourse={previewCourse} />;
+  return (
+    <ExamLibraryEditor
+      templates={templates}
+      previewCourse={previewCourse}
+      emailTemplates={emailTemplates}
+      testTo={session?.user?.email || ""}
+      upcomingCourses={upcomingCourses}
+    />
+  );
 }

@@ -1,20 +1,24 @@
 "use client";
 
-// The educator share page — 3 tabs, mobile-first, styled STRICTLY on the
-// platform design system (tokens.css + the shared .badge/.btn language):
-//   1. Appello   — attendance by day MERGED with email verification. Tap who's
-//                  present; every row always shows its verification state
-//                  (chip with server timestamp) and exactly the actions that
-//                  state allows. Green = confirmed, and nothing else.
-//   2. Programma — sake programme by day, photos + inline details.
-//   3. Esami     — ExamSendPanel (fixed sub-tabs, live progress bars).
+// The educator share page — navigation is BY DAY (the owner's flow: each
+// program day is Appello → Programma → Test, in that order; the last program
+// day also carries Feedback; the exam day is Appello → Esame):
+//   • Giorno 1..N — that day's Appello (attendance+verification merged; every
+//     row always shows its verification state, chip with server timestamp,
+//     and exactly the actions that state allows — green = confirmed, and
+//     nothing else), then that day's Programma (sake list, photos + inline
+//     details), then that day's mini-test send panel. Giorno N (the last
+//     program day) also shows Feedback right after its test.
+//   • Giorno esame — Appello for the exam day itself, then the final exam's
+//     send panel (ExamSendPanel — live progress bars).
 //
 // The verification flow is AIRTIGHT (see lib/share-links/verification-state):
 // free edits only before the first send; while a link is out, corrections
 // happen exclusively via the atomic correct-and-resend; a confirmed student's
 // data is locked forever, and the confirmation also counts as presence (their
 // last marked day can't be unchecked). The same rules are enforced
-// server-side in attendance-actions.ts.
+// server-side in attendance-actions.ts (which also bounds the exam-day
+// attendance to dayCount + 1 when the course has an exam).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -84,8 +88,6 @@ export interface TestRow {
   closedAt: string | null;
 }
 
-type TabId = "appello" | "programma" | "esami";
-
 const subjKey = (s: Pick<Student, "kind" | "id">) => `${s.kind === "corsista" ? "c" : "p"}${s.id}`;
 
 const CHIP_CLASS: Record<VerificationStateId, string> = {
@@ -108,7 +110,13 @@ export default function EducatorTabs({
   days: DayRow[];
   tests: TestRow[] | null;
 }) {
-  const [tab, setTab] = useState<TabId>("appello");
+  // Tab ids: "day1".."dayN" (program days) + "examday" (only when there's an
+  // exam — `tests` is null otherwise).
+  const dayTabIds = useMemo(
+    () => Array.from({ length: Math.max(1, dayCount) }, (_, i) => `day${i + 1}`),
+    [dayCount],
+  );
+  const [tab, setTab] = useState<string>(dayTabIds[0] ?? "day1");
   const [students, setStudents] = useState<Student[]>(initialStudents);
 
   // LIVE verification states: poll so the educator SEES the green flip the
@@ -148,11 +156,13 @@ export default function EducatorTabs({
     };
   }, [token]);
 
-  const tabs: { id: TabId; label: string }[] = [
-    { id: "appello", label: "Appello" },
-    { id: "programma", label: "Programma" },
-    ...(tests ? [{ id: "esami" as const, label: "Esami" }] : []),
+  const examDayId = "examday";
+  const tabs: { id: string; label: string }[] = [
+    ...dayTabIds.map((id, i) => ({ id, label: `Giorno ${i + 1}` })),
+    ...(tests ? [{ id: examDayId, label: "Giorno esame" }] : []),
   ];
+  const activeDayNum = tab.startsWith("day") ? Number(tab.slice(3)) : null;
+  const testByKey = (key: string) => tests?.find((t) => t.key === key);
 
   return (
     <div>
@@ -169,12 +179,73 @@ export default function EducatorTabs({
         ))}
       </div>
 
-      {tab === "appello" && (
-        <AppelloTab token={token} students={students} setStudents={setStudents} dayCount={dayCount} />
+      {activeDayNum != null && (
+        <div>
+          <SectionHeading>Appello</SectionHeading>
+          <AppelloTab
+            token={token}
+            students={students}
+            setStudents={setStudents}
+            day={activeDayNum}
+          />
+          <SectionHeading>Programma</SectionHeading>
+          <ProgrammaTab days={days} day={activeDayNum} />
+          {testByKey(`day${activeDayNum}`) && (
+            <>
+              <SectionHeading>Test</SectionHeading>
+              <ExamSendPanel
+                key={testByKey(`day${activeDayNum}`)!.key}
+                token={token}
+                test={testByKey(`day${activeDayNum}`)!}
+                students={students}
+              />
+            </>
+          )}
+          {activeDayNum === dayCount && testByKey("feedback") && (
+            <>
+              <SectionHeading>Feedback</SectionHeading>
+              <ExamSendPanel key="feedback" token={token} test={testByKey("feedback")!} students={students} />
+            </>
+          )}
+        </div>
       )}
-      {tab === "programma" && <ProgrammaTab days={days} />}
-      {tab === "esami" && tests && <ExamSendPanel token={token} tests={tests} students={students} />}
+
+      {tab === examDayId && tests && (
+        <div>
+          <SectionHeading>Appello</SectionHeading>
+          <AppelloTab
+            token={token}
+            students={students}
+            setStudents={setStudents}
+            day={dayCount + 1}
+            isExamDay
+          />
+          {testByKey("final") && (
+            <>
+              <SectionHeading>Esame</SectionHeading>
+              <ExamSendPanel token={token} test={testByKey("final")!} students={students} />
+            </>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2
+      style={{
+        fontSize: 12,
+        fontWeight: 700,
+        textTransform: "uppercase",
+        letterSpacing: "0.05em",
+        color: "var(--text-4)",
+        margin: "0 0 8px",
+      }}
+    >
+      {children}
+    </h2>
   );
 }
 
@@ -185,14 +256,19 @@ function AppelloTab({
   token,
   students,
   setStudents,
-  dayCount,
+  day,
+  isExamDay,
 }: {
   token: string;
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
-  dayCount: number;
+  /** Which roll-call day this instance shows — chosen by the top-level day
+   *  tab, not by an internal selector (day_no in corsi_presenze; program
+   *  days are 1..dayCount, the exam day is dayCount + 1). */
+  day: number;
+  /** Exam-day copy ("Giorno esame") instead of "giorno N". */
+  isExamDay?: boolean;
 }) {
-  const [day, setDay] = useState(1);
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   const [readOnly, setReadOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -202,8 +278,6 @@ function AppelloTab({
   // Mirror of `pending` readable from the poll interval (state would be stale
   // inside the closure): while any write is in flight, polls must not merge.
   const pendingRef = useRef<Set<string>>(new Set());
-
-  const dayList = useMemo(() => Array.from({ length: Math.max(1, dayCount) }, (_, i) => i + 1), [dayCount]);
 
   useEffect(() => {
     let alive = true;
@@ -301,24 +375,10 @@ function AppelloTab({
 
   return (
     <div>
-      {dayCount > 1 && (
-        <div className="edu-days" aria-label="Giornata">
-          {dayList.map((d) => (
-            <button
-              key={d}
-              aria-pressed={day === d}
-              className={`edu-day ${day === d ? "active" : ""}`}
-              onClick={() => setDay(d)}
-            >
-              Giorno {d}
-            </button>
-          ))}
-        </div>
-      )}
       <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 10px", lineHeight: 1.5 }}>
         {readOnly
           ? "Appello non ancora disponibile."
-          : `Chiama l'appello e tocca chi è presente ${dayCount > 1 ? `(giorno ${day})` : ""} — si salva da solo. Presenti: ${presentCount}/${students.length}. Chi è presente può ricevere subito l'email di conferma dati. Verde = dati confermati.`}
+          : `Chiama l'appello${isExamDay ? " del giorno esame" : ""} e tocca chi è presente — si salva da solo. Presenti: ${presentCount}/${students.length}. Chi è presente può ricevere subito l'email di conferma dati. Verde = dati confermati.`}
       </p>
       {error && (
         <p style={{ color: "var(--danger-fg)", fontSize: 12.5, margin: "0 0 10px" }} role="alert">
@@ -875,99 +935,107 @@ function AddParticipantForm({
 // ─────────────────────────────────────────────────────────────────────────────
 // 2 · PROGRAMMA — sakes by day, photo + inline expandable details.
 // ─────────────────────────────────────────────────────────────────────────────
-function ProgrammaTab({ days }: { days: DayRow[] }) {
+function ProgrammaTab({ days, day }: { days: DayRow[]; day: number }) {
   const [open, setOpen] = useState<string | null>(null);
+  // One DOM ref per sake row, so the just-expanded one can be scrolled into
+  // view (see the effect below).
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  if (days.length === 0) {
-    return <div className="edu-empty">Il programma non è ancora stato pubblicato.</div>;
+  // On mobile especially, an expanding card can open mostly BELOW the fold —
+  // scroll it to the top of the viewport (under the sticky tab bar, via
+  // scroll-margin-top on .edu-sake-row) so the whole card, photo included,
+  // stays reachable without the reader hunting for it.
+  useEffect(() => {
+    if (!open) return;
+    rowRefs.current.get(open)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [open]);
+
+  const d = days.find((x) => x.day === day);
+  if (!d || d.sakes.length === 0) {
+    return (
+      <div className="edu-empty">
+        {d ? "Nessun sake assegnato a questa giornata." : "Il programma non è ancora stato pubblicato."}
+      </div>
+    );
   }
   return (
-    <div style={{ display: "grid", gap: 14 }}>
-      {days.map((d) => (
-        <div key={d.day} className="edu-daycard">
-          <div className="edu-daycard-head">
-            <span className="edu-daybadge">G{d.day}</span>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>{d.name || `Giorno ${d.day}`}</span>
-            <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--text-4)" }}>
-              {d.sakes.length} sake
-            </span>
-          </div>
-          {d.sakes.length === 0 ? (
-            <div className="edu-empty" style={{ border: "none" }}>
-              Nessun sake assegnato a questa giornata.
-            </div>
-          ) : (
-            d.sakes.map((s, i) => {
-              const id = `${d.day}-${s.code}-${i}`;
-              const expanded = open === id;
-              return (
-                <div key={id} style={{ borderTop: i === 0 ? "none" : "1px solid var(--border-2)" }}>
-                  <button
-                    type="button"
-                    className="edu-row edu-row-tap"
-                    aria-expanded={expanded}
-                    onClick={() => setOpen(expanded ? null : id)}
+    <div className="edu-daycard" style={{ marginBottom: 14 }}>
+      {d.sakes.map((s, i) => {
+        const id = `${d.day}-${s.code}-${i}`;
+        const expanded = open === id;
+        return (
+          <div
+            key={id}
+            ref={(el) => {
+              if (el) rowRefs.current.set(id, el);
+              else rowRefs.current.delete(id);
+            }}
+            className="edu-sake-row"
+            style={{ borderTop: i === 0 ? "none" : "1px solid var(--border-2)" }}
+          >
+            <button
+              type="button"
+              className="edu-row edu-row-tap"
+              aria-expanded={expanded}
+              onClick={() => setOpen(expanded ? null : id)}
+            >
+              {s.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={s.image} alt="" className="edu-sake-thumb" />
+              ) : (
+                <span className="edu-sake-thumb edu-sake-thumb-empty">{s.code || "—"}</span>
+              )}
+              <span className="edu-row-main">
+                <span className="edu-row-name">{s.name}</span>
+                <span className="edu-row-sub">
+                  {[s.type, s.size ? `${s.size}ml` : ""].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+              <span aria-hidden style={{ color: "var(--text-4)", flexShrink: 0 }}>
+                {expanded ? "▴" : "▾"}
+              </span>
+            </button>
+            {expanded && (
+              <div className="edu-sake-detail">
+                {s.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.image} alt={s.name} className="edu-sake-photo" />
+                )}
+                <dl className="edu-sake-facts">
+                  {s.type && <Fact k="Tipo" v={s.type} />}
+                  {s.sakagura && <Fact k="Sakagura" v={s.sakagura} />}
+                  {s.size > 0 && <Fact k="Formato" v={`${s.size} ml`} />}
+                  {s.qty > 0 && <Fact k="Bottiglie" v={String(s.qty)} />}
+                  {s.code && <Fact k="Codice" v={s.code} />}
+                </dl>
+                {s.aroma && (
+                  <p
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      color: "var(--indigo-600)",
+                      margin: "10px 0 0",
+                      lineHeight: 1.5,
+                    }}
                   >
-                    {s.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={s.image} alt="" className="edu-sake-thumb" />
-                    ) : (
-                      <span className="edu-sake-thumb edu-sake-thumb-empty">{s.code || "—"}</span>
-                    )}
-                    <span className="edu-row-main">
-                      <span className="edu-row-name">{s.name}</span>
-                      <span className="edu-row-sub">
-                        {[s.type, s.size ? `${s.size}ml` : ""].filter(Boolean).join(" · ")}
-                      </span>
-                    </span>
-                    <span aria-hidden style={{ color: "var(--text-4)", flexShrink: 0 }}>
-                      {expanded ? "▴" : "▾"}
-                    </span>
-                  </button>
-                  {expanded && (
-                    <div className="edu-sake-detail">
-                      {s.image && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={s.image} alt={s.name} className="edu-sake-photo" />
-                      )}
-                      <dl className="edu-sake-facts">
-                        {s.type && <Fact k="Tipo" v={s.type} />}
-                        {s.sakagura && <Fact k="Sakagura" v={s.sakagura} />}
-                        {s.size > 0 && <Fact k="Formato" v={`${s.size} ml`} />}
-                        {s.qty > 0 && <Fact k="Bottiglie" v={String(s.qty)} />}
-                        {s.code && <Fact k="Codice" v={s.code} />}
-                      </dl>
-                      {s.aroma && (
-                        <p
-                          style={{
-                            fontSize: 12.5,
-                            fontWeight: 600,
-                            color: "var(--indigo-600)",
-                            margin: "10px 0 0",
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          🌸 {s.aroma}
-                        </p>
-                      )}
-                      {s.notes && (
-                        <p style={{ fontSize: 12.5, color: "var(--text-2)", margin: "6px 0 0", lineHeight: 1.55 }}>
-                          {s.notes}
-                        </p>
-                      )}
-                      {s.url && (
-                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="edu-linkbtn">
-                          Scheda completa su Sake Company ↗
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      ))}
+                    🌸 {s.aroma}
+                  </p>
+                )}
+                {s.notes && (
+                  <p style={{ fontSize: 12.5, color: "var(--text-2)", margin: "6px 0 0", lineHeight: 1.55 }}>
+                    {s.notes}
+                  </p>
+                )}
+                {s.url && (
+                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="edu-linkbtn">
+                    Scheda completa su Sake Company ↗
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
