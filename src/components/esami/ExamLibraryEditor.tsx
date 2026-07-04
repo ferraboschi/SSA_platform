@@ -176,7 +176,8 @@ export function ExamLibraryEditor({
     const tf = drafts[fam];
     collect(tf.finalExam.questions);
     for (const m of tf.miniTests) collect(m.questions);
-    collect(tf.feedback.questions);
+    // Feedback questions are NOT an exam area, so their cats stay out of the
+    // pickable list (they'd otherwise surface a spurious "Feedback" option).
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [categories, drafts, fam]);
   const cats: string[] | null = section === "feedback" ? null : allCats;
