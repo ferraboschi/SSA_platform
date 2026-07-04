@@ -7,8 +7,11 @@ import {
   closeExamLinksAction,
   reopenExamLinksAction,
   getExamProgressAction,
-  type SubjectProgress,
 } from "@/lib/share-links/exam-send-actions";
+// Type-only (erased at compile time), so importing from the server-only
+// module is safe — and it must NOT be re-exported by the actions module
+// above: a type in a "use server" export clause crashes its actions loader.
+import type { SubjectProgress } from "@/lib/exam-links/live-progress";
 import { newerIso } from "@/lib/share-links/verification-state";
 
 // Local prop shapes (structurally match the loader types) so this client

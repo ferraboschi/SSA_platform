@@ -16,6 +16,12 @@ import { recordExamSend } from "@/lib/exam-links/send-log";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
 import type { ExamTestKey } from "@/lib/exam-links/token";
+// NOTE: no `export type { … }` re-exports here — this is a "use server"
+// module, and Next's action transform registers every export CLAUSE name as a
+// server action, generating a runtime reference to the (erased) type binding.
+// That crashes the whole actions loader for any page using this module:
+// every action on the page 500s. Clients needing SubjectProgress import the
+// type directly from lib/exam-links/live-progress (type-only → erased).
 import {
   VALID_TEST,
   loadPresentForTest,
@@ -24,8 +30,6 @@ import {
   loadExamProgress,
   type SubjectProgress,
 } from "@/lib/exam-links/live-progress";
-
-export type { SubjectProgress };
 
 const limiter = createFixedWindowLimiter(60_000);
 const RATE_LIMIT_SEND = 120;

@@ -15,6 +15,13 @@
 //      data access (getSupabase*Client, @/lib/integrations/supabase,
 //      @/lib/data/supabase, @/lib/data/provider, server-only) — keeps the
 //      RSC/client boundary clean and DB access off the client bundle.
+//   7. No `export { … }` / `export type { … }` export CLAUSE in a `"use server"`
+//      file. Next's action transform registers every clause name as a server
+//      action — a type-only name has no runtime binding, so the page's whole
+//      actions loader crashes at module evaluation and EVERY action on that
+//      page 500s (found live: the /condividi appello outage of 2026-07-04).
+//      Declaration exports (`export async function` / `export interface` /
+//      `export type X =`) are fine.
 //
 // Usage: node scripts/check-conventions.mjs
 
@@ -70,6 +77,11 @@ const ANY_RE = /(:\s*any(?![\w$])|(?<![\w$])as\s+any(?![\w$]))/;
 const SECRET_ENV_RE = /_TOKEN|_KEY|_SECRET/;
 // Rule 6: a "use client" directive (the first statement of a client module).
 const USE_CLIENT_RE = /^\s*["']use client["']\s*;?\s*$/m;
+// Rule 7: a "use server" directive + an export CLAUSE (`export { … }` or
+// `export type { … }` — with or without a `from`). Declaration exports don't
+// match: they never start with `export {` / `export type {`.
+const USE_SERVER_RE = /^\s*["']use server["']\s*;?\s*$/m;
+const EXPORT_CLAUSE_RE = /^\s*export\s+(?:type\s+)?\{/;
 // DB client / server-only data-access that must never reach a client module.
 const BANNED_CLIENT_IMPORT_RE =
   /from\s+["'](?:server-only|@\/lib\/integrations\/supabase(?:\/[^"']*)?|@\/lib\/data\/supabase(?:\/[^"']*)?|@\/lib\/data\/provider)["']|getSupabase(?:Service|Server)Client/;
@@ -141,6 +153,7 @@ for (const rel of files) {
   const lines = text.split("\n");
   inBlockComment = false; // reset per file
   const isClient = USE_CLIENT_RE.test(text);
+  const isServerActions = USE_SERVER_RE.test(text);
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
@@ -156,6 +169,15 @@ for (const rel of files) {
       BANNED_CLIENT_IMPORT_RE.test(line)
     ) {
       add(abs, ln, '`"use client"` module must not import the Supabase client / server-only data access');
+    }
+
+    // Rule 7: no export clause in a "use server" module (crashes its actions loader).
+    if (isServerActions && EXPORT_CLAUSE_RE.test(line)) {
+      add(
+        abs,
+        ln,
+        '`"use server"` module must not use an export clause (`export { … }` / `export type { … }`) — every clause name becomes a server action and a type-only name crashes the page\'s actions loader'
+      );
     }
 
     // Rule 2: `: any` / ` as any` (skip *.test.*)
