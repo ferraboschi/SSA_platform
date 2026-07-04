@@ -175,7 +175,9 @@ export async function loadSharedCourse(
       .map((d) => ({
         day: d.day,
         name: d.name,
-        sakes: d.sakes.map((s) => ({
+        // A day in the overlay may have no sakes array (partially-edited
+        // program) — never .map() on undefined or the whole page crashes.
+        sakes: (d.sakes ?? []).map((s) => ({
           code: s.code ?? "",
           name: s.name,
           type: s.type ?? "",

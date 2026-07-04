@@ -50,7 +50,20 @@ export default async function Page({
     return <PlannerShareView plan={plan} />;
   }
 
-  const course = await loadSharedCourse(res.payload.c);
+  // Safety net: a single bad data shape (e.g. a partially-edited program) must
+  // never crash the whole public page — degrade to a clear message instead.
+  let course: Awaited<ReturnType<typeof loadSharedCourse>>;
+  try {
+    course = await loadSharedCourse(res.payload.c);
+  } catch (e) {
+    console.error(
+      `[condividi] loadSharedCourse failed for course ${res.payload.c}:`,
+      e instanceof Error ? e.message : String(e),
+    );
+    return (
+      <Invalid reason="Pagina temporaneamente non disponibile. Riprova tra poco o chiedi alla segreteria SSA un link aggiornato." />
+    );
+  }
   if (!course) {
     return <Invalid reason="Corso non trovato o non più disponibile." />;
   }
