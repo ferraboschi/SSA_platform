@@ -34,6 +34,41 @@ const OUTCOME_STEM: Record<string, "success" | "warning" | "danger"> = {
   failed: "danger",
 };
 
+// One tab per test type (Esame / Giorno N / Feedback), so the results view
+// isn't a single table mixing final + day-tests of the same student.
+const FIXED_TEST_LABEL: Record<string, string> = { final: "Esame", feedback: "Feedback" };
+function testLabel(key: string): string {
+  if (FIXED_TEST_LABEL[key]) return FIXED_TEST_LABEL[key];
+  const m = /^day(\d+)$/.exec(key);
+  return m ? `Giorno ${m[1]}` : key;
+}
+function testOrder(key: string): number {
+  if (key === "final") return 0; // Esame first (the certifying exam / default tab)
+  const m = /^day(\d+)$/.exec(key);
+  if (m) return 10 + Number(m[1]);
+  if (key === "feedback") return 100;
+  return 50;
+}
+
+// Human labels for the per-question category (KB-section key). Old questions
+// carry slugs ("storia", "produzione-s"), newer ones full labels ("Ingredienti");
+// normalise both, and group the answer detail under these headers.
+const CAT_LABELS: Record<string, string> = {
+  storia: "Storia",
+  produzione: "Produzione",
+  varieta: "Varietà & Stili",
+  ingredienti: "Ingredienti",
+  degustazione: "Degustazione",
+  servizio: "Servizio",
+  classificazione: "Classificazione",
+};
+function catLabel(cat?: string): string {
+  const raw = (cat ?? "").trim();
+  if (!raw) return "Altre domande";
+  const norm = raw.toLowerCase().replace(/-s$/, "");
+  return CAT_LABELS[norm] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
 function scoreColor(s: number): string {
   return s >= 80 ? "var(--success-fg)" : s >= 70 ? "var(--warning-fg)" : "var(--danger-fg)";
 }
@@ -89,6 +124,26 @@ export function ExamResultsClient({
     });
   }
   const [expanded, setExpanded] = useState<number | null>(null);
+
+  // One tab per test type. Group the submissions by test key; the tabs are
+  // Esame (final, default) → Giorno N → Feedback (aggregate, no per-row table).
+  const byTest = new Map<string, GradedSubmission[]>();
+  for (const r of results) {
+    const arr = byTest.get(r.testKey);
+    if (arr) arr.push(r);
+    else byTest.set(r.testKey, [r]);
+  }
+  const tabKeys = [...byTest.keys()].sort((a, b) => testOrder(a) - testOrder(b));
+  if (feedback) tabKeys.push("feedback");
+  const [tab, setTab] = useState<string>(() =>
+    byTest.has("final") ? "final" : (tabKeys[0] ?? "final"),
+  );
+  // The active tab may vanish after a live refresh (e.g. filtered out) — fall
+  // back to the first available so the view never goes blank.
+  const activeTab = tabKeys.includes(tab) ? tab : (tabKeys[0] ?? "final");
+  const tabRows = activeTab === "feedback" ? [] : (byTest.get(activeTab) ?? []);
+  const showOutcome = activeTab === "final";
+
   const router = useRouter();
   const [live, setLive] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -202,48 +257,90 @@ export function ExamResultsClient({
         <div className="card card-pad" style={{ marginTop: 16 }}>
           <p className="text-3">Questo corso non prevede un esame.</p>
         </div>
-      ) : results.length === 0 ? (
+      ) : results.length === 0 && !feedback ? (
         <div className="card card-pad" style={{ marginTop: 16 }}>
           <p className="text-3">
             Nessuna consegna ancora. I risultati appaiono qui quando gli studenti completano l&apos;esame dal link.
           </p>
         </div>
       ) : (
-        <div className="table-wrap" style={{ marginTop: 16 }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Studente</th>
-                <th>Test</th>
-                <th>Consegna</th>
-                <th style={{ textAlign: "right" }}>Auto %</th>
-                <th>Esito attuale</th>
-                <th>Conferma esito</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r) => (
-                <ResultRow
-                  key={r.id}
-                  r={r}
-                  courseId={courseId}
-                  draft={drafts[r.id]}
-                  expanded={expanded === r.id}
-                  onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
-                  onChanged={onChanged}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* One tab per test type — no more final + day-tests mixed in one list. */}
+          <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 16, borderBottom: "1px solid var(--border)" }}>
+            {tabKeys.map((k) => {
+              const count = k === "feedback" ? undefined : (byTest.get(k)?.length ?? 0);
+              const active = k === activeTab;
+              return (
+                <button
+                  key={k}
+                  role="tab"
+                  aria-selected={active}
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => { setTab(k); setExpanded(null); }}
+                  style={{
+                    borderRadius: 0,
+                    borderBottom: active ? "2px solid var(--indigo)" : "2px solid transparent",
+                    color: active ? "var(--indigo-600)" : "var(--text-2)",
+                    fontWeight: active ? 700 : 500,
+                  }}
+                >
+                  {testLabel(k)}
+                  {count != null && (
+                    <span className="text-3" style={{ marginLeft: 6, fontSize: 11, fontWeight: 400 }}>{count}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {activeTab === "feedback" ? (
+            feedback ? (
+              <FeedbackSummary data={feedback} />
+            ) : (
+              <div className="card card-pad" style={{ marginTop: 16 }}>
+                <p className="text-3">Nessun feedback raccolto.</p>
+              </div>
+            )
+          ) : tabRows.length === 0 ? (
+            <div className="card card-pad" style={{ marginTop: 16 }}>
+              <p className="text-3">Nessuna consegna per {testLabel(activeTab)}.</p>
+            </div>
+          ) : (
+            <div className="table-wrap" style={{ marginTop: 12 }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Studente</th>
+                    <th>Consegna</th>
+                    <th style={{ textAlign: "right" }}>Auto %</th>
+                    {showOutcome && <th>Esito attuale</th>}
+                    {showOutcome && <th>Conferma esito</th>}
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {tabRows.map((r) => (
+                    <ResultRow
+                      key={r.id}
+                      r={r}
+                      courseId={courseId}
+                      draft={drafts[r.id]}
+                      showOutcome={showOutcome}
+                      expanded={expanded === r.id}
+                      onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
+                      onChanged={onChanged}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {hasExam && (
         <SendResultsSection courseId={courseId} results={confirmed} adminEmail={adminEmail} emailsLive={emailsLive} />
       )}
-
-      {hasExam && feedback && <FeedbackSummary data={feedback} />}
     </div>
   );
 }
@@ -285,6 +382,7 @@ function ResultRow({
   r,
   courseId,
   draft,
+  showOutcome,
   expanded,
   onToggle,
   onChanged,
@@ -293,6 +391,10 @@ function ResultRow({
   courseId: string;
   /** The "Correggi" run's draft for this submission, when one exists. */
   draft?: CorrectionDraft;
+  /** Show the outcome + confirm columns. Only the "Esame" (final) tab does:
+   *  the certification outcome is decided on the final exam and stored ONCE per
+   *  student, so mini-test tabs never carry the confirm controls. */
+  showOutcome: boolean;
   expanded: boolean;
   onToggle: () => void;
   onChanged?: () => void;
@@ -305,12 +407,21 @@ function ResultRow({
   // companion (each persists its outcome on its own table).
   const canGrade = r.enrollmentId != null || r.partecipanteId != null;
 
-  // The certification outcome (Promosso/Recupero/Bocciato) is decided on the
-  // FINAL exam and stored ONCE per student (on their enrollment). The day tests
-  // are formative, so only the "final" row carries the outcome + confirm
-  // controls — otherwise every test row of the same student shows and edits the
-  // one shared enrollment outcome, which reads as rows moving together.
-  const isFinal = r.testKey === "final";
+  // Answers grouped by category (Storia / Produzione / …) for the detail view,
+  // preserving the exam's question order (first appearance wins).
+  const answerGroups: { label: string; items: typeof r.answers }[] = [];
+  const groupIndex = new Map<string, number>();
+  for (const a of r.answers) {
+    const label = catLabel(a.cat);
+    let idx = groupIndex.get(label);
+    if (idx == null) {
+      idx = answerGroups.length;
+      groupIndex.set(label, idx);
+      answerGroups.push({ label, items: [] });
+    }
+    answerGroups[idx].items.push(a);
+  }
+  const colSpan = showOutcome ? 6 : 4;
 
   const grade = (outcome: ExamOutcome) => {
     if (!canGrade) {
@@ -348,7 +459,6 @@ function ResultRow({
           )}
           <div className="text-3" style={{ fontSize: 11, fontWeight: 400 }}>{r.studentEmail || "—"}</div>
         </td>
-        <td className="text-3">{r.testKey}</td>
         <td className="text-3" style={{ whiteSpace: "nowrap", fontSize: 12 }}>
           {new Date(r.submittedAt).toLocaleDateString("it-IT")}
         </td>
@@ -358,44 +468,35 @@ function ResultRow({
             <div className="text-3" style={{ fontSize: 10, fontWeight: 400 }}>+{r.manualCount} aperte</div>
           )}
         </td>
-        <td>
-          {!isFinal ? (
-            <span className="text-3" style={{ fontStyle: "italic", fontSize: 12 }}>
-              — <span style={{ fontSize: 10.5 }}>(mini-test)</span>
-            </span>
-          ) : (
-            <>
-              {r.currentResult ? (
-                <Badge tone={OUTCOME_TONE[r.currentResult] ?? "neutral"} dot>
-                  {OUTCOME_LABEL[r.currentResult] ?? r.currentResult}
-                  {r.currentScore != null ? ` ${r.currentScore}%` : ""}
+        {showOutcome && (
+          <td>
+            {r.currentResult ? (
+              <Badge tone={OUTCOME_TONE[r.currentResult] ?? "neutral"} dot>
+                {OUTCOME_LABEL[r.currentResult] ?? r.currentResult}
+                {r.currentScore != null ? ` ${r.currentScore}%` : ""}
+              </Badge>
+            ) : (
+              <span className="text-3" style={{ fontStyle: "italic", fontSize: 12 }}>da confermare</span>
+            )}
+            {draft && (
+              <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <Badge tone={OUTCOME_TONE[draft.verdict] ?? "neutral"}>
+                  Bozza: {OUTCOME_LABEL[draft.verdict] ?? draft.verdict} {draft.combinedPct}%
                 </Badge>
-              ) : (
-                <span className="text-3" style={{ fontStyle: "italic", fontSize: 12 }}>da confermare</span>
-              )}
-              {draft && (
-                <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <Badge tone={OUTCOME_TONE[draft.verdict] ?? "neutral"}>
-                    Bozza: {OUTCOME_LABEL[draft.verdict] ?? draft.verdict} {draft.combinedPct}%
-                  </Badge>
-                  <a
-                    href={`/api/esami/${courseId}/bozza?sub=${r.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ fontSize: 11.5, fontWeight: 600, color: "var(--indigo-600)" }}
-                  >
-                    Bozza PDF ↗
-                  </a>
-                </div>
-              )}
-            </>
-          )}
-        </td>
-        <td>
-          {!isFinal ? (
-            <span className="text-3" style={{ fontSize: 12 }}>—</span>
-          ) : (
-            <>
+                <a
+                  href={`/api/esami/${courseId}/bozza?sub=${r.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 11.5, fontWeight: 600, color: "var(--indigo-600)" }}
+                >
+                  Bozza PDF ↗
+                </a>
+              </div>
+            )}
+          </td>
+        )}
+        {showOutcome && (
+          <td>
               <div style={{ display: "inline-flex", gap: 4 }}>
                 {(["passed", "retrial", "failed"] as ExamOutcome[]).map((o) => {
                   const stem = OUTCOME_STEM[o];
@@ -430,9 +531,8 @@ function ResultRow({
                 })}
               </div>
               {err && <div style={{ color: "var(--danger-fg)", fontSize: 11, marginTop: 4 }}>{err}</div>}
-            </>
-          )}
-        </td>
+          </td>
+        )}
         <td>
           <button className="btn btn-icon btn-sm btn-ghost" onClick={onToggle} title="Vedi risposte">
             <Icon name={expanded ? "chevron-d" : "chevron"} size={13} />
@@ -441,31 +541,50 @@ function ResultRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={7} style={{ background: "var(--surface-2)", padding: 0 }}>
-            <div style={{ padding: "12px 18px", display: "grid", gap: 6 }}>
-              {r.answers.map((a, i) => (
-                <div key={a.qid + i} style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 8, fontSize: 12.5, alignItems: "start" }}>
-                  <span style={{ marginTop: 2 }}>
-                    {a.ok === true ? (
-                      <Icon name="check" size={12} className="text-3" style={{ color: "var(--success-fg)" }} />
-                    ) : a.ok === false ? (
-                      <Icon name="x" size={12} style={{ color: "var(--danger-fg)" }} />
-                    ) : (
-                      <Icon name="edit" size={11} className="text-3" />
-                    )}
-                  </span>
-                  <div>
-                    <div style={{ fontWeight: 500 }}>{a.text}</div>
-                    <div className="text-3" style={{ fontSize: 12 }}>
-                      Risposta: <strong style={{ color: a.ok === false ? "var(--danger-fg)" : "var(--text)" }}>{a.given}</strong>
-                      {a.ok !== null && a.ok === false && <> · Corretta: <strong style={{ color: "var(--success-fg)" }}>{a.correct}</strong></>}
-                      {a.ok === null && <> · <em>valutazione manuale</em></>}
-                    </div>
-                    {a.ok === null &&
-                      (a.type === "open" || a.type === "fill") &&
-                      a.given &&
-                      a.given !== "—" && <AiGradeButton prompt={a.text} answer={a.given} kbSection={a.cat} />}
+          <td colSpan={colSpan} style={{ background: "var(--surface-2)", padding: 0 }}>
+            <div style={{ padding: "12px 18px", display: "grid", gap: 14 }}>
+              {answerGroups.map((group) => (
+                <div key={group.label} style={{ display: "grid", gap: 6 }}>
+                  {/* Category header — Storia / Produzione / Degustazione / … */}
+                  <div
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "var(--text-3)",
+                      borderBottom: "1px solid var(--border)",
+                      paddingBottom: 3,
+                    }}
+                  >
+                    {group.label}
+                    <span style={{ marginLeft: 6, fontWeight: 400 }}>{group.items.length}</span>
                   </div>
+                  {group.items.map((a, i) => (
+                    <div key={a.qid + i} style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 8, fontSize: 12.5, alignItems: "start" }}>
+                      <span style={{ marginTop: 2 }}>
+                        {a.ok === true ? (
+                          <Icon name="check" size={12} className="text-3" style={{ color: "var(--success-fg)" }} />
+                        ) : a.ok === false ? (
+                          <Icon name="x" size={12} style={{ color: "var(--danger-fg)" }} />
+                        ) : (
+                          <Icon name="edit" size={11} className="text-3" />
+                        )}
+                      </span>
+                      <div>
+                        <div style={{ fontWeight: 500 }}>{a.text}</div>
+                        <div className="text-3" style={{ fontSize: 12 }}>
+                          Risposta: <strong style={{ color: a.ok === false ? "var(--danger-fg)" : "var(--text)" }}>{a.given}</strong>
+                          {a.ok !== null && a.ok === false && <> · Corretta: <strong style={{ color: "var(--success-fg)" }}>{a.correct}</strong></>}
+                          {a.ok === null && <> · <em>valutazione manuale</em></>}
+                        </div>
+                        {a.ok === null &&
+                          (a.type === "open" || a.type === "fill") &&
+                          a.given &&
+                          a.given !== "—" && <AiGradeButton prompt={a.text} answer={a.given} kbSection={a.cat} />}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
