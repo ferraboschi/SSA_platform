@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   sendPersonalExamLinkAction,
+  getPersonalExamLinkAction,
   sendPersonalExamLinksToAllAction,
   closeExamLinksAction,
   reopenExamLinksAction,
@@ -344,6 +345,31 @@ function miniBtn(primary: boolean): React.CSSProperties {
   };
 }
 
+// Compact square secondary button — same height as miniBtn, icon-only.
+const miniIconBtn: React.CSSProperties = {
+  flexShrink: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 32,
+  minHeight: 30,
+  borderRadius: 7,
+  cursor: "pointer",
+  border: "1px solid var(--border)",
+  background: "transparent",
+  color: "var(--text-2)",
+};
+
+// Chain/link glyph (inline SVG — the public page is self-contained, no icon lib).
+function LinkIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
 function StudentSendRow({
   token,
   testKey,
@@ -407,6 +433,33 @@ function StudentSendRow({
       setNote("Link copiato ✓");
     } catch {
       window.prompt("Copia il link:", link);
+    }
+  };
+
+  // Copy the student's PERSONAL exam link WITHOUT emailing it — for someone
+  // with no email/WhatsApp, so the educator hands it over another way (SMS,
+  // dictate). Same guards as "Invia"; marks the row "Inviato" (a delivery,
+  // just off-platform).
+  const copyPersonalLink = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    setLink(null);
+    const res = await getPersonalExamLinkAction(token, testKey, person.id, ttl, person.kind).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof getPersonalExamLinkAction>>,
+    );
+    setBusy(false);
+    if (!res.ok || !res.url) {
+      setNote(res.error || "Generazione del link non riuscita.");
+      return;
+    }
+    setJustSentAt(res.sentAt ?? new Date().toISOString());
+    try {
+      await navigator.clipboard.writeText(res.url);
+      setNote("Link personale copiato ✓ — invialo via SMS o a voce.");
+    } catch {
+      setLink(res.url);
+      setNote("Link personale generato:");
     }
   };
 
@@ -494,6 +547,20 @@ function StudentSendRow({
           >
             {stateLabel}
           </span>
+        </button>
+        <button
+          type="button"
+          onClick={copyPersonalLink}
+          disabled={busy || absent}
+          title={
+            absent
+              ? "Assente all'appello: non può ricevere questo test."
+              : "Copia il link personale (per SMS o consegna a voce, se non ha email/WhatsApp)"
+          }
+          aria-label="Copia il link personale"
+          style={miniIconBtn}
+        >
+          <LinkIcon />
         </button>
         <button
           type="button"

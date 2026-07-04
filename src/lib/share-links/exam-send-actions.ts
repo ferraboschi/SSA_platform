@@ -11,7 +11,7 @@
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyShareToken } from "./token";
-import { deliverExamInvite } from "@/lib/exam-links/invite-email";
+import { deliverExamInvite, buildPersonalExamUrl } from "@/lib/exam-links/invite-email";
 import { recordExamSend } from "@/lib/exam-links/send-log";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
@@ -192,6 +192,61 @@ export async function sendPersonalExamLinkAction(
     return { ok: true, ...res, sentAt: at };
   }
   return { ok: true, ...res };
+}
+
+/**
+ * MINT the personal exam link for one subject WITHOUT emailing it — for a
+ * student who has no email/WhatsApp, so the educator can hand the link over by
+ * another channel (SMS, dictate, print). Same guards as sendPersonalExamLinkAction
+ * (course from token, test configured, not absent, subject belongs to course);
+ * stamps the send log too, so the row reads "Inviato HH:MM" — handing out the
+ * link IS a delivery, just off-platform (mirrors the Appello "Copia link").
+ */
+export async function getPersonalExamLinkAction(
+  token: string,
+  testKey: string,
+  subjectId: number,
+  ttl?: string,
+  kind: "corsista" | "partecipante" = "corsista",
+): Promise<SendExamLinkResult> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("send", token, RATE_LIMIT_SEND)) {
+    return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  }
+  const t = String(testKey);
+  if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
+  const cid = Number(subjectId);
+  if (!Number.isInteger(cid) || cid <= 0) return { ok: false, error: "Destinatario non valido." };
+  const k = kind === "partecipante" ? "partecipante" : "corsista";
+
+  const svc = getSupabaseServiceClient();
+  const notReady = await unconfiguredError(svc, corsoId, t);
+  if (notReady) return { ok: false, error: notReady };
+
+  const present = await loadPresentForTest(svc, corsoId, t);
+  if (isBlockedByAbsence(present, `${k === "corsista" ? "c" : "p"}${cid}`)) {
+    return { ok: false, error: absentSendError(t) };
+  }
+
+  // Bind the subject to THIS course (same ownership guard as the email send).
+  const target =
+    k === "corsista"
+      ? await corsistaTarget(svc, corsoId, cid)
+      : await partecipanteTarget(svc, corsoId, cid);
+  if (!target) return { ok: false, error: "Destinatario non trovato in questo corso." };
+
+  const url = buildPersonalExamUrl(
+    String(corsoId),
+    t as ExamTestKey,
+    { kind: k, id: String(cid) },
+    ttlChoice(ttl),
+  );
+  const at = new Date().toISOString();
+  // No email address here → record a sentinel; getExamSends reads only the
+  // timestamp, so the row still shows "Inviato HH:MM".
+  await recordExamSend(corsoId, t, `${k === "corsista" ? "c" : "p"}${cid}`, target.email || "link-manuale", at);
+  return { ok: true, url, sentAt: at };
 }
 
 export interface SendExamLinksAllResult {
