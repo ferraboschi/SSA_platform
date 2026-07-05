@@ -30,6 +30,17 @@ export function ShareEducatorButton({ courseId }: { courseId: string }) {
     }
   }
 
+  // Open the educator preview reliably. A declarative <a target="_blank"> can
+  // land on an empty about:blank tab in some browsers (the new tab is created but
+  // the navigation is dropped); opening programmatically in the SAME click tick
+  // avoids that. If the popup is blocked (window.open → null), fall back to the
+  // current tab so the preview still opens instead of a dead blank tab.
+  function openPreview() {
+    if (!url) return;
+    const w = window.open(url, "_blank", "noopener,noreferrer");
+    if (!w) window.location.href = url;
+  }
+
   async function copy() {
     if (!url) return;
     try {
@@ -124,10 +135,10 @@ export function ShareEducatorButton({ courseId }: { courseId: string }) {
                   </button>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-                  <a className="btn btn-sm" href={url} target="_blank" rel="noopener noreferrer">
+                  <button type="button" className="btn btn-sm" onClick={openPreview}>
                     <Icon name="external" size={12} />
                     {s.open}
-                  </a>
+                  </button>
                   {expiryLabel && (
                     <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>
                       {s.expires} {expiryLabel}

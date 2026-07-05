@@ -36,6 +36,14 @@ export function ShareEnrolButton({
     }
   }
 
+  // Open programmatically in the same click tick — a declarative
+  // <a target="_blank"> can land on an empty about:blank tab in some browsers.
+  function openPreview() {
+    if (!available) return;
+    const w = window.open(enrolUrl, "_blank", "noopener,noreferrer");
+    if (!w) window.location.href = enrolUrl;
+  }
+
   // Short caption + the enrol link, pre-filled into WhatsApp's compose box.
   const waHref = `https://wa.me/?text=${encodeURIComponent(`${title}\n${enrolUrl}`)}`;
 
@@ -127,10 +135,10 @@ export function ShareEnrolButton({
                 <Icon name="whatsapp" size={12} />
                 {s.sendWhatsapp}
               </a>
-              <a className="btn btn-sm" href={enrolUrl} target="_blank" rel="noopener">
+              <button type="button" className="btn btn-sm" onClick={openPreview}>
                 <Icon name="external" size={12} />
                 {s.open}
-              </a>
+              </button>
             </div>
           </div>
         </>
