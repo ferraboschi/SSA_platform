@@ -67,8 +67,13 @@ export interface SharedStudent {
   phone: string;
   /** Corsista rows only: the enrollment id (drives the public companion-add). */
   iscrizioneId?: number;
-  /** Corsista rows only: seats bought on this order (>=2 ⇒ a "doppio"). */
+  /** Corsista rows only: effective seat count for companion slots (suppressed to
+   *  1 on F4-expanded lines so no phantom slot appears). */
   tickets?: number;
+  /** Corsista rows only: the REAL number of tickets purchased (for display). */
+  ticketsBought?: number;
+  /** Corsista rows only: net paid on the enrollment, € (buyer carries the line). */
+  amount?: number;
   /** Corsista rows only: how many companion slots are already filled. */
   companionsUsed?: number;
   /** Companion rows only: a label like "(ospite di <buyer>)". */
@@ -230,11 +235,13 @@ export async function loadSharedCourse(
   // writes). Companions are appended below as their own rows.
   const { data: iscr } = await sb
     .from("corsi_iscrizioni")
-    .select("id, line_item_id, corsista:corsisti(id,full_name,email,phone,placeholder)")
+    .select("id, line_item_id, amount_cents, discount_cents, corsista:corsisti(id,full_name,email,phone,placeholder)")
     .eq("corso_id", corso.id);
   type IscrJoin = {
     id: number;
     line_item_id: number | null;
+    amount_cents: number | null;
+    discount_cents: number | null;
     corsista: { id: number; full_name: string | null; email: string | null; phone: string | null; placeholder?: boolean } | null;
   };
   const iscrRows = (iscr ?? []) as unknown as IscrJoin[];
@@ -400,9 +407,14 @@ export async function loadSharedCourse(
     if (seen.has(key)) continue;
     seen.add(key);
     // Expanded lines: the buyer occupies exactly one seat (the extras are their
-    // own rows), so don't inflate — otherwise the appello shows phantom slots.
+    // own rows), so don't inflate `tickets` — otherwise the appello shows phantom
+    // companion slots. `ticketsBought` keeps the REAL purchased count for display.
     const lineExpanded = r.line_item_id != null && expandedLines.has(r.line_item_id);
     const tickets = lineExpanded ? 1 : (seatsOverrideByIscr.get(r.id) ?? ticketCount.get(c.id) ?? 1);
+    const ticketsBought = seatsOverrideByIscr.get(r.id) ?? ticketCount.get(c.id) ?? 1;
+    // Net paid on this enrollment (buyer seat carries the full line total): the
+    // owner wants price + ticket count visible on the roll-call.
+    const amount = Math.max(0, ((r.amount_cents || 0) - (r.discount_cents || 0)) / 100);
     const mine = companionsByIscr.get(r.id) ?? [];
     const snap = enrolledEmail.get(r.id);
     students.push({
@@ -417,6 +429,8 @@ export async function loadSharedCourse(
       phone: c.phone ?? "",
       iscrizioneId: r.id,
       tickets,
+      ticketsBought,
+      amount,
       companionsUsed: mine.length,
     });
     // Each companion becomes its OWN roster line (its own roll-call checkboxes),

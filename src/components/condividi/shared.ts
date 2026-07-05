@@ -14,6 +14,10 @@ export interface Student {
   phone: string;
   iscrizioneId?: number;
   tickets?: number;
+  /** Real number of tickets purchased (for display; may exceed `tickets`). */
+  ticketsBought?: number;
+  /** Net paid on the enrollment, € (buyer carries the full multi-ticket line). */
+  amount?: number;
   companionsUsed?: number;
   guestOf?: string;
 }

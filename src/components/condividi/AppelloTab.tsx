@@ -195,7 +195,22 @@ export default function AppelloTab({
                         <span className="edu-guest"> (ospite{s.guestOf ? ` di ${s.guestOf}` : ""})</span>
                       )}
                     </span>
-                    <span className="edu-row-sub">{checked ? "Presente" : "Assente"}</span>
+                    <span className="edu-row-sub">
+                      {checked ? "Presente" : "Assente"}
+                      {s.kind === "corsista" && (s.amount != null || (s.ticketsBought ?? 1) > 1) && (
+                        <span style={{ color: "var(--text-3)" }}>
+                          {" · "}
+                          {s.amount != null
+                            ? s.amount === 0
+                              ? "Gratis"
+                              : `€ ${s.amount.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : null}
+                          {(s.ticketsBought ?? 1) > 1
+                            ? `${s.amount != null ? " · " : ""}${s.ticketsBought} biglietti`
+                            : ""}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </button>
                 <span className={CHIP_CLASS[state]} style={{ justifySelf: "start", whiteSpace: "nowrap" }}>
