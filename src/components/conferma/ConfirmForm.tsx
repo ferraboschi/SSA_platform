@@ -42,6 +42,8 @@ export function ConfirmForm({
   const [phone, setPhone] = useState(initialPhone);
   const [address, setAddress] = useState(initialAddress);
   const [addressConfirmed, setAddressConfirmed] = useState(false);
+  const [dataConfirmed, setDataConfirmed] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const [notes, setNotes] = useState(initialNotes);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -49,7 +51,12 @@ export function ConfirmForm({
   const [error, setError] = useState<string | null>(null);
 
   const complete =
-    Boolean(email.trim()) && Boolean(phone.trim()) && Boolean(address.trim()) && addressConfirmed;
+    Boolean(email.trim()) &&
+    Boolean(phone.trim()) &&
+    Boolean(address.trim()) &&
+    addressConfirmed &&
+    dataConfirmed &&
+    consentAccepted;
 
   const submit = async () => {
     setError(null);
@@ -59,6 +66,9 @@ export function ConfirmForm({
       phone,
       deliveryAddress: address,
       addressConfirmed,
+      dataConfirmed,
+      privacyConsent: consentAccepted,
+      termsAccepted: consentAccepted,
       deliveryNotes: notes,
     });
     setBusy(false);
@@ -158,33 +168,9 @@ export function ConfirmForm({
           textareaClassName="input"
           placeholder="Via, numero civico, CAP, città"
         />
-        <label
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 8,
-            marginTop: 8,
-            fontSize: 12.5,
-            color: "var(--text-2)",
-            lineHeight: 1.45,
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={addressConfirmed}
-            onChange={(e) => setAddressConfirmed(e.target.checked)}
-            style={{ width: 18, height: 18, marginTop: 1, accentColor: "var(--indigo-600)", flexShrink: 0 }}
-          />
-          <span>
-            Confermo di abitare all&apos;indirizzo indicato
-            {address.trim() ? (
-              <>
-                : <strong>{address.trim()}</strong>
-              </>
-            ) : null}
-          </span>
-        </label>
+        <Check checked={addressConfirmed} onChange={setAddressConfirmed} style={{ marginTop: 8 }}>
+          Confermo di aver inserito anche il numero civico
+        </Check>
       </Field>
 
       <Field label="Note per la consegna (facoltative)" htmlFor={`${uid}-note`}>
@@ -199,6 +185,33 @@ export function ConfirmForm({
           style={{ ...field, minHeight: 104, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
         />
       </Field>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          margin: "4px 0 16px",
+          padding: "12px 14px",
+          borderRadius: 10,
+          background: "var(--surface-2)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <Check checked={dataConfirmed} onChange={setDataConfirmed}>
+          Ho controllato e confermo la correttezza di queste informazioni
+        </Check>
+        <Check checked={consentAccepted} onChange={setConsentAccepted}>
+          Ho letto e accetto la{" "}
+          <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" style={link}>
+            Privacy Policy
+          </a>{" "}
+          e i{" "}
+          <a href={TERMS_URL} target="_blank" rel="noopener noreferrer" style={link}>
+            Termini e Condizioni
+          </a>
+        </Check>
+      </div>
 
       {alreadyConfirmed && !error && (
         <p style={{ fontSize: 12, color: "var(--text-4)", margin: "0 0 10px" }}>
@@ -235,6 +248,52 @@ export function ConfirmForm({
         </p>
       )}
     </div>
+  );
+}
+
+// Official SSA legal pages (Shopify-hosted policy pages on the SSA domain).
+const PRIVACY_URL = "https://www.sakesommelierassociation.it/policies/privacy-policy";
+const TERMS_URL = "https://www.sakesommelierassociation.it/policies/terms-of-service";
+
+const link: React.CSSProperties = {
+  color: "var(--indigo-600)",
+  fontWeight: 600,
+  textDecoration: "underline",
+};
+
+/** A left-aligned checkbox + wrapping label, used for every confirmation flag. */
+function Check({
+  checked,
+  onChange,
+  children,
+  style,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <label
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 8,
+        fontSize: 12.5,
+        color: "var(--text-2)",
+        lineHeight: 1.45,
+        cursor: "pointer",
+        ...style,
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        style={{ width: 18, height: 18, marginTop: 1, accentColor: "var(--indigo-600)", flexShrink: 0 }}
+      />
+      <span>{children}</span>
+    </label>
   );
 }
 

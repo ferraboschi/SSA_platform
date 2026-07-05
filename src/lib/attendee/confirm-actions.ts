@@ -9,8 +9,14 @@ export interface ConfirmAttendeeInput {
   email: string;
   phone: string;
   deliveryAddress: string;
-  /** The written confirmation: "Confermo di abitare all'indirizzo indicato". */
+  /** The written confirmation: "Confermo di aver inserito anche il numero civico". */
   addressConfirmed: boolean;
+  /** "Ho controllato e confermo la correttezza di queste informazioni" — a gate,
+   *  not stored. */
+  dataConfirmed: boolean;
+  /** GDPR consents (one checkbox sets both; stored in two columns). */
+  privacyConsent: boolean;
+  termsAccepted: boolean;
   /** OPTIONAL: citofono name if different from the surname, courier notes. */
   deliveryNotes?: string;
 }
@@ -63,7 +69,19 @@ export async function confirmAttendeeAction(
   if (!addr.ok) return { ok: false, error: addr.error };
   if (!addr.value) return { ok: false, error: "Inserisci l'indirizzo di consegna." };
   if (!input.addressConfirmed) {
-    return { ok: false, error: "Conferma l'indirizzo spuntando la casella." };
+    return { ok: false, error: "Conferma di aver inserito il numero civico spuntando la casella." };
+  }
+
+  // DATA-CORRECTNESS gate (checkbox only, not stored) — enforced server-side too
+  // so a stale page can't POST around it.
+  if (!input.dataConfirmed) {
+    return { ok: false, error: "Spunta la casella di conferma della correttezza dei dati." };
+  }
+
+  // GDPR CONSENT — Privacy Policy + Terms & Conditions. Mandatory; recorded (with
+  // a timestamp) in two columns below.
+  if (!input.privacyConsent || !input.termsAccepted) {
+    return { ok: false, error: "Per proseguire accetta la Privacy Policy e i Termini e Condizioni." };
   }
 
   // DELIVERY NOTES — optional (citofono name if different, courier notes).
@@ -76,24 +94,25 @@ export async function confirmAttendeeAction(
     k === "corsista"
       ? { enrolled_email: clean, email_confirmed_at: now }
       : { email: clean, email_confirmed_at: now };
+  const consent = { privacy_consent_at: now, terms_accepted_at: now };
   const withAddr = { ...base, delivery_address: addr.value, delivery_notes: notes.value };
+  const full = { ...withAddr, ...consent };
 
-  let { error } = await svc
-    .from(table)
-    .update(withAddr)
-    .eq("id", Number(i))
-    .eq("corso_id", Number(c));
-  // Pre-migration degrade: the email confirmation (the primary act) must still
-  // succeed when delivery_address/delivery_notes don't exist yet — retry
-  // without them.
+  const doUpdate = (payload: Record<string, unknown>) =>
+    svc.from(table).update(payload).eq("id", Number(i)).eq("corso_id", Number(c));
+
+  // Try the full payload; degrade progressively if the optional columns aren't in
+  // the DB yet (consent migration, then delivery migration), so the primary email
+  // confirmation always lands. Track what actually saved.
   let addressSaved = true;
+  let { error } = await doUpdate(full);
+  if (error && /privacy_consent_at|terms_accepted_at/i.test(error.message)) {
+    // Consent columns absent → keep the delivery fields, drop consent.
+    ({ error } = await doUpdate(withAddr));
+  }
   if (error && /delivery_address|delivery_notes|column/i.test(error.message)) {
     addressSaved = false;
-    ({ error } = await svc
-      .from(table)
-      .update(base)
-      .eq("id", Number(i))
-      .eq("corso_id", Number(c)));
+    ({ error } = await doUpdate(base));
   }
   if (error) {
     return { ok: false, error: "Salvataggio non riuscito (migrazione non applicata?)." };

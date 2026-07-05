@@ -337,60 +337,76 @@ function PlaceholderRow({
     <tr style={{ background: "var(--surface-2, #f8f8fb)" }}>
       <td>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Avatar name={`${(student.seatIndex ?? 0) + 1}`} size="md" />
+          <Avatar name={String(student.seatIndex ?? 1)} size="md" />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <span style={{ fontWeight: 600, color: "var(--text-2)" }}>{student.name}</span>
               <Badge tone="warning">{t.seatPending}</Badge>
             </div>
             {open ? (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 6 }}>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={t.seatNamePh}
-                  maxLength={120}
-                  disabled={busy}
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") save();
-                    if (e.key === "Escape") setOpen(false);
-                  }}
-                  style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 150 }}
-                />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={t.seatEmailPh}
-                  maxLength={200}
-                  disabled={busy}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") save();
-                    if (e.key === "Escape") setOpen(false);
-                  }}
-                  style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 170 }}
-                />
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder={t.seatPhonePh}
-                  maxLength={40}
-                  disabled={busy}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") save();
-                    if (e.key === "Escape") setOpen(false);
-                  }}
-                  style={{ fontSize: 12, padding: "4px 7px", borderRadius: 6, border: "1px solid var(--border)", width: 130 }}
-                />
-                <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={busy || !name.trim()}>
-                  {t.seatSave}
-                </button>
-                <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
-                  {t.seatCancel}
-                </button>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  marginTop: 8,
+                  width: "100%",
+                  maxWidth: 340,
+                }}
+              >
+                <SeatField label={t.seatNamePh}>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={120}
+                    disabled={busy}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") save();
+                      if (e.key === "Escape") setOpen(false);
+                    }}
+                    style={seatInput}
+                  />
+                </SeatField>
+                <SeatField label={t.seatEmailPh}>
+                  <input
+                    type="email"
+                    inputMode="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    maxLength={200}
+                    disabled={busy}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") save();
+                      if (e.key === "Escape") setOpen(false);
+                    }}
+                    style={seatInput}
+                  />
+                </SeatField>
+                <SeatField label={t.seatPhonePh}>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    maxLength={40}
+                    disabled={busy}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") save();
+                      if (e.key === "Escape") setOpen(false);
+                    }}
+                    style={seatInput}
+                  />
+                </SeatField>
+                <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+                  <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={busy || !name.trim()}>
+                    {t.seatSave}
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
+                    {t.seatCancel}
+                  </button>
+                </div>
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
@@ -424,5 +440,37 @@ function PlaceholderRow({
       <td>—</td>
       <td>—</td>
     </tr>
+  );
+}
+
+// A labeled full-width field for the seat-completion form. Labels above each
+// input remove the ambiguity of three bare, wrapping boxes (a person read the
+// email box as "surname") and give the email room to be read.
+const seatInput: React.CSSProperties = {
+  fontSize: 13,
+  padding: "6px 9px",
+  borderRadius: 6,
+  border: "1px solid var(--border)",
+  width: "100%",
+};
+
+function SeatField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "block" }}>
+      <span
+        style={{
+          display: "block",
+          fontSize: 10.5,
+          fontWeight: 600,
+          color: "var(--text-3)",
+          margin: "0 0 3px",
+          textTransform: "uppercase",
+          letterSpacing: ".03em",
+        }}
+      >
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }
