@@ -473,12 +473,13 @@ export async function setPartecipanteNameAction(
  *  the educator fills in the real attendee at check-in. The seat keeps its
  *  enrollment, so once filled it's a normal corsista on EVERY day without
  *  re-entry. Bound to the token's course; only a placeholder seat can be
- *  completed. Name required; email optional (well-formed if given). */
+ *  completed. ALL FOUR data points mandatory: first + last name, email, phone. */
 export async function completeSeatFromLinkAction(
   token: string,
   iscrizioneId: number,
   fullName: string,
-  email?: string,
+  email: string,
+  phone: string,
 ): Promise<{ ok: boolean; person?: { id: number; name: string; email: string }; error?: string }> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
@@ -490,13 +491,13 @@ export async function completeSeatFromLinkAction(
   if (!Number.isInteger(iscrId) || iscrId <= 0) return { ok: false, error: "Iscrizione non valida." };
   const name = String(fullName ?? "").trim().replace(/\s+/g, " ");
   if (!name) return { ok: false, error: "Nome obbligatorio." };
+  if (name.split(" ").length < 2) return { ok: false, error: "Inserisci nome e cognome." };
   if (name.length > 120) return { ok: false, error: "Nome troppo lungo." };
-  const rawEmail = String(email ?? "").trim();
-  let cleanEmail: string | null = null;
-  if (rawEmail) {
-    cleanEmail = validEmail(rawEmail);
-    if (!cleanEmail) return { ok: false, error: "Email non valida." };
-  }
+  const cleanEmail = validEmail(String(email ?? "").trim());
+  if (!cleanEmail) return { ok: false, error: "Inserisci un'email valida." };
+  const tel = String(phone ?? "").trim();
+  if (!tel) return { ok: false, error: "Inserisci il numero di telefono." };
+  if (tel.length > 40) return { ok: false, error: "Numero di telefono troppo lungo." };
 
   const svc = getSupabaseServiceClient();
   // Enrollment must belong to the token's course AND be a placeholder seat.
@@ -514,23 +515,20 @@ export async function completeSeatFromLinkAction(
   const placeholderId = Number(enr.corsista_id);
 
   // A well-formed email already used by someone else is a DUPLICATE, not invalid.
-  if (cleanEmail) {
-    const { data: existing } = await svc
-      .from("corsisti")
-      .select("id")
-      .eq("email", cleanEmail)
-      .neq("id", placeholderId)
-      .maybeSingle();
-    if (existing?.id) return { ok: false, error: "Mail già presente: è associata a un altro nominativo." };
-  }
+  const { data: existing } = await svc
+    .from("corsisti")
+    .select("id")
+    .eq("email", cleanEmail)
+    .neq("id", placeholderId)
+    .maybeSingle();
+  if (existing?.id) return { ok: false, error: "Mail già presente: è associata a un altro nominativo." };
 
-  const patch: Record<string, unknown> = { full_name: name, placeholder: false };
-  if (cleanEmail) patch.email = cleanEmail;
-  const { error: updErr } = await svc.from("corsisti").update(patch).eq("id", placeholderId);
+  const { error: updErr } = await svc
+    .from("corsisti")
+    .update({ full_name: name, email: cleanEmail, phone: tel, placeholder: false })
+    .eq("id", placeholderId);
   if (updErr) return { ok: false, error: updErr.message };
-  if (cleanEmail) {
-    await svc.from("corsi_iscrizioni").update({ enrolled_email: cleanEmail }).eq("id", iscrId);
-  }
+  await svc.from("corsi_iscrizioni").update({ enrolled_email: cleanEmail }).eq("id", iscrId);
 
-  return { ok: true, person: { id: placeholderId, name, email: cleanEmail ?? "" } };
+  return { ok: true, person: { id: placeholderId, name, email: cleanEmail } };
 }

@@ -54,13 +54,17 @@ export async function completeSeatAction(
   if (!Number.isInteger(corso) || corso <= 0) return { ok: false, error: "Corso non valido." };
   if (!Number.isInteger(iscrId) || iscrId <= 0) return { ok: false, error: "Iscrizione non valida." };
 
-  const name = String(person?.name ?? "").trim();
+  // ALL FOUR data points are mandatory: first + last name, email, phone.
+  const name = String(person?.name ?? "").trim().replace(/\s+/g, " ");
   if (!name) return { ok: false, error: "Nome obbligatorio." };
+  if (name.split(" ").length < 2) return { ok: false, error: "Inserisci nome e cognome." };
   if (name.length > 120) return { ok: false, error: "Nome troppo lungo." };
   const email = String(person?.email ?? "").trim().toLowerCase();
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Email non valida." };
+  if (!email) return { ok: false, error: "Inserisci un'email valida." };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Email non valida." };
   if (email.length > 200) return { ok: false, error: "Email troppo lunga." };
   const phone = String(person?.phone ?? "").trim();
+  if (!phone) return { ok: false, error: "Inserisci il numero di telefono." };
   if (phone.length > 40) return { ok: false, error: "Telefono troppo lungo." };
 
   try {
@@ -84,7 +88,7 @@ export async function completeSeatAction(
     // A well-formed email that ALREADY belongs to someone else isn't "invalid" —
     // it's a duplicate. Say so clearly ("Mail già presente") instead of a vague
     // rejection, so staff know to check the address rather than re-type it.
-    if (email) {
+    {
       const { data: existing } = await svc
         .from("corsisti")
         .select("id")
@@ -96,16 +100,13 @@ export async function completeSeatAction(
       }
     }
 
-    // Promote the placeholder corsista in place to a real person. Keep
-    // the synthetic email when none is provided (it is unique and harmless).
-    const patch: Record<string, unknown> = { full_name: name, placeholder: false };
-    if (email) patch.email = email;
-    if (phone) patch.phone = phone;
-    const { error: updErr } = await svc.from("corsisti").update(patch).eq("id", placeholderId);
+    // Promote the placeholder corsista in place to a real person.
+    const { error: updErr } = await svc
+      .from("corsisti")
+      .update({ full_name: name, email, phone, placeholder: false })
+      .eq("id", placeholderId);
     if (updErr) return { ok: false, error: updErr.message };
-    if (email) {
-      await svc.from("corsi_iscrizioni").update({ enrolled_email: email }).eq("id", iscrId);
-    }
+    await svc.from("corsi_iscrizioni").update({ enrolled_email: email }).eq("id", iscrId);
 
     revalidatePath(`/corsi/${corso}`);
     return { ok: true };

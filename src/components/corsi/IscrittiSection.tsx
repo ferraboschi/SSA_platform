@@ -302,9 +302,14 @@ function PlaceholderRow({
 
   const iscrId = student.iscrizioneId;
 
+  // All four data points are mandatory: first + last name, email, phone.
+  const hasFullName = name.trim().split(/\s+/).filter(Boolean).length >= 2;
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const ready = hasFullName && emailValid && phone.trim().length > 0;
+
   async function save() {
     const trimmed = name.trim();
-    if (!trimmed || busy || iscrId == null) return;
+    if (!ready || busy || iscrId == null) return;
     setBusy(true);
     setError(null);
     const res = await completeSeatAction(Number(courseId), iscrId, {
@@ -393,7 +398,7 @@ function PlaceholderRow({
                   />
                 </SeatField>
                 <div style={{ display: "flex", gap: 6, flex: "0 0 auto" }}>
-                  <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={busy || !name.trim()}>
+                  <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={busy || !ready}>
                     {t.seatSave}
                   </button>
                   <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>

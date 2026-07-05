@@ -348,15 +348,25 @@ function SeatFillIn({
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // All four data points are mandatory when registering a person: first + last
+  // name (a full "Anna Salvagno"), email, and phone.
+  const hasFullName = name.trim().split(/\s+/).filter(Boolean).length >= 2;
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const ready = hasFullName && emailValid && phone.trim().length > 0;
+
   async function submit() {
-    const trimmed = name.trim();
-    if (!trimmed || busy || !iscrizioneId) return;
+    if (!ready || busy || !iscrizioneId) return;
     setBusy(true);
-    const res = await completeSeatFromLinkAction(token, iscrizioneId, trimmed, email.trim()).catch(
-      () => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatFromLinkAction>>,
-    );
+    const res = await completeSeatFromLinkAction(
+      token,
+      iscrizioneId,
+      name.trim(),
+      email.trim(),
+      phone.trim(),
+    ).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatFromLinkAction>>);
     setBusy(false);
     if (res.ok && res.person) onCompleted(res.person);
     else onError(res.error || "Salvataggio non riuscito, riprova.");
@@ -387,12 +397,22 @@ function SeatFillIn({
         className="edu-input"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email (facoltativa)"
+        placeholder="Email"
         maxLength={200}
         disabled={busy}
       />
+      <input
+        type="tel"
+        inputMode="numeric"
+        className="edu-input"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        placeholder="Telefono"
+        maxLength={40}
+        disabled={busy}
+      />
       <div style={{ display: "flex", gap: 6 }}>
-        <button type="button" className="edu-btn primary" onClick={submit} disabled={busy || !name.trim()}>
+        <button type="button" className="edu-btn primary" onClick={submit} disabled={busy || !ready}>
           Salva
         </button>
         <button type="button" className="edu-btn" onClick={onCancel} disabled={busy}>
