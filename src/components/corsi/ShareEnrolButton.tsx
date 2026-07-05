@@ -40,8 +40,11 @@ export function ShareEnrolButton({
   // <a target="_blank"> can land on an empty about:blank tab in some browsers.
   function openPreview() {
     if (!available) return;
-    const w = window.open(enrolUrl, "_blank", "noopener,noreferrer");
-    if (!w) window.location.href = enrolUrl;
+    // Don't pass "noopener" in the features string — it makes window.open return
+    // null even on success. Open, then sever the opener for the same security.
+    const w = window.open(enrolUrl, "_blank");
+    if (w) w.opener = null;
+    else window.location.href = enrolUrl; // genuinely blocked → open in this tab
   }
 
   // Short caption + the enrol link, pre-filled into WhatsApp's compose box.

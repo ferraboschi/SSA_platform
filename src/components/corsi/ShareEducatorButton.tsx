@@ -37,8 +37,12 @@ export function ShareEducatorButton({ courseId }: { courseId: string }) {
   // current tab so the preview still opens instead of a dead blank tab.
   function openPreview() {
     if (!url) return;
-    const w = window.open(url, "_blank", "noopener,noreferrer");
-    if (!w) window.location.href = url;
+    // NOTE: do NOT pass "noopener" in the features string — that makes the call
+    // return null even when the tab opened fine, which would wrongly trigger the
+    // fallback. Open, then sever the opener manually for the same security.
+    const w = window.open(url, "_blank");
+    if (w) w.opener = null;
+    else window.location.href = url; // genuinely blocked → open in this tab
   }
 
   async function copy() {
