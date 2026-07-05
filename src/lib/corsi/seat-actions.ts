@@ -81,8 +81,9 @@ export async function completeSeatAction(
     if (!cor?.placeholder) return { ok: false, error: "Questo posto è già assegnato a una persona." };
     const placeholderId = Number(enr.corsista_id);
 
-    // If the email is already a real corsista, re-point the seat to them instead
-    // of duplicating identities — but only if they aren't already on this course.
+    // A well-formed email that ALREADY belongs to someone else isn't "invalid" —
+    // it's a duplicate. Say so clearly ("Mail già presente") instead of a vague
+    // rejection, so staff know to check the address rather than re-type it.
     if (email) {
       const { data: existing } = await svc
         .from("corsisti")
@@ -91,28 +92,11 @@ export async function completeSeatAction(
         .neq("id", placeholderId)
         .maybeSingle();
       if (existing?.id) {
-        const existingId = Number(existing.id);
-        const { data: dup } = await svc
-          .from("corsi_iscrizioni")
-          .select("id")
-          .eq("corso_id", corso)
-          .eq("corsista_id", existingId)
-          .maybeSingle();
-        if (dup?.id) return { ok: false, error: "Questa persona è già iscritta a questo corso." };
-
-        const { error: repointErr } = await svc
-          .from("corsi_iscrizioni")
-          .update({ corsista_id: existingId, enrolled_email: email })
-          .eq("id", iscrId);
-        if (repointErr) return { ok: false, error: repointErr.message };
-        // The synthetic placeholder existed only for this seat — remove it.
-        await svc.from("corsisti").delete().eq("id", placeholderId).eq("placeholder", true);
-        revalidatePath(`/corsi/${corso}`);
-        return { ok: true };
+        return { ok: false, error: "Mail già presente: è associata a un altro nominativo." };
       }
     }
 
-    // Otherwise promote the placeholder corsista in place to a real person. Keep
+    // Promote the placeholder corsista in place to a real person. Keep
     // the synthetic email when none is provided (it is unique and harmless).
     const patch: Record<string, unknown> = { full_name: name, placeholder: false };
     if (email) patch.email = email;

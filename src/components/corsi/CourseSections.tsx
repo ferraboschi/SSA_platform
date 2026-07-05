@@ -51,15 +51,24 @@ export function CourseSections({
   // so it's gated on examFamily — never on hasExam alone (which can be true via
   // `esame` with no family, leaving the tab blank).
   const requestedTab = useSearchParams().get("tab");
-  const initialSection: SectionId =
-    requestedTab === "esame" && hasExam
+  const resolveSection = (tab: string | null): SectionId =>
+    tab === "esame" && hasExam
       ? "esame"
-      : requestedTab === "esiti" && examFamily
+      : tab === "esiti" && examFamily
         ? "esiti"
-        : requestedTab === "programma"
+        : tab === "programma"
           ? "programma"
           : "iscritti";
-  const [section, setSection] = useState<SectionId>(initialSection);
+  // The active section is DERIVED from the URL (?tab=…). The sidebar deep-links
+  // each sub-section via ?tab= on the same route; Next.js soft-navigates without
+  // remounting, so reading the tab only once (as a useState seed) left every
+  // sub-link opening the same tab. A tab BUTTON overrides locally without
+  // navigating — scoped to the current URL tab, so a later sidebar link (which
+  // changes the tab) naturally supersedes the override.
+  const [override, setOverride] = useState<{ forTab: string | null; section: SectionId } | null>(null);
+  const section =
+    override && override.forTab === requestedTab ? override.section : resolveSection(requestedTab);
+  const selectTab = (id: SectionId) => setOverride({ forTab: requestedTab, section: id });
 
   const tabs: { id: SectionId; label: string; n: number; accent?: boolean }[] = [
     { id: "iscritti", label: t.tabIscritti, n: enrolled },
@@ -75,7 +84,7 @@ export function CourseSections({
           <button
             key={tb.id}
             className={`tab ${section === tb.id ? "active" : ""}`}
-            onClick={() => setSection(tb.id)}
+            onClick={() => selectTab(tb.id)}
           >
             {tb.label}
             <span className="tab-count">{tb.n}</span>

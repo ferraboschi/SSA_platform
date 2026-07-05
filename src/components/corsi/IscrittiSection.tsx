@@ -164,7 +164,7 @@ export function IscrittiSection({
                     </div>
                   </td>
                   {/* Telefono */}
-                  <td>
+                  <td style={{ whiteSpace: "nowrap" }}>
                     {s.phone ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                         {s.hasWhatsApp && (
@@ -179,7 +179,7 @@ export function IscrittiSection({
                   {/* Ticket count */}
                   <td style={{ textAlign: "center" }}>{s.tickets ?? 1}</td>
                   {/* Importo + sconto */}
-                  <td>
+                  <td style={{ whiteSpace: "nowrap" }}>
                     <div style={{ fontWeight: 600 }}>
                       {s.amount === 0 ? t.free : money(s.amount)}
                     </div>
@@ -334,9 +334,11 @@ function PlaceholderRow({
   }
 
   return (
+    // The whole "da completare" seat spans the full table width so the edit form
+    // (especially the email) has room instead of being crushed into one column.
     <tr style={{ background: "var(--surface-2, #f8f8fb)" }}>
-      <td>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <td colSpan={7} style={{ padding: "10px 14px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
           <Avatar name={String(student.seatIndex ?? 1)} size="md" />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -344,17 +346,8 @@ function PlaceholderRow({
               <Badge tone="warning">{t.seatPending}</Badge>
             </div>
             {open ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                  marginTop: 8,
-                  width: "100%",
-                  maxWidth: 340,
-                }}
-              >
-                <SeatField label={t.seatNamePh}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8, alignItems: "flex-end" }}>
+                <SeatField label={t.seatNamePh} style={{ flex: "1 1 190px" }}>
                   <input
                     type="text"
                     value={name}
@@ -369,7 +362,7 @@ function PlaceholderRow({
                     style={seatInput}
                   />
                 </SeatField>
-                <SeatField label={t.seatEmailPh}>
+                <SeatField label={t.seatEmailPh} style={{ flex: "2 1 280px" }}>
                   <input
                     type="email"
                     inputMode="email"
@@ -384,7 +377,7 @@ function PlaceholderRow({
                     style={seatInput}
                   />
                 </SeatField>
-                <SeatField label={t.seatPhonePh}>
+                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 150px" }}>
                   <input
                     type="tel"
                     inputMode="tel"
@@ -399,7 +392,7 @@ function PlaceholderRow({
                     style={seatInput}
                   />
                 </SeatField>
-                <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+                <div style={{ display: "flex", gap: 6, flex: "0 0 auto" }}>
                   <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={busy || !name.trim()}>
                     {t.seatSave}
                   </button>
@@ -409,12 +402,12 @@ function PlaceholderRow({
                 </div>
               </div>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 4 }}>
                 <button
                   type="button"
                   onClick={() => { setError(null); setOpen(true); }}
                   disabled={busy}
-                  style={{ fontSize: 11.5, fontWeight: 600, color: "var(--indigo, #635BFF)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
+                  style={{ fontSize: 12, fontWeight: 600, color: "var(--indigo, #635BFF)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
                 >
                   ✎ {t.seatComplete}
                 </button>
@@ -423,22 +416,16 @@ function PlaceholderRow({
                   onClick={remove}
                   disabled={busy}
                   title={t.seatRemove}
-                  style={{ fontSize: 11, color: "var(--danger, #dc2626)", background: "transparent", border: "none", padding: 0, cursor: busy ? "default" : "pointer" }}
+                  style={{ fontSize: 11.5, color: "var(--danger, #dc2626)", background: "transparent", border: "none", padding: 0, cursor: busy ? "default" : "pointer" }}
                 >
                   {t.seatRemove}
                 </button>
               </div>
             )}
-            {error && <div style={{ fontSize: 11, color: "var(--danger, #dc2626)", marginTop: 3 }}>{error}</div>}
+            {error && <div style={{ fontSize: 12, fontWeight: 500, color: "var(--danger, #dc2626)", marginTop: 5 }}>{error}</div>}
           </div>
         </div>
       </td>
-      <td>—</td>
-      <td style={{ textAlign: "center" }}>—</td>
-      <td style={{ color: "var(--text-4)" }}>—</td>
-      <td>—</td>
-      <td>—</td>
-      <td>—</td>
     </tr>
   );
 }
@@ -454,9 +441,17 @@ const seatInput: React.CSSProperties = {
   width: "100%",
 };
 
-function SeatField({ label, children }: { label: string; children: React.ReactNode }) {
+function SeatField({
+  label,
+  children,
+  style,
+}: {
+  label: string;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
   return (
-    <label style={{ display: "block" }}>
+    <label style={{ display: "block", minWidth: 0, ...style }}>
       <span
         style={{
           display: "block",
