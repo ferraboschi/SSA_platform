@@ -89,11 +89,14 @@ export function ExamRunner({
   onPersist,
   onSubmitSession,
   showResult,
+  isFinal,
 }: {
   mode: "exam" | "test" | "validate";
   forcedLang?: string;
   collectRegistration?: boolean;
   reveal?: boolean;
+  /** True only for the FINAL exam — day tests end with a plain "Grazie". */
+  isFinal?: boolean;
   header: RunnerHeader;
   questions: RunnerQuestion[];
   /** Signed exam token — required to persist a real ("exam") submission. */
@@ -451,8 +454,14 @@ export function ExamRunner({
           {headerBar}
           <div className="exam-public-thanks">
             <div className="exam-public-thanks-check">✓</div>
-            <h2>{timed ? t.certDoneTitle : t.thanksTitle}</h2>
-            <p>{total === 0 ? t.empty : timed ? t.certDoneBody : t.thanksBody}</p>
+            {/* Only the FINAL exam is "certified". A day test (timed but not
+                final) ends with a plain "Grazie" and no certified/result line. */}
+            <h2>{timed ? (isFinal ? t.certDoneTitle : t.dayDoneTitle) : t.thanksTitle}</h2>
+            {(() => {
+              const body =
+                total === 0 ? t.empty : timed ? (isFinal ? t.certDoneBody : "") : t.thanksBody;
+              return body ? <p>{body}</p> : null;
+            })()}
           </div>
         </div>
       </div>
