@@ -468,3 +468,69 @@ export async function setPartecipanteNameAction(
   }
   return { ok: true };
 }
+
+/** Complete a multi-ticket EXTRA SEAT (F4 placeholder) from the educator link:
+ *  the educator fills in the real attendee at check-in. The seat keeps its
+ *  enrollment, so once filled it's a normal corsista on EVERY day without
+ *  re-entry. Bound to the token's course; only a placeholder seat can be
+ *  completed. Name required; email optional (well-formed if given). */
+export async function completeSeatFromLinkAction(
+  token: string,
+  iscrizioneId: number,
+  fullName: string,
+  email?: string,
+): Promise<{ ok: boolean; person?: { id: number; name: string; email: string }; error?: string }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("add", token, RATE_LIMIT_ADD)) {
+    return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  }
+
+  const iscrId = Number(iscrizioneId);
+  if (!Number.isInteger(iscrId) || iscrId <= 0) return { ok: false, error: "Iscrizione non valida." };
+  const name = String(fullName ?? "").trim().replace(/\s+/g, " ");
+  if (!name) return { ok: false, error: "Nome obbligatorio." };
+  if (name.length > 120) return { ok: false, error: "Nome troppo lungo." };
+  const rawEmail = String(email ?? "").trim();
+  let cleanEmail: string | null = null;
+  if (rawEmail) {
+    cleanEmail = validEmail(rawEmail);
+    if (!cleanEmail) return { ok: false, error: "Email non valida." };
+  }
+
+  const svc = getSupabaseServiceClient();
+  // Enrollment must belong to the token's course AND be a placeholder seat.
+  const { data: enr, error: enrErr } = await svc
+    .from("corsi_iscrizioni")
+    .select("id, corso_id, corsista_id, corsista:corsisti(id, placeholder)")
+    .eq("id", iscrId)
+    .maybeSingle();
+  if (enrErr) return { ok: false, error: enrErr.message };
+  if (!enr || Number(enr.corso_id) !== corsoId) {
+    return { ok: false, error: "Iscrizione non valida per questo corso." };
+  }
+  const cor = Array.isArray(enr.corsista) ? enr.corsista[0] : enr.corsista;
+  if (!cor?.placeholder) return { ok: false, error: "Questo posto è già assegnato a una persona." };
+  const placeholderId = Number(enr.corsista_id);
+
+  // A well-formed email already used by someone else is a DUPLICATE, not invalid.
+  if (cleanEmail) {
+    const { data: existing } = await svc
+      .from("corsisti")
+      .select("id")
+      .eq("email", cleanEmail)
+      .neq("id", placeholderId)
+      .maybeSingle();
+    if (existing?.id) return { ok: false, error: "Mail già presente: è associata a un altro nominativo." };
+  }
+
+  const patch: Record<string, unknown> = { full_name: name, placeholder: false };
+  if (cleanEmail) patch.email = cleanEmail;
+  const { error: updErr } = await svc.from("corsisti").update(patch).eq("id", placeholderId);
+  if (updErr) return { ok: false, error: updErr.message };
+  if (cleanEmail) {
+    await svc.from("corsi_iscrizioni").update({ enrolled_email: cleanEmail }).eq("id", iscrId);
+  }
+
+  return { ok: true, person: { id: placeholderId, name, email: cleanEmail ?? "" } };
+}

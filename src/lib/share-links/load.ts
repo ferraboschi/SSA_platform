@@ -74,6 +74,9 @@ export interface SharedStudent {
   ticketsBought?: number;
   /** Corsista rows only: net paid on the enrollment, € (buyer carries the line). */
   amount?: number;
+  /** Multi-ticket extra seat not yet completed (F4): a "da completare" roll-call
+   *  row the educator fills in at check-in. `guestOf` = the buyer's name. */
+  placeholder?: boolean;
   /** Corsista rows only: how many companion slots are already filled. */
   companionsUsed?: number;
   /** Companion rows only: a label like "(ospite di <buyer>)". */
@@ -389,17 +392,52 @@ export async function loadSharedCourse(
     }
   }
 
+  // Buyer name per order line (from the real seat-1 row) — used to label a
+  // multi-ticket extra seat as "2° posto di <buyer>".
+  const buyerNameByLine = new Map<number, string>();
+  for (const r of iscrRows) {
+    const c = r.corsista;
+    if (!c || c.placeholder || r.line_item_id == null) continue;
+    if (!buyerNameByLine.has(r.line_item_id)) buyerNameByLine.set(r.line_item_id, c.full_name ?? "");
+  }
+
   const seen = new Set<string>();
   const students: SharedStudent[] = [];
   const companions: SharedStudent[] = [];
+  const lineOf = new Map<SharedStudent, number | null>();
+  // F4 extra seats not yet completed, grouped by their order line so they render
+  // directly under the buyer.
+  const placeholdersByLine = new Map<number, SharedStudent[]>();
   for (const r of iscrRows) {
     const c = r.corsista;
     if (!c) continue;
-    // A not-yet-completed placeholder seat has no real attendee — it belongs to
-    // the internal roster ("Completa iscrizione"), not the educator's roll-call.
-    // Once staff fill it in (placeholder=false) it becomes a normal corsista row
-    // here automatically.
-    if (c.placeholder) continue;
+    const snap = enrolledEmail.get(r.id);
+
+    // A not-yet-completed placeholder seat (F4 multi-ticket): show it on the
+    // roll-call as a "da completare" row the educator fills in at check-in. It
+    // keeps its (placeholder) corsista_id, so presence works and — once filled —
+    // it becomes a normal corsista row across ALL days without re-entry.
+    if (c.placeholder) {
+      const line = r.line_item_id;
+      const ph: SharedStudent = {
+        id: c.id,
+        kind: "corsista",
+        name: "", // empty → UI shows "Posto da completare"
+        email: "", // hide the synthetic placeholder email
+        emailConfirmed: false,
+        confirmSent: Boolean(snap?.sent),
+        confirmSentAt: snap?.sentAt ?? null,
+        emailConfirmedAt: null,
+        phone: "",
+        iscrizioneId: r.id,
+        placeholder: true,
+        guestOf: line != null ? (buyerNameByLine.get(line) ?? "") : "",
+      };
+      if (line != null) (placeholdersByLine.get(line) ?? placeholdersByLine.set(line, []).get(line)!).push(ph);
+      else students.push(ph); // stray seat with no line → just list it
+      continue;
+    }
+
     const key = (c.email || c.full_name || "").trim().toLowerCase();
     // No identifying field → unusable roster row, skip it (an empty key never
     // dedups, so blank indistinguishable students would pile up).
@@ -416,8 +454,7 @@ export async function loadSharedCourse(
     // owner wants price + ticket count visible on the roll-call.
     const amount = Math.max(0, ((r.amount_cents || 0) - (r.discount_cents || 0)) / 100);
     const mine = companionsByIscr.get(r.id) ?? [];
-    const snap = enrolledEmail.get(r.id);
-    students.push({
+    const st: SharedStudent = {
       id: c.id,
       kind: "corsista",
       name: c.full_name ?? "",
@@ -432,7 +469,9 @@ export async function loadSharedCourse(
       ticketsBought,
       amount,
       companionsUsed: mine.length,
-    });
+    };
+    students.push(st);
+    lineOf.set(st, r.line_item_id);
     // Each companion becomes its OWN roster line (its own roll-call checkboxes),
     // labelled as a guest of the buyer.
     for (const comp of mine) {
@@ -453,7 +492,20 @@ export async function loadSharedCourse(
   }
   students.sort((a, b) => a.name.localeCompare(b.name));
   companions.sort((a, b) => a.name.localeCompare(b.name));
-  students.push(...companions);
+  // Interleave: each buyer is immediately followed by its "da completare" extra
+  // seats, so the 2nd ticket shows right under the person who bought it.
+  const ordered: SharedStudent[] = [];
+  for (const st of students) {
+    ordered.push(st);
+    const line = lineOf.get(st);
+    if (line != null) {
+      const phs = placeholdersByLine.get(line);
+      if (phs) ordered.push(...phs);
+    }
+  }
+  ordered.push(...companions);
+  students.length = 0;
+  students.push(...ordered);
 
   const type = corso.type as CourseTypeKey;
 

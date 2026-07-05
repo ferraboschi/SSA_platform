@@ -18,6 +18,9 @@ export interface Student {
   ticketsBought?: number;
   /** Net paid on the enrollment, € (buyer carries the full multi-ticket line). */
   amount?: number;
+  /** Multi-ticket extra seat not yet completed (F4) — a "da completare" row the
+   *  educator fills in at check-in; `guestOf` holds the buyer's name. */
+  placeholder?: boolean;
   companionsUsed?: number;
   guestOf?: string;
 }

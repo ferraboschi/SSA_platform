@@ -13,6 +13,7 @@ import {
   getAttendanceAction,
   setAttendanceAction,
   addPartecipanteFromLinkAction,
+  completeSeatFromLinkAction,
   type AttendanceMap,
   type AttendanceSubject,
 } from "@/lib/share-links/attendance-actions";
@@ -46,6 +47,7 @@ export default function AppelloTab({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState<string | null>(null);
+  const [seatOpen, setSeatOpen] = useState<string | null>(null);
   const chains = useRef<Map<string, Promise<void>>>(new Map());
   // Mirror of `pending` readable from the poll interval (state would be stale
   // inside the closure): while any write is in flight, polls must not merge.
@@ -189,10 +191,30 @@ export default function AppelloTab({
                     {checked ? "✓" : ""}
                   </span>
                   <span className="edu-row-main">
-                    <span className="edu-row-name" style={state === "confermato" ? { color: "var(--success-fg)" } : undefined}>
-                      {s.name || "—"}
-                      {s.kind === "partecipante" && (
-                        <span className="edu-guest"> (ospite{s.guestOf ? ` di ${s.guestOf}` : ""})</span>
+                    <span
+                      className="edu-row-name"
+                      style={
+                        s.placeholder
+                          ? { color: "var(--text-3)" }
+                          : state === "confermato"
+                            ? { color: "var(--success-fg)" }
+                            : undefined
+                      }
+                    >
+                      {s.placeholder ? (
+                        <>
+                          Posto da completare
+                          {s.guestOf && (
+                            <span className="edu-guest"> (2° biglietto di {s.guestOf})</span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {s.name || "—"}
+                          {s.kind === "partecipante" && (
+                            <span className="edu-guest"> (ospite{s.guestOf ? ` di ${s.guestOf}` : ""})</span>
+                          )}
+                        </>
                       )}
                     </span>
                     <span className="edu-row-sub">
@@ -213,19 +235,46 @@ export default function AppelloTab({
                     </span>
                   </span>
                 </button>
-                <span className={CHIP_CLASS[state]} style={{ justifySelf: "start", whiteSpace: "nowrap" }}>
-                  {chipLabel(state, s.confirmSentAt, s.emailConfirmedAt)}
-                </span>
-                <VerifyActions
-                  token={token}
-                  student={s}
-                  state={state}
-                  onUpdated={(patch) =>
-                    setStudents((prev) =>
-                      prev.map((x) => (x.kind === s.kind && x.id === s.id ? { ...x, ...patch } : x)),
-                    )
-                  }
-                />
+                {s.placeholder ? (
+                  <span className="badge badge-warning" style={{ justifySelf: "start", whiteSpace: "nowrap" }}>
+                    Da completare
+                  </span>
+                ) : (
+                  <span className={CHIP_CLASS[state]} style={{ justifySelf: "start", whiteSpace: "nowrap" }}>
+                    {chipLabel(state, s.confirmSentAt, s.emailConfirmedAt)}
+                  </span>
+                )}
+                {s.placeholder ? (
+                  <SeatFillIn
+                    open={seatOpen === subj}
+                    onOpen={() => { setError(null); setSeatOpen(subj); }}
+                    onCancel={() => setSeatOpen(null)}
+                    token={token}
+                    iscrizioneId={s.iscrizioneId ?? 0}
+                    onError={(m) => setError(m)}
+                    onCompleted={(person) => {
+                      setStudents((prev) =>
+                        prev.map((x) =>
+                          x.kind === "corsista" && x.id === s.id
+                            ? { ...x, name: person.name, email: person.email, placeholder: false }
+                            : x,
+                        ),
+                      );
+                      setSeatOpen(null);
+                    }}
+                  />
+                ) : (
+                  <VerifyActions
+                    token={token}
+                    student={s}
+                    state={state}
+                    onUpdated={(patch) =>
+                      setStudents((prev) =>
+                        prev.map((x) => (x.kind === s.kind && x.id === s.id ? { ...x, ...patch } : x)),
+                      )
+                    }
+                  />
+                )}
               </div>
               {canAdd && addOpen !== subj && (
                 <button type="button" className="edu-addlink" onClick={() => setAddOpen(subj)}>
@@ -276,6 +325,84 @@ export default function AppelloTab({
 /** Double-confirmed course RESET: presence + email verifications back to zero
  *  (emails/phones/addresses are kept). For test runs and wrong setups — the
  *  destructive twin of the appello, so it lives at the very bottom, quiet. */
+// Fill-in for a multi-ticket EXTRA SEAT (F4 placeholder) directly on the
+// roll-call: the educator enters the real attendee at check-in. Once saved, the
+// seat becomes a normal corsista on every day (no re-entry). Name required,
+// email optional (needed later to send the confirmation).
+function SeatFillIn({
+  open,
+  onOpen,
+  onCancel,
+  token,
+  iscrizioneId,
+  onError,
+  onCompleted,
+}: {
+  open: boolean;
+  onOpen: () => void;
+  onCancel: () => void;
+  token: string;
+  iscrizioneId: number;
+  onError: (m: string) => void;
+  onCompleted: (person: { id: number; name: string; email: string }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    const trimmed = name.trim();
+    if (!trimmed || busy || !iscrizioneId) return;
+    setBusy(true);
+    const res = await completeSeatFromLinkAction(token, iscrizioneId, trimmed, email.trim()).catch(
+      () => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatFromLinkAction>>,
+    );
+    setBusy(false);
+    if (res.ok && res.person) onCompleted(res.person);
+    else onError(res.error || "Salvataggio non riuscito, riprova.");
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="edu-addlink" style={{ justifySelf: "start" }} onClick={onOpen}>
+        ✎ Inserisci nominativo
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+      <input
+        type="text"
+        className="edu-input"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Nome e cognome"
+        maxLength={120}
+        autoFocus
+        disabled={busy}
+      />
+      <input
+        type="email"
+        inputMode="email"
+        className="edu-input"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email (facoltativa)"
+        maxLength={200}
+        disabled={busy}
+      />
+      <div style={{ display: "flex", gap: 6 }}>
+        <button type="button" className="edu-btn primary" onClick={submit} disabled={busy || !name.trim()}>
+          Salva
+        </button>
+        <button type="button" className="edu-btn" onClick={onCancel} disabled={busy}>
+          Annulla
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ResetAppello({ token }: { token: string }) {
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
