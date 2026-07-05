@@ -391,32 +391,29 @@
    48px tap target (instead of vertically centred) so it lines up with the
    chip and email rather than floating mid-cell. */
 @media (min-width: 900px) {
-  /* The column tracks are defined ONCE on the list and shared by every row via
-     subgrid, so the state chip and the email/phone column line up across ALL
-     rows regardless of how wide each chip's label is (e.g. "Assente" vs
-     "Inviata 01/07 09:05 — in attesa"). Without this each row was its own grid
-     and the `max-content` chip column drifted per row. */
-  .edu-list {
-    display: grid;
-    grid-template-columns: minmax(220px, 1fr) max-content minmax(300px, 1.2fr);
-  }
-  .edu-empty { grid-column: 1 / -1; }
-  .edu-rowwrap {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: subgrid;
-  }
+  /* One line per row: [presence+name] [state chip] [email/phone]. The chip
+     column is a FIXED width, so the email/phone column starts at the SAME x on
+     every row no matter how wide the state label is ("Assente" vs "Inviata
+     01/07 09:05 — in attesa"). Each row is its own grid, but a fixed middle
+     column + flexible side columns resolve to identical boundaries given the
+     identical row width — so the columns line up across all rows. (A shared
+     `max-content`/subgrid drifted or broke in the nested layout.) */
   .edu-rowgrid {
-    grid-column: 1 / -1;
-    grid-template-columns: subgrid;
+    grid-template-columns: minmax(200px, 1fr) 232px minmax(260px, 1.05fr);
     gap: 16px;
     align-items: start;
   }
   .edu-rowgrid > .edu-presence { align-items: flex-start; min-height: 0; }
-  .edu-rowgrid > .badge { align-self: start; }
-  /* Add-participant affordances sit below the row, spanning the full width. */
-  .edu-rowwrap > .edu-addlink,
-  .edu-rowwrap > .edu-addform { grid-column: 1 / -1; }
+  .edu-rowgrid > .badge {
+    align-self: start;
+    justify-self: start;
+    /* Natural width, left-aligned in the fixed cell; an over-long label
+       ellipsizes rather than pushing the email column out of alignment. */
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .edu-empty {
