@@ -38,8 +38,11 @@ export function ConfirmForm({
   alreadyConfirmed: boolean;
 }) {
   const uid = useId();
+  const initialPhoneParts = splitPhone(initialPhone);
+  const [fullName, setFullName] = useState(name);
   const [email, setEmail] = useState(initialEmail);
-  const [phone, setPhone] = useState(initialPhone);
+  const [dialCode, setDialCode] = useState(initialPhoneParts.code);
+  const [phoneNumber, setPhoneNumber] = useState(initialPhoneParts.number);
   const [address, setAddress] = useState(initialAddress);
   const [addressConfirmed, setAddressConfirmed] = useState(false);
   const [dataConfirmed, setDataConfirmed] = useState(false);
@@ -50,20 +53,32 @@ export function ConfirmForm({
   const [addressSaved, setAddressSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fullPhone = phoneNumber.trim() ? `${dialCode} ${phoneNumber.trim()}` : "";
   const complete =
+    Boolean(fullName.trim()) &&
     Boolean(email.trim()) &&
-    Boolean(phone.trim()) &&
+    Boolean(phoneNumber.trim()) &&
     Boolean(address.trim()) &&
     addressConfirmed &&
     dataConfirmed &&
     consentAccepted;
 
+  // On mobile the on-screen keyboard covers the lower half — bring the focused
+  // field into view (after a short delay so the keyboard has appeared). Captured
+  // at the form level so it works for every field, including the address box.
+  const onFieldFocus = (e: React.FocusEvent<HTMLElement>) => {
+    const el = e.target as HTMLElement;
+    if (!el.matches("input:not([type=checkbox]), textarea, select")) return;
+    setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
+  };
+
   const submit = async () => {
     setError(null);
     setBusy(true);
     const res = await confirmAttendeeAction(token, {
+      name: fullName,
       email,
-      phone,
+      phone: fullPhone,
       deliveryAddress: address,
       addressConfirmed,
       dataConfirmed,
@@ -98,7 +113,7 @@ export function ConfirmForm({
         </div>
         <h2 style={{ fontSize: 18, margin: "0 0 6px" }}>Dati confermati</h2>
         <p style={{ fontSize: 13.5, color: "var(--text-3)", margin: 0, lineHeight: 1.55 }}>
-          Grazie{name ? `, ${name.split(" ")[0]}` : ""}. Riceverai i test e l&apos;esame
+          Grazie{fullName ? `, ${fullName.split(" ")[0]}` : ""}. Riceverai i test e l&apos;esame
           all&apos;indirizzo <strong>{email}</strong>.
         </p>
         {addressSaved && address.trim() && (
@@ -111,7 +126,7 @@ export function ConfirmForm({
   }
 
   return (
-    <div>
+    <div onFocusCapture={onFieldFocus}>
       <h1 style={{ fontSize: "clamp(19px, 4vw, 23px)", margin: "0 0 4px" }}>Conferma i tuoi dati</h1>
       <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 18px", lineHeight: 1.5 }}>
         Corso <strong>{courseName}</strong>. Controlla e completa i tuoi dati:
@@ -120,7 +135,18 @@ export function ConfirmForm({
       </p>
 
       <Field label="Nome e cognome" htmlFor={`${uid}-nome`}>
-        <input id={`${uid}-nome`} className="input" value={name} readOnly style={ro} />
+        <input
+          id={`${uid}-nome`}
+          className="input"
+          type="text"
+          autoComplete="name"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          placeholder="Nome e cognome"
+          maxLength={120}
+          style={field}
+        />
+        <Hint>Correggi qui eventuali errori di battitura nel tuo nome.</Hint>
       </Field>
 
       <Field label="Email" htmlFor={`${uid}-email`}>
@@ -142,18 +168,32 @@ export function ConfirmForm({
       </Field>
 
       <Field label="Telefono" htmlFor={`${uid}-tel`}>
-        <input
-          id={`${uid}-tel`}
-          className="input"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="+39 …"
-          maxLength={40}
-          style={field}
-        />
+        <div style={{ display: "flex", gap: 8 }}>
+          <select
+            aria-label="Prefisso internazionale"
+            value={dialCode}
+            onChange={(e) => setDialCode(e.target.value)}
+            style={{ ...field, width: "auto", flex: "0 0 auto", maxWidth: 150 }}
+          >
+            {COUNTRIES.map((c) => (
+              <option key={c.code + c.name} value={c.code}>
+                {c.flag} {c.code}
+              </option>
+            ))}
+          </select>
+          <input
+            id={`${uid}-tel`}
+            className="input"
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel-national"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="333 1234567"
+            maxLength={30}
+            style={{ ...field, flex: 1, minWidth: 0 }}
+          />
+        </div>
       </Field>
 
       <Field label="Indirizzo di consegna" htmlFor={`${uid}-addr`}>
@@ -254,6 +294,51 @@ export function ConfirmForm({
 // Official SSA legal pages (Shopify-hosted policy pages on the SSA domain).
 const PRIVACY_URL = "https://www.sakesommelierassociation.it/policies/privacy-policy";
 const TERMS_URL = "https://www.sakesommelierassociation.it/policies/terms-of-service";
+
+// International dial codes for the phone field. Italy is the default (the vast
+// majority of attendees); the rest cover the common origins. Order = Italy +
+// neighbours first, then broader.
+const COUNTRIES: { code: string; flag: string; name: string }[] = [
+  { code: "+39", flag: "🇮🇹", name: "Italia" },
+  { code: "+41", flag: "🇨🇭", name: "Svizzera" },
+  { code: "+378", flag: "🇸🇲", name: "San Marino" },
+  { code: "+33", flag: "🇫🇷", name: "Francia" },
+  { code: "+49", flag: "🇩🇪", name: "Germania" },
+  { code: "+44", flag: "🇬🇧", name: "Regno Unito" },
+  { code: "+34", flag: "🇪🇸", name: "Spagna" },
+  { code: "+43", flag: "🇦🇹", name: "Austria" },
+  { code: "+32", flag: "🇧🇪", name: "Belgio" },
+  { code: "+31", flag: "🇳🇱", name: "Paesi Bassi" },
+  { code: "+351", flag: "🇵🇹", name: "Portogallo" },
+  { code: "+30", flag: "🇬🇷", name: "Grecia" },
+  { code: "+353", flag: "🇮🇪", name: "Irlanda" },
+  { code: "+352", flag: "🇱🇺", name: "Lussemburgo" },
+  { code: "+386", flag: "🇸🇮", name: "Slovenia" },
+  { code: "+385", flag: "🇭🇷", name: "Croazia" },
+  { code: "+420", flag: "🇨🇿", name: "Rep. Ceca" },
+  { code: "+48", flag: "🇵🇱", name: "Polonia" },
+  { code: "+46", flag: "🇸🇪", name: "Svezia" },
+  { code: "+45", flag: "🇩🇰", name: "Danimarca" },
+  { code: "+47", flag: "🇳🇴", name: "Norvegia" },
+  { code: "+1", flag: "🇺🇸", name: "USA / Canada" },
+  { code: "+81", flag: "🇯🇵", name: "Giappone" },
+  { code: "+86", flag: "🇨🇳", name: "Cina" },
+  { code: "+61", flag: "🇦🇺", name: "Australia" },
+  { code: "+971", flag: "🇦🇪", name: "Emirati Arabi" },
+];
+
+/** Split a stored phone into a known dial code + the rest. Defaults to Italy
+ *  (+39) when there's no recognizable prefix, so the local number stays intact. */
+function splitPhone(raw: string): { code: string; number: string } {
+  const s = (raw || "").trim();
+  if (s.startsWith("+")) {
+    // Longest match wins so "+378"/"+351" beat "+3…".
+    const codes = COUNTRIES.map((c) => c.code).sort((a, b) => b.length - a.length);
+    const match = codes.find((c) => s.startsWith(c));
+    if (match) return { code: match, number: s.slice(match.length).trim() };
+  }
+  return { code: "+39", number: s };
+}
 
 const link: React.CSSProperties = {
   color: "var(--indigo-600)",

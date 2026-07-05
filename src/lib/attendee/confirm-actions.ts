@@ -6,6 +6,8 @@ import { normEmail, isValidEmail, normAddress, normDeliveryNotes } from "./confi
 import { loadConfirmSubject } from "./confirm";
 
 export interface ConfirmAttendeeInput {
+  /** Editable full name — lets the attendee fix a typo in their own name. */
+  name: string;
   email: string;
   phone: string;
   deliveryAddress: string;
@@ -58,6 +60,11 @@ export async function confirmAttendeeAction(
   if (!isValidEmail(clean)) {
     return { ok: false, error: "Inserisci un indirizzo email valido." };
   }
+
+  // NAME — mandatory (editable so the attendee can fix a typo; propagated below).
+  const fullName = String(input.name ?? "").trim().replace(/\s+/g, " ");
+  if (!fullName) return { ok: false, error: "Inserisci nome e cognome." };
+  if (fullName.length > 120) return { ok: false, error: "Nome troppo lungo." };
 
   // PHONE — mandatory (propagated below).
   const phone = String(input.phone ?? "").trim();
@@ -118,9 +125,9 @@ export async function confirmAttendeeAction(
     return { ok: false, error: "Salvataggio non riuscito (migrazione non applicata?)." };
   }
 
-  // PHONE propagation: corsista → the GLOBAL corsisti row (everywhere the
-  // number appears); companion → its own row. Best-effort: a phone hiccup must
-  // not undo the email confirmation above.
+  // NAME + PHONE propagation: corsista → the GLOBAL corsisti row (everywhere the
+  // name/number appears); companion → its own row. Best-effort: a hiccup here
+  // must not undo the email confirmation above.
   if (k === "corsista") {
     const { data: enr } = await svc
       .from("corsi_iscrizioni")
@@ -129,10 +136,14 @@ export async function confirmAttendeeAction(
       .maybeSingle();
     const corsistaId = (enr as { corsista_id: number } | null)?.corsista_id;
     if (corsistaId != null) {
-      await svc.from("corsisti").update({ phone }).eq("id", corsistaId);
+      await svc.from("corsisti").update({ full_name: fullName, phone }).eq("id", corsistaId);
     }
   } else {
-    await svc.from("corsi_partecipanti").update({ phone }).eq("id", Number(i)).eq("corso_id", Number(c));
+    await svc
+      .from("corsi_partecipanti")
+      .update({ full_name: fullName, phone })
+      .eq("id", Number(i))
+      .eq("corso_id", Number(c));
   }
 
   return { ok: true, addressSaved };
