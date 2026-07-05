@@ -331,34 +331,43 @@ function ProgressBar({ p }: { p: SubjectProgress | undefined }) {
 const timeIt = (iso: string) =>
   new Date(iso).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
 
-function miniBtn(primary: boolean): React.CSSProperties {
+function miniBtn(primary: boolean, disabled = false): React.CSSProperties {
   return {
     flexShrink: 0,
     fontSize: 12,
     fontWeight: 600,
     padding: "6px 12px",
     borderRadius: 7,
-    cursor: "pointer",
+    // Disabled reads as grey (not the active indigo) so it's clear the action
+    // isn't available — e.g. an absent student can't be sent the test.
+    cursor: disabled ? "not-allowed" : "pointer",
     border: primary ? "none" : "1px solid var(--border)",
-    background: primary ? "var(--indigo-600)" : "transparent",
-    color: primary ? "#fff" : "var(--text-2)",
+    background: disabled ? "var(--border-2)" : primary ? "var(--indigo-600)" : "transparent",
+    color: disabled ? "var(--text-4)" : primary ? "#fff" : "var(--text-2)",
   };
 }
 
 // Compact square secondary button — same height as miniBtn, icon-only.
-const miniIconBtn: React.CSSProperties = {
-  flexShrink: 0,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: 32,
-  minHeight: 30,
-  borderRadius: 7,
-  cursor: "pointer",
-  border: "1px solid var(--border)",
-  background: "transparent",
-  color: "var(--text-2)",
-};
+function miniIconBtn(disabled = false): React.CSSProperties {
+  return {
+    flexShrink: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 32,
+    minHeight: 30,
+    borderRadius: 7,
+    cursor: disabled ? "not-allowed" : "pointer",
+    border: "1px solid var(--border)",
+    background: disabled ? "var(--border-2)" : "transparent",
+    color: disabled ? "var(--text-4)" : "var(--text-2)",
+  };
+}
+
+// Shown when the educator tries to send/copy a test link for an absent student —
+// the owner's rule: only a present student can sit the exam.
+const ABSENT_WARNING =
+  "Persona o studente non presente. Lo studente deve essere presente per sostenere l'esame.";
 
 // Chain/link glyph (inline SVG — the public page is self-contained, no icon lib).
 function LinkIcon() {
@@ -404,6 +413,14 @@ function StudentSendRow({
 
   const send = async () => {
     if (busy) return;
+    // An absent student can't sit the exam — warn instead of sending (the button
+    // is greyed but stays clickable so this message can surface). Mirrors the
+    // server-side gate.
+    if (absent) {
+      setLink(null);
+      setNote(ABSENT_WARNING);
+      return;
+    }
     setBusy(true);
     setNote(null);
     setLink(null);
@@ -442,6 +459,11 @@ function StudentSendRow({
   // just off-platform).
   const copyPersonalLink = async () => {
     if (busy) return;
+    if (absent) {
+      setLink(null);
+      setNote(ABSENT_WARNING);
+      return;
+    }
     setBusy(true);
     setNote(null);
     setLink(null);
@@ -551,23 +573,23 @@ function StudentSendRow({
         <button
           type="button"
           onClick={copyPersonalLink}
-          disabled={busy || absent}
+          disabled={busy}
           title={
             absent
-              ? "Assente all'appello: non può ricevere questo test."
+              ? ABSENT_WARNING
               : "Copia il link personale (per SMS o consegna a voce, se non ha email/WhatsApp)"
           }
           aria-label="Copia il link personale"
-          style={miniIconBtn}
+          style={miniIconBtn(busy || absent)}
         >
           <LinkIcon />
         </button>
         <button
           type="button"
           onClick={send}
-          disabled={busy || absent}
-          title={absent ? "Assente all'appello: non può ricevere questo test." : undefined}
-          style={miniBtn(true)}
+          disabled={busy}
+          title={absent ? ABSENT_WARNING : undefined}
+          style={miniBtn(true, busy || absent)}
         >
           {busy ? "…" : "Invia"}
         </button>
