@@ -165,6 +165,7 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   // not time-based: long rightward jumps outlast any fixed timer, and a spy waking mid-flight briefly
   // highlights the PREVIOUS category (the proximity glitch). Cleared on arrival, user touch, or 3s.
   const jumpState = useRef<{ y: number; deadline: number } | null>(null);
+  const pendingSessionScroll = useRef(false); // set when a session switch happens with the bar stuck
 
   const t = T[lang];
   const ui = UI[lang]; // shared trilingual strings (congrats banner)
@@ -332,7 +333,21 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
     jumpState.current = { y, deadline: performance.now() + 3000 }; // spy silent until we land there
     window.scrollTo({ top: y, behavior: "smooth" });
   };
-  const changeSession = (s: SessionKey) => { setSession(s); setTags([]); setPref("all"); setActiveIdx(0); window.scrollTo({ top: 0 }); };
+  // Switching session is a content swap under the pinned filter, never a trip back to the banner:
+  // if the bar is stuck we land (instantly) at the top of the NEW session's list with the bar still
+  // pinned; if the user is still at the top of the page, nothing moves at all.
+  const changeSession = (s: SessionKey) => {
+    pendingSessionScroll.current = !!barRef.current && barRef.current.getBoundingClientRect().top <= 61;
+    setSession(s); setTags([]); setPref("all"); setActiveIdx(0);
+  };
+  useEffect(() => {
+    if (!pendingSessionScroll.current) return;
+    pendingSessionScroll.current = false;
+    const el = document.getElementById(secId(0));
+    const off = 60 + (barRef.current?.offsetHeight ?? 142) + 1;
+    window.scrollTo({ top: el ? el.getBoundingClientRect().top + window.scrollY - off : 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   // ── Link generator: restore the view from the URL on load, then keep the URL in sync so the
   //    "Genera link" button copies a permalink that reproduces session + prefecture + search tags. ──
