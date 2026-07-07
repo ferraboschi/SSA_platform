@@ -15,8 +15,6 @@ import {
 type SortKey = "name" | "company" | "prefecture";
 type SortState = { key: SortKey; dir: "asc" | "desc" };
 const DEFAULT_SORT: SortState = { key: "name", dir: "asc" };
-// height of the sticky category echo (.al-cat-sticky) — the tier bands stick this much lower
-const STICKY_STRIP_H = 44;
 
 const T: Record<LangKey, Record<string, string>> = {
   it: { brandSub: "Portale Risultati", kicker: "Milano Sake Challenge 2026 · Risultati", title: "Albo dei Premiati", subtitle: "Sfoglia i vincitori per sessione e categoria. Clicca una categoria per saltarci: la lista non si nasconde, scorre.", jumpTo: "Salta a", searchTagPh: "Cerca sakagura, prodotto o regione…", tagSakagura: "Sakagura", tagProduct: "Prodotto", tagRegion: "Regione", genLink: "Genera link", copied: "Link copiato", allPrefs: "Tutte le prefetture", winners: "premiati", winnerOne: "premiato", noResults: "Nessun risultato per questi criteri", reset: "Azzera", magnifica: "Magnifica: annuncio a settembre", inThis: "in questa vista", backTop: "↑ Torna su", colName: "Nome Sake", colSakagura: "Sakagura", colPrefecture: "Regione" },
@@ -55,14 +53,12 @@ const STYLES = `
 .al-cat-milano .d { color:#b08a3e; }
 .al-cat-count { margin:9px 0 0; font-family:'Bodoni Moda','EB Garamond',serif; font-style:italic; font-size:14px; font-weight:400; color:#475467; }
 .al-tablebody { position:relative; }
-/* Two-level sticky. Level 1: a slim echo of the category title — invisible until the big Bodoni title
-   scrolls away, then it sticks under the filter bar and stays for ALL the card's tiers (Platino→Argento),
-   replaced by the next card's echo. Height 44px must match STICKY_STRIP_H in the scroll handler. */
-.al-cat-sticky { position:sticky; z-index:6; height:44px; display:flex; align-items:center; justify-content:center; background:#fff; opacity:0; pointer-events:none; transition:opacity .18s ease; }
-.al-cat-sticky-name { font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:21px; color:#0f1b3d; max-width:92%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* Level 2: the Gallery Wall-Label tier band — medal photo + tier in serif italic w/ one gold hairline.
-   It sticks 44px lower, visually attached under the category echo. */
+/* Gallery Wall-Label tier band (sticky): MEDAGLIA – CATEGORIA on one line. The category sits centered
+   in the page at the SAME size as the tier word (29px, Bodoni echoing the big title), baseline-aligned
+   with the medal. It fades in only once the band sticks (while the big title is on screen it would be
+   a duplicate) and holds for all the card's tiers; the next card's bands replace it with the fade. */
 .al-band { position:sticky; z-index:5; display:flex; align-items:center; gap:13px; padding:10px 6px 9px; background:#fff; margin-top:28px; box-shadow:0 7px 9px -8px rgba(16,24,40,.14); }
+.al-band-catname { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:29px; line-height:1; color:#0f1b3d; max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; opacity:0; transition:opacity .18s ease; pointer-events:none; }
 .al-band-photo { height:34px !important; width:auto !important; object-fit:contain; flex-shrink:0; }
 .al-band-tier { font-family:'EB Garamond',Georgia,serif; font-size:29px; font-weight:400; color:#101828; line-height:1; }
 .al-band-tier .w { font-style:italic; font-weight:500; padding-bottom:4px; border-bottom:1px solid #b08a3e; }
@@ -100,8 +96,10 @@ const STYLES = `
   .al-collector { padding:16px 14px 10px; }
   .al-cat-title { font-size:25px; }
   .al-cat-rule, .al-cat-rule2 { max-width:300px; }
-  .al-band { gap:11px; padding:8px 4px 9px; margin-top:20px; }
-  .al-cat-sticky-name { font-size:16px; }
+  /* no room to center it beside the tier on a phone: the category becomes a full-width line above,
+     always visible (the !important overrides the stuck-only inline opacity, which is a desktop notion) */
+  .al-band { gap:11px; padding:8px 4px 9px; margin-top:20px; flex-wrap:wrap; }
+  .al-band-catname { position:static; transform:none; order:-1; flex:1 1 100%; max-width:none; font-size:17px; opacity:1 !important; }
   .al-band-photo { height:30px !important; }
   .al-band-tier { font-size:24px; }
   .al-colhead { display:none; }
@@ -193,34 +191,21 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
     return () => window.removeEventListener("resize", measure);
   }, [session, lang, sections.length]);
 
-  // Two-level sticky with fade. Level 1: each card's category echo is invisible until stuck (the big
-  // Bodoni title announces the section while visible), stays for ALL the card's tiers, and dissolves
-  // against the card's end as the next category takes over. Level 2: the tier bands stick right below
-  // it and hand off to each other with the same ~70px dissolve.
+  // Sticky hand-off with fade: a stuck band keeps opacity 1 for the whole scroll of its rows, then
+  // dissolves over the last ~70px as the NEXT band (or the card's end) closes in and replaces it.
+  // The centered category name inside the band fades in only while the band is stuck — while the big
+  // Bodoni title is still on screen it would read as a duplicate.
   useEffect(() => {
-    const FADE = 70; // px over which an outgoing sticky element dissolves
+    const FADE = 70; // px over which the outgoing band dissolves
     let raf = 0;
     const update = () => {
       raf = 0;
       const line = 60 + (barRef.current?.offsetHeight ?? 112);
-      document.querySelectorAll<HTMLElement>(".al-collector").forEach((card) => {
-        const strip = card.querySelector<HTMLElement>(".al-cat-sticky");
-        if (!strip) return;
-        const r = strip.getBoundingClientRect();
-        let opacity = 0;
-        if (r.top <= line + 2) {
-          opacity = 1;
-          const gap = card.getBoundingClientRect().bottom - r.bottom;
-          if (gap < FADE) opacity = Math.max(0, gap / FADE);
-        }
-        strip.style.opacity = String(opacity);
-      });
-      const bandLine = line + STICKY_STRIP_H;
       document.querySelectorAll<HTMLElement>(".al-tablebody").forEach((body) => {
         const bands = Array.from(body.querySelectorAll<HTMLElement>(".al-band"));
         bands.forEach((band, bi) => {
           const r = band.getBoundingClientRect();
-          const stuck = r.top <= bandLine + 2;
+          const stuck = r.top <= line + 2;
           let opacity = 1;
           if (stuck) {
             // the incoming edge: the next band's top, or the end of this card's table
@@ -230,6 +215,8 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
             if (gap < FADE) opacity = Math.max(0, gap / FADE);
           }
           band.style.opacity = String(opacity);
+          const cat = band.querySelector<HTMLElement>(".al-band-catname");
+          if (cat) cat.style.opacity = stuck ? "1" : "0";
         });
       });
     };
@@ -398,11 +385,6 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
                   <span className="al-cat-count">{s.count} {s.count === 1 ? t.winnerOne : t.winners}</span>
                   <span className="al-cat-rule2" aria-hidden />
                 </div>
-                {/* Slim sticky echo of the category: appears once the big title scrolls away, and the tier
-                    bands attach right below it — one category header valid for all its medals. */}
-                <div className="al-cat-sticky" style={{ top: bandTop }} aria-hidden>
-                  <span className="al-cat-sticky-name">{s.cat}</span>
-                </div>
                 {/* Medal bands are sticky within this body: Platino sticks under the menu until Doppio Oro
                     overtakes it, then Doppio Oro sticks, and so on — iOS-style section headers. Each band
                     carries the medal photo, the enlarged "category · medal", and the sortable column headers. */}
@@ -414,9 +396,10 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
                     const items = sortItems(mg.items, so);
                     return (
                       <Fragment key={mg.medal}>
-                        <div className="al-band" style={{ top: bandTop + STICKY_STRIP_H }}>
+                        <div className="al-band" style={{ top: bandTop }}>
                           <Image src={medalImageFor(mg.items[0])} alt="" width={40} height={52} className="al-band-photo" />
                           <span className="al-band-tier"><span className="w">{mm[lang]}</span></span>
+                          <span className="al-band-catname">{s.cat}</span>
                           <span className="al-band-count">{mg.items.length} {mg.items.length === 1 ? t.winnerOne : t.winners}</span>
                         </div>
                         <div className="al-colhead" style={{ gridTemplateColumns: COLS3 }}>
