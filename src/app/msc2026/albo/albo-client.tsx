@@ -126,11 +126,12 @@ const STYLES = `
   .al-collector { padding:22px 14px 10px; } /* 22 above the frame = 2px head margin + 20px band margin below */
   .al-cat-title { font-size:25px; }
   .al-cat-rule, .al-cat-rule2 { max-width:300px; }
-  /* no room beside the tier on a phone: the overlay becomes a slim full-width strip AT the sticky
-     line — it appears only once the big title has scrolled away, once, and the bands attach 26px
-     below it (must match the +26 in the scroll handler's mobile bandLine) */
-  .al-cat-overlay-name { left:0; right:0; transform:none; max-width:none; height:26px; line-height:26px; font-size:14.5px; text-align:center; background:#fff; padding:0 10px; }
-  .al-band { top:calc(var(--albo-line) + 26px); gap:11px; padding:8px 4px 9px; margin-top:20px; }
+  /* no room beside the tier on a phone: the overlay becomes a full-width strip AT the sticky line —
+     it appears only once the big title has scrolled away, once, and the bands attach 48px below it
+     (must match the +48 in the scroll handler's mobile bandLine). 48px tall with the text centered:
+     ~11px of even white above AND below the name, so it doesn't sit glued to the filter panel. */
+  .al-cat-overlay-name { left:0; right:0; transform:none; max-width:none; height:48px; line-height:48px; font-size:14.5px; text-align:center; background:#fff; padding:0 10px; }
+  .al-band { top:calc(var(--albo-line) + 48px); gap:11px; padding:8px 4px 9px; margin-top:20px; }
   .al-band-photo { height:30px !important; }
   .al-band-tier { font-size:24px; }
   .al-colhead { display:none; }
@@ -245,8 +246,8 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
         if (cr.top <= line + 18 && cr.bottom >= line - 6) anyEngaged = true;
       });
       barRef.current?.querySelector<HTMLElement>(".al-barpanel")?.classList.toggle("al-bar-fused", anyEngaged);
-      // on phones the bands stick 26px lower (the category strip occupies the line — see mobile CSS)
-      const bandLine = line + (window.innerWidth <= 720 ? 26 : 0);
+      // on phones the bands stick 48px lower (the category strip occupies the line — see mobile CSS)
+      const bandLine = line + (window.innerWidth <= 720 ? 48 : 0);
       document.querySelectorAll<HTMLElement>(".al-tablebody").forEach((body) => {
         const bands = Array.from(body.querySelectorAll<HTMLElement>(".al-band"));
         bands.forEach((band, bi) => {
