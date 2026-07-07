@@ -111,12 +111,74 @@ body { overflow-anchor: none; } /* the search row collapses/expands on scroll �
 .msc-sticky { position: sticky; top: 64px; z-index: 40; background: ${C.bg}; border-bottom: 1px solid ${C.border}; box-shadow: 0 8px 18px -14px rgba(16,24,40,0.22); }
 .msc-flabel { font-size: 11px; font-weight: 700; color: ${C.micro}; letter-spacing: .06em; text-transform: uppercase; flex-shrink: 0; }
 .msc-cat-wrap { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+/* Smooth-collapse wrapper (used by the medal list on mobile + the category grid on both). Base is global so it can
+   animate on desktop too; WHICH class actually collapses it is media-gated: is-collapsed (mobile, stuck-based) vs
+   is-collapsed-scroll (desktop, follows the free-search row's scroll show/hide). */
+.msc-collapsible { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .34s ease, opacity .26s ease; opacity: 1; }
+.msc-collapsible-inner { min-height: 0; overflow: hidden; }
+.msc-banner-body { display: flex; align-items: center; gap: 24px; padding: 20px; }
+.msc-banner-video { flex: 1.4 1 0; min-width: 0; }
+.msc-banner-text { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+/* "Comprimi" pinned to the banner's bottom-right when expanded (desktop); in-flow, right-aligned on mobile. */
+.msc-banner-collapse { position: absolute; bottom: 14px; right: 18px; }
+@media (min-width: 641px) { .msc-collapsible.is-collapsed-scroll { grid-template-rows: 0fr; opacity: 0; } }
+@media (max-width: 760px) {
+  .msc-banner-body { flex-direction: column; align-items: stretch; gap: 16px; padding: 18px 20px 16px; }
+  .msc-banner-video, .msc-banner-text { flex: none; }
+  .msc-banner-collapse { position: static; align-self: flex-end; }
+}
+.msc-medal-mobile { display: none; } /* mobile-only vertical medal list; desktop uses the segmented strip */
+.msc-cats-toggle, .msc-medals-toggle { display: none; } /* mobile-only show/hide bars ("Categorie" / "Medaglia"); desktop always shows the full controls */
 @media (max-width: 900px) {
   .msc-row-cat { display: none; }
 }
 @media (max-width: 640px) {
   .msc-wrap { padding-left: 16px; padding-right: 16px; }
   .msc-brand-sub { display: none; }
+  /* Medals go vertical: hide the desktop strip, show the full-width stack. */
+  .msc-medal-desktop { display: none; }
+  .msc-medal-mobile { display: block; }
+  /* Once a medal is chosen, collapse every non-selected row — only the picked medal stays. */
+  .msc-medal-mobile[data-selected="1"] .msc-medalitem:not(.msc-medalitem--on) { display: none !important; }
+  /* Hide medals with no results for the current filter (non-pertinent) instead of just dimming them. */
+  .msc-medal-mobile .msc-medalitem--off { display: none !important; }
+  /* Mobile collapse (stuck-based) for the medal list & category grid — base rules are global (above). */
+  .msc-collapsible.is-collapsed { grid-template-rows: 0fr; opacity: 0; }
+  /* Fixed, uniform height for every medal row — and the same value on the session pill (below) so Medaglia == Sessione. */
+  .msc-medal-mobile .msc-medalitem { height: 54px; box-sizing: border-box; }
+  /* "Categorie" / "Medaglia" toggle bars: full-width, shorter than the pills (secondary), white with an indigo label+chevron. */
+  .msc-cats-toggle, .msc-medals-toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 10px 15px;
+    border: 1px solid ${C.border}; border-radius: 10px; background: #fff; box-shadow: ${C.shadow};
+    color: ${C.indigo}; font-weight: 600; font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  .msc-cats-toggle { margin-top: 10px; }
+  .msc-medals-toggle { margin-bottom: 9px; }
+ /* !important beats the button's inline display:flex */
+  /* Stick the filter block only while a medal is selected (keeps it pinned); unselected, the tall list scrolls away. */
+  .msc-sticky[data-mobstick="0"] { position: static; box-shadow: none; }
+  /* Sessions collapse like medals: pick one → hide the "SESSIONI" label + the other sessions, so only the chosen
+     session shows. The inline category chip ("Aged Honkaku ×") STAYS so its × can clear/re-navigate the category. */
+  .msc-session-bar[data-selected="1"] .msc-flabel { display: none; }
+  .msc-session-bar[data-selected="1"] .msc-sessionitem:not(.msc-sessionitem--on) { display: none !important; }
+  /* Drop the gray segmented track: the collapsed session becomes a full-width filled pill, same height/fullness as the medal. */
+  .msc-session-bar[data-selected="1"] { background: transparent !important; border-color: transparent !important; padding: 0 !important; overflow: visible; }
+  .msc-session-bar[data-selected="1"] .msc-sessionitem--on {
+    flex: 1 1 auto !important; width: 100%;
+    justify-content: space-between !important;
+    height: 54px !important; box-sizing: border-box !important; /* exact same height as the medal pill (.msc-medalitem) */
+    padding: 0 14px !important;
+    border: 1px solid ${C.indigo} !important; background: ${C.indigoBg} !important;
+    border-radius: 11px !important; box-shadow: none !important;
+  }
+  /* Enlarge the session label to match the medal (15px); works for both the SegTab and the pill's inner button. */
+  .msc-session-bar[data-selected="1"] .msc-sessionitem--on,
+  .msc-session-bar[data-selected="1"] .msc-sessionitem--on > button { font-size: 15px !important; color: ${C.ink} !important; }
+  /* Two colours only: the indigo pill + a white category chip that pops inside it (the "›" separator is dropped).
+     The chip is enlarged on mobile — it was cramped — for a comfortable tap target. */
+  .msc-session-bar[data-selected="1"] .msc-cat-sep { display: none; }
+  .msc-session-bar[data-selected="1"] .msc-cat-chip { background: #fff !important; padding: 6px 9px 6px 13px !important; font-size: 13.5px !important; gap: 7px !important; }
   .msc-statgrid { grid-template-columns: repeat(2, 1fr); }
   .msc-hero { flex-direction: column; gap: 16px; padding: 20px; }
   .msc-row-place { display: none; }

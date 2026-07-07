@@ -26,6 +26,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Design-reference prototype (not app code — never built or shipped).
     "_reference/**",
+    // Agency design handoff for the MSC medagliere (vendor sources kept as porting reference).
+    "design-handoff-msc/**",
     // Agent scratch + temporary git worktrees (a full second copy of the repo);
     // never lint these — they'd double-count and drag in ignored trees.
     ".claude/**",
