@@ -71,12 +71,14 @@ const STYLES = `
    centered in the page, z-index above the bands). So while Platino→Argento hand off underneath it,
    the category stays at full opacity, and it only dissolves at the card's end when the next category
    takes over. The zero-height overlay adds no layout space; 53px line-height = the band's height. */
-.al-band { position:sticky; z-index:5; display:flex; align-items:center; gap:13px; padding:10px 6px 9px; background:#fff; margin-top:28px; box-shadow:0 7px 9px -8px rgba(16,24,40,.14); }
+.al-band { position:sticky; top:var(--albo-line); z-index:5; display:flex; align-items:center; gap:13px; padding:10px 6px 9px; background:#fff; margin-top:28px; box-shadow:0 7px 9px -8px rgba(16,24,40,.14); }
 /* height:1px (not 0) so the first band's 28px margin can't collapse through it and drag it down to
    the band's own position — the -1px margin cancels the layout impact */
-.al-cat-overlay { position:sticky; z-index:6; height:1px; margin-bottom:-1px; pointer-events:none; }
+/* --albo-line (set on the root) = the sticky line under the filter bar. Desktop: overlay + bands share
+   it (category centered ON the medal line). Mobile: no room there — the overlay becomes a slim strip
+   AT the line and the bands stick 26px lower, attached beneath it. */
+.al-cat-overlay { position:sticky; top:var(--albo-line); z-index:6; height:1px; margin-bottom:-1px; pointer-events:none; }
 .al-cat-overlay-name { position:absolute; left:50%; transform:translateX(-50%); line-height:53px; font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:29px; color:#0f1b3d; max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:0; transition:opacity .18s ease; }
-.al-band-catname { display:none; } /* desktop uses the overlay; on phones this becomes the band's first line */
 .al-band-photo { height:34px !important; width:auto !important; object-fit:contain; flex-shrink:0; }
 .al-band-tier { font-family:'EB Garamond',Georgia,serif; font-size:29px; font-weight:400; color:#101828; line-height:1; }
 .al-band-tier .w { font-style:italic; font-weight:500; padding-bottom:4px; border-bottom:1px solid #b08a3e; }
@@ -123,11 +125,11 @@ const STYLES = `
   .al-collector { padding:22px 14px 10px; } /* 22 above the frame = 2px head margin + 20px band margin below */
   .al-cat-title { font-size:25px; }
   .al-cat-rule, .al-cat-rule2 { max-width:300px; }
-  /* no room for the centered overlay on a phone: each band carries the category as a full-width
-     first line instead, always visible — so it never blinks across tier handoffs here either */
-  .al-cat-overlay { display:none; }
-  .al-band { gap:11px; padding:8px 4px 9px; margin-top:20px; flex-wrap:wrap; }
-  .al-band-catname { display:block; order:-1; flex:1 1 100%; font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; color:#0f1b3d; text-align:center; font-size:17px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* no room beside the tier on a phone: the overlay becomes a slim full-width strip AT the sticky
+     line — it appears only once the big title has scrolled away, once, and the bands attach 26px
+     below it (must match the +26 in the scroll handler's mobile bandLine) */
+  .al-cat-overlay-name { left:0; right:0; transform:none; max-width:none; height:26px; line-height:26px; font-size:14.5px; text-align:center; background:#fff; padding:0 10px; }
+  .al-band { top:calc(var(--albo-line) + 26px); gap:11px; padding:8px 4px 9px; margin-top:20px; }
   .al-band-photo { height:30px !important; }
   .al-band-tier { font-size:24px; }
   .al-colhead { display:none; }
@@ -242,11 +244,13 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
         if (cr.top <= line + 18 && cr.bottom >= line - 6) anyEngaged = true;
       });
       barRef.current?.querySelector<HTMLElement>(".al-barpanel")?.classList.toggle("al-bar-fused", anyEngaged);
+      // on phones the bands stick 26px lower (the category strip occupies the line — see mobile CSS)
+      const bandLine = line + (window.innerWidth <= 720 ? 26 : 0);
       document.querySelectorAll<HTMLElement>(".al-tablebody").forEach((body) => {
         const bands = Array.from(body.querySelectorAll<HTMLElement>(".al-band"));
         bands.forEach((band, bi) => {
           const r = band.getBoundingClientRect();
-          const stuck = r.top <= line + 2;
+          const stuck = r.top <= bandLine + 2;
           let opacity = 1;
           if (stuck) {
             // the incoming edge: the next band's top, or the end of this card's table
@@ -266,7 +270,7 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
           if (wrap.getBoundingClientRect().top <= line + 2) {
             o = 1;
             // same end-limit as the last band: dissolve as the card's table bottom closes in
-            const visualBottom = line + bands[0].offsetHeight;
+            const visualBottom = bandLine + bands[0].offsetHeight;
             const gap = body.getBoundingClientRect().bottom - visualBottom;
             if (gap < FADE) o = Math.max(0, gap / FADE);
           }
@@ -352,7 +356,7 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   );
 
   return (
-    <div className="al" style={{ minHeight: "100vh", background: "#f5f6f8", fontFamily: "'Inter','Noto Sans JP',sans-serif", color: "#101828", WebkitFontSmoothing: "antialiased" }}>
+    <div className="al" style={{ minHeight: "100vh", background: "#f5f6f8", fontFamily: "'Inter','Noto Sans JP',sans-serif", color: "#101828", WebkitFontSmoothing: "antialiased", "--albo-line": `${bandTop}px` } as React.CSSProperties}>
       <style>{STYLES}</style>
 
       {/* Header */}
@@ -475,7 +479,7 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
                 <div className="al-tablebody">
                   {/* per-card sticky overlay: the category floats on the band line, immune to the
                       tier handoffs below it — it only fades when this card ends */}
-                  <div className="al-cat-overlay" style={{ top: bandTop }} aria-hidden>
+                  <div className="al-cat-overlay" aria-hidden>
                     <span className="al-cat-overlay-name">{s.cat}</span>
                   </div>
                   {s.byMedal.map((mg) => {
@@ -485,10 +489,9 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
                     const items = sortItems(mg.items, so);
                     return (
                       <Fragment key={mg.medal}>
-                        <div className="al-band" style={{ top: bandTop }}>
+                        <div className="al-band">
                           <Image src={medalImageFor(mg.items[0])} alt="" width={40} height={52} className="al-band-photo" />
                           <span className="al-band-tier"><span className="w">{mm[lang]}</span></span>
-                          <span className="al-band-catname">{s.cat}</span>
                           <span className="al-band-count">{mg.items.length} {mg.items.length === 1 ? t.winnerOne : t.winners}</span>
                         </div>
                         <div className="al-colhead" style={{ gridTemplateColumns: COLS3 }}>
