@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -23,6 +23,11 @@ export function ProductView({ winner }: { winner: Winner }) {
   const heroMedal = medals[0];
   const heroWinner = winnerByRegId(heroMedal.reg_id) ?? winner;
   const mm = MEDAL_META[heroMedal.medal];
+
+  // "Back" returns to the medagliere with the filters the user had set (saved by the list in sessionStorage) —
+  // so navigating into a product and back doesn't wipe medal/session/category/search. The logo stays a clean reset.
+  const [backHref, setBackHref] = useState("/msc2026");
+  useEffect(() => { try { const f = sessionStorage.getItem("msc-filters"); if (f) setBackHref(`/msc2026?${f}`); } catch {} }, []);
 
   const flash = (m: string) => { setToast(m); window.setTimeout(() => setToast(null), 1800); };
   const forward = useCallback(() => {
@@ -70,7 +75,7 @@ export function ProductView({ winner }: { winner: Winner }) {
 
       <div className="msc-wrap" style={{ paddingTop: 20, paddingBottom: 64 }}>
         <div style={{ maxWidth: 920, margin: "0 auto" }}>
-          <Link href="/msc2026" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.sub, fontSize: 13.5, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
+          <Link href={backHref} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.sub, fontSize: 13.5, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
             <BackIcon /> {t.back}
           </Link>
 
@@ -296,7 +301,8 @@ function ReportBlock({ session, rep, medal, lang }: { session: SessionKey; rep: 
 function RadarPanel({ axes, lang, accent }: { axes: RadarAxis[]; lang: LangKey; accent: string }) {
   const t = UI[lang];
   const N = axes.length;
-  const W = 420, H = 300, cx = W / 2, cy = 150, R = 86, MAX = 100;
+  // Larger radar: a bigger R/viewBox ratio makes the plot itself read big (less wasted margin), not just the SVG box.
+  const W = 460, H = 384, cx = W / 2, cy = 184, R = 134, MAX = 100;
   const ang = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / N;
   const pt = (i: number, val: number, rad = R) => {
     const r = rad * (val / MAX);
@@ -305,36 +311,37 @@ function RadarPanel({ axes, lang, accent }: { axes: RadarAxis[]; lang: LangKey; 
   const polyOf = (vals: number[], rad = R) => vals.map((v, i) => pt(i, v, rad).join(",")).join(" ");
   const rings = [25, 50, 75, 100];
   const jury = axes.map((a) => a.avg);
-  const JURY = "#e08a1e";
+  const JURY = "#d97706"; // stronger amber — doubles the contrast of this key-viz vs the old thin pale line
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingBottom: 4 }}>
-      <div style={{ alignSelf: "flex-start", fontSize: 12, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>{t.radarTitle}</div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 420 }} role="img" aria-label={t.radarTitle}>
-        {/* grid rings */}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+      <div style={{ alignSelf: "flex-start", fontSize: 13, fontWeight: 800, color: C.sub, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>{t.radarTitle}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 480 }} role="img" aria-label={t.radarTitle}>
+        {/* grid rings — a touch stronger so the frame holds, but still clearly behind the data */}
         {rings.map((rg) => (
-          <polygon key={rg} points={polyOf(axes.map(() => rg))} fill="none" stroke="#e9ebef" strokeWidth={1} />
+          <polygon key={rg} points={polyOf(axes.map(() => rg))} fill="none" stroke="#dde1e8" strokeWidth={1.25} />
         ))}
-        {/* spokes + labels */}
+        {/* spokes + labels — labels enlarged and darkened (were thin/pale) */}
         {axes.map((a, i) => {
           const [ex, ey] = pt(i, MAX);
           const [lx, ly] = pt(i, MAX + 22);
           const anchor = Math.abs(lx - cx) < 8 ? "middle" : lx > cx ? "start" : "end";
           return (
             <g key={a.key}>
-              <line x1={cx} y1={cy} x2={ex} y2={ey} stroke="#eef0f3" strokeWidth={1} />
-              <text x={lx} y={ly + 3} fontSize={10.5} fontWeight={600} fill={C.sub} textAnchor={anchor}>
+              <line x1={cx} y1={cy} x2={ex} y2={ey} stroke="#dde1e8" strokeWidth={1.25} />
+              <text x={lx} y={ly + 4} fontSize={13.5} fontWeight={700} fill={C.ink} textAnchor={anchor}>
                 {RADAR_LABELS[a.key]?.[lang] ?? a.key}
               </text>
             </g>
           );
         })}
-        {/* jury average — the only line shown */}
-        <polygon points={polyOf(jury)} fill="none" stroke={JURY} strokeWidth={2.5} strokeDasharray="5 3" />
+        {/* jury average — the only line shown: bolder stroke + translucent fill + vertex dots = strong technical read */}
+        <polygon points={polyOf(jury)} fill={JURY} fillOpacity={0.14} stroke={JURY} strokeWidth={3.5} strokeDasharray="7 4" strokeLinejoin="round" />
+        {jury.map((v, i) => { const [x, y] = pt(i, v); return <circle key={i} cx={x} cy={y} r={3.8} fill={JURY} />; })}
       </svg>
       {/* legend */}
-      <div style={{ display: "flex", gap: 18, fontSize: 12, color: C.sub }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 0, borderTop: `2px dashed ${JURY}` }} /> {t.legendJury}</span>
+      <div style={{ display: "flex", gap: 18, fontSize: 13, fontWeight: 600, color: C.sub }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><span style={{ width: 18, height: 0, borderTop: `3px dashed ${JURY}` }} /> {t.legendJury}</span>
       </div>
     </div>
   );
