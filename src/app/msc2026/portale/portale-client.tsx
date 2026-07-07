@@ -5,7 +5,7 @@
 // 3 medal grades + numeric scores, awards directory, floating filter bar, results list, detail page, toast.
 // Uses the design's own 38 sample products (the prototype data); swap `BASE`/`T` for the real DB + app i18n later.
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 // Parse the design's computed CSS-string styles into React style objects (camel-cased).
 function css(str: string): CSSProperties {
@@ -208,7 +208,6 @@ export function PortaleClient({ showScores = true, defaultLang = "it" as Lang }:
 
   const openDetail = (id: number) => set({ selectedId: id });
   const closeDetail = () => set({ selectedId: null });
-  const selectMedal = (key: string) => { set({ medal: key, special: null }); scrollToList(); };
   const scrollToList = () => { requestAnimationFrame(() => { const el = document.getElementById("pf-list"); const bar = document.getElementById("pf-filter"); const off = 60 + (bar ? bar.offsetHeight : 170) + 16; if (el) { const y = el.getBoundingClientRect().top + window.scrollY - off; window.scrollTo({ top: y, behavior: "smooth" }); } }); };
   const scrollTop = () => { const el = document.getElementById("pf-dir"); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - 72; window.scrollTo({ top: y, behavior: "smooth" }); } };
   const pickSpecial = (key: "president" | "jury") => { set({ special: key, session: "all", category: "all", medal: "all", q: "" }); scrollToList(); };
@@ -265,11 +264,11 @@ export function PortaleClient({ showScores = true, defaultLang = "it" as Lang }:
   const grouped = (st.sort === "session" || st.sort === "category") && !st.special;
   const counts: Record<string, number> = {};
   if (grouped) rows.forEach((r) => { const k = st.sort === "session" ? r.session : r.category; counts[k] = (counts[k] || 0) + 1; });
-  let lastKey: string | null = null;
   const items = rows.map((r, i) => {
     const gk = st.sort === "session" ? r.session : st.sort === "category" ? r.category : null;
-    const showHeader = grouped && gk !== lastKey;
-    if (showHeader) lastKey = gk;
+    // header when the group key changes vs the previous row (no render-scope mutation)
+    const prevGk = i > 0 ? (st.sort === "session" ? rows[i - 1].session : st.sort === "category" ? rows[i - 1].category : null) : null;
+    const showHeader = grouped && gk !== prevGk;
     return { ...r, rankNum: i + 1, medalLabel: medalLabel(r.medal), pillBg: META[r.medal].pillBg, pillText: META[r.medal].pillText, dot: META[r.medal].dot, prefD: prefLabel(r.pref), categoryD: catLabel(r.category), sessionShort: sessionShort(r.session), showHeader, groupLabel: showHeader ? (st.sort === "session" ? sessionLabel(gk as Session) : catLabel(gk as string)) : "", groupCount: showHeader ? counts[gk as string] : 0 };
   });
 
