@@ -17,9 +17,9 @@ type SortState = { key: SortKey; dir: "asc" | "desc" };
 const DEFAULT_SORT: SortState = { key: "name", dir: "asc" };
 
 const T: Record<LangKey, Record<string, string>> = {
-  it: { brandSub: "Portale Risultati", kicker: "Milano Sake Challenge 2026 · Risultati", title: "Albo dei Premiati", subtitle: "Sfoglia i vincitori per sessione e categoria. Clicca una categoria per saltarci: la lista non si nasconde, scorre.", jumpTo: "Salta a", searchTagPh: "Cerca sakagura, prodotto o regione…", tagSakagura: "Sakagura", tagProduct: "Prodotto", tagRegion: "Regione", genLink: "Genera link", copied: "Link copiato", allPrefs: "Tutte le prefetture", winners: "premiati", winnerOne: "premiato", noResults: "Nessun risultato per questi criteri", reset: "Azzera", magnifica: "Magnifica: annuncio a settembre", inThis: "in questa vista", backTop: "↑ Torna su", colName: "Nome Sake", colSakagura: "Sakagura", colPrefecture: "Regione" },
-  en: { brandSub: "Results Portal", kicker: "Milano Sake Challenge 2026 · Results", title: "Roll of Honour", subtitle: "Browse the winners by session and category. Click a category to jump: nothing is hidden, it scrolls.", jumpTo: "Jump to", searchTagPh: "Search sakagura, product, or region…", tagSakagura: "Sakagura", tagProduct: "Product", tagRegion: "Region", genLink: "Copy link", copied: "Link copied", allPrefs: "All prefectures", winners: "winners", winnerOne: "winner", noResults: "No results for these criteria", reset: "Reset", magnifica: "Magnifica: announced in September", inThis: "in this view", backTop: "↑ Back to top", colName: "Sake name", colSakagura: "Brewery", colPrefecture: "Region" },
-  ja: { brandSub: "受賞結果ポータル", kicker: "Milano Sake Challenge 2026 · 受賞結果", title: "受賞酒一覧", subtitle: "セッション・部門で受賞酒を一覧。部門をクリックすると移動します（隠さずスクロール）。", jumpTo: "移動", searchTagPh: "蔵元・銘柄・地域を検索…", tagSakagura: "蔵元", tagProduct: "銘柄", tagRegion: "地域", genLink: "リンク", copied: "コピーしました", allPrefs: "すべての都道府県", winners: "受賞", winnerOne: "受賞", noResults: "該当する結果がありません", reset: "リセット", magnifica: "マニフィカ賞：9月発表", inThis: "この表示で", backTop: "↑ 上へ", colName: "銘柄", colSakagura: "蔵元", colPrefecture: "地域" },
+  it: { brandSub: "Portale Risultati", kicker: "Milano Sake Challenge 2026 · Risultati", title: "Albo dei Premiati", subtitle: "Sfoglia i vincitori per sessione e categoria. Clicca una categoria per saltarci: la lista non si nasconde, scorre.", searchTagPh: "Cerca sakagura, prodotto o regione…", tagSakagura: "Sakagura", tagProduct: "Prodotto", tagRegion: "Regione", genLink: "Genera link", copied: "Link copiato", allPrefs: "Tutte le prefetture", winners: "premiati", winnerOne: "premiato", noResults: "Nessun risultato per questi criteri", reset: "Azzera", magnifica: "Magnifica: annuncio a settembre", inThis: "in questa vista", backTop: "↑ Torna su", colName: "Nome Sake", colSakagura: "Sakagura", colPrefecture: "Regione" },
+  en: { brandSub: "Results Portal", kicker: "Milano Sake Challenge 2026 · Results", title: "Roll of Honour", subtitle: "Browse the winners by session and category. Click a category to jump: nothing is hidden, it scrolls.", searchTagPh: "Search sakagura, product, or region…", tagSakagura: "Sakagura", tagProduct: "Product", tagRegion: "Region", genLink: "Copy link", copied: "Link copied", allPrefs: "All prefectures", winners: "winners", winnerOne: "winner", noResults: "No results for these criteria", reset: "Reset", magnifica: "Magnifica: announced in September", inThis: "in this view", backTop: "↑ Back to top", colName: "Sake name", colSakagura: "Brewery", colPrefecture: "Region" },
+  ja: { brandSub: "受賞結果ポータル", kicker: "Milano Sake Challenge 2026 · 受賞結果", title: "受賞酒一覧", subtitle: "セッション・部門で受賞酒を一覧。部門をクリックすると移動します（隠さずスクロール）。", searchTagPh: "蔵元・銘柄・地域を検索…", tagSakagura: "蔵元", tagProduct: "銘柄", tagRegion: "地域", genLink: "リンク", copied: "コピーしました", allPrefs: "すべての都道府県", winners: "受賞", winnerOne: "受賞", noResults: "該当する結果がありません", reset: "リセット", magnifica: "マニフィカ賞：9月発表", inThis: "この表示で", backTop: "↑ 上へ", colName: "銘柄", colSakagura: "蔵元", colPrefecture: "地域" },
 };
 
 const STYLES = `
@@ -104,22 +104,23 @@ const STYLES = `
   .al-banner-body { flex-direction: column; align-items: stretch; gap: 16px; padding: 18px 20px 16px; }
   .al-banner-video, .al-banner-text { flex: none; }
   .al-banner-collapse { position: static; align-self: flex-end; }
-  /* ── compact filter: 4 tight rows instead of a half-screen stack ── */
-  .al-topbar { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
-  /* session tabs: one horizontally-scrolling row, not a wrapping 2-row block */
-  .al-seg-row { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
-  .al-seg-row::-webkit-scrollbar { display: none; }
-  /* tools: search + link share one row. The prefecture dropdown is redundant on phones — the tag
-     search already finds prefectures/regions (plus sakagura and sake) with clickable suggestions. */
-  .al-tools { flex: 0 0 auto !important; flex-wrap: nowrap !important; gap: 8px !important; justify-content: flex-start !important; align-items: stretch !important; }
+  /* ── compact filter — and NOTHING may escape the screen ── */
+  .al-topbar { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; min-width: 0; }
+  /* session tabs wrap onto a second row: all four always visible, none cut off */
+  .al-seg-row { flex-wrap: wrap !important; min-width: 0; }
+  /* tools: search + link share one row. flex-basis 0 means the search can NEVER exceed the free
+     space, so the link button always stays on screen. The prefecture dropdown is redundant on
+     phones — the tag search already finds prefectures/regions (plus sakagura and sake). */
+  .al-tools { flex: 0 0 auto !important; flex-wrap: nowrap !important; gap: 8px !important; justify-content: flex-start !important; align-items: stretch !important; min-width: 0 !important; max-width: 100%; }
   .al-prefsel { display: none !important; }
-  .al-search { min-width: 0 !important; flex: 1 1 auto !important; }
+  .al-search { min-width: 0 !important; flex: 1 1 0% !important; }
   .al-search input { font-family:'Bodoni Moda',Didot,'EB Garamond',serif !important; font-size:15px !important; }
-  /* link button sized to match the search field: same height, same radius — no more tiny icon
-     falling out of the layout */
+  /* link button sized to match the search field: same height, same radius, always inside the screen */
   .al-linkbtn { flex: 0 0 auto !important; min-height: 40px; padding: 0 14px !important; border-radius: 8px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
   .al-linkbtn svg { width: 17px; height: 17px; }
   .al-linklabel { display: none; }   /* icon-only share button on phones */
+  /* jump rail: no divider line above it — tighter vertical rhythm */
+  .al-rail { border-top: none !important; margin-top: 4px !important; padding-top: 0 !important; }
   .al-jump { scroll-margin-top: 250px; }
   /* the 4-column grid can't fit a phone: hide the sort headers and stack each entry as a labelled card */
   .al-collector { padding:22px 14px 10px; } /* 22 above the frame = 2px head margin + 20px band margin below */
@@ -433,7 +434,6 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
             </div>
             {/* category jump-rail with scroll-spy */}
             <div className="al-rail" style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eef0f3" }}>
-              <span style={{ fontSize: 11, color: "#8a93a3", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", flexShrink: 0, alignSelf: "center", paddingRight: 2 }}>{t.jumpTo}</span>
               {sections.map((s, i) => {
                 const on = activeIdx === i;
                 return (
