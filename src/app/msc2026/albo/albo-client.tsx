@@ -37,7 +37,9 @@ const STYLES = `
 /* ── Category collector: white card; medal groups headed by a slim Gallery Wall-Label header ──
    Marriage principle: serif = jewelry (category, tier, sake names) · Inter = chassis (sort headers,
    counts, region caps, hairlines) · indigo = interaction. Metal reduced to one gold hairline. */
-.al-collector { background:#fff; border:1px solid #e9ebef; border-radius:16px; padding:27px 24px 14px; box-shadow:0 1px 2px rgba(16,24,40,.05); } /* 27+1px border above the frame = the 28px below it */
+.al-collector { background:#fff; border:1px solid #e9ebef; border-radius:16px; padding:27px 24px 14px; box-shadow:0 1px 2px rgba(16,24,40,.05); transition:border-radius .15s ease; } /* 27+1px border above the frame = the 28px below it */
+/* fused with the header while scrolling under it: square top corners, no visible edge — the white continues */
+.al-collector.al-fused { border-top-left-radius:0; border-top-right-radius:0; border-top-color:transparent; }
 /* centered category title — "Bodoni Milano · cornice incisa": Bodoni Moda between engraved double
    hairlines with a matte-gold fleuron cap, MILANO · MMXXVI in spaced small caps, count in italic. */
 .al-cat-head { display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:2px; } /* +28px band margin = 30px below the frame, matching the 30px card padding above it */
@@ -59,7 +61,9 @@ const STYLES = `
    the category stays at full opacity, and it only dissolves at the card's end when the next category
    takes over. The zero-height overlay adds no layout space; 53px line-height = the band's height. */
 .al-band { position:sticky; z-index:5; display:flex; align-items:center; gap:13px; padding:10px 6px 9px; background:#fff; margin-top:28px; box-shadow:0 7px 9px -8px rgba(16,24,40,.14); }
-.al-cat-overlay { position:sticky; z-index:6; height:0; pointer-events:none; }
+/* height:1px (not 0) so the first band's 28px margin can't collapse through it and drag it down to
+   the band's own position — the -1px margin cancels the layout impact */
+.al-cat-overlay { position:sticky; z-index:6; height:1px; margin-bottom:-1px; pointer-events:none; }
 .al-cat-overlay-name { position:absolute; left:50%; transform:translateX(-50%); line-height:53px; font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:29px; color:#0f1b3d; max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:0; transition:opacity .18s ease; }
 .al-band-catname { display:none; } /* desktop uses the overlay; on phones this becomes the band's first line */
 .al-band-photo { height:34px !important; width:auto !important; object-fit:contain; flex-shrink:0; }
@@ -88,11 +92,16 @@ const STYLES = `
   /* session tabs: one horizontally-scrolling row, not a wrapping 2-row block */
   .al-seg-row { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
   .al-seg-row::-webkit-scrollbar { display: none; }
-  /* tools: prefecture on its own row; search + link icon share the next row */
-  .al-tools { flex: 0 0 auto !important; flex-wrap: wrap !important; gap: 8px !important; justify-content: flex-start !important; }
-  .al-prefsel { flex: 1 1 100% !important; }
+  /* tools: search + link share one row. The prefecture dropdown is redundant on phones — the tag
+     search already finds prefectures/regions (plus sakagura and sake) with clickable suggestions. */
+  .al-tools { flex: 0 0 auto !important; flex-wrap: nowrap !important; gap: 8px !important; justify-content: flex-start !important; align-items: stretch !important; }
+  .al-prefsel { display: none !important; }
   .al-search { min-width: 0 !important; flex: 1 1 auto !important; }
-  .al-linkbtn { flex: 0 0 auto !important; padding: 9px 11px !important; }
+  .al-search input { font-family:'Bodoni Moda',Didot,'EB Garamond',serif !important; font-size:15px !important; }
+  /* link button sized to match the search field: same height, same radius — no more tiny icon
+     falling out of the layout */
+  .al-linkbtn { flex: 0 0 auto !important; min-height: 40px; padding: 0 14px !important; border-radius: 8px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+  .al-linkbtn svg { width: 17px; height: 17px; }
   .al-linklabel { display: none; }   /* icon-only share button on phones */
   .al-jump { scroll-margin-top: 250px; }
   /* the 4-column grid can't fit a phone: hide the sort headers and stack each entry as a labelled card */
@@ -205,13 +214,16 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
     const update = () => {
       raf = 0;
       const line = 60 + (barRef.current?.offsetHeight ?? 112);
+      // fuse each card with the header: as its top edge tucks under the filter bar, unround the
+      // top corners so the white continues instead of showing an angolo
+      document.querySelectorAll<HTMLElement>(".al-collector").forEach((card) => {
+        card.classList.toggle("al-fused", card.getBoundingClientRect().top <= line + 18);
+      });
       document.querySelectorAll<HTMLElement>(".al-tablebody").forEach((body) => {
         const bands = Array.from(body.querySelectorAll<HTMLElement>(".al-band"));
-        let anyStuck = false;
         bands.forEach((band, bi) => {
           const r = band.getBoundingClientRect();
           const stuck = r.top <= line + 2;
-          if (stuck) anyStuck = true;
           let opacity = 1;
           if (stuck) {
             // the incoming edge: the next band's top, or the end of this card's table
@@ -222,10 +234,13 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
           }
           band.style.opacity = String(opacity);
         });
+        // the category overlay appears as soon as it sticks — i.e. the moment the big title has
+        // slipped under the bar, BEFORE the first band arrives — so the white zone is never empty
         const overlay = body.querySelector<HTMLElement>(".al-cat-overlay-name");
-        if (overlay) {
+        const wrap = body.querySelector<HTMLElement>(".al-cat-overlay");
+        if (overlay && wrap && bands.length) {
           let o = 0;
-          if (anyStuck && bands.length) {
+          if (wrap.getBoundingClientRect().top <= line + 2) {
             o = 1;
             // same end-limit as the last band: dissolve as the card's table bottom closes in
             const visualBottom = line + bands[0].offsetHeight;
