@@ -29,8 +29,6 @@ const STYLES = `
 .al select { -webkit-appearance: none; appearance: none; }
 .al input:focus, .al select:focus { outline: none; border-color: #1e3a8a !important; box-shadow: 0 0 0 3px rgba(30,58,138,.10); }
 .al-jump { scroll-margin-top: 172px; }
-@keyframes al-flash { 0% { background:#eef1ff; } 100% { background:transparent; } }
-.al-flash { animation: al-flash 1.1s ease; }
 .al-rail { display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
 .al-rail::-webkit-scrollbar { display:none; }
 
@@ -132,7 +130,9 @@ const STYLES = `
      it appears only once the big title has scrolled away, once, and the bands attach 48px below it
      (must match the +48 in the scroll handler's mobile bandLine). 48px tall with the text centered:
      ~11px of even white above AND below the name, so it doesn't sit glued to the filter panel. */
-  .al-cat-overlay-name { left:0; right:0; transform:none; max-width:none; height:48px; line-height:48px; font-size:14.5px; text-align:center; background:#fff; padding:0 10px; }
+  /* top:-2px + 2px white border-top: the strip tucks under the filter panel, closing the subpixel
+     sliver where scrolling rows peeked through between panel and strip */
+  .al-cat-overlay-name { left:0; right:0; top:-2px; border-top:2px solid #fff; transform:none; max-width:none; height:50px; line-height:48px; font-size:14.5px; text-align:center; background:#fff; padding:0 10px; }
   .al-band { top:calc(var(--albo-line) + 48px); gap:11px; padding:8px 4px 9px; margin-top:20px; }
   .al-band-photo { height:30px !important; }
   .al-band-tier { font-size:24px; }
@@ -156,6 +156,7 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   const [toast, setToast] = useState<string>("");
   const ready = useRef(false);
   const barRef = useRef<HTMLDivElement>(null);
+  const jumpUntil = useRef(0); // while a chip-click jump animates, the scroll-spy stays silent (no chip flicker)
 
   const t = T[lang];
   const ui = UI[lang]; // shared trilingual strings (congrats banner)
@@ -196,11 +197,14 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   }, [session]);
 
   // scroll-spy: the active category = the last heading scrolled past the sticky line.
-  // The tolerance (+30) must exceed jumpTo's landing offset (+16), otherwise a freshly-jumped section
+  // The tolerance (+30) must exceed jumpTo's landing offset, otherwise a freshly-jumped section
   // sits just below the line and the spy would keep the PREVIOUS category highlighted.
+  // While a chip-click jump animates, the spy stays SILENT: without this it would sweep the active
+  // chip through every intermediate category during the smooth scroll — the flicker the client saw.
   useEffect(() => {
     const line = () => (barRef.current ? barRef.current.getBoundingClientRect().bottom : 156) + 30;
     const spy = () => {
+      if (performance.now() < jumpUntil.current) return; // a jump is in flight — the target chip stays active
       const heads = Array.from(document.querySelectorAll<HTMLElement>("[data-sec]"));
       let cur = 0;
       const L = line();
@@ -292,14 +296,14 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   const jumpTo = (i: number) => {
     const el = document.getElementById(secId(i));
     if (!el) return;
-    setActiveIdx(i); // select the clicked chip immediately (don't wait for the scroll-spy to catch up)
+    setActiveIdx(i);                                 // the clicked chip is active for the whole ride
+    jumpUntil.current = performance.now() + 1000;    // spy silent while the smooth scroll is in flight
     // Use the bar's STUCK position (60 + height), NOT its current rect — at page top the bar sits far
     // lower (under the banner) and the landing would undershoot. +1 (not +16): 29px of air above the
     // title frame ≈ the 30px below it → the frame lands vertically centered in its white zone, and
     // the sticky category won't engage on the first scroll.
     const off = 60 + (barRef.current?.offsetHeight ?? 142) + 1;
     window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - off, behavior: "smooth" });
-    el.classList.remove("al-flash"); void el.offsetWidth; el.classList.add("al-flash");
   };
   const changeSession = (s: SessionKey) => { setSession(s); setTags([]); setPref("all"); setActiveIdx(0); window.scrollTo({ top: 0 }); };
 
@@ -549,6 +553,7 @@ function PlayIcon() { return (<svg width={22} height={22} viewBox="0 0 24 24" fi
 function TagSearch({ tags, onAdd, onRemove, t }: { tags: SearchTag[]; onAdd: (e: SearchTag) => void; onRemove: (e: SearchTag) => void; t: Record<string, string> }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const typeLabel = (ty: SearchTag["type"]) => (ty === "sakagura" ? t.tagSakagura : ty === "product" ? t.tagProduct : t.tagRegion);
   const sugg = useMemo(() => {
     const qq = q.trim().toLowerCase();
@@ -566,12 +571,14 @@ function TagSearch({ tags, onAdd, onRemove, t }: { tags: SearchTag[]; onAdd: (e:
   const choose = (e: SearchTag) => { onAdd(e); setQ(""); setOpen(false); };
   return (
     <div className="al-search" style={{ position: "relative", flex: "1 1 240px", minWidth: 0 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "5px 8px", border: `1px solid ${open ? "#1e3a8a" : "#d7dbe2"}`, borderRadius: 8, background: "#fff", minHeight: 40 }}>
-        <span style={{ color: "#98a2b3", fontSize: 14, paddingLeft: 2, flexShrink: 0 }}>⌕</span>
+      {/* icon is absolute (never owns a wrap line); at rest with a chip the input leaves the flow
+          entirely — so the box is exactly as tall as its chip: one row, or two only for long names */}
+      <div onClick={() => inputRef.current?.focus()} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "5px 8px 5px 28px", border: `1px solid ${open ? "#1e3a8a" : "#d7dbe2"}`, borderRadius: 8, background: "#fff", minHeight: 40, cursor: "text" }}>
+        <span style={{ position: "absolute", left: 10, top: 20, transform: "translateY(-50%)", color: "#98a2b3", fontSize: 14, pointerEvents: "none" }}>⌕</span>
         {tags.map((tag) => (
           <span key={`${tag.type} ${tag.value}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 6px 3px 8px", borderRadius: 7, background: "#eef1fb", color: "#1e3a8a", fontSize: 12, fontWeight: 600, maxWidth: "100%", minWidth: 0 }}>
             <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: "#3b5fc0", opacity: 0.75 }}>{typeLabel(tag.type)}</span>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{tag.value}</span>
+            <span style={{ whiteSpace: "normal", wordBreak: "break-word", minWidth: 0 }}>{tag.value}</span>
             <button onClick={() => onRemove(tag)} aria-label="rimuovi" style={{ border: "none", background: "transparent", cursor: "pointer", color: "#1e3a8a", padding: 0, opacity: 0.7, flexShrink: 0, fontSize: 13, lineHeight: 1 }}>✕</button>
           </span>
         ))}
@@ -585,7 +592,11 @@ function TagSearch({ tags, onAdd, onRemove, t }: { tags: SearchTag[]; onAdd: (e:
             else if (e.key === "Escape") setOpen(false);
           }}
           placeholder={tags.length === 0 ? t.searchTagPh : ""}
-          style={{ flex: "1 1 60px", minWidth: 60, border: "none", outline: "none", background: "transparent", fontSize: 13, fontFamily: "inherit", color: "#101828", padding: "4px 2px" }} />
+          ref={inputRef}
+          style={tags.length && !open
+            /* at rest with a chip: out of the flow (can't create a wrap line), still focusable via the box click */
+            ? { position: "absolute", left: 0, top: 0, width: 1, height: 1, opacity: 0, border: "none", outline: "none", padding: 0 }
+            : { flex: "1 1 60px", minWidth: 60, border: "none", outline: "none", background: "transparent", fontSize: 13, fontFamily: "inherit", color: "#101828", padding: "4px 2px" }} />
       </div>
       {open && sugg.length > 0 && (
         <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#fff", border: "1px solid #e4e7ec", borderRadius: 10, boxShadow: "0 12px 28px rgba(16,24,40,.14)", zIndex: 60, maxHeight: 300, overflowY: "auto", padding: 4 }}>
