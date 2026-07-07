@@ -53,12 +53,15 @@ const STYLES = `
 .al-cat-milano .d { color:#b08a3e; }
 .al-cat-count { margin:9px 0 0; font-family:'Bodoni Moda','EB Garamond',serif; font-style:italic; font-size:14px; font-weight:400; color:#475467; }
 .al-tablebody { position:relative; }
-/* Gallery Wall-Label tier band (sticky): MEDAGLIA – CATEGORIA on one line. The category sits centered
-   in the page at the SAME size as the tier word (29px, Bodoni echoing the big title), baseline-aligned
-   with the medal. It fades in only once the band sticks (while the big title is on screen it would be
-   a duplicate) and holds for all the card's tiers; the next card's bands replace it with the fade. */
+/* Gallery Wall-Label tier band (sticky): MEDAGLIA – CATEGORIA on one line. The category is NOT part
+   of any single band — it is a per-card sticky overlay floating on the band line (same 29px Bodoni,
+   centered in the page, z-index above the bands). So while Platino→Argento hand off underneath it,
+   the category stays at full opacity, and it only dissolves at the card's end when the next category
+   takes over. The zero-height overlay adds no layout space; 53px line-height = the band's height. */
 .al-band { position:sticky; z-index:5; display:flex; align-items:center; gap:13px; padding:10px 6px 9px; background:#fff; margin-top:28px; box-shadow:0 7px 9px -8px rgba(16,24,40,.14); }
-.al-band-catname { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:29px; line-height:1; color:#0f1b3d; max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; opacity:0; transition:opacity .18s ease; pointer-events:none; }
+.al-cat-overlay { position:sticky; z-index:6; height:0; pointer-events:none; }
+.al-cat-overlay-name { position:absolute; left:50%; transform:translateX(-50%); line-height:53px; font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:29px; color:#0f1b3d; max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:0; transition:opacity .18s ease; }
+.al-band-catname { display:none; } /* desktop uses the overlay; on phones this becomes the band's first line */
 .al-band-photo { height:34px !important; width:auto !important; object-fit:contain; flex-shrink:0; }
 .al-band-tier { font-family:'EB Garamond',Georgia,serif; font-size:29px; font-weight:400; color:#101828; line-height:1; }
 .al-band-tier .w { font-style:italic; font-weight:500; padding-bottom:4px; border-bottom:1px solid #b08a3e; }
@@ -96,10 +99,11 @@ const STYLES = `
   .al-collector { padding:16px 14px 10px; }
   .al-cat-title { font-size:25px; }
   .al-cat-rule, .al-cat-rule2 { max-width:300px; }
-  /* no room to center it beside the tier on a phone: the category becomes a full-width line above,
-     always visible (the !important overrides the stuck-only inline opacity, which is a desktop notion) */
+  /* no room for the centered overlay on a phone: each band carries the category as a full-width
+     first line instead, always visible — so it never blinks across tier handoffs here either */
+  .al-cat-overlay { display:none; }
   .al-band { gap:11px; padding:8px 4px 9px; margin-top:20px; flex-wrap:wrap; }
-  .al-band-catname { position:static; transform:none; order:-1; flex:1 1 100%; max-width:none; font-size:17px; opacity:1 !important; }
+  .al-band-catname { display:block; order:-1; flex:1 1 100%; font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; color:#0f1b3d; text-align:center; font-size:17px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .al-band-photo { height:30px !important; }
   .al-band-tier { font-size:24px; }
   .al-colhead { display:none; }
@@ -193,19 +197,21 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
 
   // Sticky hand-off with fade: a stuck band keeps opacity 1 for the whole scroll of its rows, then
   // dissolves over the last ~70px as the NEXT band (or the card's end) closes in and replaces it.
-  // The centered category name inside the band fades in only while the band is stuck — while the big
-  // Bodoni title is still on screen it would read as a duplicate.
+  // The category overlay is per-card, so tier handoffs never touch it: it shows while ANY of the
+  // card's bands is stuck and dissolves only against the card's end (when the next category arrives).
   useEffect(() => {
-    const FADE = 70; // px over which the outgoing band dissolves
+    const FADE = 70; // px over which an outgoing sticky element dissolves
     let raf = 0;
     const update = () => {
       raf = 0;
       const line = 60 + (barRef.current?.offsetHeight ?? 112);
       document.querySelectorAll<HTMLElement>(".al-tablebody").forEach((body) => {
         const bands = Array.from(body.querySelectorAll<HTMLElement>(".al-band"));
+        let anyStuck = false;
         bands.forEach((band, bi) => {
           const r = band.getBoundingClientRect();
           const stuck = r.top <= line + 2;
+          if (stuck) anyStuck = true;
           let opacity = 1;
           if (stuck) {
             // the incoming edge: the next band's top, or the end of this card's table
@@ -215,9 +221,19 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
             if (gap < FADE) opacity = Math.max(0, gap / FADE);
           }
           band.style.opacity = String(opacity);
-          const cat = band.querySelector<HTMLElement>(".al-band-catname");
-          if (cat) cat.style.opacity = stuck ? "1" : "0";
         });
+        const overlay = body.querySelector<HTMLElement>(".al-cat-overlay-name");
+        if (overlay) {
+          let o = 0;
+          if (anyStuck && bands.length) {
+            o = 1;
+            // same end-limit as the last band: dissolve as the card's table bottom closes in
+            const visualBottom = line + bands[0].offsetHeight;
+            const gap = body.getBoundingClientRect().bottom - visualBottom;
+            if (gap < FADE) o = Math.max(0, gap / FADE);
+          }
+          overlay.style.opacity = String(o);
+        }
       });
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
@@ -389,6 +405,11 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
                     overtakes it, then Doppio Oro sticks, and so on — iOS-style section headers. Each band
                     carries the medal photo, the enlarged "category · medal", and the sortable column headers. */}
                 <div className="al-tablebody">
+                  {/* per-card sticky overlay: the category floats on the band line, immune to the
+                      tier handoffs below it — it only fades when this card ends */}
+                  <div className="al-cat-overlay" style={{ top: bandTop }} aria-hidden>
+                    <span className="al-cat-overlay-name">{s.cat}</span>
+                  </div>
                   {s.byMedal.map((mg) => {
                     const mm = MEDAL_META[mg.medal];
                     const gid = `${i}:${mg.medal}`;
