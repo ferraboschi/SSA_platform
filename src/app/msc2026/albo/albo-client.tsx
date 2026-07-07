@@ -235,10 +235,17 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
     return () => { window.removeEventListener("scroll", spy); window.removeEventListener("resize", spy); window.removeEventListener("wheel", cancelJump); window.removeEventListener("touchstart", cancelJump); };
   }, [sections]);
 
-  // keep the active chip visible in the rail
+  // keep the active chip centered in the rail — scrolling ONLY the rail box. scrollIntoView would
+  // also touch every scrollable ancestor incl. the window, CANCELLING an in-flight chip-click jump
+  // (on phones the first tap centered the chip but killed its own page scroll — needing a 2nd tap).
   useEffect(() => {
     const c = document.querySelector<HTMLElement>(`[data-chip="${activeIdx}"]`);
-    c?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    const rail = c?.closest<HTMLElement>(".al-rail");
+    if (!c || !rail) return;
+    const cr = c.getBoundingClientRect();
+    const rr = rail.getBoundingClientRect();
+    const left = rail.scrollLeft + (cr.left - rr.left) - (rr.width - cr.width) / 2;
+    rail.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
   }, [activeIdx]);
 
   // the medal bands stick just under the filter bar — measure its height so the offset adapts (mobile bar is taller)
