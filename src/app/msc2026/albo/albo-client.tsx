@@ -108,6 +108,11 @@ const STYLES = `
      (min-width:0 keeps the overflowing content from pushing the panel wider than the screen) */
   .al-seg-row { flex-wrap: nowrap !important; min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .al-seg-row::-webkit-scrollbar { display: none; }
+  /* ── uniform control height: session tabs, search box, link button and category chips are ALL
+     44px tall with an 8px gap between the three rows ── */
+  .al-seg-row button { height: 44px; display: inline-flex; align-items: center; }
+  .al-search > div { min-height: 44px !important; }
+  .al-rail button { height: 44px; }
   /* tools: search + link share one row. flex-basis 0 means the search can NEVER exceed the free
      space, so the link button always stays on screen. The prefecture dropdown is redundant on
      phones — the tag search already finds prefectures/regions (plus sakagura and sake). */
@@ -116,11 +121,11 @@ const STYLES = `
   .al-search { min-width: 0 !important; flex: 1 1 0% !important; }
   .al-search input { font-family:'Bodoni Moda',Didot,'EB Garamond',serif !important; font-size:15px !important; }
   /* link button sized to match the search field: same height, same radius, always inside the screen */
-  .al-linkbtn { flex: 0 0 auto !important; min-height: 40px; padding: 0 14px !important; border-radius: 8px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+  .al-linkbtn { flex: 0 0 auto !important; min-height: 44px; padding: 0 14px !important; border-radius: 8px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
   .al-linkbtn svg { width: 17px; height: 17px; }
   .al-linklabel { display: none; }   /* icon-only share button on phones */
   /* jump rail: no divider line above it — tighter vertical rhythm */
-  .al-rail { border-top: none !important; margin-top: 4px !important; padding-top: 0 !important; }
+  .al-rail { border-top: none !important; margin-top: 8px !important; padding-top: 0 !important; }
   .al-jump { scroll-margin-top: 250px; }
   /* the 4-column grid can't fit a phone: hide the sort headers and stack each entry as a labelled card */
   .al-collector { padding:22px 14px 10px; } /* 22 above the frame = 2px head margin + 20px band margin below */
