@@ -156,7 +156,10 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   const [toast, setToast] = useState<string>("");
   const ready = useRef(false);
   const barRef = useRef<HTMLDivElement>(null);
-  const jumpUntil = useRef(0); // while a chip-click jump animates, the scroll-spy stays silent (no chip flicker)
+  // While a chip-click jump animates, the scroll-spy stays silent (no chip flicker). Arrival-based,
+  // not time-based: long rightward jumps outlast any fixed timer, and a spy waking mid-flight briefly
+  // highlights the PREVIOUS category (the proximity glitch). Cleared on arrival, user touch, or 3s.
+  const jumpState = useRef<{ y: number; deadline: number } | null>(null);
 
   const t = T[lang];
   const ui = UI[lang]; // shared trilingual strings (congrats banner)
@@ -204,17 +207,27 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   useEffect(() => {
     const line = () => (barRef.current ? barRef.current.getBoundingClientRect().bottom : 156) + 30;
     const spy = () => {
-      if (performance.now() < jumpUntil.current) return; // a jump is in flight — the target chip stays active
+      const js = jumpState.current;
+      if (js) {
+        // still flying to the clicked category: silent until we actually land (±3px) — a fixed timer
+        // would wake early on long jumps and flash the previous chip near arrival
+        if (Math.abs(window.scrollY - js.y) < 3 || performance.now() > js.deadline) jumpState.current = null;
+        else return;
+      }
       const heads = Array.from(document.querySelectorAll<HTMLElement>("[data-sec]"));
       let cur = 0;
       const L = line();
       for (const h of heads) { if (h.getBoundingClientRect().top - L <= 1) cur = Number(h.dataset.idx); else break; }
       setActiveIdx(cur);
     };
+    // the browser cancels a smooth scroll when the user intervenes — release the spy with it
+    const cancelJump = () => { jumpState.current = null; };
     spy();
     window.addEventListener("scroll", spy, { passive: true });
     window.addEventListener("resize", spy);
-    return () => { window.removeEventListener("scroll", spy); window.removeEventListener("resize", spy); };
+    window.addEventListener("wheel", cancelJump, { passive: true });
+    window.addEventListener("touchstart", cancelJump, { passive: true });
+    return () => { window.removeEventListener("scroll", spy); window.removeEventListener("resize", spy); window.removeEventListener("wheel", cancelJump); window.removeEventListener("touchstart", cancelJump); };
   }, [sections]);
 
   // keep the active chip visible in the rail
@@ -296,14 +309,16 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   const jumpTo = (i: number) => {
     const el = document.getElementById(secId(i));
     if (!el) return;
-    setActiveIdx(i);                                 // the clicked chip is active for the whole ride
-    jumpUntil.current = performance.now() + 1000;    // spy silent while the smooth scroll is in flight
+    setActiveIdx(i); // the clicked chip is active for the whole ride
     // Use the bar's STUCK position (60 + height), NOT its current rect — at page top the bar sits far
     // lower (under the banner) and the landing would undershoot. +1 (not +16): 29px of air above the
     // title frame ≈ the 30px below it → the frame lands vertically centered in its white zone, and
     // the sticky category won't engage on the first scroll.
     const off = 60 + (barRef.current?.offsetHeight ?? 142) + 1;
-    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - off, behavior: "smooth" });
+    const maxY = document.documentElement.scrollHeight - window.innerHeight;
+    const y = Math.min(el.getBoundingClientRect().top + window.scrollY - off, maxY);
+    jumpState.current = { y, deadline: performance.now() + 3000 }; // spy silent until we land there
+    window.scrollTo({ top: y, behavior: "smooth" });
   };
   const changeSession = (s: SessionKey) => { setSession(s); setTags([]); setPref("all"); setActiveIdx(0); window.scrollTo({ top: 0 }); };
 
