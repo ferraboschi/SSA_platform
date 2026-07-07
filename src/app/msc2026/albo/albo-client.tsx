@@ -56,7 +56,7 @@ const STYLES = `
 /* Gallery Wall-Label header (sticky): medal photo + tier in serif italic w/ one gold hairline + count in caps */
 .al-band { position:sticky; z-index:5; display:flex; align-items:center; gap:13px; padding:10px 6px 9px; background:#fff; margin-top:28px; box-shadow:0 7px 9px -8px rgba(16,24,40,.14); }
 .al-band-photo { height:34px !important; width:auto !important; object-fit:contain; flex-shrink:0; }
-.al-band-tier { font-family:'EB Garamond',Georgia,serif; font-size:23px; font-weight:400; color:#101828; line-height:1; }
+.al-band-tier { font-family:'EB Garamond',Georgia,serif; font-size:29px; font-weight:400; color:#101828; line-height:1; }
 .al-band-tier .w { font-style:italic; font-weight:500; padding-bottom:4px; border-bottom:1px solid #b08a3e; }
 .al-band-count { margin-left:auto; font-size:11px; font-weight:500; letter-spacing:.13em; text-transform:uppercase; color:#98a2b3; font-variant-numeric:tabular-nums; flex-shrink:0; }
 /* the sort filters — light-tech: uppercase micro-labels, carets, indigo when active — above the four columns */
@@ -69,7 +69,7 @@ const STYLES = `
 .al-trow { display:grid; align-items:baseline; gap:16px; padding:14px 8px; border-bottom:1px solid #f1f3f6; text-decoration:none; transition:background .12s; }
 .al-trow:hover { background:#fbfcfe; }
 .al-td { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.al-td-tipo { font-family:'EB Garamond',Georgia,serif; font-style:italic; font-size:14px; color:#b6bdc8; }
+.al-td-tipo { font-family:'EB Garamond',Georgia,serif; font-style:italic; font-size:15px; color:#475467; }
 .al-td-name { font-family:'EB Garamond',Georgia,serif; font-size:16.5px; font-weight:500; color:#101828; }
 .al-td-saka { font-size:13.5px; color:#475467; }
 .al-td-reg { font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; color:#98a2b3; font-variant-numeric:tabular-nums; }
@@ -95,7 +95,7 @@ const STYLES = `
   .al-cat-rule, .al-cat-rule2 { max-width:300px; }
   .al-band { gap:11px; padding:8px 4px; margin-top:20px; }
   .al-band-photo { height:30px !important; }
-  .al-band-tier { font-size:20px; }
+  .al-band-tier { font-size:24px; }
   .al-colhead { display:none; }
   .al-trow { grid-template-columns:1fr !important; gap:3px; padding:14px 6px; }
   .al-td { white-space:normal; }
