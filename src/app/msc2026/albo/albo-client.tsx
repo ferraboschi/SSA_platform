@@ -53,8 +53,12 @@ const STYLES = `
 .al-cat-milano .d { color:#b08a3e; }
 .al-cat-count { margin:9px 0 0; font-family:'Bodoni Moda','EB Garamond',serif; font-style:italic; font-size:14px; font-weight:400; color:#475467; }
 .al-tablebody { position:relative; }
-/* Gallery Wall-Label header (sticky): medal photo + tier in serif italic w/ one gold hairline + count in caps */
+/* Gallery Wall-Label header (sticky): medal photo + tier in serif italic w/ one gold hairline + count in caps.
+   The category name rides centered in every band — every medal has the same tiers, so once the big Bodoni
+   title scrolls away only this tells you WHICH category's Platino/Oro you are in. It persists through all
+   the card's tiers and is replaced (with the fade handoff) by the next category's bands. */
 .al-band { position:sticky; z-index:5; display:flex; align-items:center; gap:13px; padding:10px 6px 9px; background:#fff; margin-top:28px; box-shadow:0 7px 9px -8px rgba(16,24,40,.14); }
+.al-band-catname { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:20px; color:#0f1b3d; max-width:44%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
 .al-band-photo { height:34px !important; width:auto !important; object-fit:contain; flex-shrink:0; }
 .al-band-tier { font-family:'EB Garamond',Georgia,serif; font-size:29px; font-weight:400; color:#101828; line-height:1; }
 .al-band-tier .w { font-style:italic; font-weight:500; padding-bottom:4px; border-bottom:1px solid #b08a3e; }
@@ -93,7 +97,9 @@ const STYLES = `
   .al-collector { padding:16px 14px 10px; }
   .al-cat-title { font-size:25px; }
   .al-cat-rule, .al-cat-rule2 { max-width:300px; }
-  .al-band { gap:11px; padding:8px 4px; margin-top:20px; }
+  .al-band { gap:11px; padding:8px 4px 9px; margin-top:20px; flex-wrap:wrap; }
+  /* no room to center it beside the tier on a phone: the category becomes a full-width line above */
+  .al-band-catname { position:static; transform:none; order:-1; flex:1 1 100%; max-width:none; font-size:14px; margin-bottom:2px; }
   .al-band-photo { height:30px !important; }
   .al-band-tier { font-size:24px; }
   .al-colhead { display:none; }
@@ -390,6 +396,7 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
                         <div className="al-band" style={{ top: bandTop }}>
                           <Image src={medalImageFor(mg.items[0])} alt="" width={40} height={52} className="al-band-photo" />
                           <span className="al-band-tier"><span className="w">{mm[lang]}</span></span>
+                          <span className="al-band-catname">{s.cat}</span>
                           <span className="al-band-count">{mg.items.length} {mg.items.length === 1 ? t.winnerOne : t.winners}</span>
                         </div>
                         <div className="al-colhead" style={{ gridTemplateColumns: COLS4 }}>
