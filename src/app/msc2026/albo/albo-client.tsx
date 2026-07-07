@@ -8,7 +8,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  VISIBLE, MEDAL_ORDER, MEDAL_META, SESSION_ORDER, SESSION_META, CATEGORY_GROUPS, CATEGORIES_BY_SESSION, SEARCH_ENTITIES,
+  VISIBLE, MEDAL_ORDER, MEDAL_META, SESSION_ORDER, SESSION_META, CATEGORY_GROUPS, CATEGORIES_BY_SESSION, SEARCH_ENTITIES, UI,
   companyName, medalImageFor, type Winner, type SessionKey, type MedalKey, type LangKey, type SearchTag,
 } from "../shared";
 
@@ -33,6 +33,17 @@ const STYLES = `
 .al-flash { animation: al-flash 1.1s ease; }
 .al-rail { display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
 .al-rail::-webkit-scrollbar { display:none; }
+
+/* ── Congrats banner (ported from /msc2026): video placeholder + logo + text, collapsible ── */
+.al-banner { position:relative; margin-top:18px; border-radius:16px; border:1px solid #ece2c6; background:linear-gradient(135deg,#fffaef 0%,#fcf4e2 100%); box-shadow:0 1px 2px rgba(16,24,40,.05); overflow:hidden; }
+.al-banner-body { display:flex; align-items:center; gap:24px; padding:20px; }
+.al-banner-video { flex:1.4 1 0; min-width:0; }
+.al-banner-text { flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:14px; }
+.al-banner-collapse { position:absolute; bottom:14px; right:18px; }
+
+/* filter panel fuses with the card scrolling beneath it: bottom corners square while engaged */
+.al-barpanel { transition:border-radius .15s ease; }
+.al-barpanel.al-bar-fused { border-bottom-left-radius:0 !important; border-bottom-right-radius:0 !important; }
 
 /* ── Category collector: white card; medal groups headed by a slim Gallery Wall-Label header ──
    Marriage principle: serif = jewelry (category, tier, sake names) · Inter = chassis (sort headers,
@@ -87,6 +98,10 @@ const STYLES = `
 @media (max-width: 720px) {
   .al-wrap { padding-left: 16px !important; padding-right: 16px !important; }
   .al-portal-sub { display: none; }
+  /* banner: video and text stack; Comprimi flows under the text */
+  .al-banner-body { flex-direction: column; align-items: stretch; gap: 16px; padding: 18px 20px 16px; }
+  .al-banner-video, .al-banner-text { flex: none; }
+  .al-banner-collapse { position: static; align-self: flex-end; }
   /* ── compact filter: 4 tight rows instead of a half-screen stack ── */
   .al-topbar { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
   /* session tabs: one horizontally-scrolling row, not a wrapping 2-row block */
@@ -129,6 +144,7 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   const [tags, setTags] = useState<SearchTag[]>([]);   // free-search tags: sakagura / product / region
   const [pref, setPref] = useState<string>("all");      // prefecture quick-filter (individual prefectures, not macro-areas)
   const [activeIdx, setActiveIdx] = useState<number>(0);
+  const [congratsCollapsed, setCongratsCollapsed] = useState(false); // "Comprimi" shrinks the congrats banner to a slim bar (same as /msc2026)
   const [sorts, setSorts] = useState<Record<string, SortState>>({}); // per medal-band sort (keyed by section:medal)
   const [bandTop, setBandTop] = useState<number>(172);               // sticky offset for the medal bands (under the filter bar)
   const [toast, setToast] = useState<string>("");
@@ -136,6 +152,7 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   const barRef = useRef<HTMLDivElement>(null);
 
   const t = T[lang];
+  const ui = UI[lang]; // shared trilingual strings (congrats banner)
   const secId = (i: number) => "albo-sec-" + i;
 
   // categories of the active session, in the curated order.
@@ -215,10 +232,16 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
       raf = 0;
       const line = 60 + (barRef.current?.offsetHeight ?? 112);
       // fuse each card with the header: as its top edge tucks under the filter bar, unround the
-      // top corners so the white continues instead of showing an angolo
+      // top corners so the white continues instead of showing an angolo. While a card's white is
+      // engaged under the bar, the bar panel squares its BOTTOM corners too — killing the gray
+      // notch that read as a fake corner between the two.
+      let anyEngaged = false;
       document.querySelectorAll<HTMLElement>(".al-collector").forEach((card) => {
-        card.classList.toggle("al-fused", card.getBoundingClientRect().top <= line + 18);
+        const cr = card.getBoundingClientRect();
+        card.classList.toggle("al-fused", cr.top <= line + 18);
+        if (cr.top <= line + 18 && cr.bottom >= line - 6) anyEngaged = true;
       });
+      barRef.current?.querySelector<HTMLElement>(".al-barpanel")?.classList.toggle("al-bar-fused", anyEngaged);
       document.querySelectorAll<HTMLElement>(".al-tablebody").forEach((body) => {
         const bands = Array.from(body.querySelectorAll<HTMLElement>(".al-band"));
         bands.forEach((band, bi) => {
@@ -262,7 +285,11 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
     const el = document.getElementById(secId(i));
     if (!el) return;
     setActiveIdx(i); // select the clicked chip immediately (don't wait for the scroll-spy to catch up)
-    const off = (barRef.current ? barRef.current.getBoundingClientRect().bottom : 156) + 16;
+    // Use the bar's STUCK position (60 + height), NOT its current rect — at page top the bar sits far
+    // lower (under the banner) and the landing would undershoot. +1 (not +16): 29px of air above the
+    // title frame ≈ the 30px below it → the frame lands vertically centered in its white zone, and
+    // the sticky category won't engage on the first scroll.
+    const off = 60 + (barRef.current?.offsetHeight ?? 142) + 1;
     window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - off, behavior: "smooth" });
     el.classList.remove("al-flash"); void el.offsetWidth; el.classList.add("al-flash");
   };
@@ -347,12 +374,38 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
         <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".08em", color: "#1e3a8a", textTransform: "uppercase", marginBottom: 8 }}>{t.kicker}</div>
         <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: "-.01em" }}>{t.title}</h1>
         <p style={{ margin: "9px 0 0", fontSize: 14, lineHeight: 1.7, color: "#667085", maxWidth: 640 }}>{t.subtitle}</p>
+
+        {/* Congrats banner — ported 1:1 from /msc2026: video placeholder + logo + text, Comprimi/Espandi */}
+        <div className="al-banner">
+          {congratsCollapsed ? (
+            <button onClick={() => setCongratsCollapsed(false)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 20px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+              <Image src="/msc-logo.png" alt="Milano Sake Challenge 2026" width={110} height={44} style={{ width: "auto", height: 30, objectFit: "contain", flexShrink: 0 }} />
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "#b08a3a" }}>{ui.bannerExpand} <CaretToggle open={false} /></span>
+            </button>
+          ) : (
+            <div className="al-banner-body">
+              {/* video placeholder — swap for the real <video>/embed when available */}
+              <div className="al-banner-video">
+                <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", borderRadius: 12, overflow: "hidden", border: "1px solid #e6dcc0", background: "linear-gradient(135deg,#2b2620 0%,#4b4133 100%)", display: "grid", placeItems: "center" }}>
+                  <span style={{ display: "grid", placeItems: "center", width: 62, height: 62, borderRadius: "50%", background: "rgba(255,255,255,0.92)", boxShadow: "0 6px 20px rgba(0,0,0,0.3)" }}><PlayIcon /></span>
+                  <span style={{ position: "absolute", bottom: 12, left: 14, fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.82)", letterSpacing: ".02em" }}>Milano Sake Challenge 2026</span>
+                </div>
+              </div>
+              {/* logo (PNG has ~16.5% transparent side padding — negative margins align the wordmark) + congrats + Comprimi */}
+              <div className="al-banner-text">
+                <Image src="/msc-logo.png" alt="Milano Sake Challenge 2026" width={220} height={88} style={{ width: "auto", height: 88, objectFit: "contain", display: "block", marginLeft: -36, marginTop: -8, marginBottom: -6 }} />
+                <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: "#6b5b33" }}>{ui.congrats}</p>
+                <button className="al-banner-collapse" onClick={() => setCongratsCollapsed(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#b08a3a", padding: 0, zIndex: 2 }}>{ui.bannerCollapse} <CaretToggle open={true} /></button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sticky nav: session filter + search/region + category jump-rail (scroll-spy) */}
       <div ref={barRef} style={{ position: "sticky", top: 60, zIndex: 30, background: "#f5f6f8", paddingTop: 12 }}>
         <div className="al-wrap" style={{ maxWidth: 1420, margin: "0 auto", padding: "0 28px" }}>
-          <div style={{ background: "#fff", border: "1px solid #e9ebef", borderRadius: 14, padding: 14, boxShadow: "0 8px 22px rgba(16,24,40,.08)" }}>
+          <div className="al-barpanel" style={{ background: "#fff", border: "1px solid #e9ebef", borderRadius: 14, padding: 14, boxShadow: "0 8px 22px rgba(16,24,40,.08)" }}>
             <div className="al-topbar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div className="al-seg-row" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {SESSION_ORDER.map((s) => <button key={s} onClick={() => changeSession(s)} style={segBtn(session === s)}>{SESSION_META[s][lang]}</button>)}
@@ -481,6 +534,9 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
     </div>
   );
 }
+
+function CaretToggle({ open }: { open: boolean }) { return (<svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{ transition: "transform .18s ease", transform: open ? "rotate(180deg)" : "none" }}><path d="m6 9 6 6 6-6" /></svg>); }
+function PlayIcon() { return (<svg width={22} height={22} viewBox="0 0 24 24" fill="#3f382c" aria-hidden><path d="M8 5.6v12.8a.8.8 0 0 0 1.22.68l10.2-6.4a.8.8 0 0 0 0-1.36L9.22 4.92A.8.8 0 0 0 8 5.6z" /></svg>); }
 
 // ── Tag autocomplete: type "yamagata" → suggests the Yamagata region; type a name that is also a brewery →
 //    suggests it tagged "Sakagura". Selecting adds a chip that carries its type label, exactly like the source page. ──
