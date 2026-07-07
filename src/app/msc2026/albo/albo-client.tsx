@@ -37,10 +37,10 @@ const STYLES = `
 /* ── Category collector: white card; medal groups headed by a slim Gallery Wall-Label header ──
    Marriage principle: serif = jewelry (category, tier, sake names) · Inter = chassis (sort headers,
    counts, region caps, hairlines) · indigo = interaction. Metal reduced to one gold hairline. */
-.al-collector { background:#fff; border:1px solid #e9ebef; border-radius:16px; padding:24px 24px 14px; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+.al-collector { background:#fff; border:1px solid #e9ebef; border-radius:16px; padding:27px 24px 14px; box-shadow:0 1px 2px rgba(16,24,40,.05); } /* 27+1px border above the frame = the 28px below it */
 /* centered category title — "Bodoni Milano · cornice incisa": Bodoni Moda between engraved double
    hairlines with a matte-gold fleuron cap, MILANO · MMXXVI in spaced small caps, count in italic. */
-.al-cat-head { display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:10px; }
+.al-cat-head { display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:2px; } /* +28px band margin = 30px below the frame, matching the 30px card padding above it */
 .al-cat-rule, .al-cat-rule2 { width:100%; max-width:430px; position:relative; height:7px; }
 .al-cat-rule { margin-bottom:14px; }
 .al-cat-rule2 { margin-top:14px; }
@@ -96,7 +96,7 @@ const STYLES = `
   .al-linklabel { display: none; }   /* icon-only share button on phones */
   .al-jump { scroll-margin-top: 250px; }
   /* the 4-column grid can't fit a phone: hide the sort headers and stack each entry as a labelled card */
-  .al-collector { padding:16px 14px 10px; }
+  .al-collector { padding:22px 14px 10px; } /* 22 above the frame = 2px head margin + 20px band margin below */
   .al-cat-title { font-size:25px; }
   .al-cat-rule, .al-cat-rule2 { max-width:300px; }
   /* no room for the centered overlay on a phone: each band carries the category as a full-width
