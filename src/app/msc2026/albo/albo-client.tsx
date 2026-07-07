@@ -106,8 +106,10 @@ const STYLES = `
   .al-banner-collapse { position: static; align-self: flex-end; }
   /* ── compact filter — and NOTHING may escape the screen ── */
   .al-topbar { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; min-width: 0; }
-  /* session tabs wrap onto a second row: all four always visible, none cut off */
-  .al-seg-row { flex-wrap: wrap !important; min-width: 0; }
+  /* session tabs: ONE horizontally-scrolling row, same affordance as the category rail below
+     (min-width:0 keeps the overflowing content from pushing the panel wider than the screen) */
+  .al-seg-row { flex-wrap: nowrap !important; min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .al-seg-row::-webkit-scrollbar { display: none; }
   /* tools: search + link share one row. flex-basis 0 means the search can NEVER exceed the free
      space, so the link button always stays on screen. The prefecture dropdown is redundant on
      phones — the tag search already finds prefectures/regions (plus sakagura and sake). */
