@@ -12,14 +12,16 @@ import {
   companyName, medalImageFor, type Winner, type SessionKey, type MedalKey, type LangKey, type SearchTag,
 } from "../shared";
 
-type SortKey = "name" | "company" | "prefecture" | "category";
+type SortKey = "name" | "company" | "prefecture";
 type SortState = { key: SortKey; dir: "asc" | "desc" };
 const DEFAULT_SORT: SortState = { key: "name", dir: "asc" };
+// height of the sticky category echo (.al-cat-sticky) — the tier bands stick this much lower
+const STICKY_STRIP_H = 44;
 
 const T: Record<LangKey, Record<string, string>> = {
-  it: { brandSub: "Portale Risultati", kicker: "Milano Sake Challenge 2026 · Risultati", title: "Albo dei Premiati", subtitle: "Sfoglia i vincitori per sessione e categoria. Clicca una categoria per saltarci: la lista non si nasconde, scorre.", jumpTo: "Salta a", searchTagPh: "Cerca sakagura, prodotto o regione…", tagSakagura: "Sakagura", tagProduct: "Prodotto", tagRegion: "Regione", genLink: "Genera link", copied: "Link copiato", allPrefs: "Tutte le prefetture", winners: "premiati", winnerOne: "premiato", noResults: "Nessun risultato per questi criteri", reset: "Azzera", magnifica: "Magnifica: annuncio a settembre", inThis: "in questa vista", backTop: "↑ Torna su", colCategory: "Tipologia", colName: "Nome Sake", colSakagura: "Sakagura", colPrefecture: "Regione" },
-  en: { brandSub: "Results Portal", kicker: "Milano Sake Challenge 2026 · Results", title: "Roll of Honour", subtitle: "Browse the winners by session and category. Click a category to jump: nothing is hidden, it scrolls.", jumpTo: "Jump to", searchTagPh: "Search sakagura, product, or region…", tagSakagura: "Sakagura", tagProduct: "Product", tagRegion: "Region", genLink: "Copy link", copied: "Link copied", allPrefs: "All prefectures", winners: "winners", winnerOne: "winner", noResults: "No results for these criteria", reset: "Reset", magnifica: "Magnifica: announced in September", inThis: "in this view", backTop: "↑ Back to top", colCategory: "Type", colName: "Sake name", colSakagura: "Brewery", colPrefecture: "Region" },
-  ja: { brandSub: "受賞結果ポータル", kicker: "Milano Sake Challenge 2026 · 受賞結果", title: "受賞酒一覧", subtitle: "セッション・部門で受賞酒を一覧。部門をクリックすると移動します（隠さずスクロール）。", jumpTo: "移動", searchTagPh: "蔵元・銘柄・地域を検索…", tagSakagura: "蔵元", tagProduct: "銘柄", tagRegion: "地域", genLink: "リンク", copied: "コピーしました", allPrefs: "すべての都道府県", winners: "受賞", winnerOne: "受賞", noResults: "該当する結果がありません", reset: "リセット", magnifica: "マニフィカ賞：9月発表", inThis: "この表示で", backTop: "↑ 上へ", colCategory: "部門", colName: "銘柄", colSakagura: "蔵元", colPrefecture: "地域" },
+  it: { brandSub: "Portale Risultati", kicker: "Milano Sake Challenge 2026 · Risultati", title: "Albo dei Premiati", subtitle: "Sfoglia i vincitori per sessione e categoria. Clicca una categoria per saltarci: la lista non si nasconde, scorre.", jumpTo: "Salta a", searchTagPh: "Cerca sakagura, prodotto o regione…", tagSakagura: "Sakagura", tagProduct: "Prodotto", tagRegion: "Regione", genLink: "Genera link", copied: "Link copiato", allPrefs: "Tutte le prefetture", winners: "premiati", winnerOne: "premiato", noResults: "Nessun risultato per questi criteri", reset: "Azzera", magnifica: "Magnifica: annuncio a settembre", inThis: "in questa vista", backTop: "↑ Torna su", colName: "Nome Sake", colSakagura: "Sakagura", colPrefecture: "Regione" },
+  en: { brandSub: "Results Portal", kicker: "Milano Sake Challenge 2026 · Results", title: "Roll of Honour", subtitle: "Browse the winners by session and category. Click a category to jump: nothing is hidden, it scrolls.", jumpTo: "Jump to", searchTagPh: "Search sakagura, product, or region…", tagSakagura: "Sakagura", tagProduct: "Product", tagRegion: "Region", genLink: "Copy link", copied: "Link copied", allPrefs: "All prefectures", winners: "winners", winnerOne: "winner", noResults: "No results for these criteria", reset: "Reset", magnifica: "Magnifica: announced in September", inThis: "in this view", backTop: "↑ Back to top", colName: "Sake name", colSakagura: "Brewery", colPrefecture: "Region" },
+  ja: { brandSub: "受賞結果ポータル", kicker: "Milano Sake Challenge 2026 · 受賞結果", title: "受賞酒一覧", subtitle: "セッション・部門で受賞酒を一覧。部門をクリックすると移動します（隠さずスクロール）。", jumpTo: "移動", searchTagPh: "蔵元・銘柄・地域を検索…", tagSakagura: "蔵元", tagProduct: "銘柄", tagRegion: "地域", genLink: "リンク", copied: "コピーしました", allPrefs: "すべての都道府県", winners: "受賞", winnerOne: "受賞", noResults: "該当する結果がありません", reset: "リセット", magnifica: "マニフィカ賞：9月発表", inThis: "この表示で", backTop: "↑ 上へ", colName: "銘柄", colSakagura: "蔵元", colPrefecture: "地域" },
 };
 
 const STYLES = `
@@ -53,12 +55,14 @@ const STYLES = `
 .al-cat-milano .d { color:#b08a3e; }
 .al-cat-count { margin:9px 0 0; font-family:'Bodoni Moda','EB Garamond',serif; font-style:italic; font-size:14px; font-weight:400; color:#475467; }
 .al-tablebody { position:relative; }
-/* Gallery Wall-Label header (sticky): medal photo + tier in serif italic w/ one gold hairline + count in caps.
-   The category name rides centered in every band — every medal has the same tiers, so once the big Bodoni
-   title scrolls away only this tells you WHICH category's Platino/Oro you are in. It persists through all
-   the card's tiers and is replaced (with the fade handoff) by the next category's bands. */
+/* Two-level sticky. Level 1: a slim echo of the category title — invisible until the big Bodoni title
+   scrolls away, then it sticks under the filter bar and stays for ALL the card's tiers (Platino→Argento),
+   replaced by the next card's echo. Height 44px must match STICKY_STRIP_H in the scroll handler. */
+.al-cat-sticky { position:sticky; z-index:6; height:44px; display:flex; align-items:center; justify-content:center; background:#fff; opacity:0; pointer-events:none; transition:opacity .18s ease; }
+.al-cat-sticky-name { font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:21px; color:#0f1b3d; max-width:92%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Level 2: the Gallery Wall-Label tier band — medal photo + tier in serif italic w/ one gold hairline.
+   It sticks 44px lower, visually attached under the category echo. */
 .al-band { position:sticky; z-index:5; display:flex; align-items:center; gap:13px; padding:10px 6px 9px; background:#fff; margin-top:28px; box-shadow:0 7px 9px -8px rgba(16,24,40,.14); }
-.al-band-catname { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-family:'Bodoni Moda',Didot,'EB Garamond',serif; font-weight:400; font-size:20px; color:#0f1b3d; max-width:44%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
 .al-band-photo { height:34px !important; width:auto !important; object-fit:contain; flex-shrink:0; }
 .al-band-tier { font-family:'EB Garamond',Georgia,serif; font-size:29px; font-weight:400; color:#101828; line-height:1; }
 .al-band-tier .w { font-style:italic; font-weight:500; padding-bottom:4px; border-bottom:1px solid #b08a3e; }
@@ -69,11 +73,10 @@ const STYLES = `
 .al-bandth:hover { color:#1e3a8a; }
 .al-bandth[data-active="1"] { color:#1e3a8a; }
 .al-sortarrow { font-size:9px; line-height:1; opacity:.85; }
-/* rows: serif names (jewelry), sans meta (chassis), faint serif tipologia */
+/* rows: serif names (jewelry), sans meta (chassis) — no category column: the sticky echo carries it */
 .al-trow { display:grid; align-items:baseline; gap:16px; padding:14px 8px; border-bottom:1px solid #f1f3f6; text-decoration:none; transition:background .12s; }
 .al-trow:hover { background:#fbfcfe; }
 .al-td { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.al-td-tipo { font-family:'EB Garamond',Georgia,serif; font-style:italic; font-size:15px; color:#475467; }
 .al-td-name { font-family:'EB Garamond',Georgia,serif; font-size:16.5px; font-weight:500; color:#101828; }
 .al-td-saka { font-size:13.5px; color:#475467; }
 .al-td-reg { font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; color:#98a2b3; font-variant-numeric:tabular-nums; }
@@ -97,15 +100,13 @@ const STYLES = `
   .al-collector { padding:16px 14px 10px; }
   .al-cat-title { font-size:25px; }
   .al-cat-rule, .al-cat-rule2 { max-width:300px; }
-  .al-band { gap:11px; padding:8px 4px 9px; margin-top:20px; flex-wrap:wrap; }
-  /* no room to center it beside the tier on a phone: the category becomes a full-width line above */
-  .al-band-catname { position:static; transform:none; order:-1; flex:1 1 100%; max-width:none; font-size:14px; margin-bottom:2px; }
+  .al-band { gap:11px; padding:8px 4px 9px; margin-top:20px; }
+  .al-cat-sticky-name { font-size:16px; }
   .al-band-photo { height:30px !important; }
   .al-band-tier { font-size:24px; }
   .al-colhead { display:none; }
   .al-trow { grid-template-columns:1fr !important; gap:3px; padding:14px 6px; }
   .al-td { white-space:normal; }
-  .al-td-tipo { order:-1; font-family:'Inter',sans-serif; font-style:normal; font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:#98a2b3; }
   .al-td-saka::before, .al-td-reg::before { content:attr(data-label) ": "; color:#98a2b3; font-weight:600; }
 }
 `;
@@ -192,19 +193,34 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
     return () => window.removeEventListener("resize", measure);
   }, [session, lang, sections.length]);
 
-  // Sticky hand-off with fade: a stuck band keeps opacity 1 for the whole scroll of its rows,
-  // then dissolves over the last ~70px as the NEXT band (or the card's end) closes in and replaces it.
+  // Two-level sticky with fade. Level 1: each card's category echo is invisible until stuck (the big
+  // Bodoni title announces the section while visible), stays for ALL the card's tiers, and dissolves
+  // against the card's end as the next category takes over. Level 2: the tier bands stick right below
+  // it and hand off to each other with the same ~70px dissolve.
   useEffect(() => {
-    const FADE = 70; // px over which the outgoing band dissolves
+    const FADE = 70; // px over which an outgoing sticky element dissolves
     let raf = 0;
     const update = () => {
       raf = 0;
-      const stickLine = 60 + (barRef.current?.offsetHeight ?? 112);
+      const line = 60 + (barRef.current?.offsetHeight ?? 112);
+      document.querySelectorAll<HTMLElement>(".al-collector").forEach((card) => {
+        const strip = card.querySelector<HTMLElement>(".al-cat-sticky");
+        if (!strip) return;
+        const r = strip.getBoundingClientRect();
+        let opacity = 0;
+        if (r.top <= line + 2) {
+          opacity = 1;
+          const gap = card.getBoundingClientRect().bottom - r.bottom;
+          if (gap < FADE) opacity = Math.max(0, gap / FADE);
+        }
+        strip.style.opacity = String(opacity);
+      });
+      const bandLine = line + STICKY_STRIP_H;
       document.querySelectorAll<HTMLElement>(".al-tablebody").forEach((body) => {
         const bands = Array.from(body.querySelectorAll<HTMLElement>(".al-band"));
         bands.forEach((band, bi) => {
           const r = band.getBoundingClientRect();
-          const stuck = r.top <= stickLine + 2;
+          const stuck = r.top <= bandLine + 2;
           let opacity = 1;
           if (stuck) {
             // the incoming edge: the next band's top, or the end of this card's table
@@ -270,16 +286,16 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
   const langBtn = (on: boolean): React.CSSProperties => ({ padding: "6px 11px", border: "none", fontFamily: "inherit", fontSize: 12, fontWeight: 600, cursor: "pointer", background: on ? "#1e3a8a" : "#fff", color: on ? "#fff" : "#667085" });
   const selStyle: React.CSSProperties = { padding: "9px 30px 9px 12px", border: "1px solid #d7dbe2", borderRadius: 8, background: "#fff url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 10 10%22><path d=%22M1 3l4 4 4-4%22 stroke=%22%2398a2b3%22 fill=%22none%22 stroke-width=%221.4%22/></svg>') no-repeat right 11px center", fontFamily: "inherit", fontSize: 13, color: "#344054", fontWeight: 500, cursor: "pointer" };
 
-  // shared 4-column grid template — the sort headers and the rows below use it so the columns line up:
-  // Tipologia · Nome Sake · Sakagura · Regione
-  const COLS4 = "minmax(0,1.5fr) minmax(0,1.9fr) minmax(0,1.5fr) minmax(0,.8fr)";
+  // shared 3-column grid template — the sort headers and the rows below use it so the columns line up:
+  // Nome Sake · Sakagura · Regione (the category lives in the sticky echo, not in the rows)
+  const COLS3 = "minmax(0,2.3fr) minmax(0,1.7fr) minmax(0,.9fr)";
   const getSort = (gid: string) => sorts[gid] ?? DEFAULT_SORT;
   const toggleSort = (gid: string, key: SortKey) => setSorts((prev) => {
     const cur = prev[gid] ?? DEFAULT_SORT;
     return { ...prev, [gid]: cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" } };
   });
   const sortItems = (items: Winner[], so: SortState) => {
-    const val = (w: Winner) => (so.key === "company" ? companyName(w, lang) : so.key === "prefecture" ? (w.prefecture ?? "") : so.key === "category" ? w.category : w.name);
+    const val = (w: Winner) => (so.key === "company" ? companyName(w, lang) : so.key === "prefecture" ? (w.prefecture ?? "") : w.name);
     const d = so.dir === "asc" ? 1 : -1;
     return items.slice().sort((a, b) => val(a).localeCompare(val(b)) * d || a.name.localeCompare(b.name));
   };
@@ -382,6 +398,11 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
                   <span className="al-cat-count">{s.count} {s.count === 1 ? t.winnerOne : t.winners}</span>
                   <span className="al-cat-rule2" aria-hidden />
                 </div>
+                {/* Slim sticky echo of the category: appears once the big title scrolls away, and the tier
+                    bands attach right below it — one category header valid for all its medals. */}
+                <div className="al-cat-sticky" style={{ top: bandTop }} aria-hidden>
+                  <span className="al-cat-sticky-name">{s.cat}</span>
+                </div>
                 {/* Medal bands are sticky within this body: Platino sticks under the menu until Doppio Oro
                     overtakes it, then Doppio Oro sticks, and so on — iOS-style section headers. Each band
                     carries the medal photo, the enlarged "category · medal", and the sortable column headers. */}
@@ -393,21 +414,18 @@ export function AlboClient({ defaultLang = "it" as LangKey }: { defaultLang?: La
                     const items = sortItems(mg.items, so);
                     return (
                       <Fragment key={mg.medal}>
-                        <div className="al-band" style={{ top: bandTop }}>
+                        <div className="al-band" style={{ top: bandTop + STICKY_STRIP_H }}>
                           <Image src={medalImageFor(mg.items[0])} alt="" width={40} height={52} className="al-band-photo" />
                           <span className="al-band-tier"><span className="w">{mm[lang]}</span></span>
-                          <span className="al-band-catname">{s.cat}</span>
                           <span className="al-band-count">{mg.items.length} {mg.items.length === 1 ? t.winnerOne : t.winners}</span>
                         </div>
-                        <div className="al-colhead" style={{ gridTemplateColumns: COLS4 }}>
-                          {bandTh(t.colCategory, "category", gid, so)}
+                        <div className="al-colhead" style={{ gridTemplateColumns: COLS3 }}>
                           {bandTh(t.colName, "name", gid, so)}
                           {bandTh(t.colSakagura, "company", gid, so)}
                           {bandTh(t.colPrefecture, "prefecture", gid, so)}
                         </div>
                         {items.map((w) => (
-                          <Link key={w.reg_id} href={`/msc2026/${w.reg_id}`} className="al-trow" style={{ gridTemplateColumns: COLS4 }}>
-                            <span className="al-td al-td-tipo">{w.category}</span>
+                          <Link key={w.reg_id} href={`/msc2026/${w.reg_id}`} className="al-trow" style={{ gridTemplateColumns: COLS3 }}>
                             <span className="al-td al-td-name">{w.name}</span>
                             <span className="al-td al-td-saka" data-label={t.colSakagura}>{companyName(w, lang)}</span>
                             <span className="al-td al-td-reg" data-label={t.colPrefecture}>{w.prefecture ?? "—"}</span>
