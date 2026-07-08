@@ -267,11 +267,17 @@ export function ProgrammaEconomiaSection({
     else mounted.current = true;
   }, [days, customLines]);
 
+  // Per-course concurrency version (Bug 4): sent with every save so a stale
+  // editor gets "Modificato da un altro utente" instead of clobbering; bumped
+  // locally after each successful save so consecutive saves keep working.
+  const programVersion = useRef(programOverlay?.__pv ?? 0);
+
   const handleSaveProgram = () => {
     startSave(async () => {
       const overlay: CourseProgramOverlay = { days, customLines };
-      const res = await saveCourseProgramAction(courseId, overlay);
+      const res = await saveCourseProgramAction(courseId, overlay, programVersion.current);
       if (res.ok) {
+        if (res.newVersion != null) programVersion.current = res.newVersion;
         setDirty(false);
         showToast(t.programSaved);
       } else {

@@ -46,11 +46,17 @@ export function FeedbackSetsEditor() {
   const [saving, startSave] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Concurrency version of the stored row — sent back on save so a stale
+  // editor gets a "reload first" conflict instead of clobbering (Bug 4).
+  const [version, setVersion] = useState(0);
+
   useEffect(() => {
     let alive = true;
     loadFeedbackSetsAction()
       .then((s) => {
-        if (alive) setSets(s);
+        if (!alive) return;
+        setSets({ short: s.short, long: s.long });
+        setVersion(s.version);
       })
       .catch(() => {})
       .finally(() => {
@@ -90,8 +96,9 @@ export function FeedbackSetsEditor() {
   const save = () => {
     setMsg(null);
     startSave(async () => {
-      const res = await saveFeedbackSetAction(variant, questions);
+      const res = await saveFeedbackSetAction(variant, questions, version);
       if (res.ok) {
+        if (res.newVersion != null) setVersion(res.newVersion);
         setDirty((d) => ({ ...d, [variant]: false }));
         setMsg("Salvato ✓");
       } else setMsg(res.error || "Salvataggio non riuscito");

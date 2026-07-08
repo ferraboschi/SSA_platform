@@ -6,8 +6,12 @@
 // the per-family exam templates, so every course type can have feedback (always
 // optional to fill). `feedbackVariant(type)` (COURSE_PROFILE) picks which set a
 // course uses. Admin/manager only — same posture as the exam library editor.
+//
+// Saves are optimistic-concurrency protected (kv-cas): a stale editor gets a
+// conflict instead of clobbering a parallel edit (Bug 4).
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { kvReadVersioned, kvCasSave, CONFLICT_MSG } from "@/lib/data/kv-cas";
 import { assertRole, hasRole } from "@/lib/auth/guard";
 import type { ExamQuestion, FeedbackVariant } from "@/lib/domain";
 
@@ -20,9 +24,9 @@ export interface FeedbackSets {
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
 
-async function readStore(svc: Svc): Promise<Partial<FeedbackSets>> {
-  const { data } = await svc.from("settings_kv").select("value").eq("key", KEY).maybeSingle();
-  return ((data as { value?: Partial<FeedbackSets> } | null)?.value ?? {}) as Partial<FeedbackSets>;
+async function readStore(svc: Svc): Promise<{ store: Partial<FeedbackSets>; version: number }> {
+  const { value, version } = await kvReadVersioned<Partial<FeedbackSets>>(svc, KEY);
+  return { store: value ?? {}, version };
 }
 
 /** Seed the "long" set from the certificato template's existing feedback the
@@ -40,21 +44,22 @@ async function deriveLongFromTemplate(svc: Svc): Promise<ExamQuestion[]> {
   return qs;
 }
 
-/** Both feedback questionnaires. `long` falls back to the certificato template's
- *  feedback until it's saved standalone at least once. */
-export async function loadFeedbackSetsAction(): Promise<FeedbackSets> {
+/** Both feedback questionnaires + the concurrency version the editor must send
+ *  back on save. `long` falls back to the certificato template's feedback until
+ *  it's saved standalone at least once. */
+export async function loadFeedbackSetsAction(): Promise<FeedbackSets & { version: number }> {
   await assertRole(["admin", "manager"]);
   const svc = getSupabaseServiceClient();
-  const store = await readStore(svc);
+  const { store, version } = await readStore(svc);
   const long = store.long ?? (await deriveLongFromTemplate(svc));
-  return { short: store.short ?? [], long };
+  return { short: store.short ?? [], long, version };
 }
 
 /** The questions for ONE variant (used by the public feedback runner). Returns
  *  [] when unset — no role gate: the runner is a public tokenized surface. */
 export async function loadFeedbackSet(variant: FeedbackVariant): Promise<ExamQuestion[]> {
   const svc = getSupabaseServiceClient();
-  const store = await readStore(svc);
+  const { store } = await readStore(svc);
   if (variant === "long") return store.long ?? (await deriveLongFromTemplate(svc));
   return store.short ?? [];
 }
@@ -62,25 +67,33 @@ export async function loadFeedbackSet(variant: FeedbackVariant): Promise<ExamQue
 export interface SaveFeedbackResult {
   ok: boolean;
   error?: string;
+  /** Another editor saved in the meantime — reload before saving again. */
+  conflict?: boolean;
+  /** New concurrency version after a successful save. */
+  newVersion?: number;
 }
 
 export async function saveFeedbackSetAction(
   variant: FeedbackVariant,
   questions: ExamQuestion[],
+  expectedVersion: number,
 ): Promise<SaveFeedbackResult> {
   if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
   try {
     const svc = getSupabaseServiceClient();
-    const store = await readStore(svc);
+    const { store, version } = await readStore(svc);
+    // A stale editor must not clobber the other variant either — refuse early
+    // if the row moved since this editor loaded.
+    if (version !== expectedVersion) return { ok: false, error: CONFLICT_MSG, conflict: true };
     // Ensure the other variant is preserved (and 'long' materialised on first save).
     const base: FeedbackSets = {
       short: store.short ?? [],
       long: store.long ?? (await deriveLongFromTemplate(svc)),
     };
     const next: FeedbackSets = { ...base, [variant]: questions };
-    const { error } = await svc.from("settings_kv").upsert({ key: KEY, value: next }, { onConflict: "key" });
-    if (error) throw new Error(error.message);
-    return { ok: true };
+    const res = await kvCasSave(svc, KEY, next as unknown as Record<string, unknown>, expectedVersion);
+    if (res === "conflict") return { ok: false, error: CONFLICT_MSG, conflict: true };
+    return { ok: true, newVersion: expectedVersion + 1 };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Salvataggio non riuscito." };
   }

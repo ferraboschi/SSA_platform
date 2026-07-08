@@ -297,9 +297,16 @@ export function ExamLibraryEditor({
     startSave(async () => {
       const res = await saveExamTemplateAction(drafts[fam]);
       if (res.ok) {
+        // Carry the bumped concurrency version so the NEXT save from this same
+        // editor doesn't conflict with its own previous save.
+        if (res.newVersion != null) {
+          setDrafts((d) => ({ ...d, [fam]: { ...d[fam], version: res.newVersion } }));
+        }
         setDirty(false);
         router.refresh();
       } else {
+        // On conflict the message tells the user to reload — their local edits
+        // stay on screen (dirty) so nothing typed is lost before they copy it.
         setSaveErr(res.error ?? t.saveError);
       }
     });

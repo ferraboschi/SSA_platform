@@ -23,4 +23,8 @@ export interface SavedLine {
 export interface CourseProgramOverlay {
   days?: SavedDay[];
   customLines?: SavedLine[];
+  /** Per-course optimistic-concurrency version (bumped on every save). A stale
+   *  editor of the SAME course gets a conflict instead of clobbering; edits to
+   *  DIFFERENT courses in the shared kv row auto-merge via retry. */
+  __pv?: number;
 }

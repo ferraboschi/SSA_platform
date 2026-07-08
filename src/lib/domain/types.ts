@@ -354,6 +354,10 @@ export interface ExamTemplate {
   finalExam: ExamTemplateExam;
   miniTests: ExamTemplateMiniTest[];
   feedback: ExamTemplateFeedback;
+  /** Optimistic-concurrency version (data.__v in exam_templates). A save with a
+   *  stale version is refused instead of clobbering a parallel edit. Absent on
+   *  seed data → treated as 0. */
+  version?: number;
 }
 
 export interface ExamTemplateExam {

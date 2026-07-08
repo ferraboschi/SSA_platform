@@ -70,8 +70,12 @@ export interface ExamRepository {
 export interface ExamTemplateRepository {
   list(): Promise<ExamTemplate[]>;
   getByFamily(family: ExamFamily): Promise<ExamTemplate | null>;
-  /** Persist an edited family template (questions / mini-tests / feedback). */
-  save(template: ExamTemplate): Promise<void>;
+  /** Persist an edited family template (questions / mini-tests / feedback).
+   *  Compare-and-swap on `template.version`: throws CONFLICT_MSG when another
+   *  editor saved in the meantime (never clobbers). Returns the NEW version
+   *  so the caller can keep saving without a reload (void on adapters that
+   *  don't version, e.g. in-memory). */
+  save(template: ExamTemplate): Promise<number | void>;
 }
 
 export interface UserRepository {

@@ -105,9 +105,33 @@ export async function translateExamTemplateAction(family: ExamFamily): Promise<T
     return { ok: false, error: e instanceof Error ? e.message : "Traduzione non riuscita." };
   }
 
-  await svc.from("exam_templates").update({ data: { ...data, translations } }).eq("id", row.id);
-  revalidatePath("/esami/editor");
-  return { ok: true, count: qs.length };
+  // The translation loop above can run for MINUTES — long enough for someone to
+  // save question edits in the meantime. A blind write-back of the stale blob
+  // would silently revert those edits (Bug 4's sneakiest window). So: re-read
+  // the FRESH data, graft only `translations` onto it, and compare-and-swap on
+  // data.__v — retrying against further concurrent saves a few times.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: freshRow } = await svc
+      .from("exam_templates")
+      .select("id, data")
+      .eq("id", row.id)
+      .maybeSingle();
+    const fresh = (freshRow?.data ?? {}) as RawData & { __v?: number };
+    const expected = typeof fresh.__v === "number" ? fresh.__v : 0;
+    let q = svc
+      .from("exam_templates")
+      .update({ data: { ...fresh, translations, __v: expected + 1 } })
+      .eq("id", row.id);
+    q = expected === 0 ? q.or("data->>__v.is.null,data->>__v.eq.0") : q.eq("data->>__v", String(expected));
+    const { data: updated, error } = await q.select("id");
+    if (error) return { ok: false, error: error.message };
+    if ((updated ?? []).length > 0) {
+      revalidatePath("/esami/editor");
+      return { ok: true, count: qs.length };
+    }
+    // Someone saved between our read and write — loop re-reads and retries.
+  }
+  return { ok: false, error: "Traduzioni pronte ma salvataggio in conflitto: riprova la traduzione." };
 }
 
 export interface GradeOpenResult {

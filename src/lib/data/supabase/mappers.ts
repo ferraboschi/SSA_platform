@@ -456,6 +456,9 @@ export function examTemplateRowToDomain(row: ExamTemplateRow): ExamTemplate {
       name: row.data?.feedback?.name ?? "Feedback",
       questions: dedupQuestionsByText(mapQuestions(row.data?.feedback?.questions ?? [], `q-${row.id}-fb`)),
     },
+    // Optimistic-concurrency version (data.__v; legacy rows → 0). The editor
+    // sends it back on save so a stale editor can never clobber a parallel edit.
+    version: typeof (row.data as { __v?: unknown })?.__v === "number" ? ((row.data as { __v: number }).__v) : 0,
   };
 }
 
