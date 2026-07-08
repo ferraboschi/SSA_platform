@@ -22,6 +22,7 @@ import { generateTransferCredits, matchTransferCreditsByCode } from "@/lib/credi
 import { logReconciliation } from "@/lib/anomalie/reconcile";
 import { MONTH_TO_NUM, MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
 import { planSeats, placeholderEmail, placeholderName } from "./seats";
+import { loadIgnoredProductIds } from "./ignored-products";
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
 
@@ -63,8 +64,93 @@ export interface SyncSummary {
   ordersScanned: number;
   coursesUpserted: number;
   enrollmentsUpserted: number;
+  /** Enrollments healed by the purchases→iscrizioni reconciliation (orders that
+   *  predated their corso row and were skipped by the incremental watermark). */
+  enrollmentsBackfilled: number;
   purchasesUpserted: number;
   contactsCreated: number;
+}
+
+/** Create/refresh the enrollment row(s) for ONE course order line — shared by
+ *  the live order loop and the backfill pass so the multi-ticket seat
+ *  expansion semantics can never drift apart. Returns rows written. */
+async function upsertEnrollmentSeats(
+  sb: Svc,
+  args: {
+    corsoId: number;
+    coursePriceCents: number;
+    corsistaId: number;
+    /** Shopify order id — keys the deterministic placeholder emails. */
+    orderId: string | number;
+    lineItemId: number | null;
+    qty: number;
+    amountCents: number;
+    orderName: string | null;
+    orderDate: string | null;
+    discountCode: string | null;
+    discountCents: number;
+    financialStatus: string | null;
+    buyerName: string | null;
+  },
+  hasSeats: boolean,
+  placeholderCache: Map<string, number>,
+): Promise<number> {
+  let written = 0;
+  const baseRow = {
+    corso_id: args.corsoId,
+    historical: false,
+    order_name: args.orderName,
+    order_date: args.orderDate,
+    discount_code: args.discountCode,
+    discount_cents: args.discountCents,
+    financial_status: args.financialStatus,
+    line_item_id: args.lineItemId,
+    buyer_name: args.buyerName,
+  };
+  if (hasSeats && args.lineItemId != null) {
+    // One FULL enrollment row per ticket: seat 1 = the buyer (whole amount),
+    // seats 2..N = a placeholder attendee (€0) to complete later.
+    const lineId = args.lineItemId;
+    for (const seat of planSeats(args.qty, args.amountCents || args.coursePriceCents)) {
+      if (seat.seatIndex === 1) {
+        const { error: eErr } = await sb.from("corsi_iscrizioni").upsert(
+          { ...baseRow, corsista_id: args.corsistaId, seat_index: 1, amount_cents: seat.amountCents },
+          { onConflict: "corso_id,corsista_id" },
+        );
+        if (!eErr) written++;
+        continue;
+      }
+      // Extra seat: create ONCE and then leave alone, so re-syncing never
+      // overwrites a seat the operator has already completed.
+      const { data: already } = await sb
+        .from("corsi_iscrizioni")
+        .select("id")
+        .eq("corso_id", args.corsoId)
+        .eq("line_item_id", lineId)
+        .eq("seat_index", seat.seatIndex)
+        .maybeSingle();
+      if (already) continue;
+      const pid = await ensurePlaceholderCorsista(
+        sb,
+        placeholderEmail(args.orderId, lineId, seat.seatIndex),
+        placeholderName(seat.seatIndex),
+        placeholderCache,
+      );
+      if (!pid) continue;
+      const { error: eErr } = await sb
+        .from("corsi_iscrizioni")
+        .insert({ ...baseRow, corsista_id: pid, seat_index: seat.seatIndex, amount_cents: 0 });
+      if (!eErr) written++;
+    }
+  } else {
+    // Pre-migration: one row per line (unchanged behaviour).
+    const { error: eErr } = await sb.from("corsi_iscrizioni").upsert(
+      { ...baseRow, corsista_id: args.corsistaId, amount_cents: args.amountCents || args.coursePriceCents },
+      { onConflict: "corso_id,corsista_id" },
+    );
+    if (!eErr) written++;
+  }
+  return written;
 }
 
 const DEAD_FINANCIAL = new Set(["refunded", "voided"]);
@@ -195,6 +281,7 @@ function dateMonthKey(startDate: string | null): number | null {
  *  the course date (all statuses, incl. past/draft/archived). Returns product_id → corso. */
 async function syncCourses(
   products: AdminProduct[],
+  ignored: Set<string>,
 ): Promise<{ map: Map<number, { id: number; price: number }>; upserted: number }> {
   const sb = getSupabaseServiceClient();
   const now = new Date();
@@ -246,6 +333,9 @@ async function syncCourses(
 
   for (const p of products) {
     if ((p.product_type || "").toLowerCase() !== "ticket") continue;
+    // Owner-flagged products (bundles/packages, "Ignora prodotto") are sale
+    // vehicles, not courses — skip them entirely so no ghost corso is (re)born.
+    if (ignored.has(String(p.id))) continue;
     // We now ingest EVERY status (active/draft/archived) and inherit lifecycle from
     // Shopify + the course date (computed below), so drafts, past and annulled
     // courses are reflected on the platform instead of silently ignored.
@@ -340,9 +430,25 @@ async function syncCourses(
         }
       }
     } else {
-      // New course: seed staff-owned columns once. inventory_quantity is the
-      // REMAINING stock, used only as an initial capacity hint.
-      const capacity = Math.max(variant?.inventory_quantity ?? 0, 0);
+      // New course: seed staff-owned columns once. Shopify's inventory_quantity
+      // is only the REMAINING stock — a course created after sales began would
+      // be born with a shrunken capacity (Bug 3: "25 posti ne mostra 18"). Seed
+      // capacity = remaining + already sold (our purchases ledger, matched by
+      // product_id — masterclass lines classify as 'evento', so no cluster
+      // filter). Staff-owned after this seed; the sync never touches it again.
+      const remaining = Math.max(variant?.inventory_quantity ?? 0, 0);
+      let sold = 0;
+      {
+        const { data: soldRows } = await sb
+          .from("purchases")
+          .select("quantity")
+          .eq("product_id", p.id);
+        sold = (soldRows ?? []).reduce((s, r) => {
+          const q = Number((r as { quantity?: number | null }).quantity ?? 1);
+          return s + (Number.isFinite(q) && q > 0 ? Math.trunc(q) : 1);
+        }, 0);
+      }
+      const capacity = remaining + sold;
       const educatorId = resolveEducatorByName((await getMf()).sake_educator || null);
       const { error } = await sb.from("corsi").insert({
         ...syncOwned,
@@ -448,6 +554,89 @@ async function resolveContacts(
 
 const SINCE_FALLBACK_DAYS = 30;
 
+/** Purchases→iscrizioni reconciliation (Bug 3): orders processed BEFORE a corso
+ *  row existed never got their enrollments — the incremental watermark doesn't
+ *  revisit old orders, so a course published after its sales started stays
+ *  undercounted forever ("10 iscritti ne mostra 7"). Heal from our own
+ *  purchases ledger, matched by product_id ONLY (masterclass lines classify as
+ *  cluster 'evento', so a cluster filter would go blind).
+ *
+ *  SCOPE (owner-approved 2026-07-09): lifecycle 'pubblicato' only — historical
+ *  (passato) courses stay untouched so past revenue never changes
+ *  retroactively — and never for owner-ignored products. Idempotent: only
+ *  buyers with NO enrollment row are added, via the same seat-expansion
+ *  helper as the live order loop. */
+async function backfillMissedEnrollments(
+  sb: Svc,
+  ignored: Set<string>,
+  hasSeats: boolean,
+  placeholderCache: Map<string, number>,
+): Promise<number> {
+  let written = 0;
+  const { data: corsi, error } = await sb
+    .from("corsi")
+    .select("id, external_id, price_cents")
+    .eq("lifecycle", "pubblicato")
+    .not("external_id", "is", null);
+  if (error) return 0;
+  type PurRow = {
+    corsista_id: number | null;
+    external_id: string | null;
+    line_item_id: number | null;
+    quantity: number | null;
+    amount_cents: number | null;
+    order_name: string | null;
+    ordered_at: string | null;
+    discount_code: string | null;
+    discount_cents: number | null;
+    financial_status: string | null;
+    buyer_name: string | null;
+  };
+  for (const c of (corsi ?? []) as { id: number; external_id: string; price_cents: number | null }[]) {
+    if (ignored.has(String(c.external_id))) continue;
+    const productId = Number(c.external_id);
+    if (!Number.isFinite(productId)) continue;
+    const { data: pur, error: pErr } = await sb
+      .from("purchases")
+      .select(
+        "corsista_id, external_id, line_item_id, quantity, amount_cents, order_name, ordered_at, discount_code, discount_cents, financial_status, buyer_name",
+      )
+      .eq("product_id", productId);
+    if (pErr || !pur || pur.length === 0) continue;
+    const { data: iscr } = await sb
+      .from("corsi_iscrizioni")
+      .select("corsista_id")
+      .eq("corso_id", c.id);
+    const have = new Set((iscr ?? []).map((i) => i.corsista_id as number));
+    for (const p of pur as PurRow[]) {
+      if (p.corsista_id == null || have.has(p.corsista_id)) continue;
+      if (DEAD_FINANCIAL.has(p.financial_status || "")) continue;
+      written += await upsertEnrollmentSeats(
+        sb,
+        {
+          corsoId: c.id,
+          coursePriceCents: c.price_cents ?? 0,
+          corsistaId: p.corsista_id,
+          orderId: p.external_id ?? "backfill",
+          lineItemId: p.line_item_id,
+          qty: p.quantity ?? 1,
+          amountCents: p.amount_cents ?? 0,
+          orderName: p.order_name,
+          orderDate: p.ordered_at,
+          discountCode: p.discount_code,
+          discountCents: p.discount_cents ?? 0,
+          financialStatus: p.financial_status,
+          buyerName: p.buyer_name,
+        },
+        hasSeats,
+        placeholderCache,
+      );
+      have.add(p.corsista_id);
+    }
+  }
+  return written;
+}
+
 /** Run a full incremental Shopify → Supabase sync. */
 export async function runShopifySync(opts?: {
   fullBackfill?: boolean;
@@ -476,8 +665,9 @@ export async function runShopifySync(opts?: {
   }
 
   const products = await listAllProducts();
+  const ignored = await loadIgnoredProductIds(sb);
   const { map: corsoByProduct, upserted: coursesUpserted } =
-    await syncCourses(products);
+    await syncCourses(products, ignored);
   const productType = new Map<number, string | null>();
   for (const p of products) productType.set(p.id, p.product_type);
 
@@ -541,67 +731,44 @@ export async function runShopifySync(opts?: {
       if (!pErr) purchasesUpserted++;
 
       // Course ticket → enrollment (mirror order/discount/payment fields).
-      const corso = li.product_id ? corsoByProduct.get(li.product_id) : undefined;
+      // Owner-ignored products never enroll (bundle sale vehicles, Bug 3).
+      const corso =
+        li.product_id && !ignored.has(String(li.product_id))
+          ? corsoByProduct.get(li.product_id)
+          : undefined;
       if (corso) {
-        const baseRow = {
-          corso_id: corso.id,
-          historical: false,
-          order_name: o.name,
-          order_date: o.created_at,
-          discount_code: discountCode,
-          discount_cents: discountCents,
-          financial_status: o.financial_status,
-          line_item_id: li.id,
-          buyer_name: buyerName,
-        };
-        if (hasSeats && li.id != null) {
-          // One FULL enrollment row per ticket: seat 1 = the buyer (whole
-          // amount), seats 2..N = a placeholder attendee (€0) to complete later.
-          const lineId = li.id;
-          for (const seat of planSeats(qty, amount || corso.price)) {
-            if (seat.seatIndex === 1) {
-              const { error: eErr } = await sb.from("corsi_iscrizioni").upsert(
-                { ...baseRow, corsista_id: corsistaId, seat_index: 1, amount_cents: seat.amountCents },
-                { onConflict: "corso_id,corsista_id" },
-              );
-              if (!eErr) enrollmentsUpserted++;
-              continue;
-            }
-            // Extra seat: create ONCE and then leave alone, so re-syncing never
-            // overwrites a seat the operator has already completed.
-            const { data: already } = await sb
-              .from("corsi_iscrizioni")
-              .select("id")
-              .eq("corso_id", corso.id)
-              .eq("line_item_id", lineId)
-              .eq("seat_index", seat.seatIndex)
-              .maybeSingle();
-            if (already) continue;
-            const pid = await ensurePlaceholderCorsista(
-              sb,
-              placeholderEmail(o.id, lineId, seat.seatIndex),
-              placeholderName(seat.seatIndex),
-              placeholderCache,
-            );
-            if (!pid) continue;
-            const { error: eErr } = await sb
-              .from("corsi_iscrizioni")
-              .insert({ ...baseRow, corsista_id: pid, seat_index: seat.seatIndex, amount_cents: 0 });
-            if (!eErr) enrollmentsUpserted++;
-          }
-        } else {
-          // Pre-migration: one row per line (unchanged behaviour).
-          const { error: eErr } = await sb
-            .from("corsi_iscrizioni")
-            .upsert(
-              { ...baseRow, corsista_id: corsistaId, amount_cents: amount || corso.price },
-              { onConflict: "corso_id,corsista_id" },
-            );
-          if (!eErr) enrollmentsUpserted++;
-        }
+        enrollmentsUpserted += await upsertEnrollmentSeats(
+          sb,
+          {
+            corsoId: corso.id,
+            coursePriceCents: corso.price,
+            corsistaId,
+            orderId: o.id,
+            lineItemId: li.id,
+            qty,
+            amountCents: amount,
+            orderName: o.name,
+            orderDate: o.created_at,
+            discountCode,
+            discountCents,
+            financialStatus: o.financial_status,
+            buyerName,
+          },
+          hasSeats,
+          placeholderCache,
+        );
       }
     }
   }
+
+  // Heal enrollments missed because their order predated the corso row (the
+  // incremental watermark never revisits old orders). Published courses only.
+  const enrollmentsBackfilled = await backfillMissedEnrollments(
+    sb,
+    ignored,
+    hasSeats,
+    placeholderCache,
+  ).catch(() => 0);
 
   // Advance the watermark to when this run started (captures concurrent writes
   // on the next run rather than skipping them). Best-effort: if the table is not
@@ -615,6 +782,7 @@ export async function runShopifySync(opts?: {
           ordersScanned: orders.length,
           coursesUpserted,
           enrollmentsUpserted,
+          enrollmentsBackfilled,
           purchasesUpserted,
           contactsCreated,
         },
@@ -653,6 +821,7 @@ export async function runShopifySync(opts?: {
     ordersScanned: orders.length,
     coursesUpserted,
     enrollmentsUpserted,
+    enrollmentsBackfilled,
     purchasesUpserted,
     contactsCreated,
   };

@@ -20,6 +20,7 @@ import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
 import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
 import { ShareEnrolButton } from "@/components/corsi/ShareEnrolButton";
+import { IgnoreProductButton } from "@/components/corsi/IgnoreProductButton";
 import { CourseExportButtons } from "@/components/corsi/CourseExportButtons";
 import { EducatorAssign } from "@/components/corsi/EducatorAssign";
 
@@ -215,6 +216,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                 )
               }
             />
+            {course.enrolled === 0 && <IgnoreProductButton courseId={course.id} />}
             <div style={{ flex: 1 }} />
             <Badge tone={econ.invoiced ? "success" : "neutral"} size="lg" dot>
               {econ.invoiced ? td.invoicedYes : td.invoicedNo}
