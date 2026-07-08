@@ -11,7 +11,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { COURSE_TYPES, courseDayCount, courseHasExam } from "@/lib/domain";
 import type { CourseTypeKey } from "@/lib/domain";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
-import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
+import { getSakeCatalogSafe } from "@/lib/integrations/sakecompany/catalog";
 import { appConfig } from "@/lib/integrations/config";
 import {
   signExamToken,
@@ -134,18 +134,196 @@ export async function loadSharedCourse(
     .maybeSingle();
   if (!corso) return null;
 
-  let educator = "";
-  if (corso.educator_id) {
-    const { data: edu } = await sb
-      .from("educators")
-      .select("full_name")
-      .eq("id", corso.educator_id)
-      .maybeSingle();
-    educator = edu?.full_name ?? "";
-  }
+  const type = corso.type as CourseTypeKey;
+  const examFamily: "nihonshu" | "shochu" | null =
+    type === "certificato" ? "nihonshu" : type === "shochu" ? "shochu" : null;
 
-  // Sake image + storefront URL, resolved by SKU from the (cached) SC catalog.
-  const catalog = await getSakeCatalog().catch(() => []);
+  type IscrJoin = {
+    id: number;
+    line_item_id: number | null;
+    amount_cents: number | null;
+    discount_cents: number | null;
+    corsista: { id: number; full_name: string | null; email: string | null; phone: string | null; placeholder?: boolean } | null;
+  };
+  type Snap = {
+    email: string;
+    confirmed: boolean;
+    sent: boolean;
+    sentAt: string | null;
+    confirmedAt: string | null;
+  };
+
+  // Everything below depends ONLY on the corso row, so it runs as ONE parallel
+  // group. It used to be 12+ strictly sequential round-trips, all blocking the
+  // first byte of the page — the "link educator lento". Each member keeps its
+  // own graceful fallback exactly as before.
+  const [
+    educator,
+    catalog,
+    overlay,
+    iscrRows,
+    ticketCount,
+    seatsOverrideByIscr,
+    companionsByIscr,
+    enrolledEmail,
+    companionEmail,
+    examParts,
+  ] = await Promise.all([
+    // Educator display name.
+    (async () => {
+      if (!corso.educator_id) return "";
+      const { data: edu } = await sb
+        .from("educators")
+        .select("full_name")
+        .eq("id", corso.educator_id)
+        .maybeSingle();
+      return edu?.full_name ?? "";
+    })(),
+    // Sake enrichment catalog — TIME-BOXED with a last-known-good fallback, so a
+    // slow/failed Sake Company crawl can neither stall the page nor blank the
+    // tasting data (see getSakeCatalogSafe).
+    getSakeCatalogSafe(),
+    // Programma & Economia overlay (settings_kv) — authoritative when present.
+    loadCourseProgram().then((m) => m.get(String(corso.id))),
+    // Roster enrollments (join corsisti).
+    (async () => {
+      const { data: iscr } = await sb
+        .from("corsi_iscrizioni")
+        .select("id, line_item_id, amount_cents, discount_cents, corsista:corsisti(id,full_name,email,phone,placeholder)")
+        .eq("corso_id", corso.id);
+      return (iscr ?? []) as unknown as IscrJoin[];
+    })(),
+    // Tickets per person ("doppio"): SUM purchases.quantity on the course title.
+    (async () => {
+      const map = new Map<number, number>();
+      const { data: pur } = await sb
+        .from("purchases")
+        .select("corsista_id,quantity")
+        .eq("cluster", "corso")
+        .eq("product_title", corso.full_title ?? "");
+      for (const p of (pur ?? []) as { corsista_id: number; quantity?: number | null }[]) {
+        const qty = Number.isFinite(Number(p.quantity)) && Number(p.quantity) > 0 ? Math.trunc(Number(p.quantity)) : 1;
+        map.set(p.corsista_id, (map.get(p.corsista_id) ?? 0) + qty);
+      }
+      return map;
+    })(),
+    // Staff seat-count overrides — separate query ON PURPOSE: the column is a
+    // pending migration, so folding it into the roster select would kill the
+    // whole roster pre-migration. In parallel it costs nothing extra.
+    (async () => {
+      const map = new Map<number, number>();
+      const { data: ovr, error: ovrErr } = await sb
+        .from("corsi_iscrizioni")
+        .select("id, seats_override")
+        .eq("corso_id", corso.id);
+      if (!ovrErr && ovr) {
+        for (const o of ovr as { id: number; seats_override: number | null }[]) {
+          if (o.seats_override != null && o.seats_override >= 1) map.set(o.id, Math.trunc(o.seats_override));
+        }
+      }
+      return map;
+    })(),
+    // Companions per enrollment (graceful if the table/migration is absent).
+    (async () => {
+      const map = new Map<number, { id: number; full_name: string; phone: string }[]>();
+      const { data: partData, error: partErr } = await sb
+        .from("corsi_partecipanti")
+        .select("id, iscrizione_id, full_name, phone")
+        .eq("corso_id", corso.id);
+      if (!partErr) {
+        for (const p of (partData ?? []) as {
+          id: number;
+          iscrizione_id: number | null;
+          full_name: string | null;
+          phone: string | null;
+        }[]) {
+          if (p.iscrizione_id == null) continue;
+          (map.get(p.iscrizione_id) ?? map.set(p.iscrizione_id, []).get(p.iscrizione_id)!).push({
+            id: p.id,
+            full_name: p.full_name ?? "",
+            phone: p.phone ?? "",
+          });
+        }
+      }
+      return map;
+    })(),
+    // Confirmed-email snapshot per enrollment (two-tier select, as before).
+    (async () => {
+      const map = new Map<number, Snap>();
+      type Row = {
+        id: number;
+        enrolled_email: string | null;
+        email_confirmed_at: string | null;
+        confirm_sent_at?: string | null;
+      };
+      let rows: Row[] | null = null;
+      const rich = await sb
+        .from("corsi_iscrizioni")
+        .select("id, enrolled_email, email_confirmed_at, confirm_sent_at")
+        .eq("corso_id", corso.id);
+      rows = rich.data as Row[] | null;
+      if (rich.error) {
+        const base = await sb
+          .from("corsi_iscrizioni")
+          .select("id, enrolled_email, email_confirmed_at")
+          .eq("corso_id", corso.id);
+        rows = base.data as Row[] | null;
+      }
+      for (const r of rows ?? []) {
+        map.set(r.id, {
+          email: (r.enrolled_email ?? "").trim(),
+          confirmed: Boolean(r.email_confirmed_at),
+          sent: Boolean(r.confirm_sent_at),
+          sentAt: r.confirm_sent_at ?? null,
+          confirmedAt: r.email_confirmed_at ?? null,
+        });
+      }
+      return map;
+    })(),
+    // Confirmed-email snapshot per companion (two-tier select, as before).
+    (async () => {
+      const map = new Map<number, Snap>();
+      type PRow = {
+        id: number;
+        email: string | null;
+        email_confirmed_at: string | null;
+        confirm_sent_at?: string | null;
+      };
+      let rows: PRow[] | null = null;
+      const rich = await sb
+        .from("corsi_partecipanti")
+        .select("id, email, email_confirmed_at, confirm_sent_at")
+        .eq("corso_id", corso.id);
+      rows = rich.data as PRow[] | null;
+      if (rich.error) {
+        const base = await sb
+          .from("corsi_partecipanti")
+          .select("id, email, email_confirmed_at")
+          .eq("corso_id", corso.id);
+        rows = base.data as PRow[] | null;
+      }
+      for (const r of rows ?? []) {
+        map.set(r.id, {
+          email: (r.email ?? "").trim(),
+          confirmed: Boolean(r.email_confirmed_at),
+          sent: Boolean(r.confirm_sent_at),
+          sentAt: r.confirm_sent_at ?? null,
+          confirmedAt: r.email_confirmed_at ?? null,
+        });
+      }
+      return map;
+    })(),
+    // Exam structure (template tests + closures) — only for exam-bearing types.
+    (async () => {
+      if (!examFamily) return null;
+      const [templateTests, closures] = await Promise.all([
+        loadTemplateTests(examFamily),
+        getCourseClosures(Number(corso.id)),
+      ]);
+      return { templateTests, closures };
+    })(),
+  ]);
+
   const catBySku = new Map(catalog.filter((c) => c.sku).map((c) => [c.sku as string, c]));
   const enrich = (
     code: string,
@@ -171,10 +349,10 @@ export async function loadSharedCourse(
   };
 
   // The operator's "Programma & Economia" edits persist to a settings_kv OVERLAY
-  // (course_program), NOT to corsi_giorni/corsi_sake. The overlay is authoritative
-  // when present — exactly as the internal course page treats it — so the educator
-  // link must read it too (base tables are effectively vestigial for UI-set courses).
-  const overlay = (await loadCourseProgram()).get(String(corso.id));
+  // (course_program), NOT to corsi_giorni/corsi_sake. The overlay (fetched in the
+  // parallel group above) is authoritative when present — exactly as the internal
+  // course page treats it. The base-tables fallback below is the ONLY remaining
+  // conditional round-trip.
   let days: SharedDay[];
   if (overlay?.days?.length) {
     days = overlay.days
@@ -233,22 +411,6 @@ export async function loadSharedCourse(
     }));
   }
 
-  // Enrolled students — the roster the educator needs. We carry the enrollment
-  // id (drives the public companion-add) and the corsista id (drives roll-call
-  // writes). Companions are appended below as their own rows.
-  const { data: iscr } = await sb
-    .from("corsi_iscrizioni")
-    .select("id, line_item_id, amount_cents, discount_cents, corsista:corsisti(id,full_name,email,phone,placeholder)")
-    .eq("corso_id", corso.id);
-  type IscrJoin = {
-    id: number;
-    line_item_id: number | null;
-    amount_cents: number | null;
-    discount_cents: number | null;
-    corsista: { id: number; full_name: string | null; email: string | null; phone: string | null; placeholder?: boolean } | null;
-  };
-  const iscrRows = (iscr ?? []) as unknown as IscrJoin[];
-
   // Multi-ticket (F4): a line_item_id on more than one row is "expanded" — its
   // extra seats already exist as their own rows, so the buyer must NOT also show
   // an inflated ticket count (that would double the seat). Placeholder seats that
@@ -261,135 +423,6 @@ export async function loadSharedCourse(
       perLine.set(r.line_item_id, (perLine.get(r.line_item_id) ?? 0) + 1);
     }
     for (const [lineId, n] of perLine) if (n > 1) expandedLines.add(lineId);
-  }
-
-  // Tickets per person ("doppio"): SUM purchases.quantity matched on the course
-  // title (a single order line for two people is one row with quantity 2) —
-  // mirroring the internal roster (aggregations.ts countTicketsByCorsista).
-  const ticketCount = new Map<number, number>();
-  const { data: pur } = await sb
-    .from("purchases")
-    .select("corsista_id,quantity")
-    .eq("cluster", "corso")
-    .eq("product_title", corso.full_title ?? "");
-  for (const p of (pur ?? []) as { corsista_id: number; quantity?: number | null }[]) {
-    const qty = Number.isFinite(Number(p.quantity)) && Number(p.quantity) > 0 ? Math.trunc(Number(p.quantity)) : 1;
-    ticketCount.set(p.corsista_id, (ticketCount.get(p.corsista_id) ?? 0) + qty);
-  }
-
-  // Staff seat-count overrides (corsi_iscrizioni.seats_override) keyed by
-  // enrollment id — separate query, graceful pre-migration. When set it wins
-  // over the inferred count, so the appello shows the right number of slots.
-  const seatsOverrideByIscr = new Map<number, number>();
-  {
-    const { data: ovr, error: ovrErr } = await sb
-      .from("corsi_iscrizioni")
-      .select("id, seats_override")
-      .eq("corso_id", corso.id);
-    if (!ovrErr && ovr) {
-      for (const o of ovr as { id: number; seats_override: number | null }[]) {
-        if (o.seats_override != null && o.seats_override >= 1) seatsOverrideByIscr.set(o.id, Math.trunc(o.seats_override));
-      }
-    }
-  }
-
-  // Existing companions per enrollment (graceful degrade if the table/migration
-  // is absent — the roster then simply shows no companions and no add slots).
-  const companionsByIscr = new Map<number, { id: number; full_name: string; phone: string }[]>();
-  {
-    const { data: partData, error: partErr } = await sb
-      .from("corsi_partecipanti")
-      .select("id, iscrizione_id, full_name, phone")
-      .eq("corso_id", corso.id);
-    if (!partErr) {
-      for (const p of (partData ?? []) as {
-        id: number;
-        iscrizione_id: number | null;
-        full_name: string | null;
-        phone: string | null;
-      }[]) {
-        if (p.iscrizione_id == null) continue;
-        (companionsByIscr.get(p.iscrizione_id) ?? companionsByIscr.set(p.iscrizione_id, []).get(p.iscrizione_id)!).push({
-          id: p.id,
-          full_name: p.full_name ?? "",
-          phone: p.phone ?? "",
-        });
-      }
-    }
-  }
-
-  // Confirmed-email snapshot per enrollment + per companion (course-start
-  // sanitization). Two-tier selects: WITH confirm_sent_at first, then without
-  // (so a DB that has the 140000 migration but not the 20260703 one still
-  // shows confirmed states), then nothing (pre-migration roster still works).
-  type Snap = {
-    email: string;
-    confirmed: boolean;
-    sent: boolean;
-    sentAt: string | null;
-    confirmedAt: string | null;
-  };
-  const enrolledEmail = new Map<number, Snap>();
-  {
-    type Row = {
-      id: number;
-      enrolled_email: string | null;
-      email_confirmed_at: string | null;
-      confirm_sent_at?: string | null;
-    };
-    let rows: Row[] | null = null;
-    const rich = await sb
-      .from("corsi_iscrizioni")
-      .select("id, enrolled_email, email_confirmed_at, confirm_sent_at")
-      .eq("corso_id", corso.id);
-    rows = rich.data as Row[] | null;
-    if (rich.error) {
-      const base = await sb
-        .from("corsi_iscrizioni")
-        .select("id, enrolled_email, email_confirmed_at")
-        .eq("corso_id", corso.id);
-      rows = base.data as Row[] | null;
-    }
-    for (const r of rows ?? []) {
-      enrolledEmail.set(r.id, {
-        email: (r.enrolled_email ?? "").trim(),
-        confirmed: Boolean(r.email_confirmed_at),
-        sent: Boolean(r.confirm_sent_at),
-        sentAt: r.confirm_sent_at ?? null,
-        confirmedAt: r.email_confirmed_at ?? null,
-      });
-    }
-  }
-  const companionEmail = new Map<number, Snap>();
-  {
-    type PRow = {
-      id: number;
-      email: string | null;
-      email_confirmed_at: string | null;
-      confirm_sent_at?: string | null;
-    };
-    let rows: PRow[] | null = null;
-    const rich = await sb
-      .from("corsi_partecipanti")
-      .select("id, email, email_confirmed_at, confirm_sent_at")
-      .eq("corso_id", corso.id);
-    rows = rich.data as PRow[] | null;
-    if (rich.error) {
-      const base = await sb
-        .from("corsi_partecipanti")
-        .select("id, email, email_confirmed_at")
-        .eq("corso_id", corso.id);
-      rows = base.data as PRow[] | null;
-    }
-    for (const r of rows ?? []) {
-      companionEmail.set(r.id, {
-        email: (r.email ?? "").trim(),
-        confirmed: Boolean(r.email_confirmed_at),
-        sent: Boolean(r.confirm_sent_at),
-        sentAt: r.confirm_sent_at ?? null,
-        confirmedAt: r.email_confirmed_at ?? null,
-      });
-    }
   }
 
   // Buyer name per order line (from the real seat-1 row) — used to label a
@@ -507,23 +540,17 @@ export async function loadSharedCourse(
   students.length = 0;
   students.push(...ordered);
 
-  const type = corso.type as CourseTypeKey;
-
   // Exam section: only certificato (nihonshu) / shochu bear an exam. The FIXED
   // structure (Giorno 1..N, Feedback, Esame finale) always shows — unconfigured
   // tests are "da configurare" with no link. Configured tests get a signed class
   // link; tokens are stateless (the link IS the grant), minted here server-side.
-  const examFamily: "nihonshu" | "shochu" | null =
-    type === "certificato" ? "nihonshu" : type === "shochu" ? "shochu" : null;
+  // Data (templateTests + closures) was fetched in the parallel group above.
   let exam: SharedExamTest[] | null = null;
-  if (examFamily) {
+  if (examParts) {
+    const { templateTests, closures } = examParts;
     const base = appConfig.baseUrl.replace(/\/$/, "");
     const now = Math.floor(Date.now() / 1000);
     const exp = now + EXAM_LINK_TTL_HOURS.exam * 3600;
-    const [templateTests, closures] = await Promise.all([
-      loadTemplateTests(examFamily),
-      getCourseClosures(Number(corso.id)),
-    ]);
     const link = (testKey: ExamTestKey) =>
       `${base}/esame/${signExamToken({ c: String(corso.id), t: testKey, m: "exam", ia: now, e: exp })}`;
     exam = templateTests.map((t) => ({
