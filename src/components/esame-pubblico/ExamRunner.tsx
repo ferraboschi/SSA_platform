@@ -37,7 +37,10 @@ export interface RunnerHeader {
 
 const LANG_LABEL: Record<Lang, string> = { it: "Italiano", en: "English", ja: "日本語" };
 
-// Block copy/cut/paste/right-click on exam content (anti-cheat deterrent).
+// Block copy/cut/right-click/drag on exam CONTENT (anti-cheat deterrent for
+// question text, also active in previews). NOTE: paste/drop are NOT handled
+// here — they're blocked shell-wide by the exam-mode `lockdown` spread below,
+// which also covers inputs outside these containers (e.g. the notes pad).
 const noCopy = {
   onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
   onCut: (e: React.ClipboardEvent) => e.preventDefault(),
@@ -75,6 +78,9 @@ export interface PersistState {
   currentIdx: number;
   lang: string;
   elapsed: number;
+  /** Set once the submission succeeded — a resumed state with this flag must
+   *  NEVER re-enter the runner (the gate shows "Esame già consegnato"). */
+  submitted?: boolean;
 }
 
 export function ExamRunner({
@@ -146,7 +152,27 @@ export function ExamRunner({
   const [warnAck, setWarnAck] = useState(resumedPastWarn);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
+  // Server said "duplicate": the exam was ALREADY submitted earlier and the
+  // re-sent answers were discarded → show "già consegnato", not a thank-you.
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const t = CHROME[lang];
+
+  // ── Exam-mode clipboard lockdown (anti-cheat) ──────────────────────────────
+  // Capture-phase so it covers EVERY input inside the shell — including the
+  // notes pad, which lives outside the noCopy-protected question containers.
+  // Paste/drop would let a student bring prepared text in; copy/cut would let
+  // question text out via the notes. Previews (test/validate) keep normal
+  // clipboard behavior; the email gate lives outside the runner entirely.
+  const lockdown =
+    mode === "exam"
+      ? {
+          onPasteCapture: (e: React.ClipboardEvent) => e.preventDefault(),
+          onDropCapture: (e: React.DragEvent) => e.preventDefault(),
+          onCopyCapture: (e: React.ClipboardEvent) => e.preventDefault(),
+          onCutCapture: (e: React.ClipboardEvent) => e.preventDefault(),
+          onContextMenuCapture: (e: React.MouseEvent) => e.preventDefault(),
+        }
+      : {};
 
   // Keep the latest state in a ref for the periodic persist (avoids stale closure).
   const stateRef = useRef<PersistState>({ answers, currentIdx: idx, lang, elapsed });
@@ -232,14 +258,26 @@ export function ExamRunner({
       setDone(true);
       return;
     }
+    finishingRef.current = true; // stop autosave before the submit round-trip
     setSubmitting(true);
     setSubmitError(false);
     try {
       const r = await submitExam(token, { answers, lang, elapsed });
-      if (r.ok) setDone(true);
-      else setSubmitError(true);
+      if (r.ok) {
+        // Mark the persisted resume state as SUBMITTED (bypassing the flush
+        // guard) so a refresh lands on "Esame già consegnato" instead of back
+        // inside the questions. The server page-load gate is the authority;
+        // this is the instant same-device layer.
+        onPersistRef.current?.({ ...stateRef.current, submitted: true });
+        if (r.alreadySubmitted) setAlreadySubmitted(true);
+        setDone(true);
+      } else {
+        setSubmitError(true);
+        finishingRef.current = false; // allow autosave to resume for a retry
+      }
     } catch {
       setSubmitError(true);
+      finishingRef.current = false;
     } finally {
       setSubmitting(false);
     }
@@ -324,7 +362,7 @@ export function ExamRunner({
   // ── Step 0: language gate ────────────────────────────────────────────────
   if (!langPicked) {
     return (
-      <div className="exam-public-shell">
+      <div className="exam-public-shell" {...lockdown}>
         <div className="exam-public-card">
           {headerBar}
           <div className="exam-public-q" {...noCopy}>
@@ -363,7 +401,7 @@ export function ExamRunner({
   // ── Save failed — answers NOT persisted; let the student retry ───────────
   if (submitError) {
     return (
-      <div className="exam-public-shell">
+      <div className="exam-public-shell" {...lockdown}>
         <div className="exam-public-card">
           {headerBar}
           <div className="exam-public-thanks">
@@ -448,8 +486,24 @@ export function ExamRunner({
         </div>
       );
     }
+    // The server discarded this hand-in as a DUPLICATE (already submitted
+    // earlier): say so honestly — the edited answers were NOT recorded.
+    if (alreadySubmitted) {
+      return (
+        <div className="exam-public-shell" {...lockdown}>
+          <div className="exam-public-card">
+            {headerBar}
+            <div className="exam-public-thanks">
+              <div className="exam-public-thanks-check">✓</div>
+              <h2>{t.submittedTitle}</h2>
+              <p>{t.submittedBody}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
-      <div className="exam-public-shell">
+      <div className="exam-public-shell" {...lockdown}>
         <div className="exam-public-card">
           {headerBar}
           <div className="exam-public-thanks">
@@ -516,7 +570,7 @@ export function ExamRunner({
   const atLast = idx === total - 1;
 
   return (
-    <div className="exam-public-shell">
+    <div className="exam-public-shell" {...lockdown}>
       {timed && warned && !warnAck && (
         <div
           role="dialog"

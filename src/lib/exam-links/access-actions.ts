@@ -11,6 +11,7 @@ import { appConfig } from "@/lib/integrations/config";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyExamToken, signExamToken } from "./token";
 import { getClosure, isBlockedByClosure, expiryForChoice } from "./lifecycle";
+import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
 
 // Token-keyed, per-instance limiter — the gate is an email-enumeration surface.
 const limiter = createFixedWindowLimiter(60_000);
@@ -88,6 +89,18 @@ export async function resolveExamAccessByEmailAction(
       error:
         "Email non riconosciuta o non ancora confermata. Chiedi il link personale al tuo educator.",
     };
+  }
+
+  // PRESENCE gate (owner's rule): an absent student must not sit the test.
+  // Same canonical rule as the educator's send gate (day test ↔ that appello
+  // day; feedback/final ↔ any attended day). Fails open only when attendance
+  // is UNKNOWN (DB error / pre-migration) — the /esame page re-checks anyway.
+  {
+    const present = await loadPresentForTest(svc, corsoId, t);
+    const subjectKey = row ? `c${row.corsista_id}` : `p${partRow!.id}`;
+    if (isBlockedByAbsence(present, subjectKey)) {
+      return { ok: false, error: absentAccessError(t) };
+    }
   }
 
   // Lifecycle default (end of day), but never beyond the shared link's own

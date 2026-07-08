@@ -83,13 +83,20 @@ export interface SubmitExamInput {
 export async function submitExam(
   token: string,
   input: SubmitExamInput,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; alreadySubmitted?: boolean }> {
   // 3h submit-only grace: a link that expires end-of-day must never reject the
   // hand-in of a student who STARTED before the expiry (entry has zero grace).
   const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
   const { c, t, m, s, p } = res.payload;
   if (m !== "exam") return { ok: true }; // preview/validation: no write
+  // A REAL exam submission must be bound to a subject (personal links carry
+  // `s` or `p`; the email gate always mints one). An unbound exam-mode write
+  // would be invisible to results AND dodge the per-subject unique index — the
+  // one duplicate-insert hole left (two such legacy rows exist in prod).
+  if (!s && !p) {
+    return { ok: false, error: "Il tuo accesso non è più valido: apri il link personale o chiedi all'educator di reinviartelo." };
+  }
 
   // Split out the registration fields ("reg:<field>") from graded answers.
   const registration: Record<string, string> = {};
@@ -151,10 +158,14 @@ export async function submitExam(
   }
   if (error) {
     // This path shares the exam_submissions_proctored_uniq backstop index with
-    // the proctored flow, so a double-submit (double-click / retry) hits a
-    // duplicate-key — already recorded, so treat it as success (idempotent),
-    // never a scary error to the student.
-    if (/duplicate key|unique|23505/i.test(error.message)) return { ok: true };
+    // the proctored flow, so a re-submit hits a duplicate-key. Still ok:true
+    // (a double-click must never scare the student), but flag it so the UI can
+    // show "Esame già consegnato" instead of a fresh thank-you — the re-sent
+    // answers were DISCARDED (the first submission is the graded one), and the
+    // student must not believe an edit was recorded.
+    if (/duplicate key|unique|23505/i.test(error.message)) {
+      return { ok: true, alreadySubmitted: true };
+    }
     return { ok: false, error: error.message };
   }
 

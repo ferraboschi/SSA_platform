@@ -9,7 +9,13 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyExamToken } from "@/lib/exam-links/token";
 import { getClosure, isBlockedByClosure } from "@/lib/exam-links/lifecycle";
 import { loadPublicExam } from "@/lib/exam-links/load";
+import {
+  loadPresentForTest,
+  isBlockedByAbsence,
+  absentAccessError,
+} from "@/lib/exam-links/live-progress";
 import { ExamGate } from "@/components/esame-pubblico/ExamGate";
+import { CHROME, LANGS, type Lang } from "@/components/esame-pubblico/exam-chrome";
 import "@/components/esame-pubblico/exam-public.css";
 
 export const metadata: Metadata = {
@@ -24,6 +30,22 @@ function Invalid({ reason }: { reason: string }) {
         <div className="exam-public-invalid-icon">⏳</div>
         <h1>Link non valido</h1>
         <p>{reason}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Server-rendered blocking screen (already submitted / absent) — no runner is
+ *  ever mounted, so nothing behind it can be reached with a refresh. */
+function Blocked({ icon, title, body }: { icon: string; title: string; body: string }) {
+  return (
+    <div className="exam-public-shell">
+      <div className="exam-public-card">
+        <div className="exam-public-thanks">
+          <div className="exam-public-thanks-check">{icon}</div>
+          <h2>{title}</h2>
+          <p>{body}</p>
+        </div>
       </div>
     </div>
   );
@@ -63,6 +85,50 @@ export default async function Page({
     .eq("id", Number(res.payload.c))
     .maybeSingle();
   if (!corso) return <Invalid reason="Corso non trovato." />;
+
+  // ── Server-side integrity gates (real exams on a PERSONAL token only) ─────
+  // Previews (test/validate) and the shared class link (email gate) skip both.
+  const subjS = res.payload.s && /^\d+$/.test(res.payload.s) ? Number(res.payload.s) : null;
+  const subjP = res.payload.p && /^\d+$/.test(res.payload.p) ? Number(res.payload.p) : null;
+  if (res.payload.m === "exam" && (subjS != null || subjP != null)) {
+    const lang: Lang = LANGS.includes(res.payload.l as Lang) ? (res.payload.l as Lang) : "it";
+    const corsoId = Number(res.payload.c);
+
+    // 1) ALREADY SUBMITTED → blocking screen. The DB unique index already
+    //    forbids a second submission; this stops the student from re-entering
+    //    the questions at all (refresh/other device/cleared storage). Scoped
+    //    strictly per test_key; FAIL-OPEN on query error (an infra hiccup must
+    //    never lock a student out mid-exam — the submit path stays guarded).
+    const { data: prior, error: priorErr } = await sb
+      .from("exam_submissions")
+      .select("id")
+      .eq("corso_id", corsoId)
+      .eq("test_key", res.payload.t)
+      .eq("mode", "exam")
+      .eq(subjS != null ? "corsista_id" : "partecipante_id", (subjS ?? subjP)!)
+      .limit(1);
+    if (!priorErr && prior && prior.length > 0) {
+      return (
+        <Blocked
+          icon="✓"
+          title={CHROME[lang].submittedTitle}
+          body={CHROME[lang].submittedBody}
+        />
+      );
+    }
+
+    // 2) ABSENT AT THE ROLL-CALL → no access (owner's rule: the student must be
+    //    present to sit the test). Same canonical presence rule as the send
+    //    gate (day test ↔ that day; feedback/final ↔ any attended day); fails
+    //    open only when attendance is UNKNOWN (DB error / pre-migration).
+    const present = await loadPresentForTest(sb, corsoId, res.payload.t);
+    const subjectKey = subjS != null ? `c${subjS}` : `p${subjP}`;
+    if (isBlockedByAbsence(present, subjectKey)) {
+      return (
+        <Blocked icon="!" title="Accesso non disponibile" body={absentAccessError(res.payload.t)} />
+      );
+    }
+  }
 
   const family = corso.type === "shochu" ? "shochu" : "nihonshu";
   const mode = res.payload.m;

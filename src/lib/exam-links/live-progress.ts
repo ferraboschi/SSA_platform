@@ -59,6 +59,16 @@ export function absentSendError(testKey: string): string {
     : "Mai presente all'appello: non può ricevere questo invio.";
 }
 
+/** Student-facing twin of absentSendError — shown when an ABSENT student tries
+ *  to ACCESS a test (page load / email gate), not just receive it. Same rule:
+ *  the student must be present at the roll-call to sit the test. */
+export function absentAccessError(testKey: string): string {
+  const day = testDayNo(testKey);
+  return day != null
+    ? `Non risulti presente all'appello del giorno ${day}. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.`
+    : "Non risulti presente all'appello del corso. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.";
+}
+
 export interface SubjectProgress {
   /** 0-100 (submitted → 100). */
   pct: number;

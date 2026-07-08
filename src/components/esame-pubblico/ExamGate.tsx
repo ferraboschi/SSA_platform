@@ -93,6 +93,9 @@ function DirectExam(props: ExamGateProps) {
     }
     if (stored) setResume(stored);
     setReady(true);
+    // Already submitted on this device → no heartbeat (the educator's bar must
+    // not flip back to "in corso"); the render below shows the blocked screen.
+    if (stored?.submitted) return;
     // First heartbeat: the educator sees "in corso" as soon as the test opens.
     report(stored?.currentIdx ?? 0, stored?.elapsed ?? 0, stored?.answers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,6 +117,20 @@ function DirectExam(props: ExamGateProps) {
     return (
       <GateShell header={props.header}>
         <p style={{ textAlign: "center", color: "var(--text-3,#6b7280)" }}>{t.gateMoment}</p>
+      </GateShell>
+    );
+  }
+  // Submitted on this device → BLOCKING screen, never remount the runner (a
+  // refresh must not reopen the questions). UX layer only: the server-side
+  // page gate is the authority (cross-device / cleared storage).
+  if (resume?.submitted) {
+    return (
+      <GateShell header={props.header}>
+        <div className="exam-public-thanks">
+          <div className="exam-public-thanks-check">✓</div>
+          <h2>{t.submittedTitle}</h2>
+          <p>{t.submittedBody}</p>
+        </div>
       </GateShell>
     );
   }
