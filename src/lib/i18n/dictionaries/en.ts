@@ -55,6 +55,7 @@ export const en: Dictionary = {
     done: "Updated",
     noChanges: "Already up to date",
     error: "Sync error",
+    stillRunning: "The sync keeps running on the server — data lands shortly",
   },
 
   topbar: {

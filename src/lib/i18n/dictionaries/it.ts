@@ -57,6 +57,7 @@ export const it = {
     done: "Aggiornato",
     noChanges: "Già aggiornato",
     error: "Errore di sincronizzazione",
+    stillRunning: "La sincronizzazione continua sul server — i dati arrivano tra poco",
   },
 
   topbar: {
