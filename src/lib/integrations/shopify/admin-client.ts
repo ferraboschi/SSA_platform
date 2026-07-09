@@ -71,6 +71,56 @@ function baseUrl(): string {
   return `https://${domain}/admin/api/${API_VERSION}`;
 }
 
+// Shopify REST throttles to 2 calls/second per app+store (burst bucket of 40).
+// A full sync makes hundreds of calls (per-product metafields!), so unpaced
+// bursts die on 429 — which killed whole sync runs and silently emptied the
+// catch-all metafield reads. All Shopify calls therefore go through one paced,
+// 429-retrying fetch: calls are spaced MIN_GAP_MS apart process-wide, and a
+// 429 waits out Retry-After before trying again.
+const MIN_GAP_MS = 550;
+const MAX_RETRIES_429 = 5;
+const MAX_RETRIES_5XX = 2;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+let lastCallAt = 0;
+let paceQueue: Promise<void> = Promise.resolve();
+
+async function shopifyFetch(url: string, init?: RequestInit): Promise<Response> {
+  // Take a pacing turn: fetch starts are serialized ≥ MIN_GAP_MS apart, shared
+  // by every caller in the process (sync, scheduler, actions).
+  const turn = paceQueue.then(async () => {
+    const wait = lastCallAt + MIN_GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastCallAt = Date.now();
+  });
+  paceQueue = turn.catch(() => {});
+  await turn;
+
+  let attempt429 = 0;
+  let attempt5xx = 0;
+  for (;;) {
+    const res = await fetch(url, { ...init, cache: "no-store" });
+    if (res.status === 429 && attempt429 < MAX_RETRIES_429) {
+      attempt429++;
+      const retryAfter = Number(res.headers.get("Retry-After"));
+      const delay =
+        Math.max(Number.isFinite(retryAfter) ? retryAfter * 1000 : 0, 1500) +
+        attempt429 * 500;
+      await sleep(delay);
+      lastCallAt = Date.now();
+      continue;
+    }
+    if (res.status >= 500 && attempt5xx < MAX_RETRIES_5XX) {
+      attempt5xx++;
+      await sleep(1000 * attempt5xx);
+      lastCallAt = Date.now();
+      continue;
+    }
+    return res;
+  }
+}
+
 /** Extract the `page_info` cursor of the rel="next" link, if any. */
 function nextPageInfo(linkHeader: string | null): string | null {
   if (!linkHeader) return null;
@@ -83,9 +133,8 @@ function nextPageInfo(linkHeader: string | null): string | null {
 async function adminGet(
   path: string,
 ): Promise<{ body: unknown; link: string | null }> {
-  const res = await fetch(`${baseUrl()}/${path}`, {
+  const res = await shopifyFetch(`${baseUrl()}/${path}`, {
     headers: { "X-Shopify-Access-Token": shopifyConfig.adminToken as string },
-    cache: "no-store",
   });
   if (!res.ok) {
     const text = await res.text();
@@ -102,9 +151,8 @@ export async function getGrantedScopes(): Promise<string[]> {
   const domain = shopifyConfig.storeDomain;
   const token = shopifyConfig.adminToken;
   if (!domain || !token) throw new Error("Shopify not configured");
-  const res = await fetch(`https://${domain}/admin/oauth/access_scopes.json`, {
+  const res = await shopifyFetch(`https://${domain}/admin/oauth/access_scopes.json`, {
     headers: { "X-Shopify-Access-Token": token },
-    cache: "no-store",
   });
   if (!res.ok) throw new Error(`Shopify access_scopes ${res.status}`);
   const body = (await res.json()) as { access_scopes?: { handle: string }[] };
@@ -121,14 +169,13 @@ export async function shopifyGraphql(
   query: string,
   variables: Record<string, unknown>,
 ): Promise<unknown> {
-  const res = await fetch(`${baseUrl()}/graphql.json`, {
+  const res = await shopifyFetch(`${baseUrl()}/graphql.json`, {
     method: "POST",
     headers: {
       "X-Shopify-Access-Token": shopifyConfig.adminToken as string,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query, variables }),
-    cache: "no-store",
   });
   if (!res.ok) {
     const text = await res.text();

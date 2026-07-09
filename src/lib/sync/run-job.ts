@@ -27,11 +27,50 @@ export interface StartSyncResult {
   startedAt: string;
 }
 
-export async function startShopifySyncJob(opts?: {
+export interface SyncJobOptions {
   fullBackfill?: boolean;
   /** Extra work to run after a successful sync (e.g. cron alert checks). */
   afterSync?: (summary: SyncSummary) => Promise<void>;
-}): Promise<StartSyncResult> {
+}
+
+type Svc = ReturnType<typeof getSupabaseServiceClient>;
+
+/**
+ * The run itself: sync + bookkeeping + side jobs. Never throws — every
+ * outcome lands in sync_run_status. Shared by the request-triggered path
+ * (via after()) and the in-app scheduler (which has no request scope).
+ */
+export async function executeSyncRun(
+  svc: Svc,
+  startedAt: string,
+  opts?: SyncJobOptions,
+): Promise<void> {
+  try {
+    const summary = await runShopifySync({ fullBackfill: opts?.fullBackfill });
+    await markSyncFinished(svc, startedAt, { ok: true, summary });
+    if (opts?.afterSync) {
+      try {
+        await opts.afterSync(summary);
+      } catch {
+        /* side jobs must never mark the sync itself as failed */
+      }
+    }
+    try {
+      revalidateTag(SHELL_DATA_TAG, "max");
+      revalidatePath("/", "layout");
+    } catch {
+      // Throws outside a request scope (scheduler ticks): cached shell data
+      // then refreshes on its own TTL; the data tables are updated regardless.
+    }
+  } catch (e) {
+    await markSyncFinished(svc, startedAt, {
+      ok: false,
+      error: e instanceof Error ? e.message : "Sincronizzazione non riuscita.",
+    });
+  }
+}
+
+export async function startShopifySyncJob(opts?: SyncJobOptions): Promise<StartSyncResult> {
   const svc = getSupabaseServiceClient();
   const status = await readSyncRunStatus(svc);
   if (isRunInFlight(status, Date.now())) {
@@ -40,29 +79,6 @@ export async function startShopifySyncJob(opts?: {
 
   const startedAt = new Date().toISOString();
   await markSyncStarted(svc, startedAt);
-  after(async () => {
-    try {
-      const summary = await runShopifySync({ fullBackfill: opts?.fullBackfill });
-      await markSyncFinished(svc, startedAt, { ok: true, summary });
-      if (opts?.afterSync) {
-        try {
-          await opts.afterSync(summary);
-        } catch {
-          /* side jobs must never mark the sync itself as failed */
-        }
-      }
-      try {
-        revalidateTag(SHELL_DATA_TAG, "max");
-        revalidatePath("/", "layout");
-      } catch {
-        /* fresh data still reaches clients on their next router refresh */
-      }
-    } catch (e) {
-      await markSyncFinished(svc, startedAt, {
-        ok: false,
-        error: e instanceof Error ? e.message : "Sincronizzazione non riuscita.",
-      });
-    }
-  });
+  after(() => executeSyncRun(svc, startedAt, opts));
   return { started: true, alreadyRunning: false, startedAt };
 }
