@@ -13,7 +13,7 @@ import "server-only";
 // the migrations are applied.
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { courseDayCount, courseHasExam } from "@/lib/domain";
+import { courseHasExam } from "@/lib/domain";
 import type { CourseTypeKey } from "@/lib/domain";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { verifyShareToken } from "./token";
@@ -40,19 +40,18 @@ export function isMissingTable(err: { message?: string } | null | undefined): bo
   );
 }
 
-/** Roll-call days for a course = its REAL editable program length (fallback:
- *  the expected baseline for type + mode). Courses with an exam also get ONE
- *  extra roll-call day for the exam day itself (day_no = dayCount + 1, the
- *  owner's "Giorno esame" appello) — `examDay` is that number, or null when
- *  there's no exam. Single source: courseDayCount/courseHasExam (@/lib/domain)
- *  + the course program overlay. */
+/** Roll-call days for a course = its REAL editable program length ONLY (no
+ *  program yet → 1, never the fabricated type baseline — owner's rule, batch
+ *  7; sharing the educator link auto-seeds the expected days as real entries).
+ *  Courses with an exam also get ONE extra roll-call day for the exam day
+ *  itself (day_no = dayCount + 1, the owner's "Giorno esame" appello) —
+ *  `examDay` is that number, or null when there's no exam. */
 export async function courseDayInfo(corsoId: number): Promise<{ dayCount: number; examDay: number | null }> {
   const svc = getSupabaseServiceClient();
-  const { data } = await svc.from("corsi").select("type, delivery_mode").eq("id", corsoId).maybeSingle();
+  const { data } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
   const type = ((data?.type as string) ?? "introduttivo") as CourseTypeKey;
-  const mode = data?.delivery_mode === "online" ? "online" : "presenza";
   const program = (await loadCourseProgram()).get(String(corsoId));
-  const dayCount = courseDayCount(type, mode, program?.days?.length ?? null);
+  const dayCount = Math.max(1, program?.days?.length ?? 0);
   return { dayCount, examDay: courseHasExam(type) ? dayCount + 1 : null };
 }
 

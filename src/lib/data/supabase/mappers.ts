@@ -9,6 +9,7 @@
 import {
   COURSE_TYPES,
   defaultMaterialCosts,
+  expectedDays,
   EXAM_THRESHOLDS,
   NIHONSHU_CATS,
   ROLE_META,
@@ -277,7 +278,13 @@ export function corsoRowToDomain(
     ...costsRaw,
   };
   const totalCost = Object.values(costs).reduce((s, n) => s + (n || 0), 0);
-  const days = safeType === "certificato" ? 3 : 1;
+  // Real program length when configured; otherwise the profile's expected
+  // days for type+mode (an online certificato spans 9 sessions, not 3 — the
+  // old hardcode archived those courses a week early).
+  const days =
+    program.length > 0
+      ? program.length
+      : expectedDays(safeType, row.delivery_mode === "online" ? "online" : "presenza");
   const lifecycle = deriveLifecycle(row.lifecycle, row.start_date, days);
   const nbRaw = (row.notebook ?? {}) as Record<string, unknown>;
   const nb = nbRaw as Partial<Notebook>;

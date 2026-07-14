@@ -93,6 +93,23 @@ export default async function Page({
           </div>
         </div>
 
+        {course.programMissing && (
+          <p
+            style={{
+              fontSize: 13,
+              color: "#92400e",
+              background: "#fef3c7",
+              borderRadius: 10,
+              padding: "10px 12px",
+              margin: "0 0 14px",
+              lineHeight: 1.5,
+            }}
+          >
+            Le giornate di questo corso non sono ancora configurate: viene mostrata una sola
+            giornata. Chiedi alla segreteria SSA di configurare il programma.
+          </p>
+        )}
+
         {/* Compact summary */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
           <Stat label="Iscritti" value={String(course.students.filter((s) => s.kind === "corsista").length)} />

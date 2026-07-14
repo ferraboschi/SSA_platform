@@ -8,7 +8,7 @@
 // only be shared with the course's educator.
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { COURSE_TYPES, courseDayCount, courseHasExam } from "@/lib/domain";
+import { COURSE_TYPES, courseHasExam } from "@/lib/domain";
 import type { CourseTypeKey } from "@/lib/domain";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { getSakeCatalogSafe } from "@/lib/integrations/sakecompany/catalog";
@@ -114,6 +114,8 @@ export interface SharedCourse {
   exam: SharedExamTest[] | null;
   /** Roll-call days: Certificato = 3, everything else = 1. */
   dayCount: number;
+  /** No program days configured yet — the UI shows one day + a notice. */
+  programMissing?: boolean;
   /** Distinct sakes across all days. */
   totalSakes: number;
   /** Σ cost × qty across all days (€). */
@@ -577,15 +579,13 @@ export async function loadSharedCourse(
     educator,
     hasExam: courseHasExam(type),
     exam,
-    // Roll-call days = the course's REAL program length (the operator adds/removes
-    // days freely); falls back to the expected baseline for type+mode when no
-    // program exists yet. This is what makes a 9-day Certificato Online show 9
-    // appello/day tabs instead of a hardcoded 3.
-    dayCount: courseDayCount(
-      type,
-      corso.delivery_mode === "online" ? "online" : "presenza",
-      days.length,
-    ),
+    // Roll-call days = the course's REAL program length ONLY (the operator
+    // adds/removes days freely). No program yet → ONE day + the missing flag,
+    // never the fabricated type baseline (owner's rule, batch 7): sharing the
+    // link auto-seeds the expected days as real entries, so this fallback only
+    // covers legacy links minted before that.
+    dayCount: Math.max(1, days.length),
+    programMissing: days.length === 0,
     totalSakes,
     totalSakeCost,
     days,

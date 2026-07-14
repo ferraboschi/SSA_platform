@@ -12,6 +12,7 @@ export function ShareEducatorButton({ courseId }: { courseId: string }) {
   const [loading, setLoading] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [seededDays, setSeededDays] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -25,6 +26,7 @@ export function ShareEducatorButton({ courseId }: { courseId: string }) {
     if (res.ok && res.url) {
       setUrl(res.url);
       setExpiresAt(res.expiresAt ?? null);
+      setSeededDays(res.seededDays ?? 0);
     } else {
       setError(res.error ?? s.error);
     }
@@ -125,6 +127,23 @@ export function ShareEducatorButton({ courseId }: { courseId: string }) {
 
             {url && (
               <>
+                {seededDays > 0 && (
+                  <p
+                    style={{
+                      fontSize: 12.5,
+                      color: "var(--warning-fg)",
+                      background: "var(--warning-bg)",
+                      borderRadius: 8,
+                      padding: "8px 10px",
+                      margin: "0 0 10px",
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    Il programma non era configurato: ho aggiunto automaticamente{" "}
+                    <strong>{seededDays} {seededDays === 1 ? "giornata" : "giornate"}</strong> al corso.
+                    Puoi modificarle o eliminarle dal tab Programma.
+                  </p>
+                )}
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     className="input"
