@@ -6,7 +6,7 @@ import { useT, format } from "@/lib/i18n";
 import { formatNumberIt } from "@/lib/format";
 import type { ProgrammaData, TemplateData } from "@/lib/corsi";
 import { LOW_STOCK, type ScCatalogItem } from "@/components/sake/SakeProductPicker";
-import { bottlesForStudents, bottleCost } from "@/lib/economics/bottles";
+import { bottlesForStudents, bottleCost, parseVolumeMl } from "@/lib/economics/bottles";
 import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
 import { deleteTemplateAction } from "@/lib/data/template-actions";
 import { saveCourseProgramAction } from "@/lib/corsi/program-actions";
@@ -199,7 +199,10 @@ export function ProgrammaEconomiaSection({
   }, []);
 
   const enrolled = data.enrolled || 0;
-  const bottlesPerSku = bottlesForStudents(enrolled);
+  // Per-SKU bottle need: 48ml/person against the bottle FORMAT (from the
+  // catalog name or the SKU suffix; unknown → 720ml = historical behaviour).
+  const needFor = (code?: string | null, name?: string | null) =>
+    bottlesForStudents(enrolled, parseVolumeMl((code && catBySku.get(code)?.name) || name, code));
 
   // Legacy line cost (stored cost × qty) — fallback before the catalog loads
   // or when the course has no enrollees yet.
@@ -209,31 +212,32 @@ export function ProgrammaEconomiaSection({
   );
   const totalSakes = days.reduce((s, p) => s + p.sakes.length, 0);
 
-  // Real bottle cost: bottlesPerSku × live cost (fallback to stored cost) per SKU.
+  // Real bottle cost: per-SKU bottles (format-aware) × live cost per SKU.
   const liveBottleCost = useMemo(
-    () => bottleCost(days, catBySku, bottlesPerSku),
-    [days, catBySku, bottlesPerSku],
+    () => bottleCost(days, catBySku, enrolled),
+    [days, catBySku, enrolled],
   );
 
   // Use the bottle-based cost when we actually know enrollees; else legacy.
   const useBottles = enrolled > 0;
   const sakeCost = useBottles ? liveBottleCost : legacySakeCost;
 
-  // Per-SKU stock check (each program SKU once; need = bottlesPerSku).
+  // Per-SKU stock check (each program SKU once; need is format-aware).
   const stockCheck = useMemo(() => {
-    const seen = new Map<string, { sake: SakeState; need: number }>();
+    const seen = new Map<string, SakeState>();
     for (const d of days)
-      for (const sk of d.sakes)
-        if (sk.code && !seen.has(sk.code)) seen.set(sk.code, { sake: sk, need: bottlesPerSku });
-    const rows = [...seen.values()].map(({ sake, need }) => {
+      for (const sk of d.sakes) if (sk.code && !seen.has(sk.code)) seen.set(sk.code, sk);
+    const rows = [...seen.values()].map((sake) => {
       const item = catBySku.get(sake.code);
+      const need = bottlesForStudents(enrolled, parseVolumeMl(item?.name ?? sake.name, sake.code));
       const stock = item?.stock ?? null;
       const insufficient = stock != null && stock < need;
       const low = stock != null && !insufficient && stock < LOW_STOCK;
       return { sake, need, item, stock, insufficient, low };
     });
     return rows;
-  }, [days, catBySku, bottlesPerSku]);
+     
+  }, [days, catBySku, enrolled]);
   const catalogReady = catBySku.size > 0;
 
   const autoLines: CostLine[] = [
@@ -242,7 +246,7 @@ export function ProgrammaEconomiaSection({
       label: t.sakeProgram,
       value: sakeCost,
       source: useBottles
-        ? format(t.sakeBottles, { n: totalSakes, b: bottlesPerSku, s: enrolled })
+        ? format(t.sakeBottles, { n: totalSakes, s: enrolled })
         : format(t.sakeSource, { n: totalSakes }),
     },
   ];
@@ -400,7 +404,6 @@ export function ProgrammaEconomiaSection({
         price={data.price}
         enrolled={data.enrolled}
         sakeCost={sakeCost}
-        bottlesPerSku={bottlesPerSku}
         autoLines={autoLines}
         customLines={customLines}
         updateCustom={updateCustom}
@@ -574,7 +577,7 @@ export function ProgrammaEconomiaSection({
                       isLast={i === sec.sakes.length - 1}
                       noteOpen={openNote === s.id}
                       catItem={s.code ? catBySku.get(s.code) : undefined}
-                      need={bottlesPerSku}
+                      need={needFor(s.code, s.name)}
                       isDropTarget={dragOverSake === s.id}
                       onToggleNote={() => setOpenNote(openNote === s.id ? null : s.id)}
                       onUpdate={(p) => updateSake(sec.id, s.id, p)}

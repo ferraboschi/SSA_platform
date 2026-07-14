@@ -22,7 +22,6 @@ export function EconomiaPanel({
   price,
   enrolled,
   sakeCost,
-  bottlesPerSku,
   autoLines,
   customLines,
   updateCustom,
@@ -39,7 +38,6 @@ export function EconomiaPanel({
   price: number;
   enrolled: number;
   sakeCost: number;
-  bottlesPerSku: number;
   autoLines: CostLine[];
   customLines: CostLine[];
   updateCustom: (id: string, patch: Partial<CostLine>) => void;
@@ -269,7 +267,7 @@ export function EconomiaPanel({
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 12.5 }}>{t.stockTitle}</div>
                 <div style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 1 }}>
-                  {format(t.stockSub, { b: bottlesPerSku, s: enrolled || 0 })}
+                  {format(t.stockSub, { s: enrolled || 0 })}
                 </div>
               </div>
               {insufficientCount > 0 && (

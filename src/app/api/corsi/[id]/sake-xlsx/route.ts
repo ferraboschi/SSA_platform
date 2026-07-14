@@ -45,7 +45,7 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "no-template" }, { status: 409 });
   }
 
-  const buf = await buildSakeXlsx(days);
+  const buf = await buildSakeXlsx(days, course.enrolled ?? 0);
   const slug = (course.shortTitle || "corso").normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
   return new NextResponse(new Uint8Array(buf), {
     headers: {

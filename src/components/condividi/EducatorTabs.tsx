@@ -112,7 +112,7 @@ export default function EducatorTabs({
             day={activeDayNum}
           />
           <SectionHeading>Programma</SectionHeading>
-          <ProgrammaTab days={days} day={activeDayNum} />
+          <ProgrammaTab days={days} day={activeDayNum} enrolled={students.length} />
           {testByKey(`day${activeDayNum}`) && (
             <>
               <SectionHeading>Test</SectionHeading>

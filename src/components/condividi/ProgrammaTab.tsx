@@ -2,11 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { DayRow } from "./shared";
+import { bottlesForStudents, parseVolumeMl } from "@/lib/economics/bottles";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2 · PROGRAMMA — sakes by day, photo + inline expandable details.
 // ─────────────────────────────────────────────────────────────────────────────
-export default function ProgrammaTab({ days, day }: { days: DayRow[]; day: number }) {
+export default function ProgrammaTab({
+  days,
+  day,
+  enrolled,
+}: {
+  days: DayRow[];
+  day: number;
+  /** Roster size — drives the real bottle need (48ml/person by format). */
+  enrolled: number;
+}) {
   const [open, setOpen] = useState<string | null>(null);
   // One DOM ref per sake row, so the just-expanded one can be scrolled into
   // view (see the effect below).
@@ -78,7 +88,14 @@ export default function ProgrammaTab({ days, day }: { days: DayRow[]; day: numbe
                   {s.region && <Fact k="Regione" v={s.region} />}
                   {s.abv && <Fact k="Alcol" v={s.abv} />}
                   {s.size > 0 && <Fact k="Formato" v={`${s.size} ml`} />}
-                  {s.qty > 0 && <Fact k="Bottiglie" v={String(s.qty)} />}
+                  <Fact
+                    k="Bottiglie"
+                    v={String(
+                      enrolled > 0
+                        ? bottlesForStudents(enrolled, s.size || parseVolumeMl(s.name, s.code))
+                        : s.qty || 1,
+                    )}
+                  />
                   {s.code && <Fact k="Codice" v={s.code} />}
                 </dl>
                 {s.aroma && (
