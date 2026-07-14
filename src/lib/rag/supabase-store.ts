@@ -30,7 +30,12 @@ export class SupabaseVectorStore implements VectorStore {
         match_count: k,
         family_filter: filter?.family ?? null,
       });
-      if (error || !Array.isArray(data)) return [];
+      if (error || !Array.isArray(data)) {
+        // An RPC failure must be tellable apart from a genuinely empty corpus:
+        // downstream this [] turns into "nessun contenuto pertinente" refusals.
+        if (error) console.error("[rag] match_rag_chunks failed:", error.message);
+        return [];
+      }
       const rows = data as MatchRow[];
       if (!rows.length) return [];
 

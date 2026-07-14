@@ -26,6 +26,8 @@ export interface GradedSubmission {
   manualCount: number;
   suggested: ExamOutcome;
   enrollmentId: number | null;
+  /** The bound corsista (proctored submissions) — keys the attendance map. */
+  corsistaId: number | null;
   /** Set (and enrollmentId null) when the submission belongs to a "doppio"
    *  companion (corsi_partecipanti) instead of an enrolled corsista. */
   partecipanteId: number | null;
@@ -251,6 +253,7 @@ export async function loadCourseExamResults(
         manualCount: manual,
         suggested,
         enrollmentId: null,
+        corsistaId: null,
         partecipanteId,
         currentResult,
         currentScore,
@@ -317,6 +320,7 @@ export async function loadCourseExamResults(
       manualCount: manual,
       suggested,
       enrollmentId,
+      corsistaId: s.corsista_id ?? null,
       partecipanteId: null,
       currentResult,
       currentScore,

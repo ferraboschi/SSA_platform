@@ -11,7 +11,8 @@ import {
   runCourseCorrectionAction,
   getCourseCorrectionAction,
 } from "@/lib/esami/correction-actions";
-import type { CorrectionDraft } from "@/lib/esami/correction-types";
+import { getExamProgressForStaffAction } from "@/lib/exam-links/live-progress-actions";
+import type { CorrectionDraft, OpenGrade } from "@/lib/esami/correction-types";
 import { FeedbackSummary } from "./FeedbackSummary";
 import { SendResultsSection, type ConfirmedResultRow } from "./SendResultsSection";
 import type { ExamOutcome, GradedSubmission } from "@/lib/exam-links/results";
@@ -152,38 +153,52 @@ export function ExamResultsClient({
   // Loaded lazily on mount; refreshed after a run. Advisory only — staff still
   // confirms the official verdict with the buttons on each row.
   const [drafts, setDrafts] = useState<Record<number, CorrectionDraft>>({});
+  const [templateUpdatedAt, setTemplateUpdatedAt] = useState<string | null>(null);
+  // Attendance for the ACTIVE test (subject key → present) — flags submissions
+  // whose student was (or was later marked) absent at the relevant roll call.
+  const [presentMap, setPresentMap] = useState<Record<string, boolean> | undefined>(undefined);
   const [correcting, startCorrection] = useTransition();
   const [correctionMsg, setCorrectionMsg] = useState<string | null>(null);
 
+  // The batch runs PER TEST (owner batch 7: paid day tests get the same AI
+  // correction as the final) — reload run/drafts when the tab changes.
+  const correctionTest = activeTab === "feedback" ? "final" : activeTab;
   useEffect(() => {
     let alive = true;
-    getCourseCorrectionAction(courseId)
+    getCourseCorrectionAction(courseId, correctionTest)
       .then((r) => {
-        if (alive && r.drafts) setDrafts(r.drafts as Record<number, CorrectionDraft>);
+        if (!alive) return;
+        if (r.drafts) setDrafts(r.drafts as Record<number, CorrectionDraft>);
+        setTemplateUpdatedAt(r.templateUpdatedAt ?? null);
+      })
+      .catch(() => {});
+    getExamProgressForStaffAction(courseId, correctionTest)
+      .then((r) => {
+        if (alive && r.ok) setPresentMap(r.presentForTest);
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [courseId]);
+  }, [courseId, correctionTest]);
 
   const runCorrection = () => {
     if (!family || correcting) return;
     setCorrectionMsg(null);
     startCorrection(async () => {
       try {
-        const res = await runCourseCorrectionAction(courseId, family);
+        const res = await runCourseCorrectionAction(courseId, family, correctionTest);
         if (!res.ok) {
           setCorrectionMsg(res.error || "Correzione non riuscita.");
           return;
         }
         const run = res.run;
         setCorrectionMsg(
-          `Corretti ${run?.graded ?? 0}/${run?.total ?? 0} esami — bozze pronte` +
+          `Corretti ${run?.graded ?? 0}/${run?.total ?? 0} — bozze pronte` +
             (run?.failures?.length ? ` · ${run.failures.length} con errori` : "") +
             ".",
         );
-        const fresh = await getCourseCorrectionAction(courseId).catch(() => null);
+        const fresh = await getCourseCorrectionAction(courseId, correctionTest).catch(() => null);
         if (fresh?.drafts) setDrafts(fresh.drafts as Record<number, CorrectionDraft>);
       } catch {
         setCorrectionMsg("Correzione non riuscita, riprova.");
@@ -237,10 +252,10 @@ export function ExamResultsClient({
                   className="btn btn-sm btn-primary"
                   onClick={runCorrection}
                   disabled={correcting}
-                  title="Corregge tutti gli esami finali consegnati: domande oggettive in automatico, domande aperte con AI basata sulla knowledge base SSA. Genera una bozza di esito per studente — l'esito ufficiale lo confermi tu."
+                  title="Corregge tutte le consegne del test attivo: domande oggettive in automatico, domande aperte con AI (voto 1-5) basata sulla knowledge base SSA. Genera una bozza per studente — l'esito ufficiale lo confermi tu."
                 >
                   <Icon name="check" size={12} />
-                  {correcting ? "Correggo…" : "Correggi"}
+                  {correcting ? "Correggo…" : activeTab === "final" ? "Correggi" : `Correggi ${activeTab.replace("day", "giorno ")}`}
                 </button>
               )}
             </div>
@@ -325,6 +340,14 @@ export function ExamResultsClient({
                       r={r}
                       courseId={courseId}
                       draft={drafts[r.id]}
+                      templateUpdatedAt={templateUpdatedAt}
+                      absent={
+                        presentMap
+                          ? presentMap[
+                              r.corsistaId != null ? `c${r.corsistaId}` : `p${r.partecipanteId}`
+                            ] !== true && (r.corsistaId != null || r.partecipanteId != null)
+                          : false
+                      }
                       showOutcome={showOutcome}
                       expanded={expanded === r.id}
                       onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
@@ -348,32 +371,91 @@ export function ExamResultsClient({
 // AI-grade an open answer, GROUNDED in the SSA knowledge base (advisory — the
 // educator confirms). Surfaces score, whether it was grounded, and feedback.
 // kbSection (the question's category) scopes retrieval to that KB chapter.
-function AiGradeButton({ prompt, answer, kbSection }: { prompt: string; answer: string; kbSection?: string }) {
+function AiGradeButton({
+  prompt,
+  answer,
+  kbSection,
+  label = "Valuta con AI",
+}: {
+  prompt: string;
+  answer: string;
+  kbSection?: string;
+  label?: string;
+}) {
   const [pending, start] = useTransition();
   const [res, setRes] = useState<GradeOpenResult | null>(null);
   return (
-    <div style={{ marginTop: 5, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      <button
-        className="btn btn-xs"
-        disabled={pending}
-        onClick={() =>
-          start(async () => {
-            setRes(await gradeOpenAnswerAction({ prompt, studentAnswer: answer, maxPoints: 5, kbSection }));
-          })
-        }
-      >
-        <Icon name="sparkle" size={11} />
-        {pending ? "Valuto…" : "Valuta con AI"}
-      </button>
-      {res &&
-        (res.ok ? (
-          <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-            <strong>{res.score}/5</strong> · {res.grounded ? "✓ basato su KB" : "⚠ nessuna fonte KB"}
-            {res.feedback ? ` · ${res.feedback.slice(0, 120)}` : ""}
-          </span>
-        ) : (
-          <span style={{ fontSize: 11.5, color: "var(--danger-fg)" }}>{res.error}</span>
-        ))}
+    <div style={{ marginTop: 5 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <button
+          className="btn btn-xs"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              setRes(await gradeOpenAnswerAction({ prompt, studentAnswer: answer, maxPoints: 5, kbSection }));
+            })
+          }
+        >
+          <Icon name="sparkle" size={11} />
+          {pending ? "Valuto…" : label}
+        </button>
+        {res && !res.ok && <span style={{ fontSize: 11.5, color: "var(--danger-fg)" }}>{res.error}</span>}
+      </div>
+      {res?.ok && (
+        <div
+          style={{
+            marginTop: 5,
+            padding: "8px 10px",
+            background: "var(--indigo-50)",
+            borderRadius: 8,
+            fontSize: 12,
+            lineHeight: 1.55,
+            maxWidth: 720,
+          }}
+        >
+          <strong>
+            {res.vote != null ? `Voto AI: ${res.vote}/5 · ` : ""}
+            {res.score}/5 punti
+          </strong>{" "}
+          · {res.grounded ? "✓ basato su KB" : "⚠ nessuna fonte KB"}
+          {res.feedback && <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{res.feedback}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The batch draft's evaluation for one open answer — the SAME data the PDF
+// shows, finally visible where the operator actually corrects. Full rationale,
+// never truncated.
+function DraftGradeBlock({ g }: { g: OpenGrade }) {
+  return (
+    <div
+      style={{
+        marginTop: 5,
+        padding: "8px 10px",
+        background: g.failed ? "var(--warning-bg)" : "var(--indigo-50)",
+        borderRadius: 8,
+        fontSize: 12,
+        lineHeight: 1.55,
+        maxWidth: 720,
+      }}
+    >
+      {g.failed ? (
+        <strong>⚠ Non valutata dall&apos;AI</strong>
+      ) : (
+        <>
+          <strong>
+            {g.vote != null ? `Voto AI: ${g.vote}/5 · ` : "AI: "}
+            {g.points}/{g.maxPoints} punti
+          </strong>{" "}
+          · conf. {Math.round(g.confidence * 100)}% · {g.grounded ? "✓ basata su KB" : "⚠ nessuna fonte KB"}
+        </>
+      )}
+      {g.rationale && <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{g.rationale}</div>}
+      {g.citedTitles.length > 0 && (
+        <div style={{ marginTop: 4, fontSize: 10.5, color: "var(--text-4)" }}>Fonti: {g.citedTitles.join(" · ")}</div>
+      )}
     </div>
   );
 }
@@ -382,6 +464,8 @@ function ResultRow({
   r,
   courseId,
   draft,
+  templateUpdatedAt,
+  absent,
   showOutcome,
   expanded,
   onToggle,
@@ -391,6 +475,11 @@ function ResultRow({
   courseId: string;
   /** The "Correggi" run's draft for this submission, when one exists. */
   draft?: CorrectionDraft;
+  /** Latest template edit — a draft older than this is stale. */
+  templateUpdatedAt?: string | null;
+  /** The subject is NOT present at this test's roll call (owner's rule) —
+   *  a submission from an absent student is an anomaly worth flagging. */
+  absent?: boolean;
   /** Show the outcome + confirm columns. Only the "Esame" (final) tab does:
    *  the certification outcome is decided on the final exam and stored ONCE per
    *  student, so mini-test tabs never carry the confirm controls. */
@@ -406,6 +495,13 @@ function ResultRow({
   // A row is confirmable when it belongs to an enrolled corsista OR a "doppio"
   // companion (each persists its outcome on its own table).
   const canGrade = r.enrollmentId != null || r.partecipanteId != null;
+
+  // Template edited after the run → the draft graded different questions.
+  const draftStale = Boolean(
+    draft && templateUpdatedAt && Date.parse(templateUpdatedAt) > Date.parse(draft.at),
+  );
+  const draftGrade = (qid: string): OpenGrade | undefined =>
+    draft?.openGrades?.find((g) => g.qid === qid);
 
   // Answers grouped by category (Storia / Produzione / …) for the detail view,
   // preserving the exam's question order (first appearance wins).
@@ -457,6 +553,14 @@ function ResultRow({
               (ospite)
             </span>
           )}
+          {absent && (
+            <span
+              style={{ marginLeft: 6, display: "inline-block" }}
+              title="Consegna presente ma lo studente risulta assente all'appello di questo test — verifica l'appello."
+            >
+              <Badge tone="warning">Assente all&apos;appello</Badge>
+            </span>
+          )}
           <div className="text-3" style={{ fontSize: 11, fontWeight: 400 }}>{r.studentEmail || "—"}</div>
         </td>
         <td className="text-3" style={{ whiteSpace: "nowrap", fontSize: 12 }}>
@@ -482,7 +586,16 @@ function ResultRow({
               <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                 <Badge tone={OUTCOME_TONE[draft.verdict] ?? "neutral"}>
                   Bozza: {OUTCOME_LABEL[draft.verdict] ?? draft.verdict} {draft.combinedPct}%
+                  {draft.totals.openFailed > 0 ? ` · parziale (${draft.totals.openFailed} da rivedere)` : ""}
                 </Badge>
+                <span style={{ fontSize: 10.5, color: "var(--text-4)" }}>
+                  {new Date(draft.at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </span>
+                {draftStale && (
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--warning-fg)" }} title="Il template è stato modificato dopo questa bozza: riesegui Correggi.">
+                    obsoleta — riesegui Correggi
+                  </span>
+                )}
                 <a
                   href={`/api/esami/${courseId}/bozza?sub=${r.id}`}
                   target="_blank"
@@ -576,12 +689,20 @@ function ResultRow({
                         <div className="text-3" style={{ fontSize: 12 }}>
                           Risposta: <strong style={{ color: a.ok === false ? "var(--danger-fg)" : "var(--text)" }}>{a.given}</strong>
                           {a.ok !== null && a.ok === false && <> · Corretta: <strong style={{ color: "var(--success-fg)" }}>{a.correct}</strong></>}
-                          {a.ok === null && <> · <em>valutazione manuale</em></>}
+                          {a.ok === null && !draftGrade(a.qid) && <> · <em>valutazione manuale</em></>}
                         </div>
+                        {a.ok === null && draftGrade(a.qid) && <DraftGradeBlock g={draftGrade(a.qid)!} />}
                         {a.ok === null &&
                           (a.type === "open" || a.type === "fill") &&
                           a.given &&
-                          a.given !== "—" && <AiGradeButton prompt={a.text} answer={a.given} kbSection={a.cat} />}
+                          a.given !== "—" && (
+                            <AiGradeButton
+                              prompt={a.text}
+                              answer={a.given}
+                              kbSection={a.cat}
+                              label={draftGrade(a.qid) ? "Rivaluta" : "Valuta con AI"}
+                            />
+                          )}
                       </div>
                     </div>
                   ))}

@@ -43,14 +43,24 @@ export class ClaudeGradingModel implements GradingModel {
       ? `I passaggi provengono dalla sezione "${input.kbSection}" della knowledge base: ` +
         "nella motivazione fai riferimento a quella sezione. "
       : "";
+    // Owner's rubric (batch 7): CONTENT decides, form never does; the model
+    // votes on a 1-5 scale and the code derives the points from it.
     const system =
       "Sei un esaminatore della Sake Sommelier Association. Correggi la risposta aperta " +
       "ESCLUSIVAMENTE in base ai passaggi della knowledge base forniti, che sono l'unica " +
       "fonte di verità. NON usare conoscenze esterne. " +
       sectionNote +
-      "Se i passaggi non coprono la domanda, " +
-      "assegna un punteggio prudente e dillo. Rispondi SOLO con JSON " +
-      '{"score": number (0..max), "confidence": number (0..1), "rationale": string (in italiano), ' +
+      "RUBRICA: conta SOLO il contenuto — correttezza e completezza dei concetti rispetto " +
+      "alla domanda. IGNORA grammatica, ortografia, sintassi, stile e lingua; elenchi " +
+      "puntati o risposte schematiche valgono esattamente quanto la prosa se i concetti " +
+      "ci sono. Assegna un VOTO intero da 1 a 5: 1 = sbagliata o non pertinente; 2 = " +
+      "qualche elemento giusto ma gravemente incompleta o con errori concettuali; 3 = " +
+      "parzialmente corretta, coglie il nucleo ma con lacune; 4 = corretta e quasi " +
+      "completa, lacune minori; 5 = completa e corretta. Se i passaggi non coprono la " +
+      "domanda, usa un voto prudente e dillo nella motivazione. La motivazione deve " +
+      "essere completa e comprensibile (400-600 caratteri), citando cosa c'è e cosa " +
+      "manca. Rispondi SOLO con JSON " +
+      '{"voto": number (1..5), "confidence": number (0..1), "rationale": string (in italiano), ' +
       '"citations": number[] (i numeri [[n]] dei passaggi usati)}. Niente commento, niente code fence.';
     const user =
       `PASSAGGI KNOWLEDGE BASE:\n${passages}\n\n` +
@@ -58,15 +68,21 @@ export class ClaudeGradingModel implements GradingModel {
       (input.rubricKey ? `RUBRICA / RISPOSTA MODELLO: ${input.rubricKey}\n` : "") +
       `PUNTEGGIO MASSIMO: ${input.maxPoints}\n` +
       `RISPOSTA STUDENTE: ${input.answer}`;
-    const raw = await callClaude({ system, user, maxTokens: 1024 });
+    const raw = await callClaude({ system, user, maxTokens: 1500 });
     const r = parseJsonFromClaude<{
+      voto?: number;
       score?: number;
       confidence?: number;
       rationale?: string;
       citations?: number[];
     }>(raw);
 
-    const score = Number(r.score);
+    // Preferred shape: the 1-5 vote → points = max × (vote−1)/4 (1 earns
+    // nothing, 5 earns full marks). Legacy "score" accepted for robustness
+    // across deploys.
+    const voteRaw = Math.trunc(Number(r.voto));
+    const vote = Number.isFinite(voteRaw) && voteRaw >= 1 && voteRaw <= 5 ? voteRaw : undefined;
+    const score = vote != null ? (input.maxPoints * (vote - 1)) / 4 : Number(r.score);
     // Refuse (don't silently zero) on a malformed/out-of-range score — the answer
     // goes to manual review instead of being graded on garbage.
     if (!Number.isFinite(score) || score < 0 || score > input.maxPoints) {
@@ -90,6 +106,7 @@ export class ClaudeGradingModel implements GradingModel {
 
     return {
       suggestedPoints: Math.max(0, Math.min(input.maxPoints, score)),
+      vote,
       confidence: Math.max(0, Math.min(1, Number.isFinite(confidence) ? confidence : 0.5)),
       rationale: r.rationale || "",
       provider: "model",
@@ -123,6 +140,7 @@ class StubGradingModel implements GradingModel {
 
     return {
       suggestedPoints: Math.min(suggestedPoints, input.maxPoints),
+      vote: 1 + Math.round(Math.min(1, coverage) * 4),
       confidence: 0.35,
       rationale:
         `Stima euristica (offline): ${overlap}/${answerTerms.size} termini della ` +
@@ -175,8 +193,10 @@ export async function gradeOpenAnswer(
   // relevance judgement — retry unfiltered so grading behaves exactly as
   // before sections existed. Once the corpus is section-tagged, the filtered
   // path wins and this branch never runs.
+  let sectionApplied = Boolean(input.kbSection);
   if (retrieved.length === 0 && input.kbSection) {
     retrieved = await retrieve(query, k);
+    sectionApplied = false; // whole-corpus fallback: the prompt must not claim a section
   }
   // Keep only on-topic passages. If nothing relevant comes back, REFUSE: a
   // missing/misconfigured corpus must never silently produce a hallucinated
@@ -193,7 +213,10 @@ export async function gradeOpenAnswer(
       provider: "model",
     };
   }
-  const { citedIndices, ...result } = await getGradingModel().grade(input, citations);
+  const { citedIndices, ...result } = await getGradingModel().grade(
+    sectionApplied ? input : { ...input, kbSection: undefined },
+    citations,
+  );
   // Auditable citations = the passages the model actually cited (mapped from its
   // [[n]] indices), falling back to the full on-topic set if it cited none.
   const cited =

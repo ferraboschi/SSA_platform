@@ -14,6 +14,7 @@ function row(over: Partial<GradedSubmission>): GradedSubmission {
     manualCount: 0,
     suggested: "passed",
     enrollmentId: null,
+    corsistaId: null,
     partecipanteId: null,
     currentResult: null,
     currentScore: null,

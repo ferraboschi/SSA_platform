@@ -33,14 +33,17 @@ export function dedupePerStudent(subs: GradedSubmission[]): GradedSubmission[] {
   return [...byStudent.values()];
 }
 
-/** Run the batch correction for a course's FINAL exam: AI-grade every open
- *  answer (grounded in the KB, constrained to the question's category section),
- *  build one CorrectionDraft per student and persist drafts + run summary to
- *  settings_kv. A single failed grading call never aborts the run — that answer
- *  is marked failed (0 points, manual review) and the run moves on. */
+/** Run the batch correction for ONE of a course's tests (final exam or a
+ *  day test — owner batch 7: the paid day tests get the same AI correction):
+ *  AI-grade every open answer (grounded in the KB, constrained to the
+ *  question's category section), build one CorrectionDraft per student and
+ *  persist drafts + run summary to settings_kv. A single failed grading call
+ *  never aborts the run — that answer is marked failed (0 points, manual
+ *  review) and the run moves on. */
 export async function runCourseCorrection(
   courseId: string,
   family: "nihonshu" | "shochu",
+  testKey: "final" | `day${number}` = "final",
 ): Promise<CorrectionRun> {
   // Wire the grading backend ONCE for the whole run (same seam as
   // gradeOpenAnswerAction): RAG retrieval + the live Claude grader. Without an
@@ -51,10 +54,10 @@ export async function runCourseCorrection(
 
   const corsoId = Number(courseId);
   const results = await loadCourseExamResults(courseId, family);
-  const finals = dedupePerStudent(results.filter((s) => s.testKey === "final"));
+  const finals = dedupePerStudent(results.filter((s) => s.testKey === testKey));
 
-  // Template meta (points/importance) for the final test, keyed by question id.
-  const exam = await loadPublicExam(courseId, family, "final", true);
+  // Template meta (points/importance) for this test, keyed by question id.
+  const exam = await loadPublicExam(courseId, family, testKey, true);
   const questionMeta = new Map<string, QuestionMeta>();
   for (const q of exam?.questions ?? []) {
     questionMeta.set(q.id, { points: q.points ?? 1, important: q.important ?? false });
@@ -62,7 +65,7 @@ export async function runCourseCorrection(
 
   const svc = getSupabaseServiceClient();
   const at = new Date().toISOString();
-  const run: CorrectionRun = { at, total: finals.length, graded: 0, failures: [] };
+  const run: CorrectionRun = { at, testKey, total: finals.length, graded: 0, failures: [] };
 
   // SEQUENTIAL on purpose: one grading call at a time keeps the run inside the
   // provider's rate limits and makes failures attributable per answer.
@@ -88,6 +91,7 @@ export async function runCourseCorrection(
           });
           openResults.set(a.qid, {
             points: sug.suggestedPoints,
+            vote: sug.vote,
             confidence: sug.confidence,
             rationale: sug.rationale,
             grounded: sug.citations.length > 0,
@@ -95,13 +99,16 @@ export async function runCourseCorrection(
             failed: false,
             provider: sug.provider,
           });
-        } catch {
+        } catch (e) {
           // One failed model call must never abort the run: the answer gets a
           // 0-point failed grade and the draft routes it to manual review.
+          // The REASON travels with it (truncated, no secrets) — a Claude 429
+          // must be tellable apart from an empty knowledge base.
+          const why = (e instanceof Error ? e.message : String(e)).slice(0, 160);
           openResults.set(a.qid, {
             points: 0,
             confidence: 0,
-            rationale: "Valutazione automatica non riuscita: revisione manuale.",
+            rationale: `Valutazione automatica non riuscita (${why}): revisione manuale.`,
             grounded: false,
             citedTitles: [],
             failed: true,
@@ -134,7 +141,7 @@ export async function runCourseCorrection(
   try {
     await svc
       .from("settings_kv")
-      .upsert({ key: correctionRunKey(corsoId), value: run }, { onConflict: "key" });
+      .upsert({ key: correctionRunKey(corsoId, testKey), value: run }, { onConflict: "key" });
   } catch {
     /* fail soft */
   }

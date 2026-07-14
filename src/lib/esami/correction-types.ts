@@ -16,6 +16,9 @@ export interface OpenGrade {
   /** AI-suggested points in [0, maxPoints]; 0 when failed=true. */
   points: number;
   maxPoints: number;
+  /** AI vote 1-5 (owner's scale: 1 = wrong, 5 = perfect); absent on failures
+   *  and on drafts produced before the scale existed. */
+  vote?: number;
   /** Model confidence in [0, 1]; 0 when failed=true. */
   confidence: number;
   /** Grading rationale (Italian) — cites the KB passages it relied on. */
@@ -78,7 +81,10 @@ export interface CorrectionDraft {
 /** Summary of one Correggi run (settings_kv key `exam-correction-run:<corsoId>`). */
 export interface CorrectionRun {
   at: string;
-  /** Final-exam submissions considered / drafts produced. */
+  /** Which test this run corrected ("final" | "day1".."dayN"); absent on
+   *  legacy runs = final. */
+  testKey?: string;
+  /** Submissions considered / drafts produced. */
   total: number;
   graded: number;
   failures: Array<{ submissionId: number; error: string }>;
@@ -90,6 +96,10 @@ export const CORRECTION_RUN_KEY_PREFIX = "exam-correction-run:";
 export function correctionKey(corsoId: number, submissionId: number): string {
   return `${CORRECTION_KEY_PREFIX}${corsoId}:${submissionId}`;
 }
-export function correctionRunKey(corsoId: number): string {
-  return `${CORRECTION_RUN_KEY_PREFIX}${corsoId}`;
+/** Run-summary key: the legacy bare key stays for the final exam (existing
+ *  data keeps working); day-test runs get their own per-test key. */
+export function correctionRunKey(corsoId: number, testKey = "final"): string {
+  return testKey === "final"
+    ? `${CORRECTION_RUN_KEY_PREFIX}${corsoId}`
+    : `${CORRECTION_RUN_KEY_PREFIX}${corsoId}:${testKey}`;
 }

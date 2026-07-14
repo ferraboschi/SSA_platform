@@ -137,6 +137,8 @@ export async function translateExamTemplateAction(family: ExamFamily): Promise<T
 export interface GradeOpenResult {
   ok: boolean;
   score?: number;
+  /** AI vote on the 1-5 scale (1 = wrong, 5 = perfect). */
+  vote?: number;
   feedback?: string;
   error?: string;
   /** True when the grade was grounded in retrieved SSA knowledge-base passages. */
@@ -176,6 +178,7 @@ export async function gradeOpenAnswerAction(input: {
     return {
       ok: true,
       score: sug.suggestedPoints,
+      vote: sug.vote,
       feedback: sug.rationale,
       grounded: sug.citations.length > 0,
       confidence: sug.confidence,

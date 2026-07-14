@@ -54,6 +54,9 @@ export interface OpenAnswerGradingInput {
 export interface GradeSuggestion {
   /** Suggested score in [0, maxPoints]. Always reviewed by a human. */
   suggestedPoints: number;
+  /** AI vote on the owner's 1-5 scale (1 = wrong, 5 = perfect); absent on
+   *  refusals/legacy results. Points derive from it: max × (vote−1)/4. */
+  vote?: number;
   /** Normalised confidence in [0, 1]. */
   confidence: number;
   rationale: string;

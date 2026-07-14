@@ -202,12 +202,16 @@ function OpenItem({ g }: { g: OpenGrade }) {
       <Text style={styles.ground}>Fonti KB: {g.citedTitles.join(", ")}</Text>
     );
   return (
-    <View style={styles.item} wrap={false}>
+    // wrap ON: full rationales (owner batch 7 — no more truncated feedback)
+    // may cross a page boundary instead of overflowing it.
+    <View style={styles.item}>
       <Text style={styles.q}>{trimTo(g.question, 220)}</Text>
-      <Text style={styles.ans}>Risposta data: {trimTo(g.given || "—", 300)}</Text>
+      <Text style={styles.ans}>Risposta data: {trimTo(g.given || "—", 400)}</Text>
       <Text style={styles.ans}>
-        <Text style={styles.aiPts}>Valutazione AI: {pts(g.points)}/{pts(g.maxPoints)} punti</Text>
-        {g.rationale.trim() ? ` — ${trimTo(g.rationale, 350)}` : ""}
+        <Text style={styles.aiPts}>
+          {g.vote != null ? `Voto AI: ${g.vote}/5 — ` : ""}Valutazione AI: {pts(g.points)}/{pts(g.maxPoints)} punti
+        </Text>
+        {g.rationale.trim() ? ` — ${trimTo(g.rationale, 900)}` : ""}
       </Text>
       {grounding}
     </View>

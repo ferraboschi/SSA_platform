@@ -31,6 +31,8 @@ export interface QuestionMeta {
 /** Result of one AI grading call for an open answer, keyed by qid. */
 export interface OpenAnswerResult {
   points: number;
+  /** AI vote 1-5 when the model produced one. */
+  vote?: number;
   confidence: number;
   rationale: string;
   grounded: boolean;
@@ -148,6 +150,7 @@ export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDra
     else if (r.provider === "model") sawModel = true;
     else if (r.provider === "stub") sawStub = true;
     openGrades.push({
+      ...(r.vote != null && !r.failed ? { vote: r.vote } : {}),
       qid: a.qid,
       question: a.text.trim(),
       given: a.given,
