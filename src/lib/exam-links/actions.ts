@@ -11,6 +11,10 @@ import {
   type ExamLinkMode,
 } from "./token";
 import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
+import { buildDayEsito, type DayEsito } from "./esito";
+import { loadPublicExam } from "./load";
+import { explainQuestionWithKb } from "@/lib/rag/explain";
+import { createFixedWindowLimiter } from "@/lib/rate-limit";
 
 export interface CreateExamLinkInput {
   courseId: string;
@@ -84,7 +88,7 @@ export interface SubmitExamInput {
 export async function submitExam(
   token: string,
   input: SubmitExamInput,
-): Promise<{ ok: boolean; error?: string; alreadySubmitted?: boolean }> {
+): Promise<{ ok: boolean; error?: string; alreadySubmitted?: boolean; esito?: DayEsito }> {
   // 3h submit-only grace: a link that expires end-of-day must never reject the
   // hand-in of a student who STARTED before the expiry (entry has zero grace).
   const res = verifyExamToken(token, 3 * 3600);
@@ -194,5 +198,86 @@ export async function submitExam(
       .eq(subjCol, (corsistaId ?? partecipanteId)!)
       .then(() => {}, () => {});
   }
-  return { ok: true };
+
+  // Day tests are FORMATIVE (owner, batch 7): hand the student their outcome
+  // right away, graded server-side. Best-effort — a grading hiccup must never
+  // spoil a successful hand-in (the runner falls back to the plain thank-you).
+  let esito: DayEsito | undefined;
+  if (/^day[1-9]$/.test(t) && corsoId != null) {
+    try {
+      const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
+      const family = corso?.type === "shochu" ? "shochu" : "nihonshu";
+      esito = (await buildDayEsito(c, family, t, answers, input.lang)) ?? undefined;
+    } catch {
+      esito = undefined;
+    }
+  }
+  return { ok: true, esito };
+}
+
+const explainLimiter = createFixedWindowLimiter(10 * 60_000);
+const RATE_LIMIT_EXPLAIN = 30; // per token per 10 minutes
+
+/**
+ * KB-grounded formative deep-dive for ONE day-test question (owner, batch 7):
+ * available to whoever holds a valid link for that test (any mode — previews
+ * too, so staff can demo it). The explanation depends on the question, not the
+ * student, so it is cached per (family, test, question, lang) and generated at
+ * most once — cost stays flat no matter how many students tap it.
+ */
+export async function getExamExplanationAction(
+  token: string,
+  qid: string,
+  lang?: string,
+): Promise<{ ok: boolean; text?: string; error?: string }> {
+  const res = verifyExamToken(token, 3 * 3600);
+  if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
+  const { c, t } = res.payload;
+  if (!/^day[1-9]$/.test(t)) return { ok: false, error: "Approfondimenti disponibili solo per i test giornalieri." };
+  if (explainLimiter.isLimited("explain", token, RATE_LIMIT_EXPLAIN)) {
+    return { ok: false, error: "Troppe richieste, riprova tra poco." };
+  }
+  const cleanQid = String(qid).slice(0, 80);
+  const lg = lang === "en" || lang === "ja" ? lang : "it";
+
+  try {
+    const svc = getSupabaseServiceClient();
+    const corsoId = /^\d+$/.test(c) ? Number(c) : null;
+    if (corsoId == null) return { ok: false, error: "Link non valido." };
+    const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
+    const family = corso?.type === "shochu" ? "shochu" : "nihonshu";
+
+    // Shared cache: the SAME explanation serves every student of the family's
+    // template (plain upsert — worst case a concurrent miss regenerates once).
+    const cacheKey = `exam-explain:${family}:${t}:${cleanQid}:${lg}`;
+    const { data: cached } = await svc.from("settings_kv").select("value").eq("key", cacheKey).maybeSingle();
+    const hit = (cached?.value as { text?: string } | null)?.text;
+    if (hit) return { ok: true, text: hit };
+
+    const exam = await loadPublicExam(c, family, t as ExamTestKey, true);
+    const q = exam?.questions.find((x) => x.id === cleanQid);
+    if (!q) return { ok: false, error: "Domanda non trovata." };
+
+    const qText = (lg !== "it" && q.i18n?.[lg]?.text) || q.text;
+    // Correct answer in a human-readable form, mirroring the grader semantics.
+    let correctAnswer = "";
+    const key = q.correct ?? [];
+    if (q.type === "order") correctAnswer = key.map(String).join(" → ");
+    else if (q.type === "fill") correctAnswer = key.map(String).join(", ");
+    else if (key.length > 0) {
+      correctAnswer = key.map((i) => q.options[Number(i)]).filter(Boolean).join(", ");
+    }
+
+    const out = await explainQuestionWithKb({ question: qText, correctAnswer, lang: lg });
+    if (!out.ok || !out.text) {
+      return { ok: false, error: "Approfondimento non disponibile per questa domanda." };
+    }
+    await svc
+      .from("settings_kv")
+      .upsert({ key: cacheKey, value: { text: out.text, at: new Date().toISOString() } }, { onConflict: "key" })
+      .then(() => {}, () => {});
+    return { ok: true, text: out.text };
+  } catch {
+    return { ok: false, error: "Approfondimento non disponibile ora, riprova più tardi." };
+  }
 }

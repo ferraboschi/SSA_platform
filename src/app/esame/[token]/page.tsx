@@ -15,6 +15,8 @@ import {
   absentAccessError,
 } from "@/lib/exam-links/live-progress";
 import { ExamGate } from "@/components/esame-pubblico/ExamGate";
+import { EsitoCard } from "@/components/esame-pubblico/EsitoCard";
+import { buildDayEsito } from "@/lib/exam-links/esito";
 import { CHROME, LANGS, type Lang } from "@/components/esame-pubblico/exam-chrome";
 import "@/components/esame-pubblico/exam-public.css";
 
@@ -101,13 +103,41 @@ export default async function Page({
     //    never lock a student out mid-exam — the submit path stays guarded).
     const { data: prior, error: priorErr } = await sb
       .from("exam_submissions")
-      .select("id")
+      .select("id, answers, lang")
       .eq("corso_id", corsoId)
       .eq("test_key", res.payload.t)
       .eq("mode", "exam")
       .eq(subjS != null ? "corsista_id" : "partecipante_id", (subjS ?? subjP)!)
       .limit(1);
     if (!priorErr && prior && prior.length > 0) {
+      // Day tests are FORMATIVE (owner, batch 7): re-opening the link shows
+      // the student their result again — not a wall — until the educator
+      // closes it (the closure check above runs first). The FINAL exam stays
+      // locked: no outcome, no questions.
+      if (/^day[1-9]$/.test(res.payload.t)) {
+        const sub = prior[0] as {
+          answers?: Record<string, string | string[]> | null;
+          lang?: string | null;
+        };
+        const fam = corso.type === "shochu" ? "shochu" : "nihonshu";
+        const esito = await buildDayEsito(
+          res.payload.c,
+          fam,
+          res.payload.t,
+          sub.answers,
+          sub.lang,
+        ).catch(() => null);
+        if (esito) {
+          const esitoLang: Lang = sub.lang === "en" || sub.lang === "ja" ? sub.lang : "it";
+          return (
+            <div className="exam-public-shell">
+              <div className="exam-public-card">
+                <EsitoCard esito={esito} lang={esitoLang} token={token} returnNote />
+              </div>
+            </div>
+          );
+        }
+      }
       return (
         <Blocked
           icon="✓"

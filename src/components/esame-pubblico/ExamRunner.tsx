@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { submitExam } from "@/lib/exam-links/actions";
 import { gradeAnswers } from "@/lib/exam-links/grading";
 import { CHROME, EMAIL_RE, LANGS, type Lang } from "./exam-chrome";
+import { EsitoCard } from "./EsitoCard";
+import type { DayEsito } from "@/lib/exam-links/esito";
 import { QuestionInput, RegInput } from "./exam-inputs";
 
 export interface RunnerQuestion {
@@ -139,6 +141,8 @@ export function ExamRunner({
     resumeState?.answers ?? {},
   );
   const [done, setDone] = useState(false);
+  // Formative day-test result returned by submitExam (owner, batch 7).
+  const [esito, setEsito] = useState<DayEsito | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<string[] | null>(null);
   const [reviewMode, setReviewMode] = useState(false);
   // Personal scratchpad — constant across questions, never submitted/saved.
@@ -270,6 +274,7 @@ export function ExamRunner({
         // this is the instant same-device layer.
         onPersistRef.current?.({ ...stateRef.current, submitted: true });
         if (r.alreadySubmitted) setAlreadySubmitted(true);
+        if (r.esito) setEsito(r.esito);
         setDone(true);
       } else {
         setSubmitError(true);
@@ -498,6 +503,18 @@ export function ExamRunner({
               <h2>{t.submittedTitle}</h2>
               <p>{t.submittedBody}</p>
             </div>
+          </div>
+        </div>
+      );
+    }
+    // Day test handed in → formative result card (score + per-answer review +
+    // KB deep-dives). The FINAL exam never shows its outcome here.
+    if (esito && !isFinal) {
+      return (
+        <div className="exam-public-shell" {...lockdown}>
+          <div className="exam-public-card">
+            {headerBar}
+            <EsitoCard esito={esito} lang={lang} token={token} returnNote />
           </div>
         </div>
       );
