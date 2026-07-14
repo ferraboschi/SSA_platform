@@ -16,6 +16,13 @@ export type ExamSendSubjectKey = string;
 interface StoredSend {
   at?: string; // ISO
   to?: string;
+  /** How the link went out: emailed, or copied/handed over by the educator. */
+  method?: "email" | "copy";
+}
+
+export interface ExamSendStamp {
+  at: string;
+  method: "email" | "copy";
 }
 
 function sendKey(corsoId: number, testKey: string, subj: ExamSendSubjectKey): string {
@@ -29,20 +36,22 @@ export async function recordExamSend(
   subj: ExamSendSubjectKey,
   to: string,
   atIso: string,
+  method: "email" | "copy" = "email",
 ): Promise<void> {
   try {
     const svc = getSupabaseServiceClient();
     await svc
       .from("settings_kv")
-      .upsert({ key: sendKey(corsoId, testKey, subj), value: { at: atIso, to } }, { onConflict: "key" });
+      .upsert({ key: sendKey(corsoId, testKey, subj), value: { at: atIso, to, method } }, { onConflict: "key" });
   } catch {
     /* the email is already out — never fail the send over the stamp */
   }
 }
 
-/** All send stamps for one (course, test): subject key → sent-at ISO. */
-export async function getExamSends(corsoId: number, testKey: string): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
+/** All send stamps for one (course, test): subject key → stamp. Legacy rows
+ *  (written before `method` existed) read back as emailed sends. */
+export async function getExamSends(corsoId: number, testKey: string): Promise<Record<string, ExamSendStamp>> {
+  const out: Record<string, ExamSendStamp> = {};
   try {
     const svc = getSupabaseServiceClient();
     const prefix = `${SEND_LOG_KEY_PREFIX}${corsoId}:${testKey}:`;
@@ -50,7 +59,9 @@ export async function getExamSends(corsoId: number, testKey: string): Promise<Re
     if (error) return out;
     for (const r of (data ?? []) as { key: string; value: StoredSend | null }[]) {
       const at = r.value?.at;
-      if (at) out[r.key.slice(prefix.length)] = at;
+      if (at) {
+        out[r.key.slice(prefix.length)] = { at, method: r.value?.method === "copy" ? "copy" : "email" };
+      }
     }
   } catch {
     /* fail soft */

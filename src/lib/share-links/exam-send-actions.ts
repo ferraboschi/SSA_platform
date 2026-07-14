@@ -199,8 +199,7 @@ export async function sendPersonalExamLinkAction(
  * student who has no email/WhatsApp, so the educator can hand the link over by
  * another channel (SMS, dictate, print). Same guards as sendPersonalExamLinkAction
  * (course from token, test configured, not absent, subject belongs to course);
- * stamps the send log too, so the row reads "Inviato HH:MM" — handing out the
- * link IS a delivery, just off-platform (mirrors the Appello "Copia link").
+ * stamps the send log with method "copy", so the row reads "Copiato HH:MM".
  */
 export async function getPersonalExamLinkAction(
   token: string,
@@ -243,9 +242,9 @@ export async function getPersonalExamLinkAction(
     ttlChoice(ttl),
   );
   const at = new Date().toISOString();
-  // No email address here → record a sentinel; getExamSends reads only the
-  // timestamp, so the row still shows "Inviato HH:MM".
-  await recordExamSend(corsoId, t, `${k === "corsista" ? "c" : "p"}${cid}`, target.email || "link-manuale", at);
+  // Copied, not emailed: the stamp records method "copy" so the roster row
+  // honestly reads "Copiato HH:MM" instead of "Inviato".
+  await recordExamSend(corsoId, t, `${k === "corsista" ? "c" : "p"}${cid}`, target.email || "link-manuale", at, "copy");
   return { ok: true, url, sentAt: at };
 }
 
@@ -388,7 +387,7 @@ export async function getExamProgressAction(
 ): Promise<{
   ok: boolean;
   progress?: Record<string, SubjectProgress>;
-  sends?: Record<string, string>;
+  sends?: Record<string, import("@/lib/exam-links/send-log").ExamSendStamp>;
   /** Subject keys present-for-this-test — undefined = attendance unknown (the
    *  UI must not restrict anything in that case). Drives the "Assente
    *  all'appello" hint + disabled Invia, mirroring the server-side gate. */

@@ -14,6 +14,7 @@ import {
 // above: a type in a "use server" export clause crashes its actions loader.
 import type { SubjectProgress } from "@/lib/exam-links/live-progress";
 import { newerIso } from "@/lib/share-links/verification-state";
+import type { ExamSendStamp } from "@/lib/exam-links/send-log";
 
 // Local prop shapes (structurally match the loader types) so this client
 // component never imports the server-only loader module.
@@ -67,7 +68,7 @@ export default function ExamSendPanel({
   // watches the bars move and the "Inviato" stamps survive reloads.
   const [live, setLive] = useState<{
     progress: Record<string, SubjectProgress>;
-    sends: Record<string, string>;
+    sends: Record<string, ExamSendStamp>;
     presentForTest: Record<string, boolean> | undefined;
   }>({ progress: {}, sends: {}, presentForTest: undefined });
   // Bumped after "Invia a tutti" so the fresh per-row stamps show at once.
@@ -297,7 +298,7 @@ export default function ExamSendPanel({
                 ttl={ttl}
                 person={s}
                 progress={live.progress[subjK]}
-                sentAt={live.sends[subjK]}
+                sentStamp={live.sends[subjK]}
                 absent={absent}
                 last={i === roster.length - 1}
               />
@@ -385,7 +386,7 @@ function StudentSendRow({
   ttl,
   person,
   progress,
-  sentAt,
+  sentStamp,
   absent,
   last,
 }: {
@@ -394,8 +395,8 @@ function StudentSendRow({
   ttl: "eod" | "7d";
   person: Person;
   progress: SubjectProgress | undefined;
-  /** Persisted stamp of the last delivered email for THIS test (ISO). */
-  sentAt: string | undefined;
+  /** Persisted stamp of the last delivery for THIS test (email or copy). */
+  sentStamp: ExamSendStamp | undefined;
   /** Absent at the appello (this test's day, or every day for feedback/final)
    *  — the owner's rule: never invite an absent student. Mirrors the
    *  server-side gate so the button is never a dead, confusing tap. */
@@ -406,10 +407,12 @@ function StudentSendRow({
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
-  // Optimistic echo of a send done in THIS session, merged newer-wins with
-  // the polled stamp (a later "Invia a tutti" must not be masked by it).
-  const [justSentAt, setJustSentAt] = useState<string | null>(null);
-  const sent = newerIso(justSentAt, sentAt ?? null);
+  // Optimistic echo of a send/copy done in THIS session, merged newer-wins
+  // with the polled stamp (a later "Invia a tutti" must not be masked by it).
+  const [justSent, setJustSent] = useState<ExamSendStamp | null>(null);
+  const sent = newerIso(justSent?.at ?? null, sentStamp?.at ?? null);
+  const sentMethod: "email" | "copy" =
+    sent && sent === justSent?.at ? justSent.method : (sentStamp?.method ?? "email");
 
   const send = async () => {
     if (busy) return;
@@ -436,7 +439,7 @@ function StudentSendRow({
     }
     if (res.sentTo) {
       setNote(`Inviata a ${res.sentTo}`);
-      setJustSentAt(res.sentAt ?? new Date().toISOString());
+      setJustSent({ at: res.sentAt ?? new Date().toISOString(), method: "email" });
     } else {
       setNote(res.error ?? null);
       if (res.url) setLink(res.url);
@@ -455,8 +458,7 @@ function StudentSendRow({
 
   // Copy the student's PERSONAL exam link WITHOUT emailing it — for someone
   // with no email/WhatsApp, so the educator hands it over another way (SMS,
-  // dictate). Same guards as "Invia"; marks the row "Inviato" (a delivery,
-  // just off-platform).
+  // dictate). Same guards as "Invia"; marks the row "Copiato HH:MM".
   const copyPersonalLink = async () => {
     if (busy) return;
     if (absent) {
@@ -475,7 +477,7 @@ function StudentSendRow({
       setNote(res.error || "Generazione del link non riuscita.");
       return;
     }
-    setJustSentAt(res.sentAt ?? new Date().toISOString());
+    setJustSent({ at: res.sentAt ?? new Date().toISOString(), method: "copy" });
     try {
       await navigator.clipboard.writeText(res.url);
       setNote("Link personale copiato ✓ — invialo via SMS o a voce.");
@@ -495,7 +497,7 @@ function StudentSendRow({
     : progress
       ? `In corso · dom. ${progress.question}/${progress.total}`
       : sent
-        ? `Inviato ${timeIt(sent)}`
+        ? `${sentMethod === "copy" ? "Copiato" : "Inviato"} ${timeIt(sent)}`
         : absent
           ? "Assente all'appello"
           : "Non inviato";

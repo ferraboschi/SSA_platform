@@ -48,7 +48,7 @@ export async function getExamProgressForStaffAction(
 ): Promise<{
   ok: boolean;
   progress?: Record<string, SubjectProgress>;
-  sends?: Record<string, string>;
+  sends?: Record<string, import("./send-log").ExamSendStamp>;
   presentForTest?: Record<string, boolean>;
   roster?: LiveRosterEntry[];
   error?: string;

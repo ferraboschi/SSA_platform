@@ -91,7 +91,7 @@ export async function loadExamProgress(
   testKey: string,
 ): Promise<{
   progress: Record<string, SubjectProgress>;
-  sends: Record<string, string>;
+  sends: Record<string, import("./send-log").ExamSendStamp>;
   presentForTest: Record<string, boolean> | undefined;
 }> {
   const svc = getSupabaseServiceClient();
