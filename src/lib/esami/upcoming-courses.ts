@@ -3,6 +3,7 @@ import "server-only";
 // Next published courses (date + city), formatted for the exam-result email CTA.
 import { getDataSource } from "@/lib/data";
 import { monthIndexIt } from "@/lib/dashboard";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 import type { UpcomingCourseLine } from "./exam-email";
 
 export async function getUpcomingCourseLines(limit = 4): Promise<UpcomingCourseLine[]> {
@@ -12,7 +13,7 @@ export async function getUpcomingCourseLines(limit = 4): Promise<UpcomingCourseL
     const now = new Date();
     const curKey = now.getFullYear() * 12 + now.getMonth();
     return courses
-      .filter((c) => c.lifecycle === "pubblicato" && !c.cancelled)
+      .filter((c) => c.lifecycle === "pubblicato" && !c.cancelled && !isSandboxCourse(c))
       .map((c) => ({ c, key: c.year * 12 + monthIndexIt(c.month) }))
       .filter((x) => x.key >= curKey)
       .sort((a, b) => a.key - b.key || (a.c.day || 0) - (b.c.day || 0))

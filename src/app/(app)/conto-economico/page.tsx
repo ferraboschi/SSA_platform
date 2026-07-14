@@ -5,6 +5,7 @@ import { monthIndexIt } from "@/lib/dashboard";
 import { loadCourseEconomics } from "@/lib/economics";
 import { EMPTY_ECON, isLegacyInvoiced, INVOICING_GO_LIVE, type EconCourseRow } from "@/lib/economics/types";
 import { ContoEconomicoClient } from "@/components/economics/ContoEconomicoClient";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function Page() {
   const role = session.user.roleKey;
 
   const rows: EconCourseRow[] = courses
-    .filter((c) => !c.cancelled)
+    .filter((c) => !c.cancelled && !isSandboxCourse(c))
     .map((c) => {
       const ended = c.lifecycle === "passato";
       const base = econ.get(c.id) ?? EMPTY_ECON;

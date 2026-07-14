@@ -8,7 +8,9 @@ import {
   type CatalogFilterOptions,
 } from "@/lib/corsi";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 import { CorsiCatalog } from "@/components/corsi/CorsiCatalog";
+import { SandboxCard } from "@/components/corsi/SandboxCard";
 
 export default async function Page({
   searchParams,
@@ -35,9 +37,9 @@ export default async function Page({
 
   // The catalog is an ACTIVE view: only published courses (attivi tab) plus
   // drafts (which power the Bozze tab). Passed + cancelled courses now live in
-  // the Archivio, so they're excluded here.
+  // the Archivio; the "Test esame" sandbox has its own pinned card instead.
   const items = courses
-    .filter((c) => isActiveCourse(c.lifecycle) || isDraftCourse(c.lifecycle))
+    .filter((c) => !isSandboxCourse(c) && (isActiveCourse(c.lifecycle) || isDraftCourse(c.lifecycle)))
     .map((c) => ({ ...toCourseListItem(c), hasProgram: hasSakeProgram(c.id) }));
 
   const cities = [...new Set(items.map((c) => c.city))].sort((a, b) =>
@@ -59,6 +61,7 @@ export default async function Page({
       filterOptions={filterOptions}
       initialType={initialType}
       backHref={backHref}
+      topSlot={<SandboxCard />}
     />
   );
 }

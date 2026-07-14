@@ -13,6 +13,7 @@ import { isActiveCourse } from "@/lib/corsi";
 import type { CourseTypeKey } from "@/lib/domain";
 import { loadPlannerState } from "@/lib/pianificatore-server";
 import { Pianificatore } from "@/components/pianificatore/Pianificatore";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 
 export interface PrevYearItem {
   type: CourseTypeKey;
@@ -41,6 +42,7 @@ export default async function Page() {
   // only confirmation comes from Shopify. Manual planner "ipotesi" are layered on
   // top separately and are dropped once Shopify confirms the same course.
   const realItems: PlannerItem[] = courses
+    .filter((c) => !isSandboxCourse(c))
     .filter((c) => winKeys.has(keyOf(c.year, monthIdx(c.month))))
     .filter((c) => isActiveCourse(c.lifecycle))
     .map((c) =>
@@ -71,7 +73,7 @@ export default async function Page() {
   // Year-over-year baseline: the same rolling window shifted back one year.
   const prevKeys = new Set(win.map((w) => keyOf(w.year - 1, w.mIdx)));
   const prevYearItems: PrevYearItem[] = courses
-    .filter((c) => prevKeys.has(keyOf(c.year, monthIdx(c.month))))
+    .filter((c) => !isSandboxCourse(c) && prevKeys.has(keyOf(c.year, monthIdx(c.month))))
     .map((c) => ({ type: c.type, year: c.year, mIdx: monthIdx(c.month) }));
 
   const quals = await Promise.all(

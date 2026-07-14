@@ -5,6 +5,7 @@ import { format } from "@/lib/i18n/dictionary";
 import { formatEuro } from "@/lib/format";
 import { getSession } from "@/lib/auth/session";
 import { getDataSource } from "@/lib/data";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { buildDashboard, capitalize, isoWeek, monthIndexIt, monthLabel } from "@/lib/dashboard";
 import { loadCourseEconomics } from "@/lib/economics";
@@ -32,7 +33,9 @@ export default async function DashboardPage() {
   // Courses that ended before invoicing go-live (Giugno 2026) are legacy and count
   // as already settled, so this no longer surfaces ~100 historical hand-done rows.
   const econ = await loadCourseEconomics();
-  const toInvoiceCount = courses.filter(
+  // The "Test esame" sandbox never counts anywhere.
+  const realCourses = courses.filter((c) => !isSandboxCourse(c));
+  const toInvoiceCount = realCourses.filter(
     (c) =>
       c.lifecycle === "passato" &&
       !c.cancelled &&
@@ -75,7 +78,7 @@ export default async function DashboardPage() {
     /* sync_state unavailable — keep the neutral fallback */
   }
 
-  const d = buildDashboard(courses, corsisti, educators, thresholds);
+  const d = buildDashboard(realCourses, corsisti, educators, thresholds);
   const dt = t.dashboard;
   const me = session.user;
 

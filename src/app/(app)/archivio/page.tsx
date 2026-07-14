@@ -2,6 +2,7 @@ import { getDataSource } from "@/lib/data";
 import { CITIES } from "@/lib/domain";
 import { isArchivedCourse } from "@/lib/corsi";
 import { ArchivioClient, type ArchivioCourse } from "@/components/archivio/ArchivioClient";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 
 export default async function Page() {
   const ds = await getDataSource();
@@ -11,7 +12,7 @@ export default async function Page() {
   // (annulled before their date). Active (pubblicato) and drafts (bozza) live in
   // the active views / the separate Bozze area.
   const items: ArchivioCourse[] = courses
-    .filter((c) => isArchivedCourse(c.lifecycle))
+    .filter((c) => isArchivedCourse(c.lifecycle) && !isSandboxCourse(c))
     .map((c) => ({
       id: c.id,
       handle: c.handle,

@@ -3,6 +3,7 @@ import { getDataSource } from "@/lib/data";
 import { getTranslations } from "@/lib/i18n/server";
 import { COURSE_TYPES, type CourseTypeKey } from "@/lib/domain";
 import { isActiveCourse, isArchivedCourse } from "@/lib/corsi";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 import {
   EducatorDetail,
   type EducatorDetailData,
@@ -28,7 +29,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   }
 
   const quals = await ds.educators.getQualifications(id);
-  const cs = courses.filter((c) => c.educator?.id === id);
+  const cs = courses.filter((c) => c.educator?.id === id && !isSandboxCourse(c));
   const active = cs.filter((c) => isActiveCourse(c.lifecycle));
   // "past" = the educator's history: held + cancelled (+ legacy archiviato),
   // so a cancelled course stays in their record instead of vanishing.

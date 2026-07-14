@@ -3,6 +3,7 @@ import { requireNavAccess } from "@/lib/auth/guard";
 import { COURSE_TYPES, type CourseTypeKey } from "@/lib/domain";
 import { isActiveCourse, isArchivedCourse } from "@/lib/corsi";
 import { EducatorList, type EducatorListItem } from "@/components/educator/EducatorList";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 
 export default async function Page() {
   await requireNavAccess("educator");
@@ -17,7 +18,7 @@ export default async function Page() {
 
   const items: EducatorListItem[] = educators
     .map((e, i) => {
-      const cs = courses.filter((c) => c.educator?.id === e.id);
+      const cs = courses.filter((c) => c.educator?.id === e.id && !isSandboxCourse(c));
       const active = cs.filter((c) => isActiveCourse(c.lifecycle));
       // "past" = the educator's history: held + cancelled (+ legacy archiviato),
       // so a cancelled course stays in their record instead of vanishing.

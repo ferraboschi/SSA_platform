@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
@@ -25,6 +25,7 @@ export function CorsiCatalog({
   filterOptions,
   initialType,
   backHref,
+  topSlot,
 }: {
   items: CourseListItem[];
   filterOptions: CatalogFilterOptions;
@@ -32,6 +33,8 @@ export function CorsiCatalog({
   initialType?: string;
   /** When set, show a back link (e.g. "← Pianificatore"). */
   backHref?: string;
+  /** Pinned content above the catalog (e.g. the "Test esame" sandbox card). */
+  topSlot?: ReactNode;
 }) {
   const tr = useT();
   const t = tr.corsi.catalog;
@@ -143,6 +146,8 @@ export function CorsiCatalog({
           </a>
         </div>
       </div>
+
+      {topSlot}
 
       <div className="tabs">
         {tabs.map((tb) => (

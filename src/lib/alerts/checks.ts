@@ -17,9 +17,11 @@ import {
   type StockAlertRow,
 } from "./emails";
 import type { StockAlert } from "@/lib/domain";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 
 interface CourseRow {
   id: number;
+  handle?: string | null;
   short_title: string | null;
   full_title: string | null;
   city: string | null;
@@ -71,10 +73,11 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
   try {
     const { data } = await svc
       .from("corsi")
-      .select("id, short_title, full_title, city, month, year, type, start_date, end_date, lifecycle, notebook")
+      .select("id, handle, short_title, full_title, city, month, year, type, start_date, end_date, lifecycle, notebook")
       .not("start_date", "is", null);
     const courses = (data ?? []) as CourseRow[];
     const ended = courses.filter((c) => {
+      if (isSandboxCourse(c)) return false; // the demo course never bills
       if (c.notebook && (c.notebook as { cancelled?: boolean }).cancelled) return false;
       if (c.lifecycle === "bozza") return false;
       const endIso = c.end_date ?? c.start_date;
@@ -168,13 +171,14 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
   try {
     const { data } = await svc
       .from("corsi")
-      .select("id, short_title, full_title, city, month, year, type, start_date, lifecycle, notebook")
+      .select("id, handle, short_title, full_title, city, month, year, type, start_date, lifecycle, notebook")
       .not("start_date", "is", null);
     const courses = (data ?? []) as CourseRow[];
     const sent = (await kvGet<Record<string, string>>(svc, "course_reminders_sent")) ?? {};
     const day = now.toISOString().slice(0, 10);
     for (const c of courses) {
       if (!c.start_date) continue;
+      if (isSandboxCourse(c)) continue; // no logistics reminders for the demo course
       if (c.notebook && (c.notebook as { cancelled?: boolean }).cancelled) continue;
       if (c.lifecycle === "bozza") continue;
       const daysToStart = Math.ceil((new Date(c.start_date).getTime() - now.getTime()) / DAY_MS);
@@ -213,7 +217,7 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
   try {
     const { data: cr } = await svc
       .from("corsi")
-      .select("id, short_title, full_title, city, month, year, type, educator_id, lifecycle, notebook")
+      .select("id, handle, short_title, full_title, city, month, year, type, educator_id, lifecycle, notebook")
       .not("educator_id", "is", null)
       .in("lifecycle", ["pubblicato", "bozza"]);
     const courses = (cr ?? []) as Array<CourseRow & { educator_id: number }>;
@@ -232,6 +236,7 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
     const notified = new Set(notifiedObj?.ids ?? []);
     const firstRun = !notifiedObj?.seeded;
     for (const c of courses) {
+      if (isSandboxCourse(c)) continue; // demo course: any educator is fine
       if (c.notebook && (c.notebook as { cancelled?: boolean }).cancelled) continue;
       if (!c.type || !c.educator_id) continue;
       if (quals.get(c.educator_id)?.has(c.type)) continue; // qualified → fine

@@ -15,6 +15,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { MONTH_TO_NUM } from "@/lib/dates/italian-months";
 import type { SearchIndex, SidebarCourse } from "@/lib/shell";
+import { isSandboxCourse, SANDBOX_COURSE_HANDLE } from "@/lib/corsi/sandbox";
 
 export interface ShellData {
   searchIndex: SearchIndex;
@@ -59,6 +60,7 @@ async function fetchShellData(): Promise<ShellData> {
           .from("corsi")
           .select("*", { count: "exact", head: true })
           .eq("lifecycle", "pubblicato")
+          .neq("handle", SANDBOX_COURSE_HANDLE)
           .gte("start_date", today),
       ]),
       // Per-course sake-program overlays → the green "programma assegnato" dot.
@@ -94,7 +96,8 @@ async function fetchShellData(): Promise<ShellData> {
     bio: string | null;
   };
 
-  const courses = (coursesRes.data ?? []) as CourseRow[];
+  // The "Test esame" sandbox stays out of search, sidebar and counts.
+  const courses = ((coursesRes.data ?? []) as CourseRow[]).filter((c) => !isSandboxCourse(c));
   const corsisti = (corsistiRes.data ?? []) as {
     email: string;
     full_name: string;
