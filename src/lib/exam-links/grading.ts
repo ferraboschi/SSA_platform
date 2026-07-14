@@ -168,7 +168,57 @@ export function gradeAnswers(
       };
     }
 
-    // Open / match / order (or a choice question with no answer key) → manual.
+    // ORDER: deterministic — the answer is the arrangement (array of option
+    // texts), the key is the correct sequence (strings). All-or-nothing.
+    // Legacy free-text answers (from when the runner fell back to a textarea)
+    // are strings, not arrays → manual review, never auto-failed.
+    if (q.type === "order") {
+      const key = (q.correct ?? []).map(String);
+      const arr = Array.isArray(given) ? given : null;
+      const sawTranslated = (lang === "en" || lang === "ja") && !!q.i18n?.[lang];
+      if (key.length > 0 && arr && arr.length === key.length && !sawTranslated) {
+        gradable++;
+        const ok = key.every((k, idx) => normStr(k) === normStr(arr[idx]));
+        if (ok) correct++;
+        return {
+          qid: q.id,
+          type: q.type,
+          text: q.text,
+          given: fmtGiven(given, localized),
+          correct: key.join(" → "),
+          ok,
+        };
+      }
+      // Translated sitting: compare against the translated sequence the student saw.
+      if (key.length > 0 && arr && sawTranslated) {
+        const trOpts = q.i18n?.[lang as "en" | "ja"]?.options ?? [];
+        // Rebuild the translated correct sequence: same permutation logic as the
+        // loader (options are the translated ITEMS, aligned index-by-index with
+        // q.options which is the scrambled arrangement) — grade only when the
+        // translated key can be derived unambiguously.
+        if (trOpts.length === q.options.length && arr.length === key.length) {
+          const toTranslated = new Map(q.options.map((o, ix) => [normStr(o), normStr(trOpts[ix])]));
+          const trKey = key.map((k) => toTranslated.get(normStr(k)) ?? "");
+          if (trKey.every(Boolean)) {
+            gradable++;
+            const ok = trKey.every((k, idx) => k === normStr(arr[idx]));
+            if (ok) correct++;
+            return {
+              qid: q.id,
+              type: q.type,
+              text: q.text,
+              given: fmtGiven(given, localized),
+              correct: key.join(" → "),
+              ok,
+            };
+          }
+        }
+      }
+      manual++;
+      return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: key.length ? key.join(" → ") : "—", ok: null };
+    }
+
+    // Open / match (or a choice question with no answer key) → manual.
     // An EMPTY key ([]) is "no key" too — never auto-fail the whole class on it
     // (mirrors the fill branch's `accepted.length === 0` guard above).
     if (!isObjective(q.type) || !q.correct || q.correct.length === 0) {

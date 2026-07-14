@@ -54,6 +54,8 @@ interface QJson {
   type?: string;
   text?: string;
   options?: string[];
+  /** "order" questions: the items in the CORRECT sequence (editor field). */
+  items?: string[];
   correct?: Array<number | string>;
   imageId?: string;
   cat?: string;
@@ -96,6 +98,32 @@ function dedupByText(qs: PublicRunnerQuestion[]): PublicRunnerQuestion[] {
   return out;
 }
 
+// Deterministic Fisher-Yates keyed on the question id: every student sees the
+// SAME scrambled arrangement (fair + reproducible for grading review), but it
+// is never the correct sequence itself — OrderInput auto-commits the initial
+// arrangement, so serving the solution as the start state would hand out full
+// marks for doing nothing.
+function seededShuffle(arr: string[], seed: string): string[] {
+  let h = 2166136261;
+  for (const ch of seed) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  const rnd = () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  // Tiny arrays can shuffle back into the solution — rotate one step instead.
+  if (out.length > 1 && out.every((v, i) => v === arr[i])) out.push(out.shift() as string);
+  return out;
+}
+
 function mapQuestions(
   raw: QJson[],
   prefix: string,
@@ -107,11 +135,29 @@ function mapQuestions(
     const i18n = trans?.[id];
     // Rich shape → use stored type/options/correct directly.
     if (q.type) {
-      const options = q.options ?? [];
+      // "order": the editor stores the items in the CORRECT sequence in
+      // `items` (this loader used to drop them → the runner fell back to a
+      // textarea). Serve them SCRAMBLED as the options; the correct key is the
+      // original sequence. Translations, when present, get the same permutation
+      // so display stays aligned.
+      const isOrder = q.type === "order" && Array.isArray(q.items) && q.items.length > 0;
+      const options = isOrder ? seededShuffle(q.items!, id) : (q.options ?? []);
       // Keep correct as-is: numeric indices for choice questions, accepted answer
       // STRINGS for "fill" (filtering to numbers used to drop the fill answers).
-      const correct = q.correct ?? [];
+      const correct = isOrder ? q.items! : (q.correct ?? []);
       const image = toImageUrl(q.imageId);
+      let i18nOut = i18n;
+      if (isOrder && i18n) {
+        const perm = options.map((o) => q.items!.indexOf(o));
+        i18nOut = Object.fromEntries(
+          Object.entries(i18n).map(([lg, tr]) => [
+            lg,
+            tr && Array.isArray(tr.options) && tr.options.length === q.items!.length
+              ? { ...tr, options: perm.map((ix) => tr.options[ix]) }
+              : tr,
+          ]),
+        ) as typeof i18n;
+      }
       return {
         id,
         type: q.type,
@@ -120,7 +166,7 @@ function mapQuestions(
         points: q.points ?? 1,
         ...(q.important ? { important: true } : {}),
         ...(q.cat ? { cat: q.cat } : {}),
-        ...(i18n ? { i18n } : {}),
+        ...(i18nOut ? { i18n: i18nOut } : {}),
         ...(image ? { image } : {}),
         ...(includeAnswers ? { correct } : {}),
       };

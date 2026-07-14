@@ -318,3 +318,56 @@ describe("gradeAnswers — multilingual (student graded in the language they SAW
     expect(r.correct).toBe(1);
   });
 });
+
+describe("gradeAnswers — order questions (batch 7: auto-graded by sequence)", () => {
+  const order = q({
+    id: "o1",
+    type: "order",
+    options: ["Ginjo", "Junmai", "Daiginjo"], // scrambled arrangement served
+    correct: ["Junmai", "Ginjo", "Daiginjo"], // the true sequence (items)
+  });
+
+  it("exact sequence → correct, wrong sequence → wrong (all-or-nothing)", () => {
+    const right = gradeAnswers([order], { o1: ["Junmai", "Ginjo", "Daiginjo"] });
+    expect(right.gradable).toBe(1);
+    expect(right.correct).toBe(1);
+    expect(right.detail[0].ok).toBe(true);
+
+    const wrong = gradeAnswers([order], { o1: ["Ginjo", "Junmai", "Daiginjo"] });
+    expect(wrong.gradable).toBe(1);
+    expect(wrong.correct).toBe(0);
+    expect(wrong.detail[0].ok).toBe(false);
+  });
+
+  it("comparison is case/space-insensitive and shows the key as a chain", () => {
+    const r = gradeAnswers([order], { o1: ["  junmai ", "GINJO", "daiginjo"] });
+    expect(r.detail[0].ok).toBe(true);
+    expect(r.detail[0].correct).toBe("Junmai → Ginjo → Daiginjo");
+  });
+
+  it("legacy free-text answers (textarea era) stay manual, never auto-failed", () => {
+    const r = gradeAnswers([order], { o1: "junmai poi ginjo poi daiginjo" });
+    expect(r.manual).toBe(1);
+    expect(r.detail[0].ok).toBe(null);
+  });
+
+  it("no key (items never provided) → manual", () => {
+    const noKey = q({ id: "o2", type: "order", options: ["A", "B"], correct: [] });
+    const r = gradeAnswers([noKey], { o2: ["A", "B"] });
+    expect(r.manual).toBe(1);
+  });
+
+  it("translated sitting grades against the translated sequence the student saw", () => {
+    const tr = q({
+      id: "o3",
+      type: "order",
+      options: ["Ginjo IT", "Junmai IT"], // scrambled (Italian)
+      correct: ["Junmai IT", "Ginjo IT"],
+      i18n: { en: { text: "Q EN", options: ["Ginjo EN", "Junmai EN"] } }, // aligned with options
+    });
+    const right = gradeAnswers([tr], { o3: ["Junmai EN", "Ginjo EN"] }, "en");
+    expect(right.detail[0].ok).toBe(true);
+    const wrong = gradeAnswers([tr], { o3: ["Ginjo EN", "Junmai EN"] }, "en");
+    expect(wrong.detail[0].ok).toBe(false);
+  });
+});
