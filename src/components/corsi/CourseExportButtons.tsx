@@ -51,14 +51,18 @@ export function CourseExportButtons({
     );
 
   const passed = students.filter((s) => s.examResult === "passed");
-  const exportPromossi = () =>
-    downloadCsv(
-      `promossi-${slug}`,
-      toCsv(
-        ["Nome", "Email", "Telefono"],
-        passed.map((s) => [s.name, s.email, s.phone]),
-      ),
-    );
+  // The SSA-London CSS_AttendanceList (.xlsx): passed students only, built
+  // server-side with the anagraphics collected in the final exam.
+  const exportPromossi = async () => {
+    const res = await fetch(`/api/esami/${courseId}/attendance?only=passed`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `css-attendance-promossi-${slug}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   // Real .xlsx (searchable, with AutoFilter) built server-side. If the day's
   // programme/template isn't assigned the route returns 409 and we surface the

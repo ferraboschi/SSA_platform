@@ -49,6 +49,9 @@ export function RegInput({
     email: t.regEmail,
     phone: t.regPhone,
     address: t.regAddress,
+    dob: t.regDob,
+    occupation: t.regOccupation,
+    residency: t.regResidency,
   };
   const val = typeof value === "string" ? value : "";
   return (

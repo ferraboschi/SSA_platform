@@ -11,6 +11,13 @@ export interface AttendanceRow {
   email: string;
   score?: number | null;
   passFail?: string;
+  /** SSA-London anagraphics from the final exam's registration step. */
+  gender?: string;
+  nationality?: string;
+  dob?: string;
+  occupation?: string;
+  residency?: string;
+  contactNumber?: string;
 }
 
 export interface AttendanceInput {
@@ -19,6 +26,8 @@ export interface AttendanceInput {
   educator: string;
   courseDate: string;
   examDate: string;
+  /** "same as Exam Date" per the template — filled for passed students. */
+  certificationDate?: string;
   venue: string;
   rows: AttendanceRow[];
 }
@@ -69,18 +78,18 @@ export async function buildAttendanceXlsx(input: AttendanceInput): Promise<Buffe
       input.courseDate,
       input.examDate,
       input.venue,
-      "", // Gender
+      r.gender ?? "",
       r.firstName,
       r.lastName,
-      "", // Certificate Name
-      "", // Sake Sommelier Number
-      "", // Certification Date
+      "", // Certificate Name (only if different)
+      "", // Sake Sommelier Number (assigned by London)
+      input.certificationDate ?? "",
       r.email,
-      "", // Residency
-      "", // Occupation
-      "", // DOB
-      "", // Contact Number
-      "", // Nationality
+      r.residency ?? "",
+      r.occupation ?? "",
+      r.dob ?? "",
+      r.contactNumber ?? "",
+      r.nationality ?? "",
       r.score ?? "",
       r.passFail ?? "",
       "", // NOTE

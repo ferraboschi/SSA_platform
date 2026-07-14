@@ -193,6 +193,13 @@ export default async function Page({
       // email onto their submission (wrong certificate / PII leak). Identity is
       // written server-side from the enrolled corsista at submit.
       collectRegistration={false}
+      // FINAL exam only: collect the SSA-London anagraphics the platform
+      // doesn't have (identity fields stay server-derived — never re-typed).
+      registrationFields={
+        mode === "exam" && res.payload.t === "final"
+          ? ["gender", "nationality", "dob", "occupation", "residency"]
+          : undefined
+      }
       reveal={mode === "validate"}
       showResult={isPreview}
       // Only the FINAL exam is "certified"; day tests (giorno 1..N) end with a

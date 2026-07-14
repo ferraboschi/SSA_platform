@@ -50,7 +50,16 @@ const noCopy = {
   onDragStart: (e: React.DragEvent) => e.preventDefault(),
 };
 
-export type RegField = "name" | "gender" | "nationality" | "email" | "phone" | "address";
+export type RegField =
+  | "name"
+  | "gender"
+  | "nationality"
+  | "email"
+  | "phone"
+  | "address"
+  | "dob"
+  | "occupation"
+  | "residency";
 const REG_ORDER: RegField[] = ["name", "gender", "nationality", "email", "phone", "address"];
 
 type Step =
@@ -89,6 +98,7 @@ export function ExamRunner({
   mode,
   forcedLang,
   collectRegistration,
+  registrationFields,
   reveal,
   header,
   questions,
@@ -102,6 +112,10 @@ export function ExamRunner({
   mode: "exam" | "test" | "validate";
   forcedLang?: string;
   collectRegistration?: boolean;
+  /** Explicit registration fields to collect (overrides collectRegistration).
+   *  Used by the FINAL exam to gather the SSA-London anagraphics (gender,
+   *  nationality, DOB, occupation, residency) from bound students. */
+  registrationFields?: RegField[];
   reveal?: boolean;
   /** True only for the FINAL exam — day tests end with a plain "Grazie". */
   isFinal?: boolean;
@@ -306,11 +320,12 @@ export function ExamRunner({
 
   // Flatten the flow: registration fields (final exam only) + graded questions.
   const steps = useMemo<Step[]>(() => {
-    const reg: Step[] = collectRegistration
-      ? REG_ORDER.map((field) => ({ kind: "reg", field }) as Step)
-      : [];
+    // Explicit field list (e.g. the final exam's SSA-London anagraphics for
+    // bound students) wins; otherwise the legacy full set when enabled.
+    const fields = registrationFields ?? (collectRegistration ? REG_ORDER : []);
+    const reg: Step[] = fields.map((field) => ({ kind: "reg", field }) as Step);
     return [...reg, ...questions.map((q) => ({ kind: "q", q }) as Step)];
-  }, [collectRegistration, questions]);
+  }, [collectRegistration, registrationFields, questions]);
 
   const total = steps.length;
   // Clamp a resumed/stale idx into range (defensive: the question set could have

@@ -19,6 +19,7 @@ function row(over: Partial<GradedSubmission>): GradedSubmission {
     currentResult: null,
     currentScore: null,
     lang: "it",
+    registration: null,
     answers: [],
     ...over,
   };

@@ -37,6 +37,7 @@ export interface ExamGateProps {
   personal?: boolean;
   forcedLang?: string;
   collectRegistration?: boolean;
+  registrationFields?: import("./ExamRunner").RegField[];
   reveal?: boolean;
   showResult?: boolean;
   /** True only for the FINAL exam — drives the certified thank-you screen (day

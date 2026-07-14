@@ -35,6 +35,9 @@ export interface GradedSubmission {
   currentScore: number | null;
   /** Language the student took the exam in (for a localized result email/PDF). */
   lang: string | null;
+  /** Raw registration fields typed in the exam (gender/nationality/dob/…) —
+   *  feeds the SSA-London attendance export. */
+  registration: Record<string, string> | null;
   answers: GradedAnswer[];
 }
 
@@ -258,6 +261,7 @@ export async function loadCourseExamResults(
         currentResult,
         currentScore,
         lang: s.lang ?? null,
+        registration: (s.registration as Record<string, string> | null) ?? null,
         answers: detail,
       });
       continue;
@@ -325,6 +329,7 @@ export async function loadCourseExamResults(
       currentResult,
       currentScore,
       lang: s.lang ?? null,
+      registration: (s.registration as Record<string, string> | null) ?? null,
       answers: detail,
     });
   }
