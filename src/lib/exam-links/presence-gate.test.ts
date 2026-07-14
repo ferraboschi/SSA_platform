@@ -25,6 +25,11 @@ describe("presence gate (owner's rule: present at the roll-call to sit the test)
     expect(isBlockedByAbsence(new Set(), "c10")).toBe(true);
   });
 
+  it("final messages name the exam-day appello (owner's batch-7 rule)", () => {
+    expect(absentAccessError("final")).toContain("giorno d'esame");
+    expect(absentSendError("final")).toContain("giorno d'esame");
+  });
+
   it("student-facing access message names the day for dayN, generic for final/feedback", () => {
     expect(absentAccessError("day2")).toContain("giorno 2");
     expect(absentAccessError("day2")).toContain("presente per sostenere");

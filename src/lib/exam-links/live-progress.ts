@@ -10,6 +10,7 @@ import { getExamSends } from "./send-log";
 import { loadPublicExam, type PublicRunnerQuestion } from "./load";
 import { gradeAnswers } from "./grading";
 import type { ExamTestKey } from "./token";
+import { courseDayInfo } from "@/lib/share-links/attendance-db";
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
 
@@ -18,8 +19,10 @@ export const VALID_TEST = /^(day[1-9]|feedback|final)$/;
 
 // ── Presence gate (owner's rule): an absent student must never be invited to
 // an exam test. "dayN" ties to THAT appello day specifically (Camilla absent
-// day 1 → can't get the day-1 test); "feedback"/"final" have no single day, so
-// they require having attended at least one day (they attended the course).
+// day 1 → can't get the day-1 test); "final" ties to the EXAM-DAY appello
+// (owner, batch 7: presence on the exam day is what matters — not the other
+// days); "feedback" has no single day, so it only requires having attended
+// at least one day (they attended the course).
 
 export function testDayNo(t: string): number | null {
   const m = /^day(\d+)$/.exec(t);
@@ -30,7 +33,17 @@ export function testDayNo(t: string): number | null {
  *  `null` = attendance unknown (pre-migration/transient error) — the caller
  *  must fail OPEN (never block a send over a DB hiccup). */
 export async function loadPresentForTest(svc: Svc, corsoId: number, testKey: string): Promise<Set<string> | null> {
-  const day = testDayNo(testKey);
+  let day = testDayNo(testKey);
+  if (day == null && testKey === "final") {
+    // The final exam requires presence at the EXAM-DAY roll call (the
+    // "Giorno esame" appello tab, day_no = dayCount+1). If that number can't
+    // be derived, fall back to any-day presence rather than blocking.
+    try {
+      day = (await courseDayInfo(corsoId)).examDay;
+    } catch {
+      day = null;
+    }
+  }
   let q = svc
     .from("corsi_presenze")
     .select("corsista_id, partecipante_id")
@@ -54,9 +67,11 @@ export function isBlockedByAbsence(present: Set<string> | null, subjectKey: stri
 
 export function absentSendError(testKey: string): string {
   const day = testDayNo(testKey);
-  return day != null
-    ? `Assente all'appello del giorno ${day}: non può ricevere questo test finché non risulta presente.`
-    : "Mai presente all'appello: non può ricevere questo invio.";
+  if (day != null)
+    return `Assente all'appello del giorno ${day}: non può ricevere questo test finché non risulta presente.`;
+  if (testKey === "final")
+    return "Assente all'appello del giorno d'esame: non può ricevere l'esame finché non risulta presente.";
+  return "Mai presente all'appello: non può ricevere questo invio.";
 }
 
 /** Student-facing twin of absentSendError — shown when an ABSENT student tries
@@ -64,9 +79,11 @@ export function absentSendError(testKey: string): string {
  *  the student must be present at the roll-call to sit the test. */
 export function absentAccessError(testKey: string): string {
   const day = testDayNo(testKey);
-  return day != null
-    ? `Non risulti presente all'appello del giorno ${day}. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.`
-    : "Non risulti presente all'appello del corso. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.";
+  if (day != null)
+    return `Non risulti presente all'appello del giorno ${day}. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.`;
+  if (testKey === "final")
+    return "Non risulti presente all'appello del giorno d'esame. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.";
+  return "Non risulti presente all'appello del corso. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.";
 }
 
 export interface SubjectProgress {

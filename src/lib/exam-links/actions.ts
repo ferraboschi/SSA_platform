@@ -10,6 +10,7 @@ import {
   type ExamTestKey,
   type ExamLinkMode,
 } from "./token";
+import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
 
 export interface CreateExamLinkInput {
   courseId: string;
@@ -111,6 +112,18 @@ export async function submitExam(
   const corsistaId = s && /^\d+$/.test(s) ? Number(s) : null;
   // Companion personal links carry `p` instead of `s` (at most one is set).
   const partecipanteId = p && /^\d+$/.test(p) ? Number(p) : null;
+
+  // Owner's rule re-checked at HAND-IN: the page gate runs at render time, so
+  // a student flipped to absent while the runner was already open (or someone
+  // replaying the action with a still-valid token) must be refused here too.
+  // Fail-open on unknown attendance, like every other gate.
+  if (corsoId != null) {
+    const present = await loadPresentForTest(svc, corsoId, t).catch(() => null);
+    const subjKey = partecipanteId != null ? `p${partecipanteId}` : `c${corsistaId}`;
+    if (isBlockedByAbsence(present, subjKey)) {
+      return { ok: false, error: absentAccessError(t) };
+    }
+  }
   const row = {
     corso_id: corsoId,
     course_ref: c,
