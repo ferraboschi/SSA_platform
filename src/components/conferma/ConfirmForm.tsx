@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { confirmAttendeeAction } from "@/lib/attendee/confirm-actions";
-import { GoogleAddressInput } from "@/components/address/AddressInput";
+import { GoogleAddressInput, type AddressPlaceMeta } from "@/components/address/AddressInput";
 
 /**
  * Public "confirm your details" form. ALL fields are mandatory:
@@ -44,7 +44,10 @@ export function ConfirmForm({
   const [dialCode, setDialCode] = useState(initialPhoneParts.code);
   const [phoneNumber, setPhoneNumber] = useState(initialPhoneParts.number);
   const [address, setAddress] = useState(initialAddress);
-  const [addressConfirmed, setAddressConfirmed] = useState(false);
+  // Street-number detection (owner batch 7): Google tells us whether the
+  // selected address carries a civic number; null = typed by hand / unknown.
+  const [placeMeta, setPlaceMeta] = useState<AddressPlaceMeta | null>(null);
+  const [civico, setCivico] = useState("");
   const [dataConfirmed, setDataConfirmed] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [notes, setNotes] = useState(initialNotes);
@@ -54,14 +57,28 @@ export function ConfirmForm({
   const [error, setError] = useState<string | null>(null);
 
   const fullPhone = phoneNumber.trim() ? `${dialCode} ${phoneNumber.trim()}` : "";
+  // The civic number is REAL, not self-certified: either Google detected one
+  // in the selected address, or the address already contains a number, or the
+  // attendee fills the dedicated field (composed into the address on submit).
+  const civicoDetected = placeMeta?.hasStreetNumber === true || /\d/.test(address);
+  const civicoOk = civicoDetected || Boolean(civico.trim());
   const complete =
     Boolean(fullName.trim()) &&
     Boolean(email.trim()) &&
     Boolean(phoneNumber.trim()) &&
     Boolean(address.trim()) &&
-    addressConfirmed &&
+    civicoOk &&
     dataConfirmed &&
     consentAccepted;
+
+  // Compose the civic number INTO the street segment ("V. del Corso, Roma" +
+  // 12 → "V. del Corso 12, Roma") so the courier gets one canonical line.
+  const composedAddress = (() => {
+    const a = address.trim();
+    if (civicoDetected || !civico.trim()) return a;
+    const cut = a.indexOf(",");
+    return cut === -1 ? `${a} ${civico.trim()}` : `${a.slice(0, cut)} ${civico.trim()}${a.slice(cut)}`;
+  })();
 
   // On mobile the on-screen keyboard covers the lower half — bring the focused
   // field into view (after a short delay so the keyboard has appeared). Captured
@@ -79,8 +96,8 @@ export function ConfirmForm({
       name: fullName,
       email,
       phone: fullPhone,
-      deliveryAddress: address,
-      addressConfirmed,
+      deliveryAddress: composedAddress,
+      addressConfirmed: civicoOk,
       dataConfirmed,
       privacyConsent: consentAccepted,
       termsAccepted: consentAccepted,
@@ -200,17 +217,43 @@ export function ConfirmForm({
         <GoogleAddressInput
           id={`${uid}-addr`}
           value={address}
-          onChange={(v) => {
-            setAddress(v);
-            setAddressConfirmed(false); // a changed address must be re-confirmed
-          }}
+          onChange={setAddress}
+          onPlaceMeta={setPlaceMeta}
           className="input"
           textareaClassName="input"
           placeholder="Via, numero civico, CAP, città"
         />
-        <Check checked={addressConfirmed} onChange={setAddressConfirmed} style={{ marginTop: 8 }}>
-          Confermo di aver inserito anche il numero civico
-        </Check>
+        {address.trim() !== "" &&
+          (civicoDetected ? (
+            <div
+              style={{
+                marginTop: 8,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "var(--success-fg)",
+              }}
+            >
+              ✓ Numero civico rilevato
+            </div>
+          ) : (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 12.5, color: "var(--warning-fg)", fontWeight: 600, marginBottom: 6 }}>
+                Nell&apos;indirizzo manca il numero civico: aggiungilo qui sotto, ci serve per la consegna del materiale.
+              </div>
+              <input
+                className="input"
+                type="text"
+                value={civico}
+                onChange={(e) => setCivico(e.target.value)}
+                placeholder="Numero civico (es. 12, 12/B — se assente scrivi SNC)"
+                maxLength={12}
+                style={{ maxWidth: 320 }}
+              />
+            </div>
+          ))}
       </Field>
 
       <Field label="Note per la consegna (facoltative)" htmlFor={`${uid}-note`}>

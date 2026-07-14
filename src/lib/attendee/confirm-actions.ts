@@ -76,7 +76,15 @@ export async function confirmAttendeeAction(
   if (!addr.ok) return { ok: false, error: addr.error };
   if (!addr.value) return { ok: false, error: "Inserisci l'indirizzo di consegna." };
   if (!input.addressConfirmed) {
-    return { ok: false, error: "Conferma di aver inserito il numero civico spuntando la casella." };
+    return { ok: false, error: "Aggiungi il numero civico all'indirizzo per permetterci la consegna." };
+  }
+  // REAL check, not self-certification (owner batch 7): the address must carry
+  // a number (or the Italian "SNC" for streets without civic numbering).
+  if (!/\d|snc/i.test(addr.value)) {
+    return {
+      ok: false,
+      error: 'Nell\'indirizzo manca il numero civico (es. "Via Roma 12"). Aggiungilo per permetterci la consegna.',
+    };
   }
 
   // DATA-CORRECTNESS gate (checkbox only, not stored) — enforced server-side too

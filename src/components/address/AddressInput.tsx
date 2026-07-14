@@ -11,7 +11,20 @@ import { useEffect, useRef } from "react";
 
 interface GPlace {
   formatted_address?: string;
+  address_components?: Array<{ types: string[]; long_name: string; short_name: string }>;
 }
+
+/** What the selected place told us about the street number — null when the
+ *  value was typed by hand (or no key), so provenance is unknown. */
+export interface AddressPlaceMeta {
+  hasStreetNumber: boolean;
+  country?: string;
+}
+
+// A street number can live under different component types abroad: classic
+// street_number, premise (named/numbered buildings), or Japan's block numbers
+// (sublocality_level_4). Any of them satisfies the courier.
+const NUMBER_TYPES = ["street_number", "premise", "sublocality_level_4"];
 interface GAutocomplete {
   addListener(ev: string, cb: () => void): void;
   getPlace(): GPlace;
@@ -44,9 +57,14 @@ export function GoogleAddressInput({
   className = "exam-public-input",
   textareaClassName = "exam-public-textarea",
   placeholder = "Inizia a digitare l'indirizzo…",
+  onPlaceMeta,
 }: {
   value: string;
   onChange: (v: string) => void;
+  /** Fired with the selected place's street-number info; null when the field
+   *  is edited by hand afterwards (provenance lost). Optional — existing
+   *  callers (public exam registration) are unaffected. */
+  onPlaceMeta?: (meta: AddressPlaceMeta | null) => void;
   /** Binds the field to an external <label htmlFor>. */
   id?: string;
   /** Class for the autocomplete input (default: exam-public styling). */
@@ -64,11 +82,21 @@ export function GoogleAddressInput({
         if (!ref.current || !w.google) return;
         const ac = new w.google.maps.places.Autocomplete(ref.current, {
           types: ["address"],
-          fields: ["formatted_address"],
+          // address_components shares formatted_address's Basic Data SKU —
+          // requesting it costs nothing extra and carries the street number.
+          fields: ["formatted_address", "address_components"],
         });
         ac.addListener("place_changed", () => {
-          const a = ac.getPlace().formatted_address;
+          const place = ac.getPlace();
+          const a = place.formatted_address;
           if (a) onChange(a);
+          if (onPlaceMeta) {
+            const comps = place.address_components ?? [];
+            onPlaceMeta({
+              hasStreetNumber: comps.some((c) => c.types.some((t) => NUMBER_TYPES.includes(t))),
+              country: comps.find((c) => c.types.includes("country"))?.short_name,
+            });
+          }
         });
       })
       .catch(() => {
@@ -97,7 +125,10 @@ export function GoogleAddressInput({
       className={className}
       type="text"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        onChange(e.target.value);
+        onPlaceMeta?.(null); // hand-edited → the Places metadata no longer applies
+      }}
       placeholder={placeholder}
       autoComplete="off"
     />
