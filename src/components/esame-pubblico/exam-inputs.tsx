@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { RegField, RunnerQuestion } from "./ExamRunner";
 import { EMAIL_RE } from "./exam-chrome";
 // Google Places address autocomplete lives in the SHARED component — also used
@@ -178,17 +178,28 @@ function OrderInput({
   }, [value, options]);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   // TOUCH drag (owner batch 8): HTML5 draggable is mouse-only, so phones only
-  // had the arrows. Pointer events on the ⠿ handle move the row live under
-  // the finger (touch-action:none keeps the page from scrolling meanwhile).
+  // had the arrows. Pointer events move the row live under the finger
+  // (touch-action:none on the handle keeps the page from scrolling meanwhile).
+  // The pointer is CAPTURED BY THE CONTAINER, not the handle: each move
+  // re-keys the rows, and a remounted handle would lose the capture and kill
+  // the drag after one swap. The container survives every reorder.
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const touchFrom = useRef<number | null>(null);
   const [touchIdx, setTouchIdx] = useState<number | null>(null);
-  const onHandleMove = (e: React.PointerEvent) => {
-    if (touchIdx == null) return;
+  const endTouch = () => {
+    touchFrom.current = null;
+    setTouchIdx(null);
+  };
+  const onTouchDragMove = (e: React.PointerEvent) => {
+    const from = touchFrom.current;
+    if (from == null) return;
     const hit = document
       .elementsFromPoint(e.clientX, e.clientY)
       .find((el) => (el as HTMLElement).dataset?.orderIdx != null) as HTMLElement | undefined;
     const to = hit ? Number(hit.dataset.orderIdx) : NaN;
-    if (Number.isInteger(to) && to !== touchIdx) {
-      move(touchIdx, to);
+    if (Number.isInteger(to) && to !== from) {
+      move(from, to);
+      touchFrom.current = to;
       setTouchIdx(to);
     }
   };
@@ -220,14 +231,26 @@ function OrderInput({
   };
 
   return (
-    <div style={{ display: "grid", gap: 8 }}>
+    <div
+      ref={containerRef}
+      onPointerMove={onTouchDragMove}
+      onPointerUp={endTouch}
+      onPointerCancel={endTouch}
+      style={{ display: "grid", gap: 8 }}
+    >
       <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)" }}>{hint}</div>
       {order.map((opt, i) => (
         <div
           key={`${i}-${opt}`}
           data-order-idx={i}
           draggable
-          onDragStart={() => setDragIdx(i)}
+          onDragStart={(e) => {
+            // Firefox refuses to start a drag with an empty dataTransfer; the
+            // payload is just the row index — never question text.
+            e.dataTransfer.setData("text/plain", String(i));
+            e.dataTransfer.effectAllowed = "move";
+            setDragIdx(i);
+          }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => {
             if (dragIdx != null) move(dragIdx, i);
@@ -250,12 +273,14 @@ function OrderInput({
             onPointerDown={(e) => {
               if (e.pointerType === "mouse") return; // mouse keeps HTML5 dnd
               e.preventDefault();
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              try {
+                containerRef.current?.setPointerCapture(e.pointerId);
+              } catch {
+                /* inactive pointer — the drag still works via bubbling */
+              }
+              touchFrom.current = i;
               setTouchIdx(i);
             }}
-            onPointerMove={onHandleMove}
-            onPointerUp={() => setTouchIdx(null)}
-            onPointerCancel={() => setTouchIdx(null)}
             style={{ color: "var(--text-4, #9ca3af)", fontSize: 16, touchAction: "none", padding: "4px 6px", margin: "-4px -6px", cursor: "grab" }}
           >⠿</span>
           <span style={{ flex: 1, fontSize: 15 }}>{opt}</span>

@@ -47,7 +47,12 @@ const noCopy = {
   onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
   onCut: (e: React.ClipboardEvent) => e.preventDefault(),
   onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
-  onDragStart: (e: React.DragEvent) => e.preventDefault(),
+  onDragStart: (e: React.DragEvent) => {
+    // Ordering answers ARE drag&drop — their rows (data-order-idx) must be
+    // allowed to drag; everything else stays blocked.
+    if ((e.target as HTMLElement).closest?.("[data-order-idx]")) return;
+    e.preventDefault();
+  },
 };
 
 export type RegField =
@@ -188,7 +193,11 @@ export function ExamRunner({
     mode === "exam"
       ? {
           onPasteCapture: (e: React.ClipboardEvent) => e.preventDefault(),
-          onDropCapture: (e: React.DragEvent) => e.preventDefault(),
+          onDropCapture: (e: React.DragEvent) => {
+            // Dropping onto an ordering row is answering, not pasting.
+            if ((e.target as HTMLElement).closest?.("[data-order-idx]")) return;
+            e.preventDefault();
+          },
           onCopyCapture: (e: React.ClipboardEvent) => e.preventDefault(),
           onCutCapture: (e: React.ClipboardEvent) => e.preventDefault(),
           onContextMenuCapture: (e: React.MouseEvent) => e.preventDefault(),
