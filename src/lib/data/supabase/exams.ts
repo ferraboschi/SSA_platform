@@ -55,13 +55,18 @@ export function makeExamTemplatesRepo(
     async save(template) {
       const dbFamily = template.family === "shochu" ? "shochu" : "certificato";
       // Locate the existing row for this family (service client bypasses RLS).
-      const { data: existing } = await svc
+      const { data: existing, error: exErr } = await svc
         .from("exam_templates")
         .select("id,data")
         .eq("family", dbFamily)
         .order("id", { ascending: false })
         .limit(1)
         .maybeSingle();
+      // A transient read error must FAIL the save — falling through would take
+      // the INSERT branch and fork a fresh max-id row WITHOUT translations,
+      // which getByFamily would then prefer (the one path that could really
+      // "lose" the translations).
+      if (exErr) throw new Error(exErr.message);
       const prev = (existing?.data ?? {}) as ExamTemplateRow["data"] & { __v?: number };
       // Merge so we keep non-content metadata (translations/count/source) — the
       // FRESH copy of it, so e.g. a translation finished after this editor

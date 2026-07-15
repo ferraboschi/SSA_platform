@@ -27,14 +27,33 @@ interface RawQ {
   text?: string;
   prompt?: string;
   options?: string[];
+  /** "order" questions store the sequence here — translated as options. */
+  items?: string[];
   choices?: Array<{ text: string }>;
 }
 interface RawData {
   questions?: RawQ[];
   miniTests?: Array<{ day: number; questions?: RawQ[] }>;
   feedback?: { questions?: RawQ[] };
-  translations?: Record<string, Partial<Record<TLang, { text: string; options: string[] }>>>;
+  translations?: Record<
+    string,
+    Partial<Record<TLang, { text: string; options: string[] }>> & { src?: string }
+  >;
   [k: string]: unknown;
+}
+
+/** Source fingerprint of a question (text + options, order included): when it
+ *  matches the stored one, the existing translation is still fresh and the
+ *  question is SKIPPED — re-running Traduci after touching two questions costs
+ *  two questions, not the whole bank. */
+function srcHash(q: { text: string; options: string[] }): string {
+  const src = `${q.text}\u0000${q.options.join("\u0000")}`;
+  let h = 2166136261;
+  for (const ch of src) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
 }
 
 // Same id scheme as loadPublicExam, so stored translations match at runtime.
@@ -42,7 +61,9 @@ function extractQuestions(data: RawData, rowId: number): QForT[] {
   const out: QForT[] = [];
   const push = (q: RawQ, id: string) => {
     const text = q.text ?? q.prompt ?? "";
-    const options = q.options ?? (q.choices ? q.choices.map((c) => c.text) : []);
+    // Ordering questions keep their sequence in `items` — those strings are
+    // what the runner shows, so they're what gets translated.
+    const options = q.options ?? q.items ?? (q.choices ? q.choices.map((c) => c.text) : []);
     if (text) out.push({ id, text, options });
   };
   (data.questions ?? []).forEach((q, i) => push(q, q.id ?? `q-${rowId}-${i}`));
@@ -86,20 +107,43 @@ export async function translateExamTemplateAction(family: ExamFamily): Promise<T
   if (!qs.length) return { ok: false, error: "Nessuna domanda da tradurre." };
 
   const translations = data.translations ?? {};
+  // DELTA: skip questions whose source fingerprint matches the stored one and
+  // whose translations already exist — the typical re-run (a couple of edited
+  // questions) shrinks from the whole bank to just those.
+  const pending = qs.filter((q) => {
+    const t = translations[q.id];
+    return !(t?.src === srcHash(q) && t.en && t.ja);
+  });
   try {
+    const jobs: Array<{ lang: TLang; part: QForT[] }> = [];
     for (const lang of ["en", "ja"] as TLang[]) {
-      for (const part of chunk(qs, 25)) {
-        const system = `You are a professional translator for a Sake Sommelier certification exam. Translate from Italian to ${LANG_NAMES[lang]}. Preserve the meaning precisely and keep sake/Japanese technical terms accurate. Return ONLY a JSON array of the same length and order, each item {"id": string, "text": string, "options": string[]} with the options translated in the SAME order. No commentary, no code fences.`;
-        const raw = await callClaude({ system, user: JSON.stringify(part), maxTokens: 8192 });
+      for (const part of chunk(pending, 25)) jobs.push({ lang, part });
+    }
+    // Limited parallelism (3 in flight): minutes → ~1 min on a full bank,
+    // without hammering the provider's rate limits.
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    const worker = async () => {
+      for (;;) {
+        const job = jobs[cursor++];
+        if (!job) return;
+        const system = `You are a professional translator for a Sake Sommelier certification exam. Translate from Italian to ${LANG_NAMES[job.lang]}. Preserve the meaning precisely and keep sake/Japanese technical terms accurate. Return ONLY a JSON array of the same length and order, each item {"id": string, "text": string, "options": string[]} with the options translated in the SAME order. No commentary, no code fences.`;
+        const raw = await callClaude({ system, user: JSON.stringify(job.part), maxTokens: 8192 });
         const out = parseJsonFromClaude<QForT[]>(raw);
         for (const item of out) {
           if (!item?.id) continue;
           translations[item.id] = {
             ...(translations[item.id] ?? {}),
-            [lang]: { text: item.text, options: item.options ?? [] },
+            [job.lang]: { text: item.text, options: item.options ?? [] },
           };
         }
       }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker));
+    // Stamp the fingerprints AFTER both languages landed.
+    for (const q of pending) {
+      const t = translations[q.id];
+      if (t?.en && t?.ja) t.src = srcHash(q);
     }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Traduzione non riuscita." };
@@ -127,7 +171,7 @@ export async function translateExamTemplateAction(family: ExamFamily): Promise<T
     if (error) return { ok: false, error: error.message };
     if ((updated ?? []).length > 0) {
       revalidatePath("/esami/editor");
-      return { ok: true, count: qs.length };
+      return { ok: true, count: pending.length };
     }
     // Someone saved between our read and write — loop re-reads and retries.
   }

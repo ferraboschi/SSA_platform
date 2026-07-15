@@ -438,11 +438,24 @@ export function ExamLibraryEditor({
           {/* Preview links for the current section (open the real student/QA page). */}
           {previewCourseId ? (
             <span style={{ display: "inline-flex", gap: 6 }}>
-              <button className="btn btn-sm" onClick={() => openPreview("test")} disabled={previewing !== null} title={t.previewHint}>
+              {/* The preview renders the SAVED template only — with unsaved
+                  edits it would silently show stale content (the owner read
+                  that as "preview stuck on day 1"). Honest: save first. */}
+              <button
+                className="btn btn-sm"
+                onClick={() => openPreview("test")}
+                disabled={previewing !== null || dirty}
+                title={dirty ? t.previewDirty : t.previewHint}
+              >
                 <Icon name="monitor" size={12} />
                 {previewing === "test" ? "…" : t.preview}
               </button>
-              <button className="btn btn-sm" onClick={() => openPreview("validate")} disabled={previewing !== null} title={t.validateHint}>
+              <button
+                className="btn btn-sm"
+                onClick={() => openPreview("validate")}
+                disabled={previewing !== null || dirty}
+                title={dirty ? t.previewDirty : t.validateHint}
+              >
                 <Icon name="check" size={12} />
                 {previewing === "validate" ? "…" : t.validate}
               </button>

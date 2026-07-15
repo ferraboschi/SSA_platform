@@ -30,7 +30,10 @@ export async function saveExamTemplateAction(
   try {
     const ds = await getDataSource();
     const nv = await ds.examTemplates.save(template);
-    revalidatePath("/esami/editor");
+    // NO revalidatePath("/esami/editor") here: it re-renders the heavy editor
+    // page INSIDE this POST, and the client already router.refresh()es after a
+    // successful save — one refresh mechanism, half the save latency. Callers
+    // of this action must refresh client-side.
     revalidatePath("/esami");
     return { ok: true, newVersion: typeof nv === "number" ? nv : undefined };
   } catch (e) {

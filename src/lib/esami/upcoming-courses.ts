@@ -6,10 +6,14 @@ import { monthIndexIt } from "@/lib/dashboard";
 import { isSandboxCourse } from "@/lib/corsi/sandbox";
 import type { UpcomingCourseLine } from "./exam-email";
 
-export async function getUpcomingCourseLines(limit = 4): Promise<UpcomingCourseLine[]> {
+export async function getUpcomingCourseLines(
+  limit = 4,
+  /** Pass an already-loaded course list to skip the second heavy read
+   *  (courses.list() is the most expensive query in the app). */
+  preloaded?: Awaited<ReturnType<Awaited<ReturnType<typeof getDataSource>>["courses"]["list"]>>,
+): Promise<UpcomingCourseLine[]> {
   try {
-    const ds = await getDataSource();
-    const courses = await ds.courses.list();
+    const courses = preloaded ?? (await (await getDataSource()).courses.list());
     const now = new Date();
     const curKey = now.getFullYear() * 12 + now.getMonth();
     return courses

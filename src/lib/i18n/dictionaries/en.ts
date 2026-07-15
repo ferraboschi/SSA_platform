@@ -745,6 +745,7 @@ export const en: Dictionary = {
       addQuestionShort: "Add",
       preview: "Preview",
       previewHint: "Open the page as the student sees it (no answers).",
+      previewDirty: "Unsaved changes: save first — the preview only shows the saved version.",
       validate: "Validate",
       validateHint: "Open the page revealing the correct answers (for QA).",
       noPreviewCourse: "No course for preview",

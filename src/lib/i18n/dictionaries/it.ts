@@ -747,6 +747,7 @@ export const it = {
       addQuestionShort: "Aggiungi",
       preview: "Anteprima",
       previewHint: "Apri la pagina come la vede lo studente (senza risposte).",
+      previewDirty: "Hai modifiche non salvate: salva prima — l'anteprima mostra solo la versione salvata.",
       validate: "Valida",
       validateHint: "Apri la pagina mostrando le risposte corrette (per QA).",
       noPreviewCourse: "Nessun corso per l'anteprima",

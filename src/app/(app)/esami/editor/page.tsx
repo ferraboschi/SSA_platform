@@ -11,12 +11,14 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   await requireNavAccess("esami");
   const [ds, session] = await Promise.all([getDataSource(), getSession()]);
-  const [list, courses, emailTemplates, upcomingCourses] = await Promise.all([
+  const [list, courses, emailTemplates] = await Promise.all([
     ds.examTemplates.list(),
     ds.courses.list(),
     loadExamEmailTemplates(),
-    getUpcomingCourseLines(4),
   ]);
+  // Reuse the list already in hand: courses.list() is the app's heaviest read
+  // and this page used to run it TWICE per render (saves included).
+  const upcomingCourses = await getUpcomingCourseLines(4, courses);
   const templates = Object.fromEntries(list.map((tpl) => [tpl.family, tpl])) as Record<
     ExamFamily,
     ExamTemplate
