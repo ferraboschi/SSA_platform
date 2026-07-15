@@ -12,6 +12,8 @@ export interface GradableQuestion {
   type: string;
   text: string;
   options: string[];
+  /** Question weight from the template (points ?? 1) — autoScore is weighted. */
+  points?: number;
   /** Stored EN/JA translations. A student who took the exam in another language
    *  stored their answers as the TRANSLATED option text, so we must grade against
    *  the options in the language they actually saw — not the Italian original. */
@@ -135,6 +137,11 @@ export function gradeAnswers(
   let gradable = 0;
   let correct = 0;
   let manual = 0;
+  // POINTS-weighted score (owner batch 8): a 3-point question moves the
+  // percentage three times as much as a 1-point one, matching the batch
+  // correction's combinedPct semantics.
+  let gradablePts = 0;
+  let correctPts = 0;
 
   const detail: GradedAnswer[] = questions.map((q) => {
     const given = ans[q.id];
@@ -155,9 +162,13 @@ export function gradeAnswers(
         return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: "—", ok: null };
       }
       gradable++;
+      gradablePts += q.points ?? 1;
       const givenNorm = normStr(Array.isArray(given) ? given[0] : given);
       const ok = givenNorm !== "" && accepted.includes(givenNorm);
-      if (ok) correct++;
+      if (ok) {
+        correct++;
+        correctPts += q.points ?? 1;
+      }
       return {
         qid: q.id,
         type: q.type,
@@ -178,8 +189,12 @@ export function gradeAnswers(
       const sawTranslated = (lang === "en" || lang === "ja") && !!q.i18n?.[lang];
       if (key.length > 0 && arr && arr.length === key.length && !sawTranslated) {
         gradable++;
+        gradablePts += q.points ?? 1;
         const ok = key.every((k, idx) => normStr(k) === normStr(arr[idx]));
-        if (ok) correct++;
+        if (ok) {
+          correct++;
+          correctPts += q.points ?? 1;
+        }
         return {
           qid: q.id,
           type: q.type,
@@ -201,8 +216,12 @@ export function gradeAnswers(
           const trKey = key.map((k) => toTranslated.get(normStr(k)) ?? "");
           if (trKey.every(Boolean)) {
             gradable++;
+            gradablePts += q.points ?? 1;
             const ok = trKey.every((k, idx) => k === normStr(arr[idx]));
-            if (ok) correct++;
+            if (ok) {
+              correct++;
+              correctPts += q.points ?? 1;
+            }
             return {
               qid: q.id,
               type: q.type,
@@ -228,8 +247,12 @@ export function gradeAnswers(
 
     // Objective choice question → auto-graded, in the student's language.
     gradable++;
+    gradablePts += q.points ?? 1;
     const ok = gradeObjective(given, localized);
-    if (ok) correct++;
+    if (ok) {
+      correct++;
+      correctPts += q.points ?? 1;
+    }
     return {
       qid: q.id,
       type: q.type,
@@ -240,6 +263,6 @@ export function gradeAnswers(
     };
   });
 
-  const autoScore = gradable ? Math.round((correct / gradable) * 100) : 0;
+  const autoScore = gradablePts ? Math.round((correctPts / gradablePts) * 100) : 0;
   return { detail, gradable, correct, manual, autoScore, suggested: scoreToOutcome(autoScore) };
 }

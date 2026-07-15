@@ -120,6 +120,7 @@ export default async function Page({
       // locked: no outcome, no questions.
       if (/^day[1-9]$/.test(res.payload.t)) {
         const sub = prior[0] as {
+          id: number;
           answers?: Record<string, string | string[]> | null;
           lang?: string | null;
         };
@@ -130,6 +131,7 @@ export default async function Page({
           res.payload.t,
           sub.answers,
           sub.lang,
+          sub.id,
         ).catch(() => null);
         if (esito) {
           const esitoLang: Lang = sub.lang === "en" || sub.lang === "ja" ? sub.lang : "it";

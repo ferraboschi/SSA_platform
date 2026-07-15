@@ -71,6 +71,9 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     explainLoading: "Preparo l'approfondimento…",
     explainFail: "Approfondimento non disponibile ora.",
     explainSource: "Dalla Knowledge Base SSA",
+    aiWait: "Stiamo valutando le tue risposte aperte con l'AI SSA — richiede qualche secondo, l'esito si aggiorna da solo.",
+    aiVoteLabel: "Voto AI",
+    aiFailedNote: "valutazione AI non riuscita — sarà rivista dallo staff",
   },
   en: {
     test: "TEST MODE",
@@ -140,6 +143,9 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     explainLoading: "Preparing the deep-dive…",
     explainFail: "Deep-dive not available right now.",
     explainSource: "From the SSA Knowledge Base",
+    aiWait: "We're evaluating your open answers with the SSA AI — it takes a few seconds, the result updates by itself.",
+    aiVoteLabel: "AI vote",
+    aiFailedNote: "AI evaluation failed — staff will review it",
   },
   ja: {
     test: "テストモード",
@@ -209,6 +215,9 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     explainLoading: "解説を準備しています…",
     explainFail: "現在、解説をご利用いただけません。",
     explainSource: "SSAナレッジベースより",
+    aiWait: "SSAのAIが記述式回答を評価しています。数秒かかります。結果は自動的に更新されます。",
+    aiVoteLabel: "AI評価",
+    aiFailedNote: "AI評価に失敗しました。スタッフが確認します",
   },
 };
 

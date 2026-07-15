@@ -33,6 +33,78 @@ export function dedupePerStudent(subs: GradedSubmission[]): GradedSubmission[] {
   return [...byStudent.values()];
 }
 
+/** AI-grade ONE submission's open answers and persist its draft — the
+ *  submit-time path (owner batch 8: day-test open answers are graded right
+ *  after hand-in, in the background). Same engine, same draft store as the
+ *  batch, so the student's esito and the staff's Esiti read the same data.
+ *  Returns true when a draft was persisted. */
+export async function runSingleSubmissionCorrection(
+  courseId: string,
+  family: "nihonshu" | "shochu",
+  testKey: string,
+  submissionId: number,
+): Promise<boolean> {
+  ensureRagWired();
+  if (!anthropicConfig.isConfigured) return false;
+  setGradingModel(new ClaudeGradingModel());
+
+  const corsoId = Number(courseId);
+  const results = await loadCourseExamResults(courseId, family);
+  const sub = results.find((s) => s.id === submissionId && s.testKey === testKey);
+  if (!sub) return false;
+
+  const exam = await loadPublicExam(courseId, family, testKey as "final" | `day${number}`, true);
+  const questionMeta = new Map<string, QuestionMeta>();
+  for (const q of exam?.questions ?? []) {
+    questionMeta.set(q.id, { points: q.points ?? 1, important: q.important ?? false });
+  }
+
+  const svc = getSupabaseServiceClient();
+  const at = new Date().toISOString();
+  const openResults = new Map<string, OpenAnswerResult>();
+  for (const a of sub.answers) {
+    const gradableOpen =
+      a.ok === null && (a.type === "open" || a.type === "fill") && a.given !== "" && a.given !== "—";
+    if (!gradableOpen) continue;
+    const maxPoints = questionMeta.get(a.qid)?.points ?? 1;
+    try {
+      const sug = await gradeOpenAnswer({ question: a.text, answer: a.given, maxPoints, kbSection: a.cat });
+      openResults.set(a.qid, {
+        points: sug.suggestedPoints,
+        vote: sug.vote,
+        confidence: sug.confidence,
+        rationale: sug.rationale,
+        grounded: sug.citations.length > 0,
+        citedTitles: sug.citations.map((c) => c.chunk.title),
+        failed: false,
+        provider: sug.provider,
+      });
+    } catch (e) {
+      const why = (e instanceof Error ? e.message : String(e)).slice(0, 160);
+      openResults.set(a.qid, {
+        points: 0,
+        confidence: 0,
+        rationale: `Valutazione automatica non riuscita (${why}): revisione manuale.`,
+        grounded: false,
+        citedTitles: [],
+        failed: true,
+      });
+    }
+  }
+
+  const draft = buildCorrectionDraft({
+    submission: { id: sub.id, studentName: sub.studentName, studentEmail: sub.studentEmail },
+    answers: sub.answers,
+    questionMeta,
+    openResults,
+    at,
+  });
+  const { error } = await svc
+    .from("settings_kv")
+    .upsert({ key: correctionKey(corsoId, sub.id), value: draft }, { onConflict: "key" });
+  return !error;
+}
+
 /** Run the batch correction for ONE of a course's tests (final exam or a
  *  day test — owner batch 7: the paid day tests get the same AI correction):
  *  AI-grade every open answer (grounded in the KB, constrained to the

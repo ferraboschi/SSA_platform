@@ -7,9 +7,9 @@
 // outcome, whether the answer was correct or not. The FINAL exam never renders
 // this card: its outcome stays private until the official correction.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CHROME, type Lang } from "./exam-chrome";
-import { getExamExplanationAction } from "@/lib/exam-links/actions";
+import { getDayEsitoAction, getExamExplanationAction } from "@/lib/exam-links/actions";
 import type { DayEsito } from "@/lib/exam-links/esito";
 
 const ACCENT: Record<string, string> = {
@@ -84,7 +84,7 @@ function Explain({ token, qid, lang }: { token: string; qid: string; lang: Lang 
 }
 
 export function EsitoCard({
-  esito,
+  esito: initialEsito,
   lang,
   token,
   returnNote,
@@ -97,6 +97,33 @@ export function EsitoCard({
   returnNote?: boolean;
 }) {
   const t = CHROME[lang];
+  const [esito, setEsito] = useState(initialEsito);
+
+  // The submit-time AI evaluation runs in the background (owner batch 8):
+  // while it's in flight the card says so explicitly and refreshes itself
+  // until the votes land — the page never looks frozen without a reason.
+  useEffect(() => {
+    if (!esito.aiPending || !token) return;
+    let alive = true;
+    let tries = 0;
+    const id = setInterval(async () => {
+      if (++tries > 24) {
+        clearInterval(id);
+        return;
+      }
+      const res = await getDayEsitoAction(token).catch(() => null);
+      if (!alive) return;
+      if (res?.ok && res.esito && !res.esito.aiPending) {
+        setEsito(res.esito);
+        clearInterval(id);
+      }
+    }, 5000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esito.aiPending, token]);
   const accent = esito.outcome ? ACCENT[esito.outcome] : "#4f46e5";
   const outcomeLabel =
     esito.outcome === "passed" ? t.previewPassed : esito.outcome === "retrial" ? t.previewRetrial : t.previewFailed;
@@ -105,6 +132,29 @@ export function EsitoCard({
     <div className="exam-public-thanks" style={{ textAlign: "center" }}>
       <h2 style={{ marginBottom: 6 }}>{t.dayResultTitle}</h2>
       <p style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", margin: "0 0 14px" }}>{t.dayResultNote}</p>
+
+      {esito.aiPending && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            justifyContent: "center",
+            fontSize: 13,
+            color: "#4f46e5",
+            background: "#f5f7ff",
+            border: "1px solid #dbe2ff",
+            borderRadius: 10,
+            padding: "10px 14px",
+            margin: "0 auto 14px",
+            maxWidth: 520,
+          }}
+          role="status"
+        >
+          <span aria-hidden style={{ animation: "spin 1.2s linear infinite", display: "inline-block" }}>⏳</span>
+          {t.aiWait}
+        </div>
+      )}
 
       {esito.pct != null ? (
         <div
@@ -167,8 +217,31 @@ export function EsitoCard({
                 <span style={{ color: "var(--text-3, #6b7280)" }}>{t.reviewCorrectAnswer}:</span> {d.correctText}
               </div>
             )}
-            {d.ok === null && (
+            {d.ok === null && d.aiVote == null && !d.aiFailed && (
               <div style={{ fontSize: 11.5, color: "#9ca3af", marginLeft: 20 }}>({t.reviewPendingBadge})</div>
+            )}
+            {d.aiFailed && (
+              <div style={{ fontSize: 11.5, color: "#b45309", marginLeft: 20 }}>({t.aiFailedNote})</div>
+            )}
+            {d.aiVote != null && (
+              <div
+                style={{
+                  marginLeft: 20,
+                  marginTop: 6,
+                  padding: "8px 10px",
+                  background: "#f5f7ff",
+                  border: "1px solid #dbe2ff",
+                  borderRadius: 10,
+                  fontSize: 12.5,
+                  lineHeight: 1.55,
+                }}
+              >
+                <strong>
+                  {t.aiVoteLabel}: {d.aiVote}/5
+                  {d.aiPoints != null && d.aiMaxPoints != null ? ` · ${d.aiPoints}/${d.aiMaxPoints}` : ""}
+                </strong>
+                {d.aiRationale && <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{d.aiRationale}</div>}
+              </div>
             )}
             {token && <div style={{ marginLeft: 20 }}><Explain token={token} qid={d.qid} lang={lang} /></div>}
           </div>

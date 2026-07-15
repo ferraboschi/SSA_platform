@@ -12,6 +12,8 @@ import {
 } from "./token";
 import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
 import { buildDayEsito, type DayEsito } from "./esito";
+import { runSingleSubmissionCorrection } from "@/lib/esami/correction-run";
+import { after } from "next/server";
 import { loadPublicExam } from "./load";
 import { explainQuestionWithKb } from "@/lib/rag/explain";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
@@ -161,17 +163,24 @@ export async function submitExam(
 
   const full: Record<string, unknown> = { ...row, corsista_id: corsistaId };
   if (partecipanteId != null) full.partecipante_id = partecipanteId;
-  let { error } = await svc.from("exam_submissions").insert(full);
+  let submissionId: number | null = null;
+  let { data: insData, error } = await svc.from("exam_submissions").insert(full).select("id");
+  submissionId = (insData?.[0]?.id as number | undefined) ?? null;
   if (isSubjectFkViolation(error)) {
     // The bound subject no longer exists (deleted/merged mid-window). Refuse
     // loudly — a graded row with NO identity would be invisible to results.
     return { ok: false, error: "Il tuo accesso non è più valido: contatta l'educator per un nuovo link." };
   }
   if (error && isMissingColumn(error, "partecipante_id")) {
-    ({ error } = await svc.from("exam_submissions").insert({ ...row, corsista_id: corsistaId }));
+    ({ data: insData, error } = await svc
+      .from("exam_submissions")
+      .insert({ ...row, corsista_id: corsistaId })
+      .select("id"));
+    submissionId = (insData?.[0]?.id as number | undefined) ?? submissionId;
   }
   if (error && isMissingColumn(error, "corsista_id")) {
-    ({ error } = await svc.from("exam_submissions").insert(row));
+    ({ data: insData, error } = await svc.from("exam_submissions").insert(row).select("id"));
+    submissionId = (insData?.[0]?.id as number | undefined) ?? submissionId;
   }
   if (error) {
     // This path shares the exam_submissions_proctored_uniq backstop index with
@@ -207,12 +216,59 @@ export async function submitExam(
     try {
       const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
       const family = corso?.type === "shochu" ? "shochu" : "nihonshu";
-      esito = (await buildDayEsito(c, family, t, answers, input.lang)) ?? undefined;
+      esito = (await buildDayEsito(c, family, t, answers, input.lang, submissionId ?? undefined)) ?? undefined;
+      // Owner batch 8: open answers are AI-graded RIGHT AFTER hand-in, in the
+      // background (same engine + draft store as the staff batch). The esito
+      // card polls until the draft lands; the staff Esiti gets it for free.
+      if (submissionId != null && esito?.aiPending) {
+        const subId = submissionId;
+        after(() => runSingleSubmissionCorrection(c, family, t, subId).catch(() => false));
+      }
     } catch {
       esito = undefined;
     }
   }
   return { ok: true, esito };
+}
+
+/**
+ * Fresh formative esito for a day-test link — polled by the result card while
+ * the submit-time AI evaluation is in flight, and usable on any re-open.
+ */
+export async function getDayEsitoAction(
+  token: string,
+): Promise<{ ok: boolean; esito?: DayEsito; error?: string }> {
+  const res = verifyExamToken(token, 3 * 3600);
+  if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
+  const { c, t, m, s, p } = res.payload;
+  if (m !== "exam" || !/^day[1-9]$/.test(t)) return { ok: false, error: "Non disponibile." };
+  if (!s && !p) return { ok: false, error: "Link non personale." };
+  try {
+    const svc = getSupabaseServiceClient();
+    const corsoId = /^\d+$/.test(c) ? Number(c) : null;
+    if (corsoId == null) return { ok: false, error: "Link non valido." };
+    const corsistaId = s && /^\d+$/.test(s) ? Number(s) : null;
+    const partecipanteId = p && /^\d+$/.test(p) ? Number(p) : null;
+    const { data: prior } = await svc
+      .from("exam_submissions")
+      .select("id, answers, lang")
+      .eq("corso_id", corsoId)
+      .eq("test_key", t)
+      .eq("mode", "exam")
+      .eq(corsistaId != null ? "corsista_id" : "partecipante_id", (corsistaId ?? partecipanteId)!)
+      .limit(1);
+    const sub = prior?.[0] as
+      | { id: number; answers?: Record<string, string | string[]> | null; lang?: string | null }
+      | undefined;
+    if (!sub) return { ok: false, error: "Nessuna consegna trovata." };
+    const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
+    const family = corso?.type === "shochu" ? "shochu" : "nihonshu";
+    const esito = await buildDayEsito(c, family, t, sub.answers, sub.lang, sub.id);
+    if (!esito) return { ok: false, error: "Esito non disponibile." };
+    return { ok: true, esito };
+  } catch {
+    return { ok: false, error: "Esito non disponibile ora." };
+  }
 }
 
 const explainLimiter = createFixedWindowLimiter(10 * 60_000);
