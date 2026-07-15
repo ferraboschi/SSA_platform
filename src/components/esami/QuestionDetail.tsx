@@ -5,6 +5,7 @@ import { Icon, Badge } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import type { ExamQuestion, ExamQuestionType } from "@/lib/domain";
 import { QUESTION_EST_SEC } from "@/lib/esami";
+import { uploadExamImageAction } from "@/lib/esami/image-upload-action";
 
 /**
  * Category picker: a real click-to-open dropdown listing every known category
@@ -318,25 +319,7 @@ export function QuestionDetail({
         {(q.type === "single" || q.type === "multi" || q.type === "truefalse" || q.type === "image") && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {q.type === "image" && (
-              <div style={{ marginBottom: 8 }}>
-                <input
-                  className="input"
-                  placeholder="URL immagine (es. https://…/etichetta.jpg)"
-                  value={q.imageId ?? ""}
-                  onChange={(e) => onChange({ imageId: e.target.value })}
-                  style={{ marginBottom: 8 }}
-                />
-                {q.imageId ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={q.imageId}
-                    alt=""
-                    style={{ maxWidth: "100%", maxHeight: 200, borderRadius: 8, objectFit: "contain", border: "1px solid var(--border)" }}
-                  />
-                ) : (
-                  <div className="ph-img" style={{ height: 120 }}>{t.imgPlaceholder}</div>
-                )}
-              </div>
+              <ImagePicker imageId={q.imageId} placeholder={t.imgPlaceholder} onChange={(url) => onChange({ imageId: url })} />
             )}
             {(q.options ?? []).map((opt, i) => {
               const isC = correctSet.has(i);
@@ -516,6 +499,94 @@ export function QuestionDetail({
             {t.importanteCheck}
           </label>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+// Image source for "identifica immagine" questions (owner batch 8): direct
+// upload (click or drag&drop) to Supabase Storage, with the pasted-URL path
+// kept as an alternative.
+function ImagePicker({
+  imageId,
+  placeholder,
+  onChange,
+}: {
+  imageId?: string;
+  placeholder: string;
+  onChange: (url: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [over, setOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const upload = async (file: File) => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await uploadExamImageAction(fd).catch(() => null);
+    setBusy(false);
+    if (res?.ok && res.url) onChange(res.url);
+    else setErr(res?.error ?? "Upload non riuscito.");
+  };
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <input
+          className="input"
+          placeholder="URL immagine (es. https://…/etichetta.jpg)"
+          value={imageId ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ flex: 1 }}
+        />
+        <button type="button" className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={busy}>
+          {busy ? "Carico…" : "Carica file"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void upload(f);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      {err && <div style={{ fontSize: 12, color: "var(--danger-fg)", marginBottom: 6 }}>{err}</div>}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) void upload(f);
+        }}
+        style={{ outline: over ? "2px dashed var(--indigo-600)" : "none", borderRadius: 8 }}
+        title="Trascina qui un'immagine per caricarla"
+      >
+        {imageId ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageId}
+            alt=""
+            style={{ maxWidth: "100%", maxHeight: 200, borderRadius: 8, objectFit: "contain", border: "1px solid var(--border)" }}
+          />
+        ) : (
+          <div className="ph-img" style={{ height: 120, display: "grid", placeItems: "center" }}>
+            {busy ? "Carico…" : `${placeholder} — trascina qui o "Carica file"`}
+          </div>
+        )}
       </div>
     </div>
   );

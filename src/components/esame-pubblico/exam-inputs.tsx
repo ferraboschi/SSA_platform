@@ -177,6 +177,21 @@ function OrderInput({
     return v.length ? [...v, ...missing] : options.slice();
   }, [value, options]);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  // TOUCH drag (owner batch 8): HTML5 draggable is mouse-only, so phones only
+  // had the arrows. Pointer events on the ⠿ handle move the row live under
+  // the finger (touch-action:none keeps the page from scrolling meanwhile).
+  const [touchIdx, setTouchIdx] = useState<number | null>(null);
+  const onHandleMove = (e: React.PointerEvent) => {
+    if (touchIdx == null) return;
+    const hit = document
+      .elementsFromPoint(e.clientX, e.clientY)
+      .find((el) => (el as HTMLElement).dataset?.orderIdx != null) as HTMLElement | undefined;
+    const to = hit ? Number(hit.dataset.orderIdx) : NaN;
+    if (Number.isInteger(to) && to !== touchIdx) {
+      move(touchIdx, to);
+      setTouchIdx(to);
+    }
+  };
 
   // Commit the displayed arrangement once, so an order question the student
   // simply leaves as-is is still a real (submittable) answer, not "skipped".
@@ -210,6 +225,7 @@ function OrderInput({
       {order.map((opt, i) => (
         <div
           key={`${i}-${opt}`}
+          data-order-idx={i}
           draggable
           onDragStart={() => setDragIdx(i)}
           onDragOver={(e) => e.preventDefault()}
@@ -225,11 +241,23 @@ function OrderInput({
             padding: "10px 12px",
             border: "1px solid var(--border, #d4d4d8)",
             borderRadius: 10,
-            background: dragIdx === i ? "#fff7ed" : "var(--surface, #fff)",
+            background: dragIdx === i || touchIdx === i ? "#fff7ed" : "var(--surface, #fff)",
             cursor: "grab",
           }}
         >
-          <span aria-hidden style={{ color: "var(--text-4, #9ca3af)", fontSize: 16 }}>⠿</span>
+          <span
+            aria-hidden
+            onPointerDown={(e) => {
+              if (e.pointerType === "mouse") return; // mouse keeps HTML5 dnd
+              e.preventDefault();
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              setTouchIdx(i);
+            }}
+            onPointerMove={onHandleMove}
+            onPointerUp={() => setTouchIdx(null)}
+            onPointerCancel={() => setTouchIdx(null)}
+            style={{ color: "var(--text-4, #9ca3af)", fontSize: 16, touchAction: "none", padding: "4px 6px", margin: "-4px -6px", cursor: "grab" }}
+          >⠿</span>
           <span style={{ flex: 1, fontSize: 15 }}>{opt}</span>
           <span style={{ display: "inline-flex", gap: 4 }}>
             <button type="button" style={btn} disabled={i === 0} aria-label="su" onClick={() => move(i, i - 1)}>▲</button>
