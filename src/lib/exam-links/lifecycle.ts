@@ -41,19 +41,51 @@ function closureKey(corsoId: number, testKey: string): string {
   return `${CLOSURE_KEY_PREFIX}${corsoId}:${testKey}`;
 }
 
-/** closedAt ISO for a (course, test), or null if not closed. */
+/** Course-wide link EPOCH (key = `exam_link_epoch:<corsoId>`, value = { at }):
+ *  stamped by the sandbox reset so EVERY link minted before it dies at once —
+ *  open pages stop writing, old links can't resume, and the demo truly starts
+ *  over. Folded into getClosure below so every public-link check inherits it;
+ *  the educator panel reads the per-test closures map (getCourseClosures) and
+ *  therefore never shows a reset as "test chiuso". */
+export const EPOCH_KEY_PREFIX = "exam_link_epoch:";
+function epochKey(corsoId: number): string {
+  return `${EPOCH_KEY_PREFIX}${corsoId}`;
+}
+
+/** Cutoff ISO for a (course, test): the LATEST of the test's closure and the
+ *  course-wide epoch — or null when neither exists. */
 export async function getClosure(corsoId: number, testKey: string): Promise<string | null> {
   try {
     const svc = getSupabaseServiceClient();
     const { data, error } = await svc
       .from("settings_kv")
-      .select("value")
-      .eq("key", closureKey(corsoId, testKey))
-      .maybeSingle();
+      .select("key, value")
+      .in("key", [closureKey(corsoId, testKey), epochKey(corsoId)]);
     if (error) return null; // fail open — never lock students out on a blip
-    return (data?.value as StoredClosure | null)?.closedAt ?? null;
+    let latest: string | null = null;
+    for (const r of (data ?? []) as { value: (StoredClosure & { at?: string }) | null }[]) {
+      const iso = r.value?.closedAt ?? r.value?.at ?? null;
+      if (iso && (!latest || iso > latest)) latest = iso;
+    }
+    return latest;
   } catch {
     return null;
+  }
+}
+
+/** Stamp the course-wide epoch: every link issued before now stops working. */
+export async function setLinkEpoch(corsoId: number): Promise<boolean> {
+  try {
+    const svc = getSupabaseServiceClient();
+    const { error } = await svc
+      .from("settings_kv")
+      .upsert(
+        { key: epochKey(corsoId), value: { at: new Date().toISOString() } },
+        { onConflict: "key" },
+      );
+    return !error;
+  } catch {
+    return false;
   }
 }
 

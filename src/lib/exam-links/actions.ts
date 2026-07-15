@@ -130,6 +130,12 @@ export async function submitExam(
     if (isBlockedByAbsence(present, subjKey)) {
       return { ok: false, error: absentAccessError(t) };
     }
+    // Closure / sandbox-reset epoch re-checked at HAND-IN too: a page still
+    // open from before must not write fresh state back.
+    const closedAt = await getClosure(corsoId, t);
+    if (isBlockedByClosure(closedAt, res.payload.ia)) {
+      return { ok: false, error: "Questo test è stato chiuso dall'educator." };
+    }
   }
   const row = {
     corso_id: corsoId,

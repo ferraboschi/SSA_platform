@@ -8,6 +8,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { kvCasPatch } from "@/lib/data/kv-cas";
 import { MONTH_NAMES_IT } from "@/lib/dates/italian-months";
+import { setLinkEpoch } from "@/lib/exam-links/lifecycle";
 import { SANDBOX_COURSE_HANDLE } from "./sandbox";
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
@@ -61,6 +62,14 @@ export async function resetExamSandbox(): Promise<SandboxResetSummary> {
   if (error) throw new Error(error.message);
   if (!corso) throw new Error("Corso di test non trovato.");
   const id = corso.id as number;
+
+  // 0. Kill every OUTSTANDING link first (course-wide epoch = now): exam pages
+  //    still open stop heartbeating and old links die, so nothing can
+  //    repopulate the state wiped below — the demo truly restarts from the
+  //    appello. Ordered BEFORE the wipes on purpose.
+  if (!(await setLinkEpoch(id))) {
+    throw new Error("Reset interrotto: impossibile invalidare i link esistenti.");
+  }
 
   // 1. Exam/appello state. exam_submissions has ON DELETE SET NULL on corso_id,
   //    so it MUST be purged explicitly; the others are belt & braces (their

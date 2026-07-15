@@ -10,6 +10,7 @@
 // 20260703120000). Graceful: a missing table degrades to no-op.
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
+import { getClosure, isBlockedByClosure } from "./lifecycle";
 import { verifyExamToken } from "./token";
 
 const limiter = createFixedWindowLimiter(60_000);
@@ -38,6 +39,11 @@ export async function reportExamProgressAction(
   const corsistaId = s && /^\d+$/.test(s) ? Number(s) : null;
   const partecipanteId = p && /^\d+$/.test(p) ? Number(p) : null;
   if (corsoId == null || (corsistaId == null && partecipanteId == null)) return { ok: false };
+
+  // A closure — or the sandbox-reset epoch — kills outstanding links: their
+  // heartbeats must not resurrect freshly wiped progress rows.
+  const closedAt = await getClosure(corsoId, t);
+  if (isBlockedByClosure(closedAt, res.payload.ia)) return { ok: false };
 
   const currentIdx = Math.max(0, Math.trunc(Number(input.currentIdx) || 0));
   const total = Math.max(0, Math.trunc(Number(input.total) || 0));
