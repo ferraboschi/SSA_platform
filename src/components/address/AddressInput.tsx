@@ -21,10 +21,10 @@ export interface AddressPlaceMeta {
   country?: string;
 }
 
-// A street number can live under different component types abroad: classic
-// street_number, premise (named/numbered buildings), or Japan's block numbers
-// (sublocality_level_4). Any of them satisfies the courier.
-const NUMBER_TYPES = ["street_number", "premise", "sublocality_level_4"];
+// Only the explicit street_number component is trusted (the owner's field
+// test showed loose signals produce false "detected"); Japan's block numbers
+// (sublocality_level_4) count only for Japanese addresses — never `premise`,
+// which is a building NAME more often than a number.
 interface GAutocomplete {
   addListener(ev: string, cb: () => void): void;
   getPlace(): GPlace;
@@ -92,9 +92,12 @@ export function GoogleAddressInput({
           if (a) onChange(a);
           if (onPlaceMeta) {
             const comps = place.address_components ?? [];
+            const country = comps.find((c) => c.types.includes("country"))?.short_name;
+            const has = (t: string) => comps.some((c) => c.types.includes(t));
             onPlaceMeta({
-              hasStreetNumber: comps.some((c) => c.types.some((t) => NUMBER_TYPES.includes(t))),
-              country: comps.find((c) => c.types.includes("country"))?.short_name,
+              hasStreetNumber:
+                has("street_number") || (country === "JP" && has("sublocality_level_4")),
+              country,
             });
           }
         });

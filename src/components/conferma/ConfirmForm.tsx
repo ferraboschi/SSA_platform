@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { confirmAttendeeAction } from "@/lib/attendee/confirm-actions";
 import { GoogleAddressInput, type AddressPlaceMeta } from "@/components/address/AddressInput";
+import { addressHasCivico } from "@/lib/attendee/civico";
 
 /**
  * Public "confirm your details" form. ALL fields are mandatory:
@@ -48,6 +49,7 @@ export function ConfirmForm({
   // selected address carries a civic number; null = typed by hand / unknown.
   const [placeMeta, setPlaceMeta] = useState<AddressPlaceMeta | null>(null);
   const [civico, setCivico] = useState("");
+  const [addressConfirmed, setAddressConfirmed] = useState(false);
   const [dataConfirmed, setDataConfirmed] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [notes, setNotes] = useState(initialNotes);
@@ -57,10 +59,12 @@ export function ConfirmForm({
   const [error, setError] = useState<string | null>(null);
 
   const fullPhone = phoneNumber.trim() ? `${dialCode} ${phoneNumber.trim()}` : "";
-  // The civic number is REAL, not self-certified: either Google detected one
-  // in the selected address, or the address already contains a number, or the
-  // attendee fills the dedicated field (composed into the address on submit).
-  const civicoDetected = placeMeta?.hasStreetNumber === true || /\d/.test(address);
+  // The civic number is REAL, not self-certified: Google's street_number
+  // component when a suggestion was picked, else a STRICT street-segment
+  // heuristic (postal codes never count — the owner's field test caught the
+  // old any-digit check passing addresses without a number). On top, the
+  // explicit confirmation checkbox is back as the final attestation.
+  const civicoDetected = placeMeta?.hasStreetNumber === true || addressHasCivico(address);
   const civicoOk = civicoDetected || Boolean(civico.trim());
   const complete =
     Boolean(fullName.trim()) &&
@@ -68,6 +72,7 @@ export function ConfirmForm({
     Boolean(phoneNumber.trim()) &&
     Boolean(address.trim()) &&
     civicoOk &&
+    addressConfirmed &&
     dataConfirmed &&
     consentAccepted;
 
@@ -97,7 +102,7 @@ export function ConfirmForm({
       email,
       phone: fullPhone,
       deliveryAddress: composedAddress,
-      addressConfirmed: civicoOk,
+      addressConfirmed: civicoOk && addressConfirmed,
       dataConfirmed,
       privacyConsent: consentAccepted,
       termsAccepted: consentAccepted,
@@ -254,6 +259,9 @@ export function ConfirmForm({
               />
             </div>
           ))}
+        <Check checked={addressConfirmed} onChange={setAddressConfirmed} style={{ marginTop: 8 }}>
+          Confermo che l&apos;indirizzo è completo di numero civico
+        </Check>
       </Field>
 
       <Field label="Note per la consegna (facoltative)" htmlFor={`${uid}-note`}>

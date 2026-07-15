@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyConfirmToken, isConfirmLinkSpent } from "./confirm-token";
 import { normEmail, isValidEmail, normAddress, normDeliveryNotes } from "./confirm-normalize";
 import { loadConfirmSubject } from "./confirm";
+import { addressHasCivico } from "./civico";
 
 export interface ConfirmAttendeeInput {
   /** Editable full name — lets the attendee fix a typo in their own name. */
@@ -78,9 +79,10 @@ export async function confirmAttendeeAction(
   if (!input.addressConfirmed) {
     return { ok: false, error: "Aggiungi il numero civico all'indirizzo per permetterci la consegna." };
   }
-  // REAL check, not self-certification (owner batch 7): the address must carry
-  // a number (or the Italian "SNC" for streets without civic numbering).
-  if (!/\d|snc/i.test(addr.value)) {
+  // REAL check, not self-certification (owner batch 7/8): the STREET segment
+  // must carry a number (postal codes never count — the old any-digit check
+  // passed addresses without one), or the Italian "SNC".
+  if (!addressHasCivico(addr.value)) {
     return {
       ok: false,
       error: 'Nell\'indirizzo manca il numero civico (es. "Via Roma 12"). Aggiungilo per permetterci la consegna.',
