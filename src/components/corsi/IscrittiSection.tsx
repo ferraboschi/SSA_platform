@@ -294,7 +294,10 @@ function PlaceholderRow({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
+  // Separate first/last name (owner batch 8): "Gian Paolo" is a first name,
+  // not name+surname. Storage stays the composed full name.
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -302,18 +305,20 @@ function PlaceholderRow({
 
   const iscrId = student.iscrizioneId;
 
-  // All four data points are mandatory: first + last name, email, phone.
-  const hasFullName = name.trim().split(/\s+/).filter(Boolean).length >= 2;
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const ready = hasFullName && emailValid && phone.trim().length > 0;
+  const missing: string[] = [];
+  if (!firstName.trim()) missing.push("nome");
+  if (!lastName.trim()) missing.push("cognome");
+  if (!emailValid) missing.push("email");
+  if (!phone.trim()) missing.push("telefono");
+  const ready = missing.length === 0;
 
   async function save() {
-    const trimmed = name.trim();
     if (!ready || busy || iscrId == null) return;
     setBusy(true);
     setError(null);
     const res = await completeSeatAction(Number(courseId), iscrId, {
-      name: trimmed,
+      name: `${firstName.trim().replace(/\s+/g, " ")} ${lastName.trim().replace(/\s+/g, " ")}`,
       email: email.trim(),
       phone: phone.trim(),
     }).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatAction>>);
@@ -352,14 +357,28 @@ function PlaceholderRow({
             </div>
             {open ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8, alignItems: "flex-end" }}>
-                <SeatField label={t.seatNamePh} style={{ flex: "1 1 190px" }}>
+                <SeatField label="Nome" style={{ flex: "1 1 130px" }}>
                   <input
                     type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    maxLength={120}
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    maxLength={60}
                     disabled={busy}
                     autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") save();
+                      if (e.key === "Escape") setOpen(false);
+                    }}
+                    style={seatInput}
+                  />
+                </SeatField>
+                <SeatField label="Cognome" style={{ flex: "1 1 130px" }}>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    maxLength={60}
+                    disabled={busy}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") save();
                       if (e.key === "Escape") setOpen(false);
@@ -397,13 +416,24 @@ function PlaceholderRow({
                     style={seatInput}
                   />
                 </SeatField>
-                <div style={{ display: "flex", gap: 6, flex: "0 0 auto" }}>
-                  <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={busy || !ready}>
-                    {t.seatSave}
-                  </button>
-                  <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
-                    {t.seatCancel}
-                  </button>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "0 0 auto" }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      onClick={save}
+                      disabled={busy || !ready}
+                      title={!ready ? `Compila: ${missing.join(", ")}` : undefined}
+                    >
+                      {t.seatSave}
+                    </button>
+                    <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
+                      {t.seatCancel}
+                    </button>
+                  </div>
+                  {!ready && (firstName || lastName || email || phone) && (
+                    <span style={{ fontSize: 11, color: "var(--warning-fg)" }}>Manca: {missing.join(", ")}</span>
+                  )}
                 </div>
               </div>
             ) : (

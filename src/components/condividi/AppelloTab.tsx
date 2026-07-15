@@ -346,16 +346,22 @@ function SeatFillIn({
   onError: (m: string) => void;
   onCompleted: (person: { id: number; name: string; email: string }) => void;
 }) {
-  const [name, setName] = useState("");
+  // SEPARATE first/last name fields (owner batch 8): a one-word entry used to
+  // be rejected and a two-word FIRST name ("Gian Paolo") was mistaken for
+  // name+surname. Storage stays the composed full name.
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // All four data points are mandatory when registering a person: first + last
-  // name (a full "Anna Salvagno"), email, and phone.
-  const hasFullName = name.trim().split(/\s+/).filter(Boolean).length >= 2;
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const ready = hasFullName && emailValid && phone.trim().length > 0;
+  const missing: string[] = [];
+  if (!firstName.trim()) missing.push("nome");
+  if (!lastName.trim()) missing.push("cognome");
+  if (!emailValid) missing.push("email");
+  if (!phone.trim()) missing.push("telefono");
+  const ready = missing.length === 0;
 
   async function submit() {
     if (!ready || busy || !iscrizioneId) return;
@@ -363,7 +369,7 @@ function SeatFillIn({
     const res = await completeSeatFromLinkAction(
       token,
       iscrizioneId,
-      name.trim(),
+      `${firstName.trim().replace(/\s+/g, " ")} ${lastName.trim().replace(/\s+/g, " ")}`,
       email.trim(),
       phone.trim(),
     ).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatFromLinkAction>>);
@@ -381,16 +387,29 @@ function SeatFillIn({
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-      <input
-        type="text"
-        className="edu-input"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Nome e cognome"
-        maxLength={120}
-        autoFocus
-        disabled={busy}
-      />
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          type="text"
+          className="edu-input"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          placeholder="Nome"
+          maxLength={60}
+          autoFocus
+          disabled={busy}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <input
+          type="text"
+          className="edu-input"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          placeholder="Cognome"
+          maxLength={60}
+          disabled={busy}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+      </div>
       <input
         type="email"
         inputMode="email"
@@ -411,8 +430,19 @@ function SeatFillIn({
         maxLength={40}
         disabled={busy}
       />
-      <div style={{ display: "flex", gap: 6 }}>
-        <button type="button" className="edu-btn primary" onClick={submit} disabled={busy || !ready}>
+      {!ready && (firstName || lastName || email || phone) && (
+        <div style={{ fontSize: 11.5, color: "#b45309" }}>
+          Manca: {missing.join(", ")}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <button
+          type="button"
+          className="edu-btn primary"
+          onClick={submit}
+          disabled={busy || !ready}
+          title={!ready ? `Compila: ${missing.join(", ")}` : undefined}
+        >
           Salva
         </button>
         <button type="button" className="edu-btn" onClick={onCancel} disabled={busy}>
