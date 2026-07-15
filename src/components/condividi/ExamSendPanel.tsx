@@ -153,9 +153,22 @@ export default function ExamSendPanel({
 
   return (
     <div style={{ marginBottom: 22 }}>
+      {/* The intro NAMES the test: two stacked panels (day test + feedback)
+          used to open with the same identical sentence and the educator sent
+          feedback links believing they were the day test. */}
       <p style={{ fontSize: 12, color: "var(--text-3)", margin: "0 0 12px", lineHeight: 1.5 }}>
-        Invia a ogni studente il suo link personale (all&apos;email confermata), oppure
-        copia il link generale per la chat di classe.
+        {testKey === "feedback" ? (
+          <>
+            Questo è il questionario <strong>Feedback</strong>{" "}
+            (gradimento del corso), non un test con punteggio. Invia a ogni studente il suo link personale
+            (all&apos;email confermata), oppure copia il link generale per la chat di classe.
+          </>
+        ) : (
+          <>
+            Invia a ogni studente il suo link personale per <strong>{test.label}</strong>{" "}
+            (all&apos;email confermata), oppure copia il link generale per la chat di classe.
+          </>
+        )}
       </p>
 
       {/* Unconfigured test: structure only, nothing sendable. */}

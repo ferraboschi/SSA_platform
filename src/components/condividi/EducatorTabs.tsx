@@ -115,7 +115,10 @@ export default function EducatorTabs({
           <ProgrammaTab days={days} day={activeDayNum} enrolled={students.length} />
           {testByKey(`day${activeDayNum}`) && (
             <>
-              <SectionHeading>Test</SectionHeading>
+              {/* Full label ("Test giorno 3"), NOT a generic "Test": on the last
+                  day this panel sits right above the Feedback one and the owner
+                  mistook one for the other — each section must name itself. */}
+              <SectionHeading>{testByKey(`day${activeDayNum}`)!.label}</SectionHeading>
               <ExamSendPanel
                 key={testByKey(`day${activeDayNum}`)!.key}
                 token={token}
