@@ -9,6 +9,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { kvCasPatch } from "@/lib/data/kv-cas";
 import { MONTH_NAMES_IT } from "@/lib/dates/italian-months";
 import { setLinkEpoch } from "@/lib/exam-links/lifecycle";
+import { seedCourseProgramDays } from "./program-seed";
 import { SANDBOX_COURSE_HANDLE } from "./sandbox";
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
@@ -140,6 +141,12 @@ export async function resetExamSandbox(): Promise<SandboxResetSummary> {
       price_cents: 0,
     })
     .eq("id", id);
+
+  // 5. Re-seed the 3 program days RIGHT AWAY (the wipe above dropped them):
+  //    an educator link opened after the reset must show Giorno 1..3 + Giorno
+  //    esame immediately, not a single fallback day until the link is
+  //    re-shared (share-time seeding stays as the net for real courses).
+  await seedCourseProgramDays(id);
 
   return {
     submissions,
