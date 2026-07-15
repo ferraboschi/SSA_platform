@@ -74,6 +74,8 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     aiWait: "Stiamo valutando le tue risposte aperte con l'AI SSA — richiede qualche secondo, l'esito si aggiorna da solo.",
     aiVoteLabel: "Voto AI",
     aiFailedNote: "valutazione AI non riuscita — sarà rivista dallo staff",
+    closedTitle: "Test chiuso",
+    closedBody: "L'educator ha chiuso questo test. Il link non è più attivo: se ti serve un nuovo accesso, chiedi all'educator.",
   },
   en: {
     test: "TEST MODE",
@@ -146,6 +148,8 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     aiWait: "We're evaluating your open answers with the SSA AI — it takes a few seconds, the result updates by itself.",
     aiVoteLabel: "AI vote",
     aiFailedNote: "AI evaluation failed — staff will review it",
+    closedTitle: "Test closed",
+    closedBody: "The educator closed this test. The link is no longer active: ask the educator if you need new access.",
   },
   ja: {
     test: "テストモード",
@@ -218,6 +222,8 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     aiWait: "SSAのAIが記述式回答を評価しています。数秒かかります。結果は自動的に更新されます。",
     aiVoteLabel: "AI評価",
     aiFailedNote: "AI評価に失敗しました。スタッフが確認します",
+    closedTitle: "テストは終了しました",
+    closedBody: "講師がこのテストを終了しました。リンクは無効です。新しいアクセスが必要な場合は講師にお問い合わせください。",
   },
 };
 

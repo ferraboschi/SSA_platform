@@ -11,6 +11,7 @@ import {
   type ExamLinkMode,
 } from "./token";
 import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
+import { getClosure, isBlockedByClosure } from "./lifecycle";
 import { buildDayEsito, type DayEsito } from "./esito";
 import { runSingleSubmissionCorrection } from "@/lib/esami/correction-run";
 import { after } from "next/server";
@@ -229,6 +230,30 @@ export async function submitExam(
     }
   }
   return { ok: true, esito };
+}
+
+/**
+ * Live link-state check, polled by the OPEN runner (owner batch 8): when the
+ * educator closes the test, students with the page already open see the
+ * "test chiuso" screen within seconds — no more answering into a void.
+ */
+export async function getLinkStateAction(
+  token: string,
+): Promise<{ ok: boolean; closed?: boolean; reason?: "closed" | "expired" }> {
+  const res = verifyExamToken(token);
+  if (!res.ok) {
+    return res.reason === "expired"
+      ? { ok: true, closed: true, reason: "expired" }
+      : { ok: false };
+  }
+  if (res.payload.m !== "exam") return { ok: true, closed: false };
+  try {
+    const closedAt = await getClosure(Number(res.payload.c), res.payload.t);
+    const closed = isBlockedByClosure(closedAt, res.payload.ia);
+    return { ok: true, closed, reason: closed ? "closed" : undefined };
+  } catch {
+    return { ok: true, closed: false }; // fail open: never kick a student on a hiccup
+  }
 }
 
 /**

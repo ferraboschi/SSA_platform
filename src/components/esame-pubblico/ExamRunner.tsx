@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { submitExam } from "@/lib/exam-links/actions";
+import { submitExam, getLinkStateAction } from "@/lib/exam-links/actions";
 import { gradeAnswers } from "@/lib/exam-links/grading";
 import { CHROME, EMAIL_RE, LANGS, type Lang } from "./exam-chrome";
 import { EsitoCard } from "./EsitoCard";
@@ -157,6 +157,9 @@ export function ExamRunner({
   const [done, setDone] = useState(false);
   // Formative day-test result returned by submitExam (owner, batch 7).
   const [esito, setEsito] = useState<DayEsito | null>(null);
+  // Live "the educator closed this test" push (owner batch 8): polled while
+  // the exam is open so an already-open page reacts within seconds.
+  const [closedLive, setClosedLive] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string[] | null>(null);
   const [reviewMode, setReviewMode] = useState(false);
   // Personal scratchpad — constant across questions, never submitted/saved.
@@ -302,6 +305,18 @@ export function ExamRunner({
     }
   };
 
+  useEffect(() => {
+    if (mode !== "exam" || done || !token) return;
+    const id = setInterval(() => {
+      getLinkStateAction(token)
+        .then((r) => {
+          if (r.ok && r.closed) setClosedLive(true);
+        })
+        .catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [mode, done, token]);
+
   // Clock — ticks once the language is chosen. Pauses on the submit-error screen
   // so a stuck "Riprova" state doesn't keep inflating the elapsed time.
   useEffect(() => {
@@ -437,6 +452,23 @@ export function ExamRunner({
             >
               {submitting ? "…" : t.retry}
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Closed by the educator while the page was open → replace the exam with an
+  // honest screen (answers stay in localStorage/server if they re-open later).
+  if (closedLive && !done) {
+    return (
+      <div className="exam-public-shell" {...lockdown}>
+        <div className="exam-public-card">
+          {headerBar}
+          <div className="exam-public-thanks">
+            <div className="exam-public-thanks-check">✕</div>
+            <h2>{t.closedTitle}</h2>
+            <p>{t.closedBody}</p>
           </div>
         </div>
       </div>
