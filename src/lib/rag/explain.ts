@@ -32,7 +32,11 @@ export async function explainQuestionWithKb(input: {
     .map((r, i) => `[${i + 1}] ${r.chunk.text}`)
     .join("\n\n");
   const langName = LANG_NAME[input.lang] ?? "italiano";
-  const system = `Sei un educatore della Sake Sommelier Association. Scrivi un breve approfondimento FORMATIVO per uno studente che ha appena completato un test giornaliero. Basati ESCLUSIVAMENTE sui passaggi della knowledge base SSA forniti — mai conoscenze esterne. Se i passaggi non coprono l'argomento, rispondi solo: NON_DISPONIBILE. Tono incoraggiante e chiaro; elenchi puntati benvenuti; massimo ~700 caratteri. Scrivi in ${langName}.`;
+  // The SAME text is shown to students who answered RIGHT and students who
+  // answered WRONG (it is cached per question) — so it must never judge the
+  // student's performance: no praise ("Ottimo lavoro"), no consolation, no
+  // celebration emoji. Straight to the substance.
+  const system = `Sei un educatore della Sake Sommelier Association. Scrivi un breve approfondimento FORMATIVO su una domanda di un test giornaliero. Il testo sarà letto sia da chi ha risposto correttamente sia da chi ha sbagliato: NON valutare né commentare la prestazione dello studente — niente complimenti, congratulazioni, consolazioni o emoji celebrative. Inizia direttamente dalla sostanza (qual è la risposta corretta e perché). Basati ESCLUSIVAMENTE sui passaggi della knowledge base SSA forniti — mai conoscenze esterne. Se i passaggi non coprono l'argomento, rispondi solo: NON_DISPONIBILE. Tono chiaro e didattico. TESTO SEMPLICE, NIENTE MARKDOWN (il testo è mostrato così com'è: niente asterischi o #); elenchi con trattini benvenuti; massimo ~700 caratteri. Scrivi in ${langName}.`;
   const user = `DOMANDA DEL TEST:\n${input.question}\n${
     input.correctAnswer ? `\nRISPOSTA CORRETTA:\n${input.correctAnswer}\n` : ""
   }\nPASSAGGI DELLA KNOWLEDGE BASE SSA:\n${passages}\n\nScrivi l'approfondimento (perché questa è la risposta corretta / cosa va ricordato sull'argomento).`;

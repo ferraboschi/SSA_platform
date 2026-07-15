@@ -77,11 +77,13 @@ function fmtClock(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** Real exams are TIMED: 60 minutes total, with a "10 minutes left" notice at 50'.
- *  `elapsed` is persisted, so the limit survives a disconnect/resume — reloading
- *  buys no extra time. Only the real "exam" mode is timed (not test/validate). */
-const EXAM_LIMIT_S = 60 * 60; // 60' → auto-submit + certified closing screen
-const EXAM_WARN_S = 50 * 60; // 50' → "ancora 10 minuti" notice
+/** Real exams are TIMED — the limit comes from the page by test type (owner
+ *  batch 9: day tests 10', final/feedback 60') with a "time left" notice near
+ *  the end (10' before on long tests, 2' on short ones). `elapsed` is
+ *  persisted, so the limit survives a disconnect/resume — reloading buys no
+ *  extra time. At the limit the test HANDS ITSELF IN with whatever is
+ *  answered. Only the real "exam" mode is timed (not test/validate). */
+const DEFAULT_LIMIT_S = 60 * 60;
 
 export interface ResumeState {
   answers: Record<string, string[] | string>;
@@ -113,6 +115,7 @@ export function ExamRunner({
   onSubmitSession,
   showResult,
   isFinal,
+  limitS,
 }: {
   mode: "exam" | "test" | "validate";
   forcedLang?: string;
@@ -136,6 +139,8 @@ export function ExamRunner({
   onSubmitSession?: (final: PersistState) => Promise<{ ok: boolean; error?: string }>;
   /** Preview: at the end, compute + show the outcome instead of a thank-you. */
   showResult?: boolean;
+  /** Time limit in seconds for the timed ("exam") mode. Day tests get 10'. */
+  limitS?: number;
 }) {
   // Only offer a non-Italian language when EVERY question is fully translated into
   // it (text + all options). Otherwise the student would silently receive Italian
@@ -173,7 +178,11 @@ export function ExamRunner({
   // Timed exam (real "exam" mode only). Init "already warned" when resuming past 50'
   // so the "10 minutes left" pop-up doesn't fire late on a reconnect.
   const timed = mode === "exam" && !showResult;
-  const resumedPastWarn = (resumeState?.elapsed ?? 0) >= EXAM_WARN_S;
+  // Long tests warn 10' before the end, short (day) tests 2' before.
+  const limit = limitS ?? DEFAULT_LIMIT_S;
+  const warnAt = limit - (limit > 30 * 60 ? 10 * 60 : 2 * 60);
+  const warnMin = Math.round((limit - warnAt) / 60);
+  const resumedPastWarn = (resumeState?.elapsed ?? 0) >= warnAt;
   const [warned, setWarned] = useState(resumedPastWarn);
   const [warnAck, setWarnAck] = useState(resumedPastWarn);
   const [submitting, setSubmitting] = useState(false);
@@ -194,8 +203,13 @@ export function ExamRunner({
       ? {
           onPasteCapture: (e: React.ClipboardEvent) => e.preventDefault(),
           onDropCapture: (e: React.DragEvent) => {
-            // Dropping onto an ordering row is answering, not pasting.
-            if ((e.target as HTMLElement).closest?.("[data-order-idx]")) return;
+            // Dropping onto an ordering row is answering, not pasting — but
+            // only for the INTERNAL row drag. An external link/file drop must
+            // stay cancelled even there: its browser default NAVIGATES away
+            // from the exam.
+            const types = Array.from(e.dataTransfer?.types ?? []);
+            const external = types.includes("text/uri-list") || types.includes("Files");
+            if (!external && (e.target as HTMLElement).closest?.("[data-order-idx]")) return;
             e.preventDefault();
           },
           onCopyCapture: (e: React.ClipboardEvent) => e.preventDefault(),
@@ -328,17 +342,31 @@ export function ExamRunner({
 
   // Clock — ticks once the language is chosen. Pauses on the submit-error screen
   // so a stuck "Riprova" state doesn't keep inflating the elapsed time.
+  // Anchored to the WALL CLOCK, not to interval counts: a background tab or a
+  // locked phone throttles timers, and a drifting count would grant extra time
+  // past the hard limit. Each (re)activation re-anchors at the current elapsed.
   useEffect(() => {
     if (!langPicked || done || submitError) return;
-    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(id);
+    const t0 = Date.now();
+    const base = stateRef.current.elapsed;
+    const sync = () => setElapsed(base + Math.floor((Date.now() - t0) / 1000));
+    const id = setInterval(sync, 1000);
+    // Throttled background timers can delay the catch-up tick — coming back
+    // to the tab must settle the clock (and a due hard stop) immediately.
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", sync);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [langPicked, done, submitError]);
 
-  // Timed exam: show the "10 minutes left" notice at 50', auto-submit at 60'.
+  // Timed exam: "time left" notice near the end, HARD STOP at the limit — the
+  // test hands itself in with whatever has been answered (owner batch 9).
   useEffect(() => {
     if (!timed || !langPicked || done || submitError) return;
-    if (elapsed >= EXAM_WARN_S && elapsed < EXAM_LIMIT_S && !warned) setWarned(true);
-    if (elapsed >= EXAM_LIMIT_S && !finishingRef.current) void finish();
+    if (elapsed >= warnAt && elapsed < limit && !warned) setWarned(true);
+    if (elapsed >= limit && !finishingRef.current) void finish();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elapsed, timed, langPicked, done, submitError, warned]);
 
@@ -378,9 +406,9 @@ export function ExamRunner({
           <span
             className="exam-public-clock"
             aria-label="timer"
-            style={timed && elapsed >= EXAM_WARN_S ? { color: "#b42318", fontWeight: 700 } : undefined}
+            style={timed && elapsed >= warnAt ? { color: "#b42318", fontWeight: 700 } : undefined}
           >
-            ⏱ {timed ? fmtClock(Math.max(0, EXAM_LIMIT_S - elapsed)) : fmtClock(elapsed)}
+            ⏱ {timed ? fmtClock(Math.max(0, limit - elapsed)) : fmtClock(elapsed)}
           </span>
         )}
       </div>
@@ -426,6 +454,22 @@ export function ExamRunner({
                 </button>
               ))}
             </div>
+            {/* Staff previews only: say WHY a language is missing instead of
+                hiding it silently (the picker itself never lies to students). */}
+            {mode !== "exam" && availableLangs.length < LANGS.length && (
+              <p style={{ fontSize: 12, color: "#b45309", marginTop: 10 }}>
+                {LANGS.filter((l) => l !== "it" && !availableLangs.includes(l))
+                  .map((l) => {
+                    const n = questions.filter((q) => {
+                      const tr = q.i18n?.[l as "en" | "ja"];
+                      return !(tr?.text && (q.options.length === 0 || (tr.options?.length ?? 0) >= q.options.length));
+                    }).length;
+                    return `${l.toUpperCase()} non offerta: ${n} ${n === 1 ? "domanda" : "domande"} senza traduzione completa`;
+                  })
+                  .join(" · ")}{" "}
+                — usa “Traduci (AI)” nella Libreria esami.
+              </p>
+            )}
           </div>
           <div className="exam-public-nav">
             <span />
@@ -661,8 +705,8 @@ export function ExamRunner({
         >
           <div style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", maxWidth: 360, textAlign: "center", boxShadow: "0 10px 40px rgba(0,0,0,0.25)" }}>
             <div style={{ fontSize: 34, marginBottom: 6 }} aria-hidden>⏳</div>
-            <h2 style={{ fontSize: 18, margin: "0 0 6px" }}>{t.timeWarnTitle}</h2>
-            <p style={{ fontSize: 14, color: "var(--text-3, #555)", margin: "0 0 18px" }}>{t.timeWarnBody}</p>
+            <h2 style={{ fontSize: 18, margin: "0 0 6px" }}>{t.timeWarnTitle.replace("{m}", String(warnMin))}</h2>
+            <p style={{ fontSize: 14, color: "var(--text-3, #555)", margin: "0 0 18px" }}>{t.timeWarnBody.replace("{m}", String(warnMin))}</p>
             <button type="button" className="exam-public-btn primary" onClick={() => setWarnAck(true)}>
               OK
             </button>

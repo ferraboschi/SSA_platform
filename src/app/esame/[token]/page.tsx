@@ -250,6 +250,9 @@ export default async function Page({
       }}
       questions={data.questions}
       serverResume={serverResume}
+      // Day tests are SHORT: 10 minutes with a hard stop (owner batch 9); the
+      // final exam and the feedback keep the full hour.
+      limitS={/^day[1-9]$/.test(res.payload.t) ? 10 * 60 : 60 * 60}
     />
   );
 }

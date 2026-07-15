@@ -38,6 +38,8 @@ export interface ExamGateProps {
   forcedLang?: string;
   collectRegistration?: boolean;
   registrationFields?: import("./ExamRunner").RegField[];
+  /** Time limit (seconds) forwarded to the runner — day tests get 10 minutes. */
+  limitS?: number;
   /** Server-side progress snapshot (cross-device resume): used when this
    *  browser has no richer local state for the same link. */
   serverResume?: Omit<PersistState, "submitted">;

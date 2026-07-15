@@ -185,12 +185,18 @@ function OrderInput({
   // the drag after one swap. The container survives every reorder.
   const containerRef = useRef<HTMLDivElement | null>(null);
   const touchFrom = useRef<number | null>(null);
+  // Only the pointer that grabbed the handle drives the drag — a second finger
+  // must neither steal the row nor end the gesture.
+  const touchPointer = useRef<number | null>(null);
   const [touchIdx, setTouchIdx] = useState<number | null>(null);
-  const endTouch = () => {
+  const endTouch = (e: React.PointerEvent) => {
+    if (touchPointer.current != null && e.pointerId !== touchPointer.current) return;
+    touchPointer.current = null;
     touchFrom.current = null;
     setTouchIdx(null);
   };
   const onTouchDragMove = (e: React.PointerEvent) => {
+    if (e.pointerId !== touchPointer.current) return;
     const from = touchFrom.current;
     if (from == null) return;
     const hit = document
@@ -251,8 +257,13 @@ function OrderInput({
             e.dataTransfer.effectAllowed = "move";
             setDragIdx(i);
           }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => {
+          onDragOver={(e) => {
+            // Accept row drags only — an external link/file must not turn the
+            // row into a drop target (its default drop action NAVIGATES away).
+            if (dragIdx != null) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
             if (dragIdx != null) move(dragIdx, i);
             setDragIdx(null);
           }}
@@ -272,16 +283,20 @@ function OrderInput({
             aria-hidden
             onPointerDown={(e) => {
               if (e.pointerType === "mouse") return; // mouse keeps HTML5 dnd
+              if (touchPointer.current != null) return; // one drag at a time
               e.preventDefault();
               try {
                 containerRef.current?.setPointerCapture(e.pointerId);
               } catch {
                 /* inactive pointer — the drag still works via bubbling */
               }
+              touchPointer.current = e.pointerId;
               touchFrom.current = i;
               setTouchIdx(i);
             }}
-            style={{ color: "var(--text-4, #9ca3af)", fontSize: 16, touchAction: "none", padding: "4px 6px", margin: "-4px -6px", cursor: "grab" }}
+            // Generous hit area (~44px) — a missed grab falls on the row and
+            // scrolls the page instead of dragging.
+            style={{ color: "var(--text-4, #9ca3af)", fontSize: 16, touchAction: "none", padding: "14px 12px", margin: "-14px -6px", cursor: "grab" }}
           >⠿</span>
           <span style={{ flex: 1, fontSize: 15 }}>{opt}</span>
           <span style={{ display: "inline-flex", gap: 4 }}>

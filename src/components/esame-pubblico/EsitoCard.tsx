@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { CHROME, type Lang } from "./exam-chrome";
-import { getDayEsitoAction, getExamExplanationAction } from "@/lib/exam-links/actions";
+import { getDayEsitoAction, getExamExplanationAction, getLinkStateAction } from "@/lib/exam-links/actions";
 import type { DayEsito } from "@/lib/exam-links/esito";
 
 const ACCENT: Record<string, string> = {
@@ -98,6 +98,25 @@ export function EsitoCard({
 }) {
   const t = CHROME[lang];
   const [esito, setEsito] = useState(initialEsito);
+  // When the educator CLOSES the link, an esito already on screen must vanish
+  // too (owner batch 9) — same 30s fail-open poll the runner uses while the
+  // test is in progress. Re-opening the link is already blocked server-side.
+  const [closed, setClosed] = useState(false);
+
+  useEffect(() => {
+    if (!token || closed) return;
+    const id = setInterval(() => {
+      getLinkStateAction(token)
+        .then((r) => {
+          // Only the EDUCATOR closure wipes the esito: the natural end-of-day
+          // expiry (reason "expired") must not flash "closed by the educator"
+          // at midnight — re-opening is blocked server-side anyway.
+          if (r.ok && r.closed && r.reason === "closed") setClosed(true);
+        })
+        .catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [token, closed]);
 
   // The submit-time AI evaluation runs in the background (owner batch 8):
   // while it's in flight the card says so explicitly and refreshes itself
@@ -127,6 +146,16 @@ export function EsitoCard({
   const accent = esito.outcome ? ACCENT[esito.outcome] : "#4f46e5";
   const outcomeLabel =
     esito.outcome === "passed" ? t.previewPassed : esito.outcome === "retrial" ? t.previewRetrial : t.previewFailed;
+
+  if (closed) {
+    return (
+      <div className="exam-public-thanks" style={{ textAlign: "center" }}>
+        <div className="exam-public-thanks-check">✕</div>
+        <h2>{t.closedTitle}</h2>
+        <p>{t.closedBody}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="exam-public-thanks" style={{ textAlign: "center" }}>
