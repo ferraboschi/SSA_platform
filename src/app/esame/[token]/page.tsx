@@ -59,6 +59,10 @@ export default async function Page({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+  // Server-side resume snapshot (cross-device), filled by gate step 3 below.
+  let serverResume:
+    | { answers: Record<string, string | string[]>; currentIdx: number; lang: string; elapsed: number }
+    | undefined;
   const res = verifyExamToken(token);
   if (!res.ok) {
     const msg =
@@ -158,6 +162,36 @@ export default async function Page({
         <Blocked icon="!" title="Accesso non disponibile" body={absentAccessError(res.payload.t)} />
       );
     }
+
+    // 3) CROSS-DEVICE RESUME (owner, batch 8): the live-progress heartbeats
+    //    already persist answers/position/elapsed server-side — hand them to
+    //    the runner so a NEW device (or cleared storage) resumes from where
+    //    the server saw the student last, instead of restarting. The same-
+    //    device localStorage state still wins when richer (see ExamGate).
+    try {
+      const { data: prog } = await sb
+        .from("exam_progress")
+        .select("answers, current_idx, elapsed_seconds")
+        .eq("corso_id", corsoId)
+        .eq("test_key", res.payload.t)
+        .eq(subjS != null ? "corsista_id" : "partecipante_id", (subjS ?? subjP)!)
+        .is("submitted_at", null)
+        .maybeSingle();
+      const rawAnswers = (prog?.answers ?? null) as Record<string, string | string[]> | null;
+      if (rawAnswers && Object.keys(rawAnswers).length > 0) {
+        const { __lang, ...answers } = rawAnswers as Record<string, string | string[]> & {
+          __lang?: string;
+        };
+        serverResume = {
+          answers,
+          currentIdx: Number(prog?.current_idx ?? 0) || 0,
+          lang: typeof __lang === "string" ? __lang : (res.payload.l ?? ""),
+          elapsed: Number(prog?.elapsed_seconds ?? 0) || 0,
+        };
+      }
+    } catch {
+      /* pre-migration / transient — the exam simply starts fresh */
+    }
   }
 
   const family = corso.type === "shochu" ? "shochu" : "nihonshu";
@@ -213,6 +247,7 @@ export default async function Page({
         educator: data.header.educator,
       }}
       questions={data.questions}
+      serverResume={serverResume}
     />
   );
 }

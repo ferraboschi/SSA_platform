@@ -38,6 +38,9 @@ export interface ExamGateProps {
   forcedLang?: string;
   collectRegistration?: boolean;
   registrationFields?: import("./ExamRunner").RegField[];
+  /** Server-side progress snapshot (cross-device resume): used when this
+   *  browser has no richer local state for the same link. */
+  serverResume?: Omit<PersistState, "submitted">;
   reveal?: boolean;
   showResult?: boolean;
   /** True only for the FINAL exam — drives the certified thank-you screen (day
@@ -92,6 +95,16 @@ function DirectExam(props: ExamGateProps) {
     } catch {
       /* private mode / bad JSON → start fresh */
     }
+    // Cross-device resume (owner, batch 8): no local state — or the server
+    // snapshot knows MORE answers (the student progressed on another device)
+    // → resume from the server. A local submitted flag always wins.
+    const server = props.serverResume;
+    if (server && !stored?.submitted) {
+      const answered = (a?: Record<string, unknown>) => Object.keys(a ?? {}).length;
+      if (!stored || answered(server.answers) > answered(stored.answers)) {
+        stored = { ...server, submitted: false };
+      }
+    }
     if (stored) setResume(stored);
     setReady(true);
     // Already submitted on this device → no heartbeat (the educator's bar must
@@ -109,7 +122,10 @@ function DirectExam(props: ExamGateProps) {
       } catch {
         /* private mode — progress just won't survive a refresh */
       }
-      report(s.currentIdx, s.elapsed, s.answers);
+      // "__lang" rides along in the server snapshot so a cross-device resume
+      // restores the SAME exam language (mixed-language answers would grade
+      // against the wrong option texts). Stripped again on load.
+      report(s.currentIdx, s.elapsed, s.lang ? { ...s.answers, __lang: s.lang } : s.answers);
     },
     [storeKey, report],
   );
