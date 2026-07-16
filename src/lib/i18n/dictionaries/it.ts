@@ -1433,7 +1433,7 @@ export const it = {
   archivio: {
     eyebrow: "Repository",
     title: "Archivio completo",
-    sub: "Tutti i corsi della SSA, passati, in corso e futuri. Esplora per anno, città o educator.",
+    sub: "Tutti i corsi conclusi e annullati della SSA. Esplora per anno, città o educator — con esiti, incassi e fatturazione.",
     exportArchive: "Esporta archivio",
     cancelledWord: "Annullati",
     cancelRateWord: "tasso cancellazione",

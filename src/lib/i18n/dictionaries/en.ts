@@ -1431,7 +1431,7 @@ export const en: Dictionary = {
   archivio: {
     eyebrow: "Repository",
     title: "Full archive",
-    sub: "Every SSA course — past, ongoing and upcoming. Explore by year, city or educator.",
+    sub: "Every ended and cancelled SSA course. Explore by year, city or educator — with outcomes, revenue and invoicing.",
     exportArchive: "Export archive",
     cancelledWord: "Cancelled",
     cancelRateWord: "cancellation rate",
