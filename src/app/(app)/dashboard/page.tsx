@@ -4,6 +4,7 @@ import { getTranslations } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n/dictionary";
 import { formatEuro } from "@/lib/format";
 import { getSession } from "@/lib/auth/session";
+import { ROLE_VIEWS } from "@/lib/auth/roles";
 import { getDataSource } from "@/lib/data";
 import { isSandboxCourse } from "@/lib/corsi/sandbox";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
@@ -81,6 +82,10 @@ export default async function DashboardPage() {
   const d = buildDashboard(realCourses, corsisti, educators, thresholds);
   const dt = t.dashboard;
   const me = session.user;
+  // KPI links respect the role's ACL: a hidden nav id would 404 via
+  // requireNavAccess, so those cards render as plain (non-link) KPIs.
+  const hidden = new Set(ROLE_VIEWS[me.roleKey]?.hidden ?? []);
+  const kpiHref = (navId: string, href: string) => (hidden.has(navId) ? undefined : href);
 
   // Real returning-vs-new spend multiplier (was a hardcoded "2.3×" string).
   const avgSpend = (list: typeof corsisti) =>
@@ -211,7 +216,7 @@ export default async function DashboardPage() {
       <section className="kpi-grid cols-4" style={{ marginBottom: 28 }}>
         <KPI
           anim
-          href="/corsi"
+          href={kpiHref("corsi", "/corsi")}
           label={dt.kpi.activeCourses}
           value={kpis.activeCount}
           sub={format(dt.kpi.belowThreshold, { n: kpis.atRiskCount })}
@@ -219,7 +224,7 @@ export default async function DashboardPage() {
         />
         <KPI
           anim
-          href="/corsisti"
+          href={kpiHref("corsisti", "/corsisti")}
           label={dt.kpi.totalEnrolled}
           value={kpis.totalEnrolled.toLocaleString(locale)}
           sub={format(dt.kpi.avgPerCourse, { n: avgPerCourse })}
@@ -227,7 +232,7 @@ export default async function DashboardPage() {
         />
         <KPI
           anim
-          href="/conto-economico"
+          href={kpiHref("conto-economico", "/conto-economico")}
           label={dt.kpi.expectedMargin}
           value={Math.round(kpis.totalMargin / 1000)}
           unit="k €"
@@ -236,7 +241,7 @@ export default async function DashboardPage() {
         />
         <KPI
           anim
-          href="/esami"
+          href={kpiHref("esami", "/esami")}
           label={dt.kpi.examPassRate}
           value={examPassRate}
           unit="%"
