@@ -1341,6 +1341,11 @@ export const it = {
     emailCount: "{n} persone con più email",
     emailBadge: "{n} email",
     emailReviewed: "Verificato",
+    // Unione in blocco dei duplicati "quasi certi" (stessa email/telefono)
+    mergeAllBtn: "Unisci tutti i certi ({n})",
+    mergeAllConfirm:
+      "Stai per unire {n} gruppi di duplicati quasi certi (stessa email o stesso telefono). Iscrizioni, presenze, acquisti e crediti passano al profilo principale di ogni gruppo; i record duplicati restano conservati ma nascosti dagli elenchi. I gruppi con solo lo stesso nome (possibile omonimia) NON vengono toccati. Procedere?",
+    mergeAllDone: "Unite {people} anagrafiche in {clusters} gruppi.",
     repaidTitle: "Ripartecipazione pagata (dovrebbe essere gratis)",
     repaidSubtitle:
       "Regola SSA: chi ha già fatto un corso può ripartecipare allo stesso tipo gratis. Qui compaiono persone con più iscrizioni PAGATE dello stesso tipo — l'importo in più è probabilmente un errore.",

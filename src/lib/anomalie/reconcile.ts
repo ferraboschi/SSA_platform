@@ -59,6 +59,10 @@ export interface ReconciliationCounts {
   openCredits: number;
 }
 
+/** settings_kv key holding the last computed counts (read by the shell for
+ *  the /anomalie nav badge — a single cheap row instead of a recompute). */
+export const ANOMALIE_COUNTS_KEY = "anomalie_counts";
+
 /**
  * Compute the four reconciliation counts. Each rule is independently guarded so
  * a missing table degrades that count to 0; never throws.
@@ -204,6 +208,21 @@ export async function logReconciliation(): Promise<void> {
       `[reconcile] doppio-no-2nd=${c.doppioNo2nd} cancelled-100off=${c.cancelled100off} ` +
         `cash-on-cancelled=${c.cashOnCancelled} open-credits=${c.openCredits}`,
     );
+    // Persist the counts for the shell nav badge (counts only — no PII).
+    try {
+      const total = c.doppioNo2nd + c.cancelled100off + c.cashOnCancelled + c.openCredits;
+      await getSupabaseServiceClient()
+        .from("settings_kv")
+        .upsert(
+          {
+            key: ANOMALIE_COUNTS_KEY,
+            value: { computedAt: new Date().toISOString(), total, byRule: c },
+          },
+          { onConflict: "key" },
+        );
+    } catch {
+      // Best-effort: the badge just stays stale until the next sync.
+    }
   } catch {
     // Never let reconciliation logging break a Shopify sync.
   }
