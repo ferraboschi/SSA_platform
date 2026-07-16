@@ -15,7 +15,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { MONTH_TO_NUM } from "@/lib/dates/italian-months";
 import type { SearchIndex, SidebarCourse } from "@/lib/shell";
-import { isSandboxCourse, SANDBOX_COURSE_HANDLE } from "@/lib/corsi/sandbox";
+import { isSandboxCourse, SANDBOX_COURSE_HANDLES } from "@/lib/corsi/sandbox";
 
 export interface ShellData {
   searchIndex: SearchIndex;
@@ -60,7 +60,7 @@ async function fetchShellData(): Promise<ShellData> {
           .from("corsi")
           .select("*", { count: "exact", head: true })
           .eq("lifecycle", "pubblicato")
-          .neq("handle", SANDBOX_COURSE_HANDLE)
+          .not("handle", "in", `(${[...SANDBOX_COURSE_HANDLES].join(",")})`)
           .gte("start_date", today),
       ]),
       // Per-course sake-program overlays → the green "programma assegnato" dot.
