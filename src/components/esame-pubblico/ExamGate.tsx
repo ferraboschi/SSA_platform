@@ -113,7 +113,14 @@ function DirectExam(props: ExamGateProps) {
     // not flip back to "in corso"); the render below shows the blocked screen.
     if (stored?.submitted) return;
     // First heartbeat: the educator sees "in corso" as soon as the test opens.
-    report(stored?.currentIdx ?? 0, stored?.elapsed ?? 0, stored?.answers);
+    // MUST carry __lang like every persist() does — this write replaces the
+    // server's answers snapshot wholesale, and dropping the language here was
+    // exactly what made a browser switch re-ask it (owner batch 9).
+    report(
+      stored?.currentIdx ?? 0,
+      stored?.elapsed ?? 0,
+      stored?.lang ? { ...stored.answers, __lang: stored.lang } : stored?.answers,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeKey]);
 

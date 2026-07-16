@@ -439,6 +439,22 @@ export function ExamRunner({
           {headerBar}
           <div className="exam-public-q" {...noCopy}>
             <p className="exam-public-q-text">{CHROME[lang].chooseLang}</p>
+            {/* The choice is FINAL (owner batch 9): it follows the student
+                across devices and there is no way back — say so up front.
+                The warning follows the currently highlighted language. */}
+            <p
+              style={{
+                fontSize: 12.5,
+                color: "#92400e",
+                background: "#fef3c7",
+                borderRadius: 10,
+                padding: "8px 12px",
+                margin: "0 0 12px",
+                lineHeight: 1.5,
+              }}
+            >
+              ⚠️ {CHROME[lang].langWarn}
+            </p>
             <div className="exam-public-options">
               {availableLangs.map((l) => (
                 <button

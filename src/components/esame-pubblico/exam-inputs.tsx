@@ -203,7 +203,13 @@ function OrderInput({
       .elementsFromPoint(e.clientX, e.clientY)
       .find((el) => (el as HTMLElement).dataset?.orderIdx != null) as HTMLElement | undefined;
     const to = hit ? Number(hit.dataset.orderIdx) : NaN;
-    if (Number.isInteger(to) && to !== from) {
+    if (!Number.isInteger(to) || to === from) return;
+    // Swap only past the target's MIDPOINT (same rule as the mouse path):
+    // equal-height rows at the boundary would otherwise swap back and forth
+    // under a resting finger — the "can't tell where it lands" feel.
+    const r = hit!.getBoundingClientRect();
+    const mid = r.top + r.height / 2;
+    if ((from < to && e.clientY > mid) || (from > to && e.clientY < mid)) {
       move(from, to);
       touchFrom.current = to;
       setTouchIdx(to);
@@ -245,9 +251,14 @@ function OrderInput({
       style={{ display: "grid", gap: 8 }}
     >
       <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)" }}>{hint}</div>
-      {order.map((opt, i) => (
+      {order.map((opt, i) => {
+        const lifted = dragIdx === i || touchIdx === i;
+        return (
         <div
-          key={`${i}-${opt}`}
+          // Keyed by CONTENT so React MOVES the row during the live reorder
+          // instead of remounting it — the HTML5 drag source must survive its
+          // own swaps (sequence items are unique by nature).
+          key={opt}
           data-order-idx={i}
           draggable
           onDragStart={(e) => {
@@ -260,11 +271,21 @@ function OrderInput({
           onDragOver={(e) => {
             // Accept row drags only — an external link/file must not turn the
             // row into a drop target (its default drop action NAVIGATES away).
-            if (dragIdx != null) e.preventDefault();
+            if (dragIdx == null) return;
+            e.preventDefault();
+            // LIVE reorder: the row follows the cursor (like touch) so the
+            // landing position is always visible. Swap past the midpoint only,
+            // or boundary hovers would flicker back and forth.
+            if (dragIdx === i) return;
+            const r = e.currentTarget.getBoundingClientRect();
+            const mid = r.top + r.height / 2;
+            if ((dragIdx < i && e.clientY > mid) || (dragIdx > i && e.clientY < mid)) {
+              move(dragIdx, i);
+              setDragIdx(i);
+            }
           }}
           onDrop={(e) => {
-            e.preventDefault();
-            if (dragIdx != null) move(dragIdx, i);
+            e.preventDefault(); // arrangement already live — just finalize
             setDragIdx(null);
           }}
           onDragEnd={() => setDragIdx(null)}
@@ -273,10 +294,11 @@ function OrderInput({
             alignItems: "center",
             gap: 10,
             padding: "10px 12px",
-            border: "1px solid var(--border, #d4d4d8)",
+            border: lifted ? "1.5px dashed var(--indigo, #635bff)" : "1px solid var(--border, #d4d4d8)",
             borderRadius: 10,
-            background: dragIdx === i || touchIdx === i ? "#fff7ed" : "var(--surface, #fff)",
-            cursor: "grab",
+            background: lifted ? "#f5f7ff" : "var(--surface, #fff)",
+            boxShadow: lifted ? "0 6px 18px rgba(35, 39, 91, 0.18)" : undefined,
+            cursor: lifted ? "grabbing" : "grab",
           }}
         >
           <span
@@ -304,7 +326,8 @@ function OrderInput({
             <button type="button" style={btn} disabled={i === order.length - 1} aria-label="giù" onClick={() => move(i, i + 1)}>▼</button>
           </span>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

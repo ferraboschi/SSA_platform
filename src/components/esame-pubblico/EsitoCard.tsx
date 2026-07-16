@@ -162,30 +162,29 @@ export function EsitoCard({
       <h2 style={{ marginBottom: 6 }}>{t.dayResultTitle}</h2>
       <p style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", margin: "0 0 14px" }}>{t.dayResultNote}</p>
 
-      {esito.aiPending && (
+      {/* While the AI is still grading the open answers, NO number is shown:
+          a provisional (objective-only) score would flash "100%" and then
+          drop when the real combined one lands — the owner saw exactly that.
+          The card says "being verified" and swaps in the final score once. */}
+      {esito.aiPending ? (
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            justifyContent: "center",
-            fontSize: 13,
-            color: "#4f46e5",
+            border: "2px solid #dbe2ff",
             background: "#f5f7ff",
-            border: "1px solid #dbe2ff",
-            borderRadius: 10,
-            padding: "10px 14px",
-            margin: "0 auto 14px",
-            maxWidth: 520,
+            borderRadius: 12,
+            padding: "18px 22px",
+            margin: "0 auto 16px",
+            maxWidth: 420,
           }}
           role="status"
         >
-          <span aria-hidden style={{ animation: "spin 1.2s linear infinite", display: "inline-block" }}>⏳</span>
-          {t.aiWait}
+          <div aria-hidden style={{ fontSize: 30, marginBottom: 4 }}>⏳</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#4f46e5", marginBottom: 6 }}>
+            {t.aiVerifying}
+          </div>
+          <div style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", lineHeight: 1.5 }}>{t.aiWait}</div>
         </div>
-      )}
-
-      {esito.pct != null ? (
+      ) : esito.pct != null ? (
         <div
           style={{
             border: `2px solid ${accent}`,
@@ -215,28 +214,49 @@ export function EsitoCard({
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-3, #6b7280)", margin: "0 0 8px" }}>
           {t.reviewList}
         </div>
-        {esito.detail.map((d, i) => (
+        {esito.detail.map((d, i) => {
+          // Loud per-answer verdict (owner batch 9): a colored chip + row
+          // accent, not a lone 13px glyph. Green = right, red = wrong,
+          // gray = still under evaluation.
+          const chip =
+            d.ok === true
+              ? { icon: "✓", txt: t.verdictRight, bg: "#e8f6ee", fg: "#1a7f43" }
+              : d.ok === false
+                ? { icon: "✗", txt: t.verdictWrong, bg: "#fde8e6", fg: "#b42318" }
+                : { icon: "…", txt: t.reviewPendingBadge, bg: "#f3f4f6", fg: "#6b7280" };
+          return (
           <div
             key={d.qid}
             style={{
               padding: "10px 12px",
               borderTop: "1px solid #e5e7eb",
+              borderLeft: `3px solid ${chip.fg}`,
               fontSize: 13,
               lineHeight: 1.5,
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: 3 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
               <span
                 style={{
-                  display: "inline-block",
-                  width: 20,
-                  color: d.ok === true ? "#15803d" : d.ok === false ? "#b42318" : "#9ca3af",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "2px 9px",
+                  borderRadius: 999,
+                  fontSize: 11,
                   fontWeight: 800,
+                  letterSpacing: ".02em",
+                  textTransform: "uppercase",
+                  background: chip.bg,
+                  color: chip.fg,
+                  whiteSpace: "nowrap",
                 }}
               >
-                {d.ok === true ? "✓" : d.ok === false ? "✗" : "…"}
+                {chip.icon} {chip.txt}
               </span>
-              {i + 1}. {d.text}
+              <span>
+                {i + 1}. {d.text}
+              </span>
             </div>
             <div style={{ color: "var(--text-2, #374151)", marginLeft: 20 }}>
               <span style={{ color: "var(--text-3, #6b7280)" }}>{t.yourAnswer}:</span> {d.given || "—"}
@@ -245,9 +265,6 @@ export function EsitoCard({
               <div style={{ color: "#15803d", marginLeft: 20 }}>
                 <span style={{ color: "var(--text-3, #6b7280)" }}>{t.reviewCorrectAnswer}:</span> {d.correctText}
               </div>
-            )}
-            {d.ok === null && d.aiVote == null && !d.aiFailed && (
-              <div style={{ fontSize: 11.5, color: "#9ca3af", marginLeft: 20 }}>({t.reviewPendingBadge})</div>
             )}
             {d.aiFailed && (
               <div style={{ fontSize: 11.5, color: "#b45309", marginLeft: 20 }}>({t.aiFailedNote})</div>
@@ -274,7 +291,8 @@ export function EsitoCard({
             )}
             {token && <div style={{ marginLeft: 20 }}><Explain token={token} qid={d.qid} lang={lang} /></div>}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {returnNote && (
