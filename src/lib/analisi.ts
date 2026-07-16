@@ -9,10 +9,7 @@
 import type { Course, CourseTypeKey, DeliveryMode } from "@/lib/domain";
 import { COURSE_TYPES } from "@/lib/domain/constants";
 import { monthIndexIt, MONTH_NAMES_IT } from "@/lib/dates/italian-months";
-
-// "Now" anchor for due/overdue maths. Kept as a constant so the page is
-// deterministic (pure) — bump it as the platform's reference date moves.
-const ANALISI_TODAY = new Date(2026, 5, 2); // 2 Jun 2026
+import { isPaidRevenue, netPaidCents } from "@/lib/economics/revenue";
 
 /** Months elapsed between two course-dates (signed, in whole months). */
 function monthsBetween(a: Date, b: Date): number {
@@ -28,9 +25,10 @@ function isHeld(c: Course): boolean {
   return !c.cancelled && c.lifecycle === "passato";
 }
 
-/** A course planned for the future (published but not yet held). */
+/** A course planned for the future: PUBLISHED and not yet held. Drafts
+ *  ("bozza") are intentions, not plans — they must not count as scheduled. */
 function isPlanned(c: Course): boolean {
-  return !c.cancelled && c.lifecycle !== "passato";
+  return !c.cancelled && c.lifecycle === "pubblicato";
 }
 
 // ===== Serializable output shapes =====
@@ -79,7 +77,71 @@ export interface TypeStat {
   courses: number;
   enrolled: number;
   avgFill: number;
+  revenue: number;
   byYear: { year: number; courses: number }[];
+}
+
+export interface YearMonthCell {
+  courses: number;
+  enrolled: number;
+  /** Heat tier 0–4: 0 = never held, 4 = the busiest cell of the whole matrix.
+   *  Discrete so the UI can map it onto the indigo token scale (no rgba). */
+  tier: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface YearMonthRow {
+  year: number;
+  /** 12 cells, index = month 0–11. */
+  cells: YearMonthCell[];
+  courses: number;
+  enrolled: number;
+}
+
+export interface YoyMonth {
+  month: string; // IT key
+  idx: number; // 0–11
+  year: number;
+  courses: number;
+  enrolled: number;
+  prevYear: number;
+  prevCourses: number;
+  prevEnrolled: number;
+  deltaCourses: number;
+  deltaEnrolled: number;
+}
+
+/** Raw `purchases` row as fetched by the page (RLS-locked table, server read). */
+export interface PurchaseAggRow {
+  cluster: string | null;
+  subtype: string | null;
+  product_title: string | null;
+  amount_cents: number | null;
+  discount_cents: number | null;
+  financial_status: string | null;
+  ordered_at: string | null;
+}
+
+export interface ActivityStat {
+  cluster: string;
+  title: string;
+  orders: number;
+  revenue: number; // euros, net of discounts, paid orders only
+  lastAt: string | null; // most recent ordered_at (ISO)
+  share: number; // vs the top activity (0–100), for bar width
+}
+
+export interface PersonStat {
+  email: string;
+  name: string;
+  courses: number;
+  totalSpent: number;
+}
+
+export interface EducatorStat {
+  id: string;
+  name: string;
+  courses: number;
+  enrolled: number;
 }
 
 export type RecoPriority = "alta" | "media" | "bassa";
@@ -103,6 +165,8 @@ export interface Recommendation {
 export interface AnalisiData {
   kpis: AnalisiKpis;
   seasonality: MonthStat[];
+  yearMatrix: YearMonthRow[];
+  yoy: YoyMonth[];
   cityStats: CityStat[];
   typeStats: TypeStat[];
   recommendations: Recommendation[];
@@ -129,7 +193,7 @@ function modal<T>(values: T[]): T | null {
   return best;
 }
 
-export function computeAnalisi(courses: Course[]): AnalisiData {
+export function computeAnalisi(courses: Course[], today: Date = new Date()): AnalisiData {
   const held = courses.filter(isHeld);
   const planned = courses.filter(isPlanned);
 
@@ -189,7 +253,7 @@ export function computeAnalisi(courses: Course[]): AnalisiData {
       }
       cadence = Math.round(gaps / (sorted.length - 1));
     }
-    const monthsSinceLast = monthsBetween(courseDate(last), ANALISI_TODAY);
+    const monthsSinceLast = monthsBetween(courseDate(last), today);
     const topType = (modal(list.map((c) => c.type)) ?? last.type) as CourseTypeKey;
     return {
       city,
@@ -243,6 +307,7 @@ export function computeAnalisi(courses: Course[]): AnalisiData {
         courses: list.length,
         enrolled: list.reduce((s, c) => s + c.enrolled, 0),
         avgFill: round(safeDiv(fillSum, list.length)),
+        revenue: round(list.reduce((s, c) => s + c.revenue, 0)),
         byYear: [...yearMap.entries()]
           .map(([year, courses]) => ({ year, courses }))
           .sort((a, b) => a.year - b.year),
@@ -306,7 +371,7 @@ export function computeAnalisi(courses: Course[]): AnalisiData {
         cadence = Math.max(1, Math.round(gaps / (editions - 1)));
       }
       const assumedCadence = cadence ?? 12;
-      const monthsSinceLast = monthsBetween(courseDate(last), ANALISI_TODAY);
+      const monthsSinceLast = monthsBetween(courseDate(last), today);
       const dueIn = assumedCadence - monthsSinceLast; // <=0 → overdue
 
       // Only surface combos that are due now or coming due within 3 months.
@@ -333,11 +398,11 @@ export function computeAnalisi(courses: Course[]): AnalisiData {
           bestIdx = idx;
         }
       }
-      if (bestIdx < 0) bestIdx = ANALISI_TODAY.getMonth();
+      if (bestIdx < 0) bestIdx = today.getMonth();
 
       // Next calendar occurrence of bestIdx at/after today.
-      let suggestedYear = ANALISI_TODAY.getFullYear();
-      if (bestIdx < ANALISI_TODAY.getMonth()) suggestedYear += 1;
+      let suggestedYear = today.getFullYear();
+      if (bestIdx < today.getMonth()) suggestedYear += 1;
 
       const mode = (modal(eds.map((c) => c.mode)) ?? last.mode) as DeliveryMode;
 
@@ -394,10 +459,168 @@ export function computeAnalisi(courses: Course[]): AnalisiData {
   return {
     kpis,
     seasonality,
+    yearMatrix: computeYearMatrix(held),
+    yoy: computeYoyGrowth(courses, today),
     cityStats,
     typeStats,
     recommendations,
     bestSeason,
     hasData: held.length > 0,
   };
+}
+
+// ===== Year × month matrix ("Mesi più frequentati — storico") =====
+
+/** Per-year 12-month heat matrix over held courses. Heat = each cell's enrolled
+ *  share of the single busiest cell across ALL years, quantized to 4 tiers so
+ *  the UI can render it with the discrete indigo token scale. */
+export function computeYearMatrix(held: Course[]): YearMonthRow[] {
+  const byYear = new Map<number, { courses: number; enrolled: number }[]>();
+  for (const c of held) {
+    const idx = monthIndexIt(c.month);
+    if (idx < 0) continue;
+    const cells =
+      byYear.get(c.year) ??
+      byYear
+        .set(c.year, Array.from({ length: 12 }, () => ({ courses: 0, enrolled: 0 })))
+        .get(c.year)!;
+    cells[idx].courses += 1;
+    cells[idx].enrolled += c.enrolled;
+  }
+  const peak = Math.max(1, ...[...byYear.values()].flat().map((c) => c.enrolled));
+  return [...byYear.entries()]
+    .map(([year, cells]) => ({
+      year,
+      cells: cells.map((c) => ({
+        ...c,
+        tier: (c.courses === 0
+          ? 0
+          : Math.min(4, Math.max(1, Math.ceil((c.enrolled / peak) * 4)))) as YearMonthCell["tier"],
+      })),
+      courses: cells.reduce((s, c) => s + c.courses, 0),
+      enrolled: cells.reduce((s, c) => s + c.enrolled, 0),
+    }))
+    .sort((a, b) => a.year - b.year);
+}
+
+// ===== YoY growth ("quali mesi crescono di meno") =====
+
+/** Each of the last 12 COMPLETE months (current month excluded) vs the same
+ *  month one year earlier, over held courses. Months with no activity in either
+ *  year are skipped. Sorted WEAKEST first (lowest enrolled delta) so shrinking
+ *  months surface at the top. */
+export function computeYoyGrowth(courses: Course[], today: Date): YoyMonth[] {
+  const held = courses.filter(isHeld);
+  const agg = new Map<string, { courses: number; enrolled: number }>();
+  for (const c of held) {
+    const idx = monthIndexIt(c.month);
+    if (idx < 0) continue;
+    const key = `${c.year}-${idx}`;
+    const e = agg.get(key) ?? { courses: 0, enrolled: 0 };
+    e.courses += 1;
+    e.enrolled += c.enrolled;
+    agg.set(key, e);
+  }
+  const out: YoyMonth[] = [];
+  for (let back = 12; back >= 1; back--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - back, 1);
+    const year = d.getFullYear();
+    const idx = d.getMonth();
+    const cur = agg.get(`${year}-${idx}`) ?? { courses: 0, enrolled: 0 };
+    const prev = agg.get(`${year - 1}-${idx}`) ?? { courses: 0, enrolled: 0 };
+    if (cur.courses === 0 && prev.courses === 0) continue;
+    out.push({
+      month: MONTH_NAMES_IT[idx],
+      idx,
+      year,
+      courses: cur.courses,
+      enrolled: cur.enrolled,
+      prevYear: year - 1,
+      prevCourses: prev.courses,
+      prevEnrolled: prev.enrolled,
+      deltaCourses: cur.courses - prev.courses,
+      deltaEnrolled: cur.enrolled - prev.enrolled,
+    });
+  }
+  return out.sort((a, b) => a.deltaEnrolled - b.deltaEnrolled);
+}
+
+// ===== Non-course activity ranking (eventi, libri, merchandise) =====
+
+/** Rank NON-course products by net paid revenue (financial_status null/'paid';
+ *  net = max(amount − discount, 0), the platform-wide revenue rule).
+ *  NOTE: discount_cents is the ORDER-level discount copied onto every line for
+ *  legacy rows, so a multi-line order can over-subtract per product — accepted
+ *  for ranking purposes (same rule applied uniformly to every product). */
+export function rankActivities(rows: PurchaseAggRow[], top = 10): ActivityStat[] {
+  const byKey = new Map<
+    string,
+    { cluster: string; title: string; orders: number; cents: number; lastAt: string | null }
+  >();
+  for (const r of rows) {
+    const cluster = (r.cluster ?? "").trim();
+    if (!cluster || cluster === "corso") continue;
+    if (!isPaidRevenue(r.financial_status)) continue;
+    const title = (r.product_title ?? "").trim() || "—";
+    const key = `${cluster}|${title}`;
+    const e =
+      byKey.get(key) ?? { cluster, title, orders: 0, cents: 0, lastAt: null };
+    e.orders += 1;
+    e.cents += netPaidCents(r);
+    if (r.ordered_at && (!e.lastAt || r.ordered_at > e.lastAt)) e.lastAt = r.ordered_at;
+    byKey.set(key, e);
+  }
+  const ranked = [...byKey.values()]
+    .sort((a, b) => b.cents - a.cents || b.orders - a.orders)
+    .slice(0, top);
+  const topCents = Math.max(1, ...ranked.map((e) => e.cents));
+  return ranked.map((e) => ({
+    cluster: e.cluster,
+    title: e.title,
+    orders: e.orders,
+    revenue: round(e.cents / 100),
+    lastAt: e.lastAt,
+    share: round((e.cents / topCents) * 100),
+  }));
+}
+
+// ===== People rankings =====
+
+/** Top corsisti by courses attended. Placeholder seats ("@ssa.placeholder")
+ *  are synthetic multi-ticket rows, not people — excluded. Structural input so
+ *  the full Corsista domain object is accepted but not required. */
+export function rankCorsisti(
+  corsisti: { email: string; name: string; totalSpent: number; courses: unknown[] }[],
+  top = 10,
+): PersonStat[] {
+  return corsisti
+    .filter((c) => !c.email.endsWith("@ssa.placeholder"))
+    .map((c) => ({
+      email: c.email,
+      name: c.name,
+      courses: c.courses.length,
+      totalSpent: round(c.totalSpent),
+    }))
+    .filter((c) => c.courses > 0)
+    .sort((a, b) => b.courses - a.courses || b.totalSpent - a.totalSpent)
+    .slice(0, top);
+}
+
+/** Top educators by held courses (grouped by name — the id joins the profile
+ *  link when available; the placeholder educator "—" is skipped). */
+export function rankEducators(courses: Course[], top = 10): EducatorStat[] {
+  const held = courses.filter(isHeld);
+  const byName = new Map<string, EducatorStat>();
+  for (const c of held) {
+    const name = (c.educator?.name ?? "").trim();
+    if (!name || name === "—") continue;
+    const e = byName.get(name) ?? { id: c.educator.id, name, courses: 0, enrolled: 0 };
+    e.courses += 1;
+    e.enrolled += c.enrolled;
+    if (!e.id && c.educator.id) e.id = c.educator.id;
+    byName.set(name, e);
+  }
+  return [...byName.values()]
+    .sort((a, b) => b.courses - a.courses || b.enrolled - a.enrolled)
+    .slice(0, top);
 }

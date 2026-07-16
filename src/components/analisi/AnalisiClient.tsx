@@ -1,17 +1,24 @@
 "use client";
 
+import Link from "next/link";
 import { Badge, KPI, PageHeader, type BadgeTone } from "@/components/ui";
 import { useT, format, type Dictionary } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
 import { monthLabel } from "@/lib/dashboard";
+import { MONTH_NAMES_IT } from "@/lib/dates/italian-months";
 import { COURSE_TYPES } from "@/lib/domain/constants";
 import type { CourseTypeKey } from "@/lib/domain";
 import type {
+  ActivityStat,
   AnalisiData,
   CityStat,
+  EducatorStat,
   MonthStat,
+  PersonStat,
   Recommendation,
   RecoPriority,
+  YearMonthRow,
+  YoyMonth,
 } from "@/lib/analisi";
 
 type AnalisiT = Dictionary["analisi"];
@@ -30,7 +37,19 @@ const PRIO_TONE: Record<RecoPriority, BadgeTone> = {
 
 const eur = (n: number) => formatEuro(n);
 
-export function AnalisiClient({ data, locale }: { data: AnalisiData; locale: string }) {
+export function AnalisiClient({
+  data,
+  activities,
+  people,
+  educators,
+  locale,
+}: {
+  data: AnalisiData;
+  activities: ActivityStat[];
+  people: PersonStat[];
+  educators: EducatorStat[];
+  locale: string;
+}) {
   const t = useT().analisi;
   const mLabel = (m: string) => monthLabel(m, locale);
 
@@ -44,25 +63,58 @@ export function AnalisiClient({ data, locale }: { data: AnalisiData; locale: str
         </div>
       ) : (
         <>
-          <section className="kpi-grid cols-4" style={{ marginBottom: 24 }}>
+          <section className="kpi-grid cols-4" style={{ marginBottom: 8 }}>
             <KPI label={t.kpi.held} value={data.kpis.heldCourses} sub={`${data.kpis.plannedCourses} ${t.kpi.planned.toLowerCase()}`} />
             <KPI label={t.kpi.enrolled} value={data.kpis.totalEnrolled} />
             <KPI label={t.kpi.fill} value={data.kpis.avgFill} unit="%" />
             <KPI label={t.kpi.revenue} value={eur(data.kpis.totalRevenue)} sub={`${t.kpi.margin}: ${data.kpis.avgMargin}%`} />
           </section>
 
+          <GroupLabel>{t.groups.plan}</GroupLabel>
           <RecommendationsSection recos={data.recommendations} t={t} mLabel={mLabel} />
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 20, marginTop: 20 }} className="analisi-split">
+          <GroupLabel>{t.groups.when}</GroupLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 20, marginTop: 12 }} className="analisi-split">
             <SeasonalitySection data={data} t={t} mLabel={mLabel} />
-            <TypesSection data={data} t={t} mLabel={mLabel} />
+            <YearMatrixSection rows={data.yearMatrix} t={t} mLabel={mLabel} />
           </div>
 
+          <GroupLabel>{t.groups.growth}</GroupLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 20, marginTop: 12 }} className="analisi-split">
+            <YoySection yoy={data.yoy} t={t} mLabel={mLabel} />
+            <TypesSection data={data} t={t} />
+          </div>
+
+          <GroupLabel>{t.groups.what}</GroupLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 20, marginTop: 12 }} className="analisi-split">
+            <TypeRankingSection data={data} t={t} />
+            <ActivitiesSection activities={activities} t={t} />
+          </div>
+
+          <GroupLabel>{t.groups.who}</GroupLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 20, marginTop: 12 }} className="analisi-split">
+            <PeopleSection people={people} t={t} />
+            <EducatorsSection educators={educators} t={t} />
+          </div>
+
+          <GroupLabel>{t.groups.where}</GroupLabel>
           <GeographySection cities={data.cityStats} t={t} mLabel={mLabel} />
         </>
       )}
 
       <style>{`@media (max-width: 900px){.analisi-split{grid-template-columns:minmax(0,1fr) !important}}`}</style>
+    </div>
+  );
+}
+
+/** Uppercase eyebrow separating the page's thematic groups. */
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="text-3"
+      style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", margin: "28px 2px 0" }}
+    >
+      {children}
     </div>
   );
 }
@@ -84,7 +136,7 @@ function RecommendationsSection({
     bassa: t.reco.priorityLow,
   };
   return (
-    <section className="card" style={{ marginTop: 16 }}>
+    <section className="card" style={{ marginTop: 12 }}>
       <div className="card-head">
         <div>
           <div className="h3" style={{ fontWeight: 600 }}>{t.reco.title}</div>
@@ -198,17 +250,160 @@ function SeasonalitySection({
   );
 }
 
-// ===== Types trend =====
+// ===== Year × month matrix (historic busiest months) =====
 
-function TypesSection({
-  data,
+// Discrete indigo scale — one hue (demand), 4 intensities. Tier 0 = never held.
+const TIER_BG = ["transparent", "var(--indigo-50)", "var(--indigo-100)", "var(--indigo-400)", "var(--indigo)"];
+
+function YearMatrixSection({
+  rows,
   t,
-  mLabel: _mLabel,
+  mLabel,
 }: {
-  data: AnalisiData;
+  rows: YearMonthRow[];
   t: AnalisiT;
   mLabel: (m: string) => string;
 }) {
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <div className="h3" style={{ fontWeight: 600 }}>{t.matrix.title}</div>
+          <div className="text-3" style={{ fontSize: 12 }}>{t.matrix.sub}</div>
+        </div>
+      </div>
+      <div className="card-body">
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 3, width: "100%", minWidth: 560 }}>
+            <thead>
+              <tr>
+                <th className="text-3" style={{ fontSize: 10.5, fontWeight: 500, textAlign: "left", padding: "0 4px" }}>{t.matrix.colYear}</th>
+                {MONTH_NAMES_IT.map((m) => (
+                  <th key={m} className="text-3" style={{ fontSize: 10.5, fontWeight: 500, textAlign: "center", padding: "0 2px" }}>
+                    {mLabel(m).slice(0, 1)}
+                  </th>
+                ))}
+                <th className="text-3" style={{ fontSize: 10.5, fontWeight: 500, textAlign: "right", padding: "0 4px" }}>{t.matrix.colTotal}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.year}>
+                  <td style={{ fontSize: 12, fontWeight: 600, padding: "0 4px", whiteSpace: "nowrap" }}>{r.year}</td>
+                  {r.cells.map((c, idx) => (
+                    <td
+                      key={idx}
+                      title={`${mLabel(MONTH_NAMES_IT[idx])} ${r.year} — ${format(t.matrix.cellTitle, { courses: String(c.courses), enrolled: String(c.enrolled) })}`}
+                      style={{
+                        background: TIER_BG[c.tier],
+                        color: c.tier >= 3 ? "#fff" : c.tier === 0 ? "var(--text-4)" : "var(--text)",
+                        borderRadius: 4,
+                        textAlign: "center",
+                        fontSize: 11.5,
+                        fontWeight: c.tier >= 3 ? 600 : 400,
+                        fontVariantNumeric: "tabular-nums",
+                        padding: "6px 2px",
+                        minWidth: 28,
+                        border: c.tier === 0 ? "1px solid var(--border-2)" : "1px solid transparent",
+                      }}
+                    >
+                      {c.courses === 0 ? "·" : c.enrolled}
+                    </td>
+                  ))}
+                  <td style={{ fontSize: 11.5, textAlign: "right", padding: "0 4px", whiteSpace: "nowrap" }}>
+                    <strong>{r.enrolled}</strong>{" "}
+                    <span className="text-3">· {format(t.season.courses, { n: String(r.courses) })}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="text-3" style={{ fontSize: 11, marginTop: 10 }}>{t.matrix.legend}</div>
+      </div>
+    </section>
+  );
+}
+
+// ===== YoY growth (weakest months first) =====
+
+function YoySection({
+  yoy,
+  t,
+  mLabel,
+}: {
+  yoy: YoyMonth[];
+  t: AnalisiT;
+  mLabel: (m: string) => string;
+}) {
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <div className="h3" style={{ fontWeight: 600 }}>{t.yoy.title}</div>
+          <div className="text-3" style={{ fontSize: 12 }}>{t.yoy.sub}</div>
+        </div>
+      </div>
+      {yoy.length === 0 ? (
+        <div className="card-body">
+          <p className="text-3" style={{ fontSize: 13 }}>{t.yoy.empty}</p>
+        </div>
+      ) : (
+        <div className="table-wrap" style={{ boxShadow: "none", borderRadius: 0 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t.yoy.colMonth}</th>
+                <th style={{ textAlign: "right" }}>{t.yoy.colCourses}</th>
+                <th style={{ textAlign: "right" }}>{t.yoy.colEnrolled}</th>
+                <th style={{ textAlign: "right" }}>{t.yoy.colPrev}</th>
+                <th style={{ textAlign: "right" }}>{t.yoy.colDelta}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {yoy.map((m) => (
+                <tr key={`${m.year}-${m.idx}`}>
+                  <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {mLabel(m.month).slice(0, 3)} {m.year}
+                  </td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {m.courses} <span className="text-3">({m.prevCourses})</span>
+                  </td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{m.enrolled}</td>
+                  <td className="text-3" style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{m.prevEnrolled}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <Delta value={m.deltaEnrolled} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Delta({ value }: { value: number }) {
+  if (value === 0) return <span className="text-3" style={{ fontVariantNumeric: "tabular-nums" }}>=</span>;
+  const up = value > 0;
+  return (
+    <span
+      style={{
+        color: up ? "var(--success-fg)" : "var(--danger-fg)",
+        fontWeight: 600,
+        fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {up ? "▲" : "▼"} {up ? "+" : "−"}{Math.abs(value)}
+    </span>
+  );
+}
+
+// ===== Types trend =====
+
+function TypesSection({ data, t }: { data: AnalisiData; t: AnalisiT }) {
   const maxYearCount = Math.max(
     1,
     ...data.typeStats.flatMap((ts) => ts.byYear.map((y) => y.courses)),
@@ -255,6 +450,184 @@ function TypesSection({
   );
 }
 
+// ===== Best activities: course types ranked =====
+
+function TypeRankingSection({ data, t }: { data: AnalisiData; t: AnalisiT }) {
+  const ranked = [...data.typeStats].sort((a, b) => b.enrolled - a.enrolled);
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <div className="h3" style={{ fontWeight: 600 }}>{t.best.typesTitle}</div>
+          <div className="text-3" style={{ fontSize: 12 }}>{t.best.typesSub}</div>
+        </div>
+      </div>
+      <div className="table-wrap" style={{ boxShadow: "none", borderRadius: 0 }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t.best.colType}</th>
+              <th style={{ textAlign: "right" }}>{t.best.colCourses}</th>
+              <th style={{ textAlign: "right" }}>{t.best.colEnrolled}</th>
+              <th style={{ textAlign: "right" }}>{t.best.colFill}</th>
+              <th style={{ textAlign: "right" }}>{t.best.colRevenue}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranked.map((ts) => (
+              <tr key={ts.type}>
+                <td><Badge tone={typeTone(ts.type)}>{ts.label.toUpperCase()}</Badge></td>
+                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{ts.courses}</td>
+                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{ts.enrolled}</td>
+                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{ts.avgFill}%</td>
+                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(ts.revenue)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// ===== Best activities: non-course purchases =====
+
+function ActivitiesSection({ activities, t }: { activities: ActivityStat[]; t: AnalisiT }) {
+  const clusterLabel = (c: string) => t.best.clusters[c] ?? c;
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <div className="h3" style={{ fontWeight: 600 }}>{t.best.otherTitle}</div>
+          <div className="text-3" style={{ fontSize: 12 }}>{t.best.otherSub}</div>
+        </div>
+      </div>
+      {activities.length === 0 ? (
+        <div className="card-body">
+          <p className="text-3" style={{ fontSize: 13 }}>{t.best.otherEmpty}</p>
+        </div>
+      ) : (
+        <div className="table-wrap" style={{ boxShadow: "none", borderRadius: 0 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t.best.colProduct}</th>
+                <th style={{ textAlign: "right" }}>{t.best.colOrders}</th>
+                <th style={{ textAlign: "right" }}>{t.best.colRevenue}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activities.map((a) => (
+                <tr key={`${a.cluster}|${a.title}`}>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <Badge tone="neutral">{clusterLabel(a.cluster).toUpperCase()}</Badge>
+                      <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 260 }} title={a.title}>
+                        {a.title}
+                      </span>
+                    </div>
+                    <div className="bar azzurro" style={{ height: 4, marginTop: 6, maxWidth: 220 }}>
+                      <i style={{ width: `${Math.max(a.share, 3)}%` }} />
+                    </div>
+                  </td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{a.orders}</td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{eur(a.revenue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ===== Most active people =====
+
+function PeopleSection({ people, t }: { people: PersonStat[]; t: AnalisiT }) {
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <div className="h3" style={{ fontWeight: 600 }}>{t.people.corsistiTitle}</div>
+          <div className="text-3" style={{ fontSize: 12 }}>{t.people.corsistiSub}</div>
+        </div>
+      </div>
+      {people.length === 0 ? (
+        <div className="card-body">
+          <p className="text-3" style={{ fontSize: 13 }}>{t.people.corsistiEmpty}</p>
+        </div>
+      ) : (
+        <div className="table-wrap" style={{ boxShadow: "none", borderRadius: 0 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t.people.colName}</th>
+                <th style={{ textAlign: "right" }}>{t.people.colCourses}</th>
+                <th style={{ textAlign: "right" }}>{t.people.colSpent}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {people.map((p) => (
+                <tr key={p.email}>
+                  <td>
+                    <Link href={`/corsisti/${encodeURIComponent(p.email)}`} style={{ fontWeight: 600, color: "var(--indigo-600)", textDecoration: "none" }}>
+                      {p.name || p.email}
+                    </Link>
+                  </td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{p.courses}</td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(p.totalSpent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function EducatorsSection({ educators, t }: { educators: EducatorStat[]; t: AnalisiT }) {
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <div className="h3" style={{ fontWeight: 600 }}>{t.people.educatorsTitle}</div>
+          <div className="text-3" style={{ fontSize: 12 }}>{t.people.educatorsSub}</div>
+        </div>
+      </div>
+      <div className="table-wrap" style={{ boxShadow: "none", borderRadius: 0 }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t.people.colName}</th>
+              <th style={{ textAlign: "right" }}>{t.people.colCourses}</th>
+              <th style={{ textAlign: "right" }}>{t.people.colEnrolled}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {educators.map((e) => (
+              <tr key={e.name}>
+                <td>
+                  {e.id ? (
+                    <Link href={`/educator/${e.id}`} style={{ fontWeight: 600, color: "var(--indigo-600)", textDecoration: "none" }}>
+                      {e.name}
+                    </Link>
+                  ) : (
+                    <span style={{ fontWeight: 600 }}>{e.name}</span>
+                  )}
+                </td>
+                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{e.courses}</td>
+                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{e.enrolled}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 // ===== Geography =====
 
 function GeographySection({
@@ -267,7 +640,7 @@ function GeographySection({
   mLabel: (m: string) => string;
 }) {
   return (
-    <section className="card" style={{ marginTop: 20 }}>
+    <section className="card" style={{ marginTop: 12 }}>
       <div className="card-head">
         <div>
           <div className="h3" style={{ fontWeight: 600 }}>{t.geo.title}</div>
