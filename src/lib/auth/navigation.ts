@@ -42,9 +42,8 @@ export const NAV_ITEMS: NavItemDef[] = [
   // redundant (see ROLE_VIEWS.admin/manager .hidden in roles.ts).
   { id: "esami", icon: "exam", href: "/esami", group: "sistema" },
   { id: "esami-editor", icon: "note", href: "/esami/editor", group: "sistema" },
+  { id: "conto-economico", icon: "coin", href: "/conto-economico", group: "sistema" },
   { id: "anomalie", icon: "warn", href: "/anomalie", group: "sistema" },
   { id: "analisi", icon: "trending", href: "/analisi", group: "sistema" },
   { id: "account", icon: "user", href: "/account", group: "sistema" },
-  // NOTE: "conto-economico" is intentionally NOT listed here — it's hidden from
-  // the menu (the page still exists at /conto-economico if reached directly).
 ];

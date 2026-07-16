@@ -251,13 +251,14 @@ export function makeCoursesRepo(
         amount_cents: number;
         discount_cents: number | null;
         financial_status?: string | null;
+        exam_result?: "passed" | "retrial" | "failed" | null;
       };
       const ENR_PAGE = 1000;
       // `financial_status` may not exist pre-enrichment migration → fall back to
       // the base columns (revenue then treats every enrollment as paid, as it
       // did before the paid-only rule was introduced).
-      const AGG_RICH = "corso_id,amount_cents,discount_cents,financial_status";
-      const AGG_BASE = "corso_id,amount_cents,discount_cents";
+      const AGG_RICH = "corso_id,amount_cents,discount_cents,exam_result,financial_status";
+      const AGG_BASE = "corso_id,amount_cents,discount_cents,exam_result";
       let aggSelect = AGG_RICH;
       const enrollAggRows = await paginateAll<EnrollAggRow>(
         async (from, to) => {
@@ -280,6 +281,18 @@ export function makeCoursesRepo(
         { pageSize: ENR_PAGE },
       );
       const agg = aggregateCourseEnrollments(enrollAggRows);
+
+      // Exam-outcome tally per course from the same enrollment scan. Without
+      // this, list-level consumers (educator pass-rate, archivio, month report)
+      // always saw examResults = null — only the single-course path filled it.
+      const examAgg = new Map<number, { passed: number; retrial: number; failed: number }>();
+      for (const r of enrollAggRows) {
+        if (!r.exam_result) continue;
+        const e =
+          examAgg.get(r.corso_id) ??
+          examAgg.set(r.corso_id, { passed: 0, retrial: 0, failed: 0 }).get(r.corso_id)!;
+        e[r.exam_result] += 1;
+      }
 
       // Applied transfer credits per destination course (euros), fetched once via
       // the SERVICE client (corsi_crediti is service-role only — RLS with no
@@ -311,7 +324,10 @@ export function makeCoursesRepo(
             ? (eduMap.get(r.educator_id) ?? placeholderEducator())
             : placeholderEducator();
         const credits = (creditsByCourse.get(r.id) ?? 0) / 100;
-        return corsoRowToDomain(r, edu, a.n, a.rev, [], [], credits);
+        const course = corsoRowToDomain(r, edu, a.n, a.rev, [], [], credits);
+        const exams = examAgg.get(r.id);
+        if (exams) course.examResults = exams;
+        return course;
       });
 
       if (filter?.status) {

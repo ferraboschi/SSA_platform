@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, KPI, PageHeader } from "@/components/ui";
-import { useT } from "@/lib/i18n";
+import { useT, format } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
 import { monthLabel } from "@/lib/dashboard";
 import type { RoleKey } from "@/lib/domain";
@@ -24,23 +24,29 @@ export function ContoEconomicoClient({
   locale,
   canEditAdv,
   canEditInvoice,
+  initialFilter,
 }: {
   rows: EconCourseRow[];
   role: RoleKey;
   locale: string;
   canEditAdv: boolean;
   canEditInvoice: boolean;
+  initialFilter?: Filter;
 }) {
   const t = useT().contoEconomico;
-  // Accountant lands on the work to do; everyone else sees all.
-  const [filter, setFilter] = useState<Filter>(role === "accountant" ? "toInvoice" : "all");
+  // Deep-link filter wins; else the accountant lands on the work to do.
+  const [filter, setFilter] = useState<Filter>(
+    initialFilter ?? (role === "accountant" ? "toInvoice" : "all"),
+  );
 
   const summary = useMemo(() => {
-    const toInvoice = rows.filter(isToInvoice).length;
+    const toInvoiceRows = rows.filter(isToInvoice);
+    const toInvoice = toInvoiceRows.length;
+    const toInvoiceRevenue = toInvoiceRows.reduce((s, r) => s + r.revenue, 0);
     const invoiced = rows.filter((r) => r.econ.invoiced).length;
     const withCampaign = rows.filter((r) => r.econ.advCost != null).length;
     const totalAdv = rows.reduce((s, r) => s + (r.econ.advCost ?? 0), 0);
-    return { toInvoice, invoiced, withCampaign, totalAdv };
+    return { toInvoice, toInvoiceRevenue, invoiced, withCampaign, totalAdv };
   }, [rows]);
 
   const visible = useMemo(() => {
@@ -61,7 +67,12 @@ export function ContoEconomicoClient({
       <PageHeader eyebrow={t.eyebrow} title={t.title} sub={roleHint} />
 
       <section className="kpi-grid cols-4" style={{ margin: "16px 0 20px" }}>
-        <KPI label={t.kpiToInvoice} value={summary.toInvoice} accent="warning" />
+        <KPI
+          label={t.kpiToInvoice}
+          value={summary.toInvoice}
+          sub={format(t.kpiToInvoiceSub, { amount: formatEuro(summary.toInvoiceRevenue) })}
+          accent="warning"
+        />
         <KPI label={t.kpiInvoiced} value={summary.invoiced} accent="success" />
         <KPI label={t.kpiWithCampaign} value={summary.withCampaign} />
         <KPI label={t.kpiTotalAdv} value={formatEuro(summary.totalAdv)} />
@@ -86,6 +97,7 @@ export function ContoEconomicoClient({
               <th>{t.colCourse}</th>
               <th>{t.colPlace}</th>
               <th>{t.colStatus}</th>
+              <th style={{ textAlign: "right" }}>{t.colRevenue}</th>
               <th style={{ minWidth: 150 }}>{t.colCampaign}</th>
               <th style={{ minWidth: 160 }}>{t.colInvoicing}</th>
             </tr>
@@ -93,7 +105,7 @@ export function ContoEconomicoClient({
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-3" style={{ padding: 24, textAlign: "center" }}>
+                <td colSpan={6} className="text-3" style={{ padding: 24, textAlign: "center" }}>
                   {t.empty}
                 </td>
               </tr>
@@ -117,6 +129,9 @@ export function ContoEconomicoClient({
                     ) : (
                       <span className="text-3" style={{ fontSize: 12 }}>{t.statusPlanned}</span>
                     )}
+                  </td>
+                  <td className="num" style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {formatEuro(r.revenue)}
                   </td>
                   <td>
                     <AdvCell row={r} canEdit={canEditAdv} t={t} />

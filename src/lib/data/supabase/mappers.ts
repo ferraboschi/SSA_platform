@@ -200,20 +200,26 @@ function coursePast(startDate: string | null, days: number): boolean {
 }
 
 /** The sync writes the authoritative lifecycle hourly from Shopify status + date.
- *  This read-time pass covers two things it can't:
+ *  This read-time pass covers three things it can't:
  *   1. the GAP between a course's date passing and the next sync run — a stale
  *      "pubblicato" whose last day is over reads "passato";
  *   2. LEGACY "archiviato" rows (the model no longer produces that value) folded
  *      into the two-reason scheme — past → "passato" (it was held), future →
- *      "cancelled" (it was pulled before its date).
- *  "bozza"/"passato"/"cancelled" pass through untouched (never resurrected). */
+ *      "cancelled" (it was pulled before its date);
+ *   3. a "bozza" whose date is past AND that has real enrollments — the product
+ *      was set to draft on Shopify AFTER the course sold and ran (post-course
+ *      housekeeping), so it WAS held: it reads "passato". A 0-enrolled draft
+ *      stays a draft (a plan that never went live must not enter the archive).
+ *  "passato"/"cancelled" pass through untouched (never resurrected). */
 export function deriveLifecycle(
   lifecycle: CourseLifecycle,
   startDate: string | null,
   days: number,
+  enrolled = 0,
 ): CourseLifecycle {
   if (lifecycle === "pubblicato") return coursePast(startDate, days) ? "passato" : "pubblicato";
   if (lifecycle === "archiviato") return coursePast(startDate, days) ? "passato" : "cancelled";
+  if (lifecycle === "bozza" && enrolled > 0 && coursePast(startDate, days)) return "passato";
   return lifecycle;
 }
 
@@ -285,7 +291,7 @@ export function corsoRowToDomain(
     program.length > 0
       ? program.length
       : expectedDays(safeType, row.delivery_mode === "online" ? "online" : "presenza");
-  const lifecycle = deriveLifecycle(row.lifecycle, row.start_date, days);
+  const lifecycle = deriveLifecycle(row.lifecycle, row.start_date, days, enrolled);
   const nbRaw = (row.notebook ?? {}) as Record<string, unknown>;
   const nb = nbRaw as Partial<Notebook>;
   // "Annullato" = pulled before it ran, from EITHER the Shopify-derived lifecycle

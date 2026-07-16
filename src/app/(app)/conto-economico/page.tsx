@@ -1,5 +1,6 @@
 import { getDataSource } from "@/lib/data";
 import { getSession } from "@/lib/auth/session";
+import { requireNavAccess } from "@/lib/auth/guard";
 import { getTranslations } from "@/lib/i18n/server";
 import { monthIndexIt } from "@/lib/dashboard";
 import { loadCourseEconomics } from "@/lib/economics";
@@ -9,8 +10,14 @@ import { isSandboxCourse } from "@/lib/corsi/sandbox";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
-  const [ds, session, { locale }] = await Promise.all([
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string }>;
+}) {
+  await requireNavAccess("conto-economico");
+  const [{ filter }, ds, session, { locale }] = await Promise.all([
+    searchParams,
     getDataSource(),
     getSession(),
     getTranslations(),
@@ -55,6 +62,12 @@ export default async function Page() {
       return db - da; // most recent first
     });
 
+  // Deep-link filter (e.g. the dashboard "fatture da chiudere" headline).
+  const initialFilter =
+    filter === "toInvoice" || filter === "withCampaign" || filter === "all"
+      ? filter
+      : undefined;
+
   return (
     <ContoEconomicoClient
       rows={rows}
@@ -62,6 +75,7 @@ export default async function Page() {
       locale={locale}
       canEditAdv={role === "social" || role === "admin"}
       canEditInvoice={role === "accountant" || role === "admin"}
+      initialFilter={initialFilter}
     />
   );
 }

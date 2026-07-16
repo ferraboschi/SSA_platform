@@ -4,7 +4,7 @@
 
 import type { Corsista, Course, DashThresholds, Educator } from "@/lib/domain";
 import type { CourseStatus, CourseTypeColor, CourseLifecycle, CourseTypeKey } from "@/lib/domain";
-import { monthIndexIt } from "@/lib/dates/italian-months";
+import { monthIndexIt, MONTH_NAMES_IT } from "@/lib/dates/italian-months";
 
 // Re-exported for the many call sites that import it from here (and via lib/corsi).
 export { monthIndexIt };
@@ -65,6 +65,7 @@ export interface PipelineBarData {
 
 export interface PipelineMonth {
   monthKey: string;
+  year: number;
   count: number;
   revenue: number;
   enrolled: number;
@@ -180,10 +181,15 @@ export function buildDashboard(
   const totalMargin = active.reduce((s, c) => s + c.margin, 0);
   const atRisk = active.filter((c) => c.status === "rischio" || c.status === "critico");
 
-  // Pipeline: 6 months starting at May (prototype window).
-  const pipelineMonthKeys = ["Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre"];
-  const pipeline: PipelineMonth[] = pipelineMonthKeys.map((monthKey) => {
-    const cs = active.filter((c) => c.month === monthKey);
+  // Pipeline: a rolling 6-month window from the current month (year-aware, so
+  // the strip never goes stale and a January window spans the year boundary).
+  const pipelineWindow = [...Array(6)].map((_, i) => {
+    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    return { monthKey: MONTH_NAMES_IT[d.getMonth()], year: d.getFullYear() };
+  });
+  const pipelineMonthKeys = pipelineWindow.map((w) => w.monthKey);
+  const pipeline: PipelineMonth[] = pipelineWindow.map(({ monthKey, year }) => {
+    const cs = active.filter((c) => c.month === monthKey && c.year === year);
     const count = cs.length;
     const bars: PipelineBarData[] = [...Array(count || 1)].map((_, j) => {
       const c = cs[j];
@@ -207,6 +213,7 @@ export function buildDashboard(
     });
     return {
       monthKey,
+      year,
       count,
       revenue: cs.reduce((s, c) => s + c.revenue, 0),
       enrolled: cs.reduce((s, c) => s + c.enrolled, 0),
@@ -250,18 +257,22 @@ export function buildDashboard(
     return rest;
   });
 
-  const topEducators: TopEducator[] = educators.slice(0, 4).map((e) => {
-    const eCourses = courses.filter((c) => c.educator?.id === e.id);
-    return {
-      id: e.id,
-      name: e.name,
-      initials: e.initials,
-      role: e.role,
-      city: e.city,
-      courseCount: eCourses.length,
-      enrolled: eCourses.reduce((s, c) => s + c.enrolled, 0),
-    };
-  });
+  // Genuinely TOP educators: ranked by courses held/assigned, then reach.
+  const topEducators: TopEducator[] = educators
+    .map((e) => {
+      const eCourses = courses.filter((c) => c.educator?.id === e.id);
+      return {
+        id: e.id,
+        name: e.name,
+        initials: e.initials,
+        role: e.role,
+        city: e.city,
+        courseCount: eCourses.length,
+        enrolled: eCourses.reduce((s, c) => s + c.enrolled, 0),
+      };
+    })
+    .sort((a, b) => b.courseCount - a.courseCount || b.enrolled - a.enrolled)
+    .slice(0, 4);
 
   const returning = corsisti.filter((s) => s.isReturning).length;
   const community: CommunityStats = {

@@ -55,6 +55,20 @@ describe("deriveLifecycle", () => {
     expect(deriveLifecycle("cancelled", iso(5), 1)).toBe("cancelled");
     expect(deriveLifecycle("cancelled", iso(-100), 1)).toBe("cancelled"); // annulled stays annulled
   });
+  // Regression test for the "Merlo course vanished" bug: a course that sold and
+  // ran, then had its Shopify product set back to draft (post-course cleanup),
+  // synced as "bozza" forever — invisible in the catalog AND the archive.
+  it("a past-dated bozza WITH enrollments was actually held → 'passato'", () => {
+    expect(deriveLifecycle("bozza", iso(-9), 1, 11)).toBe("passato");
+    expect(deriveLifecycle("bozza", iso(-3), 3, 1)).toBe("passato");
+  });
+  it("a past-dated bozza with NO enrollments stays a draft", () => {
+    expect(deriveLifecycle("bozza", iso(-9), 1, 0)).toBe("bozza");
+    expect(deriveLifecycle("bozza", iso(-9), 1)).toBe("bozza"); // default arg
+  });
+  it("an upcoming bozza stays a draft even with enrollments", () => {
+    expect(deriveLifecycle("bozza", iso(5), 1, 4)).toBe("bozza");
+  });
   it("folds legacy 'archiviato' into the two-reason model by date", () => {
     expect(deriveLifecycle("archiviato", iso(-100), 1)).toBe("passato"); // it was held
     expect(deriveLifecycle("archiviato", iso(5), 1)).toBe("cancelled"); // pulled before its date

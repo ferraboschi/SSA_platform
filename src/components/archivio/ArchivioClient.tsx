@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge, Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { archiveReason } from "@/lib/corsi";
+import { toCsv, downloadCsv } from "@/lib/csv";
 import { COURSE_TYPES, type CourseLifecycle, type CourseTypeColor, type CourseTypeKey } from "@/lib/domain";
 import { monthIndexIt } from "@/lib/dates/italian-months";
 
@@ -21,9 +22,18 @@ export interface ArchivioCourse {
   year: number;
   enrolled: number;
   revenue: number;
+  margin: number;
+  examResults: { passed: number; retrial: number; failed: number } | null;
+  /** true = invoiced, false = still to invoice, null = not applicable (cancelled). */
+  invoiced: boolean | null;
   lifecycle: CourseLifecycle;
   educatorName: string;
   cancelled: boolean;
+}
+
+/** Course start date from its stored day/month/year (month is the Italian name). */
+function courseDate(c: ArchivioCourse): Date {
+  return new Date(c.year, Math.max(0, monthIndexIt(c.month)), c.day || 1);
 }
 
 type GroupBy = "anno" | "citta" | "educator" | "tipo";
@@ -387,6 +397,91 @@ function YearStrip({
   );
 }
 
+/** Outcome line shared by the recent strip and the group cards: money, exam
+ *  tally and invoicing state of a HELD course — the post-course picture. */
+function CourseOutcome({ c, compact }: { c: ArchivioCourse; compact?: boolean }) {
+  const t = useT().archivio;
+  if (c.cancelled) return null;
+  const examTotal = c.examResults
+    ? c.examResults.passed + c.examResults.retrial + c.examResults.failed
+    : 0;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
+        marginTop: compact ? 6 : 8,
+        fontSize: 11,
+      }}
+    >
+      <span className="num" style={{ fontWeight: 600, color: "var(--text-2)" }}>
+        {format(t.cardRevenue, { v: (c.revenue / 1000).toFixed(1) })}
+      </span>
+      {examTotal > 0 && (
+        <span className="num" style={{ color: "var(--text-3)" }}>
+          {format(t.cardExams, { p: c.examResults!.passed, t: examTotal })}
+        </span>
+      )}
+      {c.invoiced === false ? (
+        <Badge tone="warning">{t.tagToInvoice}</Badge>
+      ) : c.invoiced === true ? (
+        <Badge tone="success">{t.tagInvoiced}</Badge>
+      ) : null}
+    </div>
+  );
+}
+
+/** "Conclusi di recente" — held courses whose date fell in the last 60 days,
+ *  newest first: the owner's entry point for "what happened" after a course
+ *  ends, instead of the course silently sinking into the year groups. */
+function RecentlyEnded({ courses }: { courses: ArchivioCourse[] }) {
+  const t = useT().archivio;
+  const recent = useMemo(() => {
+    const now = Date.now();
+    const cutoff = now - 60 * 86_400_000;
+    return courses
+      .filter((c) => {
+        const d = courseDate(c).getTime();
+        return d >= cutoff && d <= now;
+      })
+      .sort((a, b) => courseDate(b).getTime() - courseDate(a).getTime());
+  }, [courses]);
+
+  if (!recent.length) return null;
+  return (
+    <section className="card card-pad-lg" style={{ marginBottom: 28 }}>
+      <div style={{ marginBottom: 14 }}>
+        <div className="h3">{t.recentTitle}</div>
+        <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{t.recentSub}</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        {recent.map((c) => (
+          <Link
+            key={c.id}
+            href={`/corsi/${c.handle}`}
+            className="card"
+            style={{ padding: 14, background: "var(--surface-2)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <Badge tone={c.typeColor === "oro" ? "oro" : "azzurro"}>{c.typeShort}</Badge>
+              <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                {c.day} {c.month} {c.year}
+              </span>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.25 }}>{c.shortTitle}</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 4 }}>
+              {c.city} · {c.educatorName} · {format(t.cardIscritti, { n: c.enrolled })}
+            </div>
+            <CourseOutcome c={c} />
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ArchivioGroups({ courses, groupBy }: { courses: ArchivioCourse[]; groupBy: GroupBy }) {
   const t = useT().archivio;
 
@@ -491,6 +586,7 @@ function ArchivioGroups({ courses, groupBy }: { courses: ArchivioCourse[]; group
                     <span>{c.educatorName}</span>
                     <span className="num">{format(t.cardIscritti, { n: c.enrolled })}</span>
                   </div>
+                  <CourseOutcome c={c} compact />
                 </Link>
               ))}
             </div>
@@ -558,7 +654,36 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
           <p className="page-sub">{t.sub}</p>
         </div>
         <div className="page-actions">
-          <button className="btn">
+          <button
+            className="btn"
+            onClick={() =>
+              downloadCsv(
+                "archivio-corsi",
+                toCsv(
+                  ["Corso", "Tipo", "Città", "Data", "Educator", "Iscritti", "Incasso €", "Margine €", "Esami promossi", "Esami totali", "Stato", "Fatturato"],
+                  filtered.map((c) => {
+                    const examTotal = c.examResults
+                      ? c.examResults.passed + c.examResults.retrial + c.examResults.failed
+                      : 0;
+                    return [
+                      c.shortTitle,
+                      COURSE_TYPES[c.type]?.label ?? c.type,
+                      c.city,
+                      `${c.day} ${c.month} ${c.year}`,
+                      c.educatorName,
+                      c.enrolled,
+                      c.revenue,
+                      c.margin,
+                      c.examResults?.passed ?? "",
+                      examTotal || "",
+                      c.cancelled ? t.tagCancelled : t.tagPassed,
+                      c.invoiced == null ? "" : c.invoiced ? "sì" : "no",
+                    ];
+                  }),
+                ),
+              )
+            }
+          >
             <Icon name="download" size={13} />
             {t.exportArchive}
           </button>
@@ -602,6 +727,8 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
           {format(t.reasonSummary, { passed: heldInYear.length, cancelled: cancInYear.length })}
         </span>
       </div>
+
+      <RecentlyEnded courses={held} />
 
       <YearStrip
         courses={held}

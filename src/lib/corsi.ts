@@ -19,8 +19,6 @@ import { monthIndexIt } from "@/lib/dashboard";
 
 export { monthIndexIt };
 
-// The course-detail countdown anchors "today" to 25 May 2026, like the prototype.
-const CORSO_TODAY = new Date(2026, 4, 25);
 const DAY_MS = 86_400_000;
 
 // Health-status rule keys, in escalation order. The human-readable rule/detail
@@ -200,10 +198,10 @@ export interface IscrittoModel {
   flags: { typoName: boolean; typoEmail: boolean };
 }
 
-// Days-to-start for the detail countdown.
+// Days-to-start for the detail countdown, anchored to the real current date.
 export function daysToStart(course: Pick<Course, "year" | "month" | "day">): number {
   const start = new Date(course.year, Math.max(0, monthIndexIt(course.month)), course.day);
-  return Math.round((start.getTime() - CORSO_TODAY.getTime()) / DAY_MS);
+  return Math.round((start.getTime() - Date.now()) / DAY_MS);
 }
 
 // ===== Course detail · Programma & Economia =====

@@ -82,6 +82,14 @@ export default async function DashboardPage() {
   const dt = t.dashboard;
   const me = session.user;
 
+  // Real returning-vs-new spend multiplier (was a hardcoded "2.3×" string).
+  const avgSpend = (list: typeof corsisti) =>
+    list.length ? list.reduce((s, c) => s + c.totalSpent, 0) / list.length : 0;
+  const returningAvg = avgSpend(corsisti.filter((c) => c.isReturning && c.totalSpent > 0));
+  const newcomerAvg = avgSpend(corsisti.filter((c) => !c.isReturning && c.totalSpent > 0));
+  const spendMultiplier =
+    returningAvg > 0 && newcomerAvg > 0 ? returningAvg / newcomerAvg : null;
+
   const { kpis } = d;
   const occupancy = kpis.totalCapacity ? (kpis.totalEnrolled / kpis.totalCapacity) * 100 : 0;
   const avgPerCourse = kpis.activeCount ? (kpis.totalEnrolled / kpis.activeCount).toFixed(1) : "0";
@@ -119,11 +127,30 @@ export default async function DashboardPage() {
             >
               {format(dt.greeting, { name: me.first })}{" "}
               <span style={{ color: "var(--text-3)" }}>{dt.headlineHas}</span>{" "}
-              <span style={{ color: "var(--indigo)" }}>
+              {/* Each headline count links to the view that answers "WHICH ones". */}
+              <Link
+                href="#attention"
+                style={{
+                  color: "var(--indigo)",
+                  textDecoration: "underline",
+                  textDecorationStyle: "dotted",
+                  textUnderlineOffset: 5,
+                }}
+              >
                 {format(dt.headlineCourses, { n: kpis.atRiskCount })}
-              </span>{" "}
+              </Link>{" "}
               <span style={{ color: "var(--text-3)" }}>{dt.headlineMid}</span>{" "}
-              <span style={{ color: "var(--text)" }}>{format(dt.headlineInvoices, { n: toInvoiceCount })}</span>{" "}
+              <Link
+                href="/conto-economico?filter=toInvoice"
+                style={{
+                  color: "var(--text)",
+                  textDecoration: "underline",
+                  textDecorationStyle: "dotted",
+                  textUnderlineOffset: 5,
+                }}
+              >
+                {format(dt.headlineInvoices, { n: toInvoiceCount })}
+              </Link>{" "}
               <span style={{ color: "var(--text-3)" }}>{dt.headlineEnd}</span>
             </h1>
             <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
@@ -137,6 +164,10 @@ export default async function DashboardPage() {
               <Link className="btn" href="/corsi">
                 <Icon name="book" size={13} />
                 {dt.openCatalog}
+              </Link>
+              <Link className="btn" href="/archivio">
+                <Icon name="archive" size={13} />
+                {dt.openArchive} · {kpis.pastCount}
               </Link>
               <MonthReportButton courses={d.reportCourses} />
             </div>
@@ -176,10 +207,11 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* KPI row */}
+      {/* KPI row — every card links to the view that lists its members. */}
       <section className="kpi-grid cols-4" style={{ marginBottom: 28 }}>
         <KPI
           anim
+          href="/corsi"
           label={dt.kpi.activeCourses}
           value={kpis.activeCount}
           sub={format(dt.kpi.belowThreshold, { n: kpis.atRiskCount })}
@@ -187,6 +219,7 @@ export default async function DashboardPage() {
         />
         <KPI
           anim
+          href="/corsisti"
           label={dt.kpi.totalEnrolled}
           value={kpis.totalEnrolled.toLocaleString(locale)}
           sub={format(dt.kpi.avgPerCourse, { n: avgPerCourse })}
@@ -194,6 +227,7 @@ export default async function DashboardPage() {
         />
         <KPI
           anim
+          href="/conto-economico"
           label={dt.kpi.expectedMargin}
           value={Math.round(kpis.totalMargin / 1000)}
           unit="k €"
@@ -202,10 +236,11 @@ export default async function DashboardPage() {
         />
         <KPI
           anim
+          href="/esami"
           label={dt.kpi.examPassRate}
           value={examPassRate}
           unit="%"
-          sub={dt.kpi.last12}
+          sub={format(dt.kpi.examsGraded, { n: gradedExams.length })}
           accent="oro"
         />
       </section>
@@ -251,7 +286,7 @@ export default async function DashboardPage() {
                   marginBottom: 6,
                 }}
               >
-                {monthLabel(p.monthKey, locale)} 2026
+                {monthLabel(p.monthKey, locale)} {p.year}
               </div>
               <div
                 style={{
@@ -331,7 +366,7 @@ export default async function DashboardPage() {
 
       {/* Two columns: attention + recent */}
       <section style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 24 }}>
-        <div className="card">
+        <div className="card" id="attention" style={{ scrollMarginTop: 80 }}>
           <div className="card-head">
             <div>
               <div className="h3">{dt.attention.title}</div>
@@ -339,9 +374,6 @@ export default async function DashboardPage() {
                 {format(dt.attention.sub, { n: kpis.atRiskCount })}
               </div>
             </div>
-            <button className="btn btn-sm btn-ghost">
-              <Icon name="filter" size={12} />
-            </button>
           </div>
           <div className="table-wrap" style={{ boxShadow: "none", borderRadius: 0 }}>
             <table className="table">
@@ -536,25 +568,27 @@ export default async function DashboardPage() {
               accent="success"
             />
           </div>
-          <div
-            style={{
-              marginTop: 18,
-              padding: 14,
-              background: "var(--indigo-50)",
-              borderRadius: 6,
-              fontSize: 12,
-              color: "var(--text-2)",
-              display: "flex",
-              gap: 8,
-              alignItems: "flex-start",
-            }}
-          >
-            <Icon name="sparkle" size={14} className="text-3" />
-            <span>
-              <strong style={{ color: "var(--text)" }}>{dt.community.insight}</strong> —{" "}
-              {format(dt.community.insightText, { x: "2.3" })}
-            </span>
-          </div>
+          {spendMultiplier != null && (
+            <div
+              style={{
+                marginTop: 18,
+                padding: 14,
+                background: "var(--indigo-50)",
+                borderRadius: 6,
+                fontSize: 12,
+                color: "var(--text-2)",
+                display: "flex",
+                gap: 8,
+                alignItems: "flex-start",
+              }}
+            >
+              <Icon name="sparkle" size={14} className="text-3" />
+              <span>
+                <strong style={{ color: "var(--text)" }}>{dt.community.insight}</strong> —{" "}
+                {format(dt.community.insightText, { x: spendMultiplier.toFixed(1) })}
+              </span>
+            </div>
+          )}
         </div>
       </section>
     </div>

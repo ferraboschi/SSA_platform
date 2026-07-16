@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Icon } from "./Icon";
 
 export interface KPIProps {
@@ -10,6 +11,9 @@ export interface KPIProps {
   deltaDir?: "up" | "dn";
   accent?: string;
   anim?: boolean;
+  /** When set, the whole card becomes a link — a KPI should answer "which ones",
+   *  not just "how many". */
+  href?: string;
 }
 
 export function KPI({
@@ -21,9 +25,10 @@ export function KPI({
   deltaDir,
   accent,
   anim,
+  href,
 }: KPIProps) {
-  return (
-    <div className={`kpi ${anim ? "kpi-anim" : ""}`}>
+  const body = (
+    <>
       {accent && <span className={`kpi-accent ${accent}`} />}
       <div className="kpi-label">{label}</div>
       <div className="kpi-value">
@@ -49,6 +54,15 @@ export function KPI({
           {sub && <div className="kpi-foot">{sub}</div>}
         </div>
       )}
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className={`kpi ${anim ? "kpi-anim" : ""}`} style={{ cursor: "pointer" }}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={`kpi ${anim ? "kpi-anim" : ""}`}>{body}</div>;
 }
