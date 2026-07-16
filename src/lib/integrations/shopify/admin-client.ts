@@ -47,6 +47,15 @@ export interface AdminCustomer {
   phone?: string | null;
   default_address?: AdminAddress | null;
 }
+/** Order billing address — the identity fallback for manual/phone/POS orders
+ *  that carry no customer object (they'd otherwise sync as anonymous). */
+export interface AdminBillingAddress {
+  name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  city?: string | null;
+}
 export interface AdminOrder {
   id: number;
   name: string | null;
@@ -57,6 +66,7 @@ export interface AdminOrder {
   cancelled_at: string | null;
   discount_codes: AdminDiscountCode[] | null;
   customer: AdminCustomer | null;
+  billing_address?: AdminBillingAddress | null;
   line_items: AdminLineItem[];
 }
 
@@ -304,7 +314,7 @@ export async function listOrdersUpdatedSince(
 ): Promise<AdminOrder[]> {
   const out: AdminOrder[] = [];
   const fields =
-    "id,name,email,created_at,updated_at,customer,line_items,financial_status,cancelled_at,discount_codes";
+    "id,name,email,created_at,updated_at,customer,billing_address,line_items,financial_status,cancelled_at,discount_codes";
   const since = sinceIso ? `&updated_at_min=${encodeURIComponent(sinceIso)}` : "";
   let path: string | null = `orders.json?status=any&limit=250&fields=${fields}${since}`;
   while (path) {

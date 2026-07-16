@@ -30,3 +30,11 @@ export function placeholderEmail(orderId: string | number, lineItemId: string | 
 export function placeholderName(seatIndex: number): string {
   return `Posto ${seatIndex} — da completare`;
 }
+
+/** Deterministic synthetic email for the BUYER of an email-less Shopify order
+ *  (manual / phone / POS): keyed by the order id so a re-sync resolves the same
+ *  corsista. The `@ssa.placeholder` domain is already filtered out of the
+ *  global search index (shell-data). */
+export function orderPlaceholderEmail(orderId: string | number): string {
+  return `order-${orderId}@ssa.placeholder`;
+}
