@@ -31,16 +31,80 @@ function splitPhone(val: string): { code: string; num: string } {
 }
 
 
+export interface NameParts {
+  first: string;
+  last: string;
+}
+
+/** Nome/Cognome as REAL two-field state, seeded once and composed upward on
+ *  change. Deriving first/last from the composed string on every render
+ *  swallowed typed spaces (a trailing space in "Nome" was trimmed away before
+ *  it could reach "Cognome") and made two-word first names impossible.
+ *  Seed priority: the persisted parts (they survive step remounts and never
+ *  invert a lone cognome into "Nome"), else the composed value split at the
+ *  LAST space so "Gian Paolo Rossi" resumes as "Gian Paolo" + "Rossi". */
+function NameField({
+  value,
+  onChange,
+  parts: savedParts,
+  onParts,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  parts?: NameParts;
+  onParts?: (p: NameParts) => void;
+}) {
+  const [parts, setParts] = useState<NameParts>(() => {
+    if (savedParts && (savedParts.first || savedParts.last)) return savedParts;
+    const sp = value.lastIndexOf(" ");
+    return sp >= 0
+      ? { first: value.slice(0, sp), last: value.slice(sp + 1) }
+      : { first: value, last: "" };
+  });
+  const set = (p: NameParts) => {
+    setParts(p);
+    onChange(`${p.first.trim()} ${p.last.trim()}`.trim());
+    onParts?.(p);
+  };
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <input
+        className="exam-public-input"
+        type="text"
+        placeholder="Nome"
+        autoComplete="given-name"
+        value={parts.first}
+        onChange={(e) => set({ ...parts, first: e.target.value })}
+        style={{ flex: 1 }}
+      />
+      <input
+        className="exam-public-input"
+        type="text"
+        placeholder="Cognome"
+        autoComplete="family-name"
+        value={parts.last}
+        onChange={(e) => set({ ...parts, last: e.target.value })}
+        style={{ flex: 1 }}
+      />
+    </div>
+  );
+}
+
 export function RegInput({
   field,
   t,
   value,
   onChange,
+  nameParts,
+  onNameParts,
 }: {
   field: RegField;
   t: Record<string, string>;
   value: string[] | string | undefined;
   onChange: (v: string) => void;
+  /** Persisted nome/cognome halves (field "name" only) — see NameField. */
+  nameParts?: NameParts;
+  onNameParts?: (p: NameParts) => void;
 }): ReactNode {
   const labels: Record<RegField, string> = {
     name: t.regName,
@@ -74,33 +138,7 @@ export function RegInput({
           ))}
         </div>
       ) : field === "name" ? (
-        (() => {
-          const sp = val.indexOf(" ");
-          const first = sp >= 0 ? val.slice(0, sp) : val;
-          const last = sp >= 0 ? val.slice(sp + 1) : "";
-          return (
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                className="exam-public-input"
-                type="text"
-                placeholder="Nome"
-                autoComplete="given-name"
-                value={first}
-                onChange={(e) => onChange(`${e.target.value} ${last}`.trim())}
-                style={{ flex: 1 }}
-              />
-              <input
-                className="exam-public-input"
-                type="text"
-                placeholder="Cognome"
-                autoComplete="family-name"
-                value={last}
-                onChange={(e) => onChange(`${first} ${e.target.value}`.trim())}
-                style={{ flex: 1 }}
-              />
-            </div>
-          );
-        })()
+        <NameField value={val} onChange={onChange} parts={nameParts} onParts={onNameParts} />
       ) : field === "address" ? (
         <GoogleAddressInput value={val} onChange={onChange} />
       ) : field === "email" ? (

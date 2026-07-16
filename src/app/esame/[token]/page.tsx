@@ -25,17 +25,31 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function Invalid({ reason }: { reason: string }) {
+/** Full-page refusal. "Link non valido" is RESERVED for malformed/tampered
+ *  tokens; an expired or educator-closed link says "Link scaduto" — telling a
+ *  student their genuine link is "not valid" reads like their fault. */
+function Invalid({ title = "Link non valido", reason }: { title?: string; reason: string }) {
   return (
     <div className="exam-public-shell">
       <div className="exam-public-card exam-public-invalid">
         <div className="exam-public-invalid-icon">⏳</div>
-        <h1>Link non valido</h1>
+        <h1>{title}</h1>
         <p>{reason}</p>
       </div>
     </div>
   );
 }
+
+const EXPIRED_TITLE: Record<Lang, string> = {
+  it: "Link scaduto",
+  en: "Link expired",
+  ja: "リンクの有効期限が切れました",
+};
+const CLOSED_BODY: Record<Lang, string> = {
+  it: "Questo test è stato chiuso dall'educator. Se ti serve un nuovo accesso, chiedi di reinviarti il link.",
+  en: "This test was closed by the educator. If you need access again, ask for the link to be re-sent.",
+  ja: "このテストはエデュケーターによって終了されました。再度アクセスが必要な場合は、リンクの再送を依頼してください。",
+};
 
 /** Server-rendered blocking screen (already submitted / absent) — no runner is
  *  ever mounted, so nothing behind it can be reached with a refresh. */
@@ -63,13 +77,21 @@ export default async function Page({
   let serverResume:
     | { answers: Record<string, string | string[]>; currentIdx: number; lang: string; elapsed: number }
     | undefined;
+  // Student identity for the on-screen watermark (personal exam links only).
+  let watermark: string | undefined;
   const res = verifyExamToken(token);
   if (!res.ok) {
-    const msg =
-      res.reason === "expired"
-        ? "Questo link è scaduto. Richiedi un nuovo link al tuo educator."
-        : "Questo link non è valido. Verifica di aver copiato l'indirizzo completo.";
-    return <Invalid reason={msg} />;
+    if (res.reason === "expired") {
+      return (
+        <Invalid
+          title={EXPIRED_TITLE.it}
+          reason="Questo link è scaduto. Richiedi un nuovo link al tuo educator."
+        />
+      );
+    }
+    return (
+      <Invalid reason="Questo link non è valido. Verifica di aver copiato l'indirizzo completo." />
+    );
   }
 
   // Lifecycle: the educator can CLOSE a test for everyone. An exam-mode token
@@ -77,9 +99,8 @@ export default async function Page({
   if (res.payload.m === "exam") {
     const closedAt = await getClosure(Number(res.payload.c), res.payload.t);
     if (isBlockedByClosure(closedAt, res.payload.ia)) {
-      return (
-        <Invalid reason="Questo test è stato chiuso dall'educator. Se ti serve un nuovo accesso, chiedi di reinviarti il link." />
-      );
+      const l: Lang = LANGS.includes(res.payload.l as Lang) ? (res.payload.l as Lang) : "it";
+      return <Invalid title={EXPIRED_TITLE[l]} reason={CLOSED_BODY[l]} />;
     }
   }
 
@@ -194,6 +215,29 @@ export default async function Page({
     } catch {
       /* pre-migration / transient — the exam simply starts fresh */
     }
+
+    // 4) WATERMARK identity (screenshot deterrence, owner batch 11): a leaked
+    //    capture of the questions carries whose exam it was. Best-effort — a
+    //    lookup failure must never block the exam.
+    try {
+      if (subjS != null) {
+        const { data: w } = await sb
+          .from("corsisti")
+          .select("full_name,email")
+          .eq("id", subjS)
+          .maybeSingle();
+        if (w) watermark = [w.full_name, w.email].filter(Boolean).join(" · ") || undefined;
+      } else if (subjP != null) {
+        const { data: w } = await sb
+          .from("corsi_partecipanti")
+          .select("full_name")
+          .eq("id", subjP)
+          .maybeSingle();
+        if (w?.full_name) watermark = w.full_name;
+      }
+    } catch {
+      /* deterrence only */
+    }
   }
 
   const family = corso.type === "shochu" ? "shochu" : "nihonshu";
@@ -250,6 +294,7 @@ export default async function Page({
       }}
       questions={data.questions}
       serverResume={serverResume}
+      watermark={watermark}
       // Day tests are SHORT: 10 minutes with a hard stop (owner batch 9); the
       // final exam and the feedback keep the full hour.
       limitS={/^day[1-9]$/.test(res.payload.t) ? 10 * 60 : 60 * 60}

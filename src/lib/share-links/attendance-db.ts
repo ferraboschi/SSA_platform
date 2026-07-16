@@ -65,16 +65,22 @@ export function validEmail(email: string): string | null {
   return clean;
 }
 
-/** Is the SUBJECT's verification in flight or done (confirm link out OR data
- *  confirmed)? Keyed the attendance way (corsista_id / partecipante id),
- *  unlike readConfirmState (iscrizione id). Two-tier select degrades on a
+/** The SUBJECT's verification state, keyed the attendance way (corsista_id /
+ *  partecipante id), unlike readConfirmState (iscrizione id):
+ *    "confirmed" — the student confirmed their data (final, hard fact);
+ *    "sent"      — a confirm link is out but not yet confirmed;
+ *    null        — nothing in flight.
+ *  Only "confirmed" locks the last marked presence: a merely-SENT link must
+ *  stay correctable, or a mis-tapped presence on day 1 (when the email
+ *  usually leaves) becomes permanently stuck — the owner's re-reported
+ *  "impossibile segnare assente". Two-tier select degrades on a
  *  pre-migration DB; fails open — without the columns nobody is locked. */
-export async function isSubjectVerificationLocked(
+export async function subjectVerificationState(
   svc: ReturnType<typeof getSupabaseServiceClient>,
   corsoId: number,
   kind: "corsista" | "partecipante",
   id: number,
-): Promise<boolean> {
+): Promise<"confirmed" | "sent" | null> {
   const from = () =>
     kind === "corsista"
       ? svc.from(ISCR_TABLE).select("email_confirmed_at, confirm_sent_at").eq("corso_id", corsoId).eq("corsista_id", id)
@@ -82,14 +88,18 @@ export async function isSubjectVerificationLocked(
   const rich = await from().maybeSingle();
   if (!rich.error) {
     const r = rich.data as { email_confirmed_at: string | null; confirm_sent_at: string | null } | null;
-    return Boolean(r?.email_confirmed_at || r?.confirm_sent_at);
+    if (r?.email_confirmed_at) return "confirmed";
+    if (r?.confirm_sent_at) return "sent";
+    return null;
   }
   const base =
     kind === "corsista"
       ? await svc.from(ISCR_TABLE).select("email_confirmed_at").eq("corso_id", corsoId).eq("corsista_id", id).maybeSingle()
       : await svc.from(PART_TABLE).select("email_confirmed_at").eq("corso_id", corsoId).eq("id", id).maybeSingle();
-  if (base.error) return false;
-  return Boolean((base.data as { email_confirmed_at: string | null } | null)?.email_confirmed_at);
+  if (base.error) return null;
+  return (base.data as { email_confirmed_at: string | null } | null)?.email_confirmed_at
+    ? "confirmed"
+    : null;
 }
 
 /** Does the subject have ANOTHER day marked present (besides `exceptDay`)?

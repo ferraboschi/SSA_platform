@@ -121,12 +121,16 @@ export function EsitoCard({
   // The submit-time AI evaluation runs in the background (owner batch 8):
   // while it's in flight the card says so explicitly and refreshes itself
   // until the votes land — the page never looks frozen without a reason.
+  const [aiSlow, setAiSlow] = useState(false);
   useEffect(() => {
     if (!esito.aiPending || !token) return;
     let alive = true;
     let tries = 0;
     const id = setInterval(async () => {
       if (++tries > 24) {
+        // ~2 minutes without a verdict: stop polling but SAY so — a silent
+        // eternal hourglass reads as a frozen page.
+        setAiSlow(true);
         clearInterval(id);
         return;
       }
@@ -182,7 +186,9 @@ export function EsitoCard({
           <div style={{ fontSize: 16, fontWeight: 800, color: "#4f46e5", marginBottom: 6 }}>
             {t.aiVerifying}
           </div>
-          <div style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", lineHeight: 1.5 }}>{t.aiWait}</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-3, #6b7280)", lineHeight: 1.5 }}>
+            {aiSlow ? t.aiSlow : t.aiWait}
+          </div>
         </div>
       ) : esito.pct != null ? (
         <div
@@ -247,7 +253,20 @@ export function EsitoCard({
                 ? { icon: "◐", txt: t.verdictPartial, bg: "#fef3c7", fg: "#b45309" }
                 : d.ok === false
                   ? { icon: "✗", txt: t.verdictWrong, bg: "#fde8e6", fg: "#b42318" }
-                  : { icon: "…", txt: t.reviewPendingBadge, bg: "#f3f4f6", fg: "#6b7280" };
+                  : d.aiVote != null
+                    ? // The AI verdict LANDED: the chip must agree with the "Voto
+                      // AI: n/5" box right below it, not keep saying "in
+                      // valutazione" forever (open answers keep ok === null).
+                      // Green ONLY for full marks — 2..4/5 earn partial credit
+                      // in the score, so the chip says so.
+                      d.aiVote >= 5
+                      ? { icon: "✓", txt: t.verdictRight, bg: "#e8f6ee", fg: "#1a7f43" }
+                      : d.aiVote >= 2
+                        ? { icon: "◐", txt: t.verdictPartial, bg: "#fef3c7", fg: "#b45309" }
+                        : { icon: "✗", txt: t.verdictWrong, bg: "#fde8e6", fg: "#b42318" }
+                    : d.aiFailed
+                      ? { icon: "!", txt: t.verdictReview, bg: "#fef3c7", fg: "#b45309" }
+                      : { icon: "…", txt: t.reviewPendingBadge, bg: "#f3f4f6", fg: "#6b7280" };
           return (
           <div
             key={d.qid}
@@ -311,6 +330,13 @@ export function EsitoCard({
                   {d.aiPoints != null && d.aiMaxPoints != null ? ` · ${d.aiPoints}/${d.aiMaxPoints}` : ""}
                 </strong>
                 {d.aiRationale && <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{d.aiRationale}</div>}
+              </div>
+            )}
+            {/* "Ripassa qui" only where there is something to review — a fully
+                correct answer needs no pointer back to the course section. */}
+            {d.cat && d.ok !== true && !(d.aiVote != null && d.aiVote >= 5) && (
+              <div style={{ fontSize: 11.5, color: "var(--text-3, #6b7280)", marginLeft: 20, marginTop: 4 }}>
+                📖 {t.sectionRef}: <strong>{d.cat}</strong>
               </div>
             )}
             {token && <div style={{ marginLeft: 20 }}><Explain token={token} qid={d.qid} lang={lang} /></div>}

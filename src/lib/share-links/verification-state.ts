@@ -14,10 +14,11 @@
 // This is the VERIFICATION axis only. Per-day presence is an independent fact
 // (the checkbox): once something was sent or confirmed, toggling presence must
 // never change or hide the chip — send/confirm timestamps don't un-happen.
-// ONE coupling holds by owner rule: VERIFICA ⇒ PRESENZA — the confirm email
-// leaves from the appello, so once a link is out (or confirmed) the subject's
-// LAST marked presence can't be removed (enforced with a post-write re-check
-// in attendance-actions.ts and mirrored in EducatorTabs).
+// ONE coupling holds by owner rule: VERIFICA ⇒ PRESENZA — but ONLY once the
+// student has CONFIRMED (batch 11 softening): a confirmed subject's LAST
+// marked presence can't be removed (post-write re-check in
+// attendance-actions.ts, mirrored in AppelloTab). A merely-SENT link no
+// longer locks presence — a day-1 mis-tap must stay correctable.
 //
 // INVARIANT: the stored email is always the address the LAST link was sent to
 // — edits after a send only happen inside the atomic correct-and-resend.

@@ -246,7 +246,7 @@ export function ConfirmForm({
           ) : (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 12.5, color: "var(--warning-fg)", fontWeight: 600, marginBottom: 6 }}>
-                Nell&apos;indirizzo manca il numero civico: aggiungilo qui sotto, ci serve per la consegna del materiale.
+                ✕ Numero civico non rilevato — aggiungilo qui sotto, ci serve per la consegna del materiale.
               </div>
               <input
                 className="input"

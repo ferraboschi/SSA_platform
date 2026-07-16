@@ -32,6 +32,9 @@ export interface DayEsitoItem {
   partial?: boolean;
   /** Left blank — zero at full weight, chip "Non risposto" (owner batch 10). */
   unanswered?: boolean;
+  /** Course section (question category from the Libreria) — the "ripassa qui"
+   *  reference under the explanation. Omitted when uncategorized. */
+  cat?: string;
 }
 
 export interface DayEsitoSection {
@@ -141,12 +144,16 @@ export async function buildDayEsito(
     ...(sections.length > 0 ? { sections } : {}),
     detail: res.detail.map((d) => {
       const g = d.ok === null ? gradeByQid.get(d.qid) : undefined;
+      const cat = qMeta.get(d.qid)?.cat;
       return {
         qid: d.qid,
         text: textById.get(d.qid) ?? d.text,
         given: d.given,
         correctText: d.correct,
         ok: d.ok,
+        // Course-section pointer for the "ripassa qui" line (skip the fallback
+        // bucket — "Generale" points nowhere useful).
+        ...(cat && cat !== "Generale" ? { cat } : {}),
         ...(d.unanswered ? { unanswered: true } : {}),
         ...(d.ok === false && !d.unanswered && (d.fraction ?? 0) > 0 ? { partial: true } : {}),
         ...(g && !g.failed

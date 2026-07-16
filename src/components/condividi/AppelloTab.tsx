@@ -2,11 +2,12 @@
 
 // The verification flow is AIRTIGHT (see lib/share-links/verification-state):
 // free edits only before the first send; while a link is out, corrections
-// happen exclusively via the atomic correct-and-resend; a confirmed student's
+// happen exclusively via the atomic correct-and-resend; a CONFIRMED student's
 // data is locked forever, and the confirmation also counts as presence (their
-// last marked day can't be unchecked). The same rules are enforced
-// server-side in attendance-actions.ts (which also bounds the exam-day
-// attendance to dayCount + 1 when the course has an exam).
+// last marked day can't be unchecked). A merely-SENT link does NOT lock the
+// presence — a day-1 mis-tap must stay correctable. The same rules are
+// enforced server-side in attendance-actions.ts (which also bounds the
+// exam-day attendance to dayCount + 1 when the course has an exam).
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -30,6 +31,7 @@ export default function AppelloTab({
   students,
   setStudents,
   day,
+  maxDay,
   isExamDay,
 }: {
   token: string;
@@ -39,12 +41,20 @@ export default function AppelloTab({
    *  tab, not by an internal selector (day_no in corsi_presenze; program
    *  days are 1..dayCount, the exam day is dayCount + 1). */
   day: number;
+  /** Highest valid roll-call day (dayCount, +1 when the course has an exam) —
+   *  the client-side "other present day" check must judge the SAME universe
+   *  as the server's bounded check, or the two disagree and a tap silently
+   *  flips then reverts. */
+  maxDay: number;
   /** Exam-day copy ("Giorno esame") instead of "giorno N". */
   isExamDay?: boolean;
 }) {
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   const [readOnly, setReadOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Refusals belong AT the tapped row — the top-of-roster alert was invisible
+  // on long lists and read as a dead tap (the re-reported "bug presenze").
+  const [rowError, setRowError] = useState<{ subj: string; msg: string } | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState<string | null>(null);
   const [seatOpen, setSeatOpen] = useState<string | null>(null);
@@ -52,14 +62,27 @@ export default function AppelloTab({
   // Mirror of `pending` readable from the poll interval (state would be stale
   // inside the closure): while any write is in flight, polls must not merge.
   const pendingRef = useRef<Set<string>>(new Set());
+  // A poll snapshot FETCHED before the last write completed must be discarded
+  // even if it RESOLVES after (TOCTOU): it would visually re-check a just-saved
+  // uncheck for up to one poll period.
+  const lastWriteDoneRef = useRef(0);
 
   useEffect(() => {
     let alive = true;
+    const startedAt = Date.now();
     getAttendanceAction(token)
       .then((res) => {
         if (!alive) return;
         if (res.ok) {
-          setAttendance(res.attendance ?? {});
+          // Same guards as the 12s poll: a tap during the in-flight mount
+          // fetch must not be wiped by the pre-tap snapshot (flip-then-revert
+          // on the first seconds after a tab switch).
+          if (
+            pendingRef.current.size === 0 &&
+            startedAt >= lastWriteDoneRef.current
+          ) {
+            setAttendance(res.attendance ?? {});
+          }
           if (res.schema) setReadOnly(true);
         }
       })
@@ -77,10 +100,13 @@ export default function AppelloTab({
     let alive = true;
     const id = setInterval(() => {
       if (pendingRef.current.size > 0) return;
+      const startedAt = Date.now();
       getAttendanceAction(token)
         .then((res) => {
           if (!alive || !res.ok || !res.attendance) return;
           if (pendingRef.current.size > 0) return;
+          // Snapshot read before the last write finished → stale, discard.
+          if (startedAt < lastWriteDoneRef.current) return;
           setAttendance(res.attendance);
         })
         .catch(() => {});
@@ -98,24 +124,25 @@ export default function AppelloTab({
     if (readOnly) return;
     const subj = subjKey(subject);
     const key = cellKey(subj, day);
-    // VERIFICA ⇒ PRESENZA: the confirm email leaves from the appello, so once
-    // a link is OUT (or confirmed) that student's LAST marked presence can't
-    // be removed — it would contradict the persistent "Inviata/Confermato"
-    // fact. Other days stay freely correctable. Mirrors the server guard —
-    // refused with an explanation, never a dead tap.
+    // VERIFICA ⇒ PRESENZA (softened): only a CONFIRMED student's last marked
+    // presence is untouchable — the confirmation is a hard fact that counts
+    // as presence. A merely-SENT link no longer locks (the email leaves
+    // minutes after the day-1 tap, so a mis-tap was permanently stuck).
+    // Mirrors the server guard; the refusal renders AT the row, never a dead
+    // tap. The "other day" check is bounded to 1..maxDay like the server's.
     if (!next) {
       const stu = students.find((x) => subjKey(x) === subj);
       const confirmed = Boolean(stu && (stu.emailConfirmedAt || stu.emailConfirmed));
-      const sent = Boolean(stu && (stu.confirmSentAt || stu.confirmSent));
-      if (stu && (confirmed || sent)) {
+      if (stu && confirmed) {
         const days = attendance[subj] ?? {};
-        const hasOther = Object.entries(days).some(([d, v]) => v && Number(d) !== day);
+        const hasOther = Object.entries(days).some(
+          ([d, v]) => v && Number(d) !== day && Number(d) >= 1 && Number(d) <= maxDay,
+        );
         if (!hasOther) {
-          setError(
-            confirmed
-              ? `${stu.name || "Studente"} ha confermato i dati: la conferma vale come presenza, quindi almeno una giornata resta "Presente".`
-              : `L'email di conferma per ${stu.name || "questa persona"} è partita da questo appello: finché la verifica è in corso, l'ultima presenza resta segnata.`,
-          );
+          setRowError({
+            subj,
+            msg: `${stu.name || "Studente"} ha confermato i dati: la conferma vale come presenza, quindi almeno una giornata resta "Presente".`,
+          });
           return;
         }
       }
@@ -125,6 +152,7 @@ export default function AppelloTab({
     pendingRef.current.add(key);
     setPending((s) => new Set(s).add(key));
     setError(null);
+    setRowError(null);
     const run = async () => {
       const res = await setAttendanceAction(token, subject, day, next).catch(
         () => ({ ok: false }) as { ok: boolean; schema?: boolean; error?: string },
@@ -132,8 +160,11 @@ export default function AppelloTab({
       if (!res.ok) {
         setAttendance((m) => ({ ...m, [subj]: { ...(m[subj] ?? {}), [day]: prev } }));
         if (res.schema) setReadOnly(true);
-        else setError(res.error || "Salvataggio non riuscito, riprova.");
+        // A refusal about THIS student renders at their row, where the tap
+        // happened — the top-of-page alert was invisible on long rosters.
+        else setRowError({ subj, msg: res.error || "Salvataggio non riuscito, riprova." });
       }
+      lastWriteDoneRef.current = Date.now();
       pendingRef.current.delete(key);
       setPending((s) => {
         const n = new Set(s);
@@ -276,6 +307,19 @@ export default function AppelloTab({
                   />
                 )}
               </div>
+              {rowError?.subj === subj && (
+                <p
+                  role="alert"
+                  style={{
+                    color: "var(--danger-fg)",
+                    fontSize: 12.5,
+                    margin: "6px 14px 2px",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {rowError.msg}
+                </p>
+              )}
               {canAdd && addOpen !== subj && (
                 <button type="button" className="edu-addlink" onClick={() => setAddOpen(subj)}>
                   ✎ {emptySlots === 1
@@ -542,7 +586,10 @@ function AddParticipantForm({
   onCancel: () => void;
   onError: (m: string) => void;
 }) {
-  const [name, setName] = useState("");
+  // Separate nome/cognome like SeatFillIn — one "Nome e cognome" field made
+  // single-word names ambiguous and gave no hint about what was missing.
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   // Optional here: the educator may add the person before knowing their
   // email. Giving it now means "Invia email" is ready the moment presence
@@ -550,11 +597,17 @@ function AddParticipantForm({
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const missing: string[] = [];
+  if (!firstName.trim()) missing.push("nome");
+  if (!lastName.trim()) missing.push("cognome");
+  const touched = firstName.trim() !== "" || lastName.trim() !== "";
+  const ready = missing.length === 0;
+
   async function submit() {
-    const trimmed = name.trim();
-    if (!trimmed || busy) return;
+    if (!ready || busy) return;
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
     setBusy(true);
-    const res = await addPartecipanteFromLinkAction(token, iscrizioneId, trimmed, phone.trim(), email.trim()).catch(
+    const res = await addPartecipanteFromLinkAction(token, iscrizioneId, fullName, phone.trim(), email.trim()).catch(
       () =>
         ({ ok: false }) as {
           ok: boolean;
@@ -569,16 +622,29 @@ function AddParticipantForm({
 
   return (
     <div className="edu-addform">
-      <input
-        type="text"
-        className="edu-input"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Nome e cognome"
-        maxLength={120}
-        autoFocus
-        disabled={busy}
-      />
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="text"
+          className="edu-input"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          placeholder="Nome"
+          maxLength={60}
+          autoFocus
+          disabled={busy}
+          style={{ flex: 1 }}
+        />
+        <input
+          type="text"
+          className="edu-input"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          placeholder="Cognome"
+          maxLength={60}
+          disabled={busy}
+          style={{ flex: 1 }}
+        />
+      </div>
       <input
         type="tel"
         className="edu-input"
@@ -597,8 +663,19 @@ function AddParticipantForm({
         placeholder="Email (facoltativa ora, obbligatoria per la conferma)"
         disabled={busy}
       />
+      {touched && !ready && (
+        <p style={{ color: "var(--warning-fg)", fontSize: 12, margin: "2px 0 0" }}>
+          Manca: {missing.join(", ")}
+        </p>
+      )}
       <div style={{ display: "flex", gap: 8 }}>
-        <button type="button" className="edu-btn primary" onClick={submit} disabled={busy || !name.trim()}>
+        <button
+          type="button"
+          className="edu-btn primary"
+          onClick={submit}
+          disabled={busy || !ready}
+          title={ready ? undefined : `Compila: ${missing.join(", ")}`}
+        >
           Aggiungi
         </button>
         <button type="button" className="edu-btn" onClick={onCancel} disabled={busy}>

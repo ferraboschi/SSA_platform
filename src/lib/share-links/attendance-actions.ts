@@ -42,7 +42,7 @@ import {
   courseDayInfo,
   subjectKey,
   validEmail,
-  isSubjectVerificationLocked,
+  subjectVerificationState,
   hasOtherPresentDay,
 } from "./attendance-db";
 
@@ -237,15 +237,17 @@ export async function setAttendanceAction(
     return { ok: false, error: "Giornata non valida." };
   }
 
-  // VERIFICA ⇒ PRESENZA (owner's rule): the confirm email leaves from the
-  // appello, so once a link is out or the data is confirmed, removing that
-  // student's LAST marked presence would contradict a persistent fact. Other
-  // days stay freely correctable (a day-2 mis-tap must be undoable).
+  // VERIFICA ⇒ PRESENZA (owner's rule, softened per batch 11): only a
+  // CONFIRMED student's last marked presence is locked — the confirmation is
+  // a hard fact that counts as presence. A merely-SENT link no longer locks:
+  // the email usually leaves minutes after the day-1 tap, so a mis-tapped
+  // presence became permanently impossible to correct ("impossibile segnare
+  // assente"). Other days stay freely correctable.
   const LOCK_ERROR =
-    "La verifica email è partita dall'appello: almeno una giornata di presenza deve restare segnata.";
+    "Lo studente ha confermato i dati: la conferma vale come presenza, quindi almeno una giornata resta segnata.";
   if (!present) {
-    const locked = await isSubjectVerificationLocked(svc, corsoId, kind, id);
-    if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, maxDay))) {
+    const state = await subjectVerificationState(svc, corsoId, kind, id);
+    if (state === "confirmed" && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, maxDay))) {
       return { ok: false, error: LOCK_ERROR };
     }
   }
@@ -275,8 +277,8 @@ export async function setAttendanceAction(
   // restore this day and refuse. Any interleaving ends with ≥1 presence
   // (worst case both restore — fail closed).
   if (!present) {
-    const locked = await isSubjectVerificationLocked(svc, corsoId, kind, id);
-    if (locked && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, maxDay))) {
+    const state = await subjectVerificationState(svc, corsoId, kind, id);
+    if (state === "confirmed" && !(await hasOtherPresentDay(svc, corsoId, kind, id, day, maxDay))) {
       await writePresence(svc, { ...row, present: true, updated_at: new Date().toISOString() });
       return { ok: false, error: LOCK_ERROR };
     }

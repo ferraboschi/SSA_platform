@@ -72,6 +72,10 @@ export default function EducatorTabs({
         })
         .catch(() => {});
     };
+    // Immediate first tick: without it a send done on ANOTHER device is
+    // invisible for up to 12s, and the appello guard judges stale state
+    // (tap flips, server refuses, checkbox reverts — reads as a dead tap).
+    tick();
     const id = setInterval(tick, 12_000);
     return () => {
       alive = false;
@@ -110,6 +114,7 @@ export default function EducatorTabs({
             students={students}
             setStudents={setStudents}
             day={activeDayNum}
+            maxDay={tests ? dayCount + 1 : dayCount}
           />
           <SectionHeading>Programma</SectionHeading>
           <ProgrammaTab days={days} day={activeDayNum} enrolled={students.length} />
@@ -144,6 +149,7 @@ export default function EducatorTabs({
             students={students}
             setStudents={setStudents}
             day={dayCount + 1}
+            maxDay={dayCount + 1}
             isExamDay
           />
           {testByKey("final") && (

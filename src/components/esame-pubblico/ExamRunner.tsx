@@ -116,6 +116,7 @@ export function ExamRunner({
   showResult,
   isFinal,
   limitS,
+  watermark,
 }: {
   mode: "exam" | "test" | "validate";
   forcedLang?: string;
@@ -141,6 +142,9 @@ export function ExamRunner({
   showResult?: boolean;
   /** Time limit in seconds for the timed ("exam") mode. Day tests get 10'. */
   limitS?: number;
+  /** Student identity repeated as a faint diagonal overlay on the question
+   *  screens (screenshot deterrence — a leaked capture names its owner). */
+  watermark?: string;
 }) {
   // Only offer a non-Italian language when EVERY question is fully translated into
   // it (text + all options). Otherwise the student would silently receive Italian
@@ -339,7 +343,11 @@ export function ExamRunner({
     const id = setInterval(() => {
       getLinkStateAction(token)
         .then((r) => {
-          if (r.ok && r.closed) setClosedLive(true);
+          // ONLY a real educator closure flips the screen (same filter as
+          // EsitoCard): the state action verifies with ZERO grace, so a merely
+          // expired token would otherwise masquerade as "chiuso dall'educator"
+          // and cut off a student the 3h submit grace still accepts.
+          if (r.ok && r.closed && r.reason === "closed") setClosedLive(true);
         })
         .catch(() => {});
     }, 30_000);
@@ -437,6 +445,27 @@ export function ExamRunner({
     </header>
   );
 
+  // Closed by the educator while the page was open → replace the exam with an
+  // honest screen (answers stay in localStorage/server if they re-open later).
+  // Renders BEFORE the language picker (a student parked on the first screen
+  // never saw the closure until a manual reload) but NEVER over the submit-
+  // retry screen: a failed hand-in must keep its Riprova path — the 3h submit
+  // grace exists exactly for finishing across the expiry boundary.
+  if (closedLive && !done && !submitError) {
+    return (
+      <div className="exam-public-shell" {...lockdown}>
+        <div className="exam-public-card">
+          {headerBar}
+          <div className="exam-public-thanks">
+            <div className="exam-public-thanks-check">✕</div>
+            <h2>{t.closedTitle}</h2>
+            <p>{t.closedBody}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Step 0: language gate ────────────────────────────────────────────────
   if (!langPicked) {
     return (
@@ -527,23 +556,6 @@ export function ExamRunner({
             >
               {submitting ? "…" : t.retry}
             </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Closed by the educator while the page was open → replace the exam with an
-  // honest screen (answers stay in localStorage/server if they re-open later).
-  if (closedLive && !done) {
-    return (
-      <div className="exam-public-shell" {...lockdown}>
-        <div className="exam-public-card">
-          {headerBar}
-          <div className="exam-public-thanks">
-            <div className="exam-public-thanks-check">✕</div>
-            <h2>{t.closedTitle}</h2>
-            <p>{t.closedBody}</p>
           </div>
         </div>
       </div>
@@ -710,6 +722,36 @@ export function ExamRunner({
 
   return (
     <div className="exam-public-shell" {...lockdown}>
+      {/* Screenshot deterrence (owner batch 11): the OS capture can't be
+          blocked from a web page, but every question screen carries WHOSE
+          exam it is — a leaked capture names its owner. Faint, non-
+          interactive, invisible to screen readers. */}
+      {mode === "exam" && watermark && (
+        <div
+          aria-hidden
+          style={{
+            position: "fixed",
+            inset: "-20%",
+            zIndex: 5,
+            pointerEvents: "none",
+            userSelect: "none",
+            transform: "rotate(-28deg)",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "72px 56px",
+            alignContent: "space-around",
+            justifyContent: "space-around",
+            opacity: 0.055,
+            overflow: "hidden",
+          }}
+        >
+          {Array.from({ length: 36 }, (_, i) => (
+            <span key={i} style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", color: "#1f2937" }}>
+              {watermark}
+            </span>
+          ))}
+        </div>
+      )}
       {timed && warned && !warnAck && (
         <div
           role="dialog"
@@ -846,6 +888,25 @@ export function ExamRunner({
               t={t}
               value={answers["reg:" + step.field]}
               onChange={(v) => setAnswer("reg:" + step.field, v)}
+              // Nome/cognome survive step remounts as their own keys — the
+              // composed "reg:name" alone can't tell a lone first name from a
+              // lone last name when re-seeding the two fields.
+              nameParts={
+                step.field === "name"
+                  ? {
+                      first: String(answers["reg:name:first"] ?? ""),
+                      last: String(answers["reg:name:last"] ?? ""),
+                    }
+                  : undefined
+              }
+              onNameParts={
+                step.field === "name"
+                  ? (p) => {
+                      setAnswer("reg:name:first", p.first);
+                      setAnswer("reg:name:last", p.last);
+                    }
+                  : undefined
+              }
             />
           ) : (
             (() => {
