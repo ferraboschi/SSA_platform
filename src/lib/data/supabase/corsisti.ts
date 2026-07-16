@@ -17,8 +17,9 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
   const enrollmentCorso = `corso:corsi (
       id, short_title, full_title, type, city, month, year, lifecycle
     )`;
-  // `exam_score_pct` may not exist pre-migration → fall back without it.
-  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, exam_score_pct, historical, ${enrollmentCorso}`;
+  // `exam_score_pct`/`financial_status` may not exist pre-migration → fall
+  // back without them (every row then counts as paid, the legacy rule).
+  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, discount_cents, financial_status, exam_result, exam_score_pct, historical, ${enrollmentCorso}`;
   const enrollmentSelectBase = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, historical, ${enrollmentCorso}`;
 
   // Official certificate PDFs (Supabase Storage), keyed "<corsistaId>-<corsoId>".

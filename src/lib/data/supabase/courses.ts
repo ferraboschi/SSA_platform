@@ -211,6 +211,12 @@ export function makeCoursesRepo(
       }
     }
 
+    // Seats not on a dead order — deriveLifecycle's evidence that a past-dated
+    // bozza really ran (a fully refunded course must not resurrect as held).
+    const liveEnrolled = rows.filter(
+      (r) => !["refunded", "voided", "cancelled"].includes((r.financial_status ?? "").toLowerCase()),
+    ).length;
+
     const course = corsoRowToDomain(
       row,
       educator,
@@ -219,6 +225,7 @@ export function makeCoursesRepo(
       students,
       program,
       recognizedCredits,
+      liveEnrolled,
     );
     const totalExam = examResults.passed + examResults.retrial + examResults.failed;
     if (totalExam > 0) course.examResults = examResults;
@@ -318,13 +325,13 @@ export function makeCoursesRepo(
 
       const eduMap = await loadEducatorsMap(ctx);
       let courses = corsoRows.map((r) => {
-        const a = agg.get(r.id) ?? { n: 0, rev: 0 };
+        const a = agg.get(r.id) ?? { n: 0, nLive: 0, rev: 0 };
         const edu =
           r.educator_id != null
             ? (eduMap.get(r.educator_id) ?? placeholderEducator())
             : placeholderEducator();
         const credits = (creditsByCourse.get(r.id) ?? 0) / 100;
-        const course = corsoRowToDomain(r, edu, a.n, a.rev, [], [], credits);
+        const course = corsoRowToDomain(r, edu, a.n, a.rev, [], [], credits, a.nLive);
         const exams = examAgg.get(r.id);
         if (exams) course.examResults = exams;
         return course;

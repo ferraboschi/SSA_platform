@@ -16,7 +16,7 @@ import {
   SHOCHU_CATS,
   STATUS_META,
 } from "@/lib/domain";
-import { netPaidEuros } from "@/lib/economics/revenue";
+import { isPaidRevenue, netPaidEuros } from "@/lib/economics/revenue";
 import type {
   Corsista,
   CorsistaEnrollment,
@@ -109,9 +109,11 @@ export function iscrizioneToEnrollment(row: IscrizioneRow): CorsistaEnrollment |
     month: corso.month,
     year: corso.year,
     status: corso.lifecycle,
-    // NET paid (gross − discount). Free re-participations have a full discount,
-    // so they correctly show 0 instead of a misleading gross amount.
-    amount: netPaidEuros(row),
+    // NET paid (gross − discount), and only when the money was actually
+    // COLLECTED: refunded/voided/pending seats show 0, so per-person spend
+    // (totalSpent, "persone più attive") never counts money that never landed.
+    // Free re-participations have a full discount → correctly 0 too.
+    amount: isPaidRevenue(row.financial_status) ? netPaidEuros(row) : 0,
     examResult: row.exam_result,
     examScorePct: row.exam_score_pct ?? null,
     historical: row.historical || undefined,
@@ -265,6 +267,10 @@ export function corsoRowToDomain(
   // Optional + defaulted so every existing 6-arg caller (and all tests) keep
   // working unchanged.
   recognizedCredits: number = 0,
+  // Seats NOT on a dead order (refunded/voided/cancelled) — the evidence the
+  // bozza→passato flip requires. Defaults to the raw headcount for callers
+  // that don't track financial status.
+  liveEnrolled: number = enrolled,
 ): Course {
   // Guard against an off-enum `type` slipping in from imports (would crash
   // COURSE_TYPES[type].label consumers downstream).
@@ -291,7 +297,7 @@ export function corsoRowToDomain(
     program.length > 0
       ? program.length
       : expectedDays(safeType, row.delivery_mode === "online" ? "online" : "presenza");
-  const lifecycle = deriveLifecycle(row.lifecycle, row.start_date, days, enrolled);
+  const lifecycle = deriveLifecycle(row.lifecycle, row.start_date, days, liveEnrolled);
   const nbRaw = (row.notebook ?? {}) as Record<string, unknown>;
   const nb = nbRaw as Partial<Notebook>;
   // "Annullato" = pulled before it ran, from EITHER the Shopify-derived lifecycle

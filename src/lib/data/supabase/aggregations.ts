@@ -256,13 +256,20 @@ export function buildStudentsFromEnrollments(
  *  enrollment rollup. Replicates the L898-905 loop exactly: `n` counts EVERY
  *  enrollment (enrolled ≠ collected); `rev` adds netPaidEuros(row) only for
  *  isPaidRevenue rows. Returns a map corso id → { n, rev }. */
+/** Statuses of a seat whose money is gone (refunded/voided) or whose order was
+ *  cancelled — kept in the roster for history, but NOT proof a course ran. */
+const DEAD_ENROLLMENT = new Set(["refunded", "voided", "cancelled"]);
+
 export function aggregateCourseEnrollments(
   enrollAggRows: EnrollmentAggRow[],
-): Map<number, { n: number; rev: number }> {
-  const agg = new Map<number, { n: number; rev: number }>();
+): Map<number, { n: number; nLive: number; rev: number }> {
+  const agg = new Map<number, { n: number; nLive: number; rev: number }>();
   for (const i of enrollAggRows) {
-    const a = agg.get(i.corso_id) ?? { n: 0, rev: 0 };
+    const a = agg.get(i.corso_id) ?? { n: 0, nLive: 0, rev: 0 };
     a.n++; // headcount = all enrollments (enrolled ≠ collected)
+    // Live seats exclude dead orders — deriveLifecycle uses this so a fully
+    // refunded, back-to-draft course is never resurrected as "held".
+    if (!DEAD_ENROLLMENT.has((i.financial_status ?? "").toLowerCase())) a.nLive++;
     // Net paid = gross − discount, never negative. Revenue counts only
     // fully-paid orders.
     if (isPaidRevenue(i.financial_status)) a.rev += netPaidEuros(i);

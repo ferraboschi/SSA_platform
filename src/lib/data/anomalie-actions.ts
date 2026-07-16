@@ -59,6 +59,16 @@ const KEYED_TABLES: { table: string; keyCols: string[] }[] = [
   { table: "exam_progress", keyCols: ["corso_id", "test_key"] }, // partial unique(corso_id,test_key,corsista_id)
 ];
 
+/** A pre-migration environment legitimately lacks some of these tables/columns
+ *  — that (and ONLY that) may be skipped silently. Any other error must abort
+ *  the merge BEFORE the merged_into fold, or rows would be stranded on a
+ *  hidden record with no retry path (the cluster disappears from the page). */
+function isMissingSchema(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (["42P01", "42703", "PGRST204", "PGRST205"].includes(error.code ?? "")) return true;
+  return /does not exist|schema cache/i.test(error.message ?? "");
+}
+
 /**
  * Merge core, shared by the per-cluster and bulk actions. Non-destructive (mai
  * buttare dati): the duplicates KEEP their rows (with their email/phone
@@ -107,54 +117,75 @@ async function mergeCorsistiCore(
 
   // Blind reassignments — no unique constraint involves corsista_id here.
   for (const table of BLIND_TABLES) {
-    try {
-      const { data, error } = await svc
-        .from(table)
-        .update({ corsista_id: survivorId })
-        .in("corsista_id", dups)
-        .select("id");
-      if (!error) bump(table, (data ?? []).length);
-    } catch {
-      // missing table (pre-migration env) → skip
+    const { data, error } = await svc
+      .from(table)
+      .update({ corsista_id: survivorId })
+      .in("corsista_id", dups)
+      .select("id");
+    if (error) {
+      if (isMissingSchema(error)) continue; // pre-migration env → skip table
+      throw error; // real failure → abort BEFORE the fold (merge stays retryable)
     }
+    bump(table, (data ?? []).length);
   }
 
   // Keyed reassignments — move only rows whose unique key the survivor
   // doesn't already hold (mirrors the corsi_iscrizioni loop above).
   for (const { table, keyCols } of KEYED_TABLES) {
-    try {
-      const cols = ["id", ...keyCols].join(",");
-      const rowKey = (r: Record<string, unknown>) =>
-        keyCols.map((c) => String(r[c] ?? "")).join("|");
-      const { data: survRows, error: survErr } = await svc
+    const isPresenze = table === "corsi_presenze";
+    // corsi_presenze carries a boolean FACT (present): on a key conflict the
+    // dup's row can't move, but a `present=true` must still win over the
+    // survivor's `false` — attendance was real regardless of which duplicate
+    // identity the educator ticked.
+    const cols = ["id", ...keyCols, ...(isPresenze ? ["present"] : [])].join(",");
+    const rowKey = (r: Record<string, unknown>) =>
+      keyCols.map((c) => String(r[c] ?? "")).join("|");
+    const { data: survRows, error: survErr } = await svc
+      .from(table)
+      .select(cols)
+      .eq("corsista_id", survivorId);
+    if (survErr) {
+      if (isMissingSchema(survErr)) continue; // pre-migration env → skip table
+      throw survErr;
+    }
+    // Dynamic select string → supabase-js can't infer the row type; go via unknown.
+    const survivorByKey = new Map(
+      ((survRows ?? []) as unknown as Record<string, unknown>[]).map((r) => [rowKey(r), r]),
+    );
+    for (const dupId of dups) {
+      const { data: dupRows, error: dupErr } = await svc
         .from(table)
         .select(cols)
-        .eq("corsista_id", survivorId);
-      if (survErr) continue; // missing table/column → skip
-      // Dynamic select string → supabase-js can't infer the row type; go via unknown.
-      const taken = new Set(
-        ((survRows ?? []) as unknown as Record<string, unknown>[]).map(rowKey),
-      );
-      for (const dupId of dups) {
-        const { data: dupRows } = await svc
-          .from(table)
-          .select(cols)
-          .eq("corsista_id", dupId);
-        for (const r of (dupRows ?? []) as unknown as Record<string, unknown>[]) {
-          const k = rowKey(r);
-          if (taken.has(k)) continue; // survivor already holds this key → leave on the merged row
-          const { error } = await svc
-            .from(table)
-            .update({ corsista_id: survivorId })
-            .eq("id", r.id as number);
-          if (!error) {
-            taken.add(k);
-            bump(table);
+        .eq("corsista_id", dupId);
+      if (dupErr) throw dupErr;
+      for (const r of (dupRows ?? []) as unknown as Record<string, unknown>[]) {
+        const k = rowKey(r);
+        const survRow = survivorByKey.get(k);
+        if (survRow) {
+          // Key conflict → the dup's row stays on the merged record, but a
+          // positive attendance is folded onto the survivor (OR semantics).
+          if (isPresenze && r.present === true && survRow.present !== true) {
+            const { error } = await svc
+              .from(table)
+              .update({ present: true })
+              .eq("id", survRow.id as number);
+            if (error && !isMissingSchema(error)) throw error;
+            survRow.present = true;
+            bump(`${table} (present OR)`);
           }
+          continue;
         }
+        const { error } = await svc
+          .from(table)
+          .update({ corsista_id: survivorId })
+          .eq("id", r.id as number);
+        if (error) {
+          if (isMissingSchema(error)) break; // table went away mid-loop → skip
+          throw error;
+        }
+        survivorByKey.set(k, r);
+        bump(table);
       }
-    } catch {
-      // missing table (pre-migration env) → skip
     }
   }
 
@@ -244,12 +275,17 @@ export async function mergeCorsistiAction(
 export async function mergeAllHighConfidenceAction(): Promise<{
   clusters: number;
   peopleMerged: number;
+  /** nameKeys of the clusters that were ACTUALLY merged — the client hides
+   *  exactly these, never its own optimistic guess. */
+  mergedKeys: string[];
 }> {
   await assertRole(["admin", "manager"]);
   const svc = getSupabaseServiceClient();
 
   // Same inputs the anomalie page feeds duplicatePeople(): every corsista
   // (paginated), enrollment counts (survivor choice), dismissed clusters.
+  // onError THROW: a failed read must abort the bulk merge — a partial list
+  // would silently shrink the merge set (or merge with a wrong survivor).
   const all = await paginateAll<CorsistaLite>(
     async (from, to) => {
       const { data, error } = await svc
@@ -258,7 +294,7 @@ export async function mergeAllHighConfidenceAction(): Promise<{
         .range(from, to);
       return { data: data as CorsistaLite[] | null, error };
     },
-    { onError: "break" },
+    { onError: "throw" },
   );
   const enr = await paginateAll<{ corsista_id: number }>(
     async (from, to) => {
@@ -268,7 +304,7 @@ export async function mergeAllHighConfidenceAction(): Promise<{
         .range(from, to);
       return { data: data as { corsista_id: number }[] | null, error };
     },
-    { onError: "break" },
+    { onError: "throw" },
   );
   const enrPerCorsista = new Map<number, number>();
   for (const e of enr) {
@@ -282,15 +318,17 @@ export async function mergeAllHighConfidenceAction(): Promise<{
       isAutoMergeableCluster(c.members.map((m) => m.name)),
   );
   let peopleMerged = 0;
+  const mergedKeys: string[] = [];
   for (const c of alta) {
     const dupIds = c.members.map((m) => m.id).filter((id) => id !== c.survivorId);
     await mergeCorsistiCore(svc, c.survivorId, dupIds);
     peopleMerged += c.members.length;
+    mergedKeys.push(c.nameKey);
   }
 
   revalidatePath("/anomalie");
   revalidatePath("/corsisti", "layout");
-  return { clusters: alta.length, peopleMerged };
+  return { clusters: mergedKeys.length, peopleMerged, mergedKeys };
 }
 
 /** Names of email-clusters the operator already reviewed (settings_kv). */

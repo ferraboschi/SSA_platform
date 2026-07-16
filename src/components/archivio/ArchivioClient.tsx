@@ -610,8 +610,8 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
 
   const years = Array.from(new Set(items.map((c) => c.year))).sort((a, b) => b - a);
 
-  const filtered = useMemo(() => {
-    let l = held;
+  const applyFilters = (list: ArchivioCourse[]) => {
+    let l = list;
     if (year !== "tutti") l = l.filter((c) => c.year === Number(year));
     if (filterType) l = l.filter((c) => c.type === filterType);
     if (search) {
@@ -619,7 +619,13 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
       l = l.filter((c) => (c.shortTitle + " " + c.city + " " + c.educatorName).toLowerCase().includes(q));
     }
     return l;
-  }, [held, year, filterType, search]);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filtered = useMemo(() => applyFilters(held), [held, year, filterType, search]);
+  // The CSV export must include CANCELLED courses too (the page's own KPIs
+  // report a cancellation rate — an export without them couldn't reconcile it).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filteredForExport = useMemo(() => applyFilters(items), [items, year, filterType, search]);
 
   // Cancellation KPI (respects the year filter).
   const cancInYear =
@@ -661,7 +667,7 @@ export function ArchivioClient({ items, citiesPossible }: { items: ArchivioCours
                 "archivio-corsi",
                 toCsv(
                   ["Corso", "Tipo", "Città", "Data", "Educator", "Iscritti", "Incasso €", "Margine €", "Esami promossi", "Esami totali", "Stato", "Fatturato"],
-                  filtered.map((c) => {
+                  filteredForExport.map((c) => {
                     const examTotal = c.examResults
                       ? c.examResults.passed + c.examResults.retrial + c.examResults.failed
                       : 0;

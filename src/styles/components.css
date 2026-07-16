@@ -760,6 +760,7 @@
   background: var(--indigo);
 }
 .kpi-accent.green   { background: var(--success); }
+.kpi-accent.success { background: var(--success); } /* alias — several call sites use the token name */
 .kpi-accent.warning { background: var(--warning); }
 .kpi-accent.danger  { background: var(--danger); }
 .kpi-accent.azzurro { background: var(--azzurro); }

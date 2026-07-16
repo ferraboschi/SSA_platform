@@ -1,5 +1,7 @@
 import { getTranslations } from "@/lib/i18n/server";
 import { requireNavAccess } from "@/lib/auth/guard";
+import { getSession } from "@/lib/auth/session";
+import { ROLE_VIEWS } from "@/lib/auth/roles";
 import { supabaseConfig } from "@/lib/integrations/config";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { netPaidCents } from "@/lib/economics/revenue";
@@ -40,7 +42,12 @@ interface CorsoRow {
 
 export default async function Page() {
   await requireNavAccess("pagamenti");
-  const { t } = await getTranslations();
+  const [{ t }, session] = await Promise.all([getTranslations(), getSession()]);
+  // A role with "corsisti" hidden (e.g. accountant) would 404 on the buyer
+  // deep-links — render plain names for it instead of links into a wall.
+  const canLinkCorsisti = !(
+    ROLE_VIEWS[session.user.roleKey]?.hidden ?? []
+  ).includes("corsisti");
 
   if (!supabaseConfig.isConfigured) {
     return (
@@ -120,5 +127,5 @@ export default async function Page() {
     };
   });
 
-  return <PagamentiClient rows={rows} />;
+  return <PagamentiClient rows={rows} canLinkCorsisti={canLinkCorsisti} />;
 }

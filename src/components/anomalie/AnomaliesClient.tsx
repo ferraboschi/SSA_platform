@@ -122,14 +122,15 @@ export function AnomaliesClient({
   const mergeAll = () => {
     if (altaClusters.length === 0) return;
     if (!confirm(format(t.mergeAllConfirm, { n: altaClusters.length }))) return;
-    const keys = altaClusters.map((c) => c.nameKey);
     startTransition(async () => {
       try {
         const res = await mergeAllHighConfidenceAction();
         setBulkResult(res);
+        // Hide exactly what the SERVER merged — a partial/zero server merge
+        // must leave the remaining clusters visible, not vanish them.
         setMergedKeys((prev) => {
           const next = new Set(prev);
-          for (const k of keys) next.add(k);
+          for (const k of res.mergedKeys) next.add(k);
           return next;
         });
         router.refresh();
@@ -156,7 +157,20 @@ export function AnomaliesClient({
   };
   const dismissCluster = (nameKey: string) => {
     setDismissedClusters((prev) => new Set(prev).add(nameKey));
-    startTransition(() => void dismissEmailClusterAction(nameKey));
+    startTransition(async () => {
+      try {
+        await dismissEmailClusterAction(nameKey);
+      } catch {
+        // Roll back: an unpersisted dismissal must stay visible — the bulk
+        // merge trusts ONLY persisted dismissals, so a silently-failed one
+        // could otherwise be auto-merged later against the operator's intent.
+        setDismissedClusters((prev) => {
+          const next = new Set(prev);
+          next.delete(nameKey);
+          return next;
+        });
+      }
+    });
   };
 
   return (

@@ -89,6 +89,8 @@ export interface IscrizioneRow {
   corsista_id: number;
   amount_cents: number;
   discount_cents?: number | null;
+  /** Absent pre-enrichment migration → treated as paid (legacy rows). */
+  financial_status?: string | null;
   exam_result: "passed" | "retrial" | "failed" | null;
   exam_score_pct?: number | null;
   historical: boolean;

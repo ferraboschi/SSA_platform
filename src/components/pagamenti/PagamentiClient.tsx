@@ -34,7 +34,13 @@ function formatDateIt(iso: string | null): string {
   return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-export function PagamentiClient({ rows }: { rows: PaymentRow[] }) {
+export function PagamentiClient({
+  rows,
+  canLinkCorsisti,
+}: {
+  rows: PaymentRow[];
+  canLinkCorsisti: boolean;
+}) {
   const t = useT().pagamenti;
   const [search, setSearch] = useState("");
   const [cluster, setCluster] = useState<ClusterFilter>("tutti");
@@ -240,7 +246,7 @@ export function PagamentiClient({ rows }: { rows: PaymentRow[] }) {
                       {r.orderName ?? "—"}
                     </td>
                     <td>
-                      {r.buyerEmail ? (
+                      {r.buyerEmail && canLinkCorsisti ? (
                         <Link
                           className="link"
                           href={`/corsisti/${encodeURIComponent(r.buyerEmail)}`}
@@ -249,7 +255,7 @@ export function PagamentiClient({ rows }: { rows: PaymentRow[] }) {
                           {r.buyerName ?? r.buyerEmail}
                         </Link>
                       ) : (
-                        <span style={{ fontWeight: 600 }}>{r.buyerName ?? "—"}</span>
+                        <span style={{ fontWeight: 600 }}>{r.buyerName ?? r.buyerEmail ?? "—"}</span>
                       )}
                     </td>
                     <td>

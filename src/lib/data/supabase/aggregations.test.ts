@@ -437,7 +437,7 @@ describe("aggregateCourseEnrollments", () => {
       agg({ corso_id: 1, amount_cents: 12000, financial_status: "paid" }),
       agg({ corso_id: 1, amount_cents: 8000, discount_cents: 2000, financial_status: "paid" }),
     ]);
-    expect(map.get(1)).toEqual({ n: 2, rev: 120 + 60 });
+    expect(map.get(1)).toEqual({ n: 2, nLive: 2, rev: 120 + 60 });
   });
 
   it("counts pending rows in n but excludes them from rev", () => {
@@ -445,7 +445,7 @@ describe("aggregateCourseEnrollments", () => {
       agg({ corso_id: 1, amount_cents: 12000, financial_status: "paid" }),
       agg({ corso_id: 1, amount_cents: 12000, financial_status: "pending" }),
     ]);
-    expect(map.get(1)).toEqual({ n: 2, rev: 120 });
+    expect(map.get(1)).toEqual({ n: 2, nLive: 2, rev: 120 });
   });
 
   it("treats a null/absent financial_status as paid (legacy rows)", () => {
@@ -453,7 +453,7 @@ describe("aggregateCourseEnrollments", () => {
       { corso_id: 1, amount_cents: 12000, discount_cents: null },
       agg({ corso_id: 1, amount_cents: 5000, financial_status: null }),
     ]);
-    expect(map.get(1)).toEqual({ n: 2, rev: 120 + 50 });
+    expect(map.get(1)).toEqual({ n: 2, nLive: 2, rev: 120 + 50 });
   });
 
   it("aggregates independently per course id", () => {
@@ -462,15 +462,27 @@ describe("aggregateCourseEnrollments", () => {
       agg({ corso_id: 2, amount_cents: 8000 }),
       agg({ corso_id: 1, amount_cents: 12000, financial_status: "pending" }),
     ]);
-    expect(map.get(1)).toEqual({ n: 2, rev: 120 });
-    expect(map.get(2)).toEqual({ n: 1, rev: 80 });
+    expect(map.get(1)).toEqual({ n: 2, nLive: 2, rev: 120 });
+    expect(map.get(2)).toEqual({ n: 1, nLive: 1, rev: 80 });
   });
 
   it("uses the cents-space net (clamped at 0 for 100%-off)", () => {
     const map = aggregateCourseEnrollments([
       agg({ corso_id: 1, amount_cents: 12000, discount_cents: 15000 }),
     ]);
-    expect(map.get(1)).toEqual({ n: 1, rev: 0 });
+    expect(map.get(1)).toEqual({ n: 1, nLive: 1, rev: 0 });
+  });
+
+
+  it("excludes dead seats (refunded/voided/cancelled) from nLive but not n", () => {
+    const map = aggregateCourseEnrollments([
+      agg({ corso_id: 1, financial_status: "paid" }),
+      agg({ corso_id: 1, financial_status: "refunded" }),
+      agg({ corso_id: 1, financial_status: "voided" }),
+      agg({ corso_id: 1, financial_status: "cancelled" }),
+      agg({ corso_id: 1, financial_status: "pending" }), // alive, just unpaid
+    ]);
+    expect(map.get(1)).toEqual({ n: 5, nLive: 2, rev: 120 });
   });
 
   it("returns an empty map for no rows", () => {

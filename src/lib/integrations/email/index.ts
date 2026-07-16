@@ -88,17 +88,41 @@ class StubEmailService implements EmailService {
   }
 }
 
+/** Synthetic contact addresses invented by the sync (email-less orders,
+ *  multi-ticket extra seats). They are real rows in `corsisti` but must never
+ *  receive actual mail — Resend would hard-bounce and hurt sender reputation. */
+const PLACEHOLDER_EMAIL_RE = /@(ssa\.placeholder|placeholder\.ssa)\s*$/i;
+
+/** Strips placeholder recipients from every message at the single outbound
+ *  seam; a message left with no real recipient reports `skipped`. */
+class PlaceholderFilterService implements EmailService {
+  constructor(private inner: EmailService) {}
+
+  async send(message: EmailMessage): Promise<EmailSendResult> {
+    const recipients = (Array.isArray(message.to) ? message.to : [message.to]).filter(
+      (t) => !PLACEHOLDER_EMAIL_RE.test(t),
+    );
+    if (recipients.length === 0) {
+      console.info(`[email] skipped — placeholder-only recipient · "${message.subject}"`);
+      return { status: "skipped", provider: "stub" };
+    }
+    return this.inner.send({ ...message, to: recipients });
+  }
+}
+
 let instance: EmailService | null = null;
 
 export function getEmailService(): EmailService {
   if (!instance) {
-    instance = resendConfig.isConfigured
-      ? new ResendEmailService(
-          resendConfig.apiKey!,
-          resendConfig.from,
-          resendConfig.replyTo,
-        )
-      : new StubEmailService();
+    instance = new PlaceholderFilterService(
+      resendConfig.isConfigured
+        ? new ResendEmailService(
+            resendConfig.apiKey!,
+            resendConfig.from,
+            resendConfig.replyTo,
+          )
+        : new StubEmailService(),
+    );
   }
   return instance;
 }

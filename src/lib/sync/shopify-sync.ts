@@ -33,6 +33,7 @@ import { logReconciliation } from "@/lib/anomalie/reconcile";
 import { MONTH_TO_NUM, MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
 import { planSeats, placeholderEmail, placeholderName, orderPlaceholderEmail } from "./seats";
 import { DEAD_FINANCIAL, deadOrderStatus, prorateDiscount } from "./order-rules";
+import { isPaidRevenue } from "@/lib/economics/revenue";
 import { loadIgnoredProductIds } from "./ignored-products";
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
@@ -183,6 +184,30 @@ async function upsertEnrollmentSeats(
     line_item_id: args.lineItemId,
     buyer_name: args.buyerName,
   };
+  // The buyer identity of an order can CHANGE between syncs (an email-less
+  // order first enrolls its deterministic placeholder; the owner later attaches
+  // the real customer on Shopify and the order re-syncs). The upsert keys on
+  // (corso, corsista), so without this cleanup the old identity's row would
+  // survive next to the new one — a phantom duplicate seat. Reassign the stale
+  // seat-1 row to the new identity (preserves confirm/delivery fields); if the
+  // new identity already holds a row in this course, drop the stale one.
+  if (args.lineItemId != null) {
+    const stale = sb
+      .from("corsi_iscrizioni")
+      .update({ corsista_id: args.corsistaId })
+      .eq("line_item_id", args.lineItemId)
+      .or("seat_index.eq.1,seat_index.is.null")
+      .neq("corsista_id", args.corsistaId);
+    const { error: staleErr } = await stale;
+    if (staleErr) {
+      await sb
+        .from("corsi_iscrizioni")
+        .delete()
+        .eq("line_item_id", args.lineItemId)
+        .or("seat_index.eq.1,seat_index.is.null")
+        .neq("corsista_id", args.corsistaId);
+    }
+  }
   if (hasSeats && args.lineItemId != null) {
     // One FULL enrollment row per ticket: seat 1 = the buyer (whole amount),
     // seats 2..N = a placeholder attendee (€0) to complete later.
@@ -755,9 +780,15 @@ const SINCE_FALLBACK_DAYS = 30;
  *  purchases ledger, matched by product_id ONLY (masterclass lines classify as
  *  cluster 'evento', so a cluster filter would go blind).
  *
- *  SCOPE: lifecycle 'pubblicato' always, plus 'passato'/'bozza' courses whose
- *  start_date is already past — a course that just ended (or a draft that was
- *  actually held) must not keep a short roster forever. STRICTLY ADD-ONLY:
+ *  SCOPE: lifecycle 'pubblicato' always; ONLY on a FULL run also
+ *  'passato'/'bozza' courses whose start_date is already past — a course that
+ *  just ended (or a draft that was actually held) must not keep a short
+ *  roster forever. The widened scope is gated on `healEnded` (= fullBackfill)
+ *  because only the full run has ALREADY swept dead orders out of the
+ *  purchases ledger this same run: an incremental run would happily
+ *  materialize a stale 'paid' purchase of an order refunded under the old
+ *  sync (its updated_at bump is behind the watermark, unreachable forever)
+ *  as fresh paid revenue on a held course. STRICTLY ADD-ONLY:
  *  only buyers with NO enrollment row are inserted (existing rows and their
  *  amounts are never rewritten), and never for owner-ignored products.
  *  Idempotent via the same seat-expansion helper as the live order loop. */
@@ -766,12 +797,13 @@ async function backfillMissedEnrollments(
   ignored: Set<string>,
   hasSeats: boolean,
   placeholderCache: Map<string, number>,
+  healEnded: boolean,
 ): Promise<number> {
   let written = 0;
   const { data: corsi, error } = await sb
     .from("corsi")
     .select("id, external_id, price_cents, lifecycle, start_date")
-    .in("lifecycle", ["pubblicato", "passato", "bozza"])
+    .in("lifecycle", healEnded ? ["pubblicato", "passato", "bozza"] : ["pubblicato"])
     .not("external_id", "is", null);
   if (error) return 0;
   type PurRow = {
@@ -907,10 +939,44 @@ export async function runShopifySync(opts?: {
         .map((li) => li.id)
         .filter((x): x is number => x != null);
       if (lineIds.length > 0) {
-        await sb
+        // The enrollment row is unique per (corso, corsista): if the buyer holds
+        // ANOTHER alive paid order for the same product (double-purchase, one
+        // refunded — the standard remediation), the row currently carries THIS
+        // order's line_item_id but the seat is still paid for. Stamping it dead
+        // would erase a genuinely-paid seat, so such rows are skipped. This
+        // order's own purchases are already deleted above, so any surviving
+        // ledger row is by definition another order.
+        const { data: hitRows } = await sb
           .from("corsi_iscrizioni")
-          .update({ financial_status: dead })
+          .select("id, corsista_id, line_item_id")
           .in("line_item_id", lineIds);
+        const hits = (hitRows ?? []) as { id: number; corsista_id: number; line_item_id: number }[];
+        if (hits.length > 0) {
+          const productByLine = new Map(
+            o.line_items.filter((li) => li.id != null).map((li) => [li.id as number, li.product_id]),
+          );
+          const stillPaid = new Set<number>();
+          for (const h of hits) {
+            const productId = productByLine.get(h.line_item_id);
+            if (productId == null) continue;
+            const { data: alive } = await sb
+              .from("purchases")
+              .select("financial_status")
+              .eq("corsista_id", h.corsista_id)
+              .eq("product_id", productId)
+              .limit(10);
+            if ((alive ?? []).some((p) => isPaidRevenue((p as { financial_status: string | null }).financial_status))) {
+              stillPaid.add(h.id);
+            }
+          }
+          const toStamp = hits.filter((h) => !stillPaid.has(h.id)).map((h) => h.id);
+          if (toStamp.length > 0) {
+            await sb
+              .from("corsi_iscrizioni")
+              .update({ financial_status: dead })
+              .in("id", toStamp);
+          }
+        }
       }
       // Legacy rows synced before line_item_id existed: match by order name.
       if (o.name) {
@@ -1021,13 +1087,16 @@ export async function runShopifySync(opts?: {
   }
 
   // Heal enrollments missed because their order predated the corso row (the
-  // incremental watermark never revisits old orders). Published courses always,
-  // plus already-started passato/bozza courses — add-only, amounts never rewritten.
+  // incremental watermark never revisits old orders). Published courses always;
+  // ended (passato/bozza-past) courses ONLY on a full run, after this same
+  // run's dead-order sweep has cleaned the purchases ledger — add-only,
+  // amounts never rewritten.
   const enrollmentsBackfilled = await backfillMissedEnrollments(
     sb,
     ignored,
     hasSeats,
     placeholderCache,
+    Boolean(opts?.fullBackfill),
   ).catch(() => 0);
 
   // One-line visibility for what did NOT flow (counts only, no PII/secrets):
