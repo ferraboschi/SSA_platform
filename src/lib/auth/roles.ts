@@ -97,6 +97,7 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "anomalie",
       "educator",
       "crediti",
+      "pagamenti",
     ],
     priority: ["dashboard", "conto-economico", "corsi", "corsisti", "archivio"],
   },
@@ -113,7 +114,7 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "educator",
       "crediti",
     ],
-    priority: ["dashboard", "conto-economico", "corsi", "archivio"],
+    priority: ["dashboard", "conto-economico", "pagamenti", "corsi", "archivio"],
   },
   // guest sees nothing (unauthenticated placeholder).
   guest: {
@@ -131,6 +132,7 @@ export const ROLE_VIEWS: Record<RoleKey, RoleView> = {
       "anomalie",
       "educator",
       "crediti",
+      "pagamenti",
       "account",
     ],
     priority: [],
