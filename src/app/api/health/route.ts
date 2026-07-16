@@ -7,6 +7,7 @@ import { getVectorStore } from "@/lib/rag/store";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { getGrantedScopes } from "@/lib/integrations/shopify/admin-client";
+import { readSyncRunStatus } from "@/lib/sync/run-status";
 import { hasRole } from "@/lib/auth/guard";
 
 // Liveness + admin-only diagnostics. Anonymous callers get a trivial `{ ok: true }`
@@ -157,6 +158,38 @@ export async function GET() {
   const shochuExam = await examCounts("shochu");
   const certExam = await examCounts("certificato");
 
+  // Shopify sync freshness/outcome diagnostic: when data last landed, whether the
+  // last run succeeded, and how many ticket products it could not ingest. Read
+  // from sync_state (watermark) + sync_run_status (last run outcome). Counts and
+  // timestamps only — no tokens, no order/customer data.
+  let sync: {
+    lastSyncedAt: string | null;
+    minutesAgo: number | null;
+    lastRunOk: boolean | null;
+    lastRunError?: string;
+    skippedProducts: number;
+  } = { lastSyncedAt: null, minutesAgo: null, lastRunOk: null, skippedProducts: 0 };
+  try {
+    const svc = getSupabaseServiceClient();
+    const { data: st } = await svc
+      .from("sync_state")
+      .select("last_synced_at")
+      .eq("source", "shopify")
+      .maybeSingle();
+    const last = (st?.last_synced_at as string | null) ?? null;
+    const parsed = last ? Date.parse(last) : NaN;
+    const status = await readSyncRunStatus(svc);
+    sync = {
+      lastSyncedAt: last,
+      minutesAgo: Number.isFinite(parsed) ? Math.round((Date.now() - parsed) / 60_000) : null,
+      lastRunOk: status?.ok ?? null,
+      ...(status?.ok === false && status.error ? { lastRunError: status.error } : {}),
+      skippedProducts: status?.summary?.skippedProducts?.length ?? 0,
+    };
+  } catch {
+    /* diagnostic best-effort */
+  }
+
   // Shopify discount-write capability: can the SSA admin token CREATE+SAVE
   // discount codes (needed to auto-issue credit redemption codes to Shopify)?
   // Reads the granted scopes (no side effects). canWriteDiscounts=false means the
@@ -189,6 +222,7 @@ export async function GET() {
     examProgress: { table: examProgressTable, answersCol: progressAnswersCol },
     courseStatus,
     exam: { shochu: shochuExam, certificato: certExam },
+    sync,
     shopifyDiscounts: { canWriteDiscounts, scopes: shopifyScopes, error: scopesError },
   });
 }

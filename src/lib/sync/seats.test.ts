@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planSeats, placeholderEmail, placeholderName } from "./seats";
+import { planSeats, placeholderEmail, placeholderName, orderPlaceholderEmail } from "./seats";
 
 describe("planSeats — revenue invariant", () => {
   it("single ticket → one seat with the full amount", () => {
@@ -33,5 +33,16 @@ describe("placeholder identity", () => {
   });
   it("readable seat label", () => {
     expect(placeholderName(2)).toContain("Posto 2");
+  });
+});
+
+describe("orderPlaceholderEmail — email-less (manual/phone/POS) order buyers", () => {
+  it("deterministic per order id (re-sync resolves the SAME corsista)", () => {
+    expect(orderPlaceholderEmail(987654)).toBe("order-987654@ssa.placeholder");
+    expect(orderPlaceholderEmail(987654)).toBe(orderPlaceholderEmail("987654"));
+    expect(orderPlaceholderEmail(1)).not.toBe(orderPlaceholderEmail(2));
+  });
+  it("uses the @ssa.placeholder domain the search index filters out", () => {
+    expect(orderPlaceholderEmail(42).endsWith("@ssa.placeholder")).toBe(true);
   });
 });
