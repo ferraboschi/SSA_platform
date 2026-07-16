@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui";
 import { format, useT } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
+import { isAutoMergeableCluster } from "@/lib/anomalie/rules";
 import {
   resolveAnomalyAction,
   dismissEmailClusterAction,
@@ -93,7 +94,14 @@ export function AnomaliesClient({
   const clusters = emailClusters.filter(
     (c) => !dismissedClusters.has(c.nameKey) && !mergedKeys.has(c.nameKey),
   );
-  const altaClusters = clusters.filter((c) => c.confidence === "alta");
+  // Only the clusters the server-side bulk action will actually merge:
+  // shared email/phone AND every member with the same normalized name — a
+  // shared contact alone can be a family phone or a company email.
+  const altaClusters = clusters.filter(
+    (c) =>
+      c.confidence === "alta" &&
+      isAutoMergeableCluster(c.members.map((m) => m.name)),
+  );
 
   const merge = (c: EmailCluster) => {
     const dupIds = c.members.map((m) => m.id).filter((id) => id !== c.survivorId);

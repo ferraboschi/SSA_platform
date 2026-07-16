@@ -43,10 +43,9 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "esami", icon: "exam", href: "/esami", group: "sistema" },
   { id: "esami-editor", icon: "note", href: "/esami/editor", group: "sistema" },
   { id: "conto-economico", icon: "coin", href: "/conto-economico", group: "sistema" },
+  // Cross-cutting register of every Shopify payment.
+  { id: "pagamenti", icon: "list", href: "/pagamenti", group: "sistema" },
   { id: "anomalie", icon: "warn", href: "/anomalie", group: "sistema" },
   { id: "analisi", icon: "trending", href: "/analisi", group: "sistema" },
-  // Cross-cutting register of every Shopify payment (belongs right after
-  // "conto-economico" whenever that item returns to this list).
-  { id: "pagamenti", icon: "list", href: "/pagamenti", group: "sistema" },
   { id: "account", icon: "user", href: "/account", group: "sistema" },
 ];

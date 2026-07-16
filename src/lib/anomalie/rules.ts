@@ -94,6 +94,23 @@ export function normName(s: string | null): string {
     .trim();
 }
 
+/** Word-order-insensitive name key ("VENDRAMIN LAURA" ≡ "Laura Vendramin"). */
+export function sortedNameKey(name: string): string {
+  return normName(name).split(" ").filter(Boolean).sort().join(" ");
+}
+
+/**
+ * True when every member of a cluster carries the SAME (non-empty) normalized
+ * name, word order ignored. A shared phone/email alone is NOT proof of one
+ * person — prod data has relatives sharing a family phone and colleagues
+ * sharing company contacts — so any AUTOMATIC merge requires the name to
+ * agree too. Different-name clusters stay listed for a human decision.
+ */
+export function isAutoMergeableCluster(memberNames: string[]): boolean {
+  const keys = new Set(memberNames.map(sortedNameKey));
+  return keys.size === 1 && !keys.has("");
+}
+
 const normEmail = (s: string | null) => (s ?? "").trim().toLowerCase();
 const normPhone = (s: string | null) => {
   const d = (s ?? "").replace(/[^\d+]/g, "").replace(/^00/, "+");

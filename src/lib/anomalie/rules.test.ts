@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   duplicatePeople,
+  isAutoMergeableCluster,
   repaidClusters,
   duplicateCourses,
   missingCompanions,
@@ -362,5 +363,26 @@ describe("duplicateCourses (same slot listed twice)", () => {
       [31, course({ id: 31, type: "certificato", city: "Roma", month: null, year: null })],
     ]);
     expect(duplicateCourses(corsi, new Map())).toHaveLength(0);
+  });
+});
+
+// ── isAutoMergeableCluster — the safety gate for AUTOMATIC merging ───────────
+// A shared phone/email alone is not proof of one person (family phones,
+// company emails exist in prod); auto-merge additionally requires every
+// member to carry the same normalized name, word order ignored.
+describe("isAutoMergeableCluster", () => {
+  it("same name in different order/case/accents → mergeable", () => {
+    expect(isAutoMergeableCluster(["VENDRAMIN LAURA", "Laura Vendramin"])).toBe(true);
+    expect(isAutoMergeableCluster(["Piotto  Matteo", "Matteo Piotto"])).toBe(true);
+    expect(isAutoMergeableCluster(["josé pérez", "Jose Perez"])).toBe(true);
+  });
+  it("different people sharing a contact → NOT mergeable", () => {
+    expect(isAutoMergeableCluster(["Elisa Hu", "Antonio Hu"])).toBe(false);
+    expect(isAutoMergeableCluster(["Jacopo Tiezzi", "Nicola Savoldi"])).toBe(false);
+    expect(isAutoMergeableCluster(["Aleandro Mattia Zucaro", "Aleandro Zucaro"])).toBe(false);
+  });
+  it("empty/blank names never auto-merge", () => {
+    expect(isAutoMergeableCluster(["", ""])).toBe(false);
+    expect(isAutoMergeableCluster(["  ", "Mario Rossi"])).toBe(false);
   });
 });

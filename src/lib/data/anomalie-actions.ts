@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { assertRole } from "@/lib/auth/guard";
 import { paginateAll } from "@/lib/data/supabase/query-helpers";
-import { duplicatePeople, type CorsistaLite } from "@/lib/anomalie/rules";
+import {
+  duplicatePeople,
+  isAutoMergeableCluster,
+  type CorsistaLite,
+} from "@/lib/anomalie/rules";
 
 /** Mark an anomaly as reviewed/OK by clearing the corsista's review_note. */
 export async function resolveAnomalyAction(corsistaId: number): Promise<void> {
@@ -231,9 +235,11 @@ export async function mergeCorsistiAction(
 }
 
 /**
- * Merge EVERY high-confidence duplicate cluster (confidence "alta" = shared
- * email/phone — near-certain same person) into its suggested survivor.
- * Name-only ("media") clusters are NEVER touched: homonymy needs a human eye.
+ * Merge every SAFE high-confidence duplicate cluster into its suggested
+ * survivor: confidence "alta" (shared email/phone) AND all members share the
+ * same normalized name. Name-only ("media") clusters and mixed-name clusters
+ * are NEVER touched: homonymy and shared family/company contacts need a
+ * human eye.
  */
 export async function mergeAllHighConfidenceAction(): Promise<{
   clusters: number;
@@ -271,7 +277,9 @@ export async function mergeAllHighConfidenceAction(): Promise<{
   const reviewed = new Set(await getReviewedEmailClusters());
 
   const alta = duplicatePeople(all, enrPerCorsista, reviewed).filter(
-    (c) => c.confidence === "alta",
+    (c) =>
+      c.confidence === "alta" &&
+      isAutoMergeableCluster(c.members.map((m) => m.name)),
   );
   let peopleMerged = 0;
   for (const c of alta) {
