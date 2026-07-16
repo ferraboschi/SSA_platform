@@ -371,3 +371,61 @@ describe("gradeAnswers — order questions (batch 7: auto-graded by sequence)", 
     expect(wrong.detail[0].ok).toBe(false);
   });
 });
+
+// ── Batch 10 (owner): unanswered = wrong, MULTI partial credit ──────────────
+describe("unanswered & partial credit (batch 10)", () => {
+  const single = q({ id: "s1", type: "single", options: ["A", "B"], correct: [0] });
+  const multi = q({
+    id: "m1",
+    type: "multi",
+    options: ["A", "B", "C", "D"],
+    correct: [0, 1, 2],
+    points: 3,
+  });
+  const open = q({ id: "op1", type: "open", options: [], correct: [] });
+
+  it("a blank answer is WRONG at full weight for every type — never manual", () => {
+    const r = gradeAnswers([single, open], {});
+    expect(r.gradable).toBe(2);
+    expect(r.manual).toBe(0);
+    expect(r.autoScore).toBe(0);
+    for (const d of r.detail) {
+      expect(d.ok).toBe(false);
+      expect(d.unanswered).toBe(true);
+      expect(d.given).toBe("—");
+    }
+  });
+
+  it("a blank open never reaches the AI lane (ok !== null)", () => {
+    const r = gradeAnswers([open], { op1: "   " });
+    expect(r.detail[0].ok).toBe(false);
+    expect(r.detail[0].unanswered).toBe(true);
+  });
+
+  it("multi: the exact set earns the full point", () => {
+    const r = gradeAnswers([multi], { m1: ["A", "B", "C"] });
+    expect(r.detail[0].ok).toBe(true);
+    expect(r.detail[0].fraction).toBe(1);
+    expect(r.autoScore).toBe(100);
+  });
+
+  it("multi: partial picks earn their share (2 right of 3 → 2/3)", () => {
+    const r = gradeAnswers([multi], { m1: ["A", "B"] });
+    expect(r.detail[0].ok).toBe(false);
+    expect(r.detail[0].fraction).toBeCloseTo(2 / 3);
+    expect(r.autoScore).toBe(67); // round(100 × 2/3)
+  });
+
+  it("multi: wrong picks subtract (2 right + 1 wrong of 3 → 1/3), floored at 0", () => {
+    const r = gradeAnswers([multi], { m1: ["A", "B", "D"] });
+    expect(r.detail[0].fraction).toBeCloseTo(1 / 3);
+    const allWrong = gradeAnswers([multi], { m1: ["D"] });
+    expect(allWrong.detail[0].fraction).toBe(0);
+  });
+
+  it("partial credit flows into the points-weighted autoScore", () => {
+    // single (1pt) right + multi (3pt) at 2/3 → (1 + 2) / 4 = 75
+    const r = gradeAnswers([single, multi], { s1: ["A"], m1: ["A", "B"] });
+    expect(r.autoScore).toBe(75);
+  });
+});

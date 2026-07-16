@@ -41,6 +41,12 @@ export interface GradedAnswer {
   given: string;
   correct: string;
   ok: boolean | null; // null = manual review (open/match/order, or fill w/o key)
+  /** Earned share 0..1 for auto-graded questions — MULTI gives partial credit
+   *  (owner batch 10), everything else is 0 or 1. Absent on manual rows. */
+  fraction?: number;
+  /** Left blank: counts as WRONG at full weight, and the UIs say "Non
+   *  risposto" — never "in valutazione" (there is nothing to evaluate). */
+  unanswered?: boolean;
 }
 
 export interface GradeResult {
@@ -58,6 +64,35 @@ function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
 const normStr = (s: unknown) => String(s ?? "").trim().toLowerCase();
 const asArray = (given: string | string[] | undefined): string[] =>
   given == null ? [] : Array.isArray(given) ? given : [given];
+const isBlank = (given: string | string[] | undefined): boolean =>
+  asArray(given).every((v) => String(v).trim() === "");
+
+/** Partial credit for MULTI (owner batch 10): the exact set earns 1; otherwise
+ *  (right picks − wrong picks) / total right, floored at zero. */
+export function multiFraction(
+  given: string | string[] | undefined,
+  q: GradableQuestion,
+): number {
+  const correctSet = new Set(
+    (q.correct ?? []).map((i) => normStr(q.options[Number(i)])).filter(Boolean),
+  );
+  if (correctSet.size === 0) return 0;
+  const picks = [...new Set(asArray(given).map(normStr).filter(Boolean))];
+  let hits = 0;
+  let wrong = 0;
+  for (const g of picks) (correctSet.has(g) ? hits++ : wrong++);
+  return Math.max(0, hits - wrong) / correctSet.size;
+}
+
+/** Human-readable correct answer for a question, per type ("—" when keyless). */
+function correctDisplay(q: GradableQuestion, localized: GradableQuestion): string {
+  if (q.type === "fill") return (q.correct ?? []).map(String).join(", ") || "—";
+  if (q.type === "order") return (q.correct ?? []).map(String).join(" → ") || "—";
+  if (isObjective(q.type) && q.correct?.length) {
+    return q.correct.map((i) => localized.options[Number(i)]).filter(Boolean).join(", ") || "—";
+  }
+  return "—";
+}
 
 /** Auto-gradable choice types. Open / match / order go to manual review. */
 export const isObjective = (t: string): boolean =>
@@ -149,6 +184,24 @@ export function gradeAnswers(
     // stored as translated option text matches the (translated) correct option.
     const localized: GradableQuestion = { ...q, options: seenOptions(q, lang) };
 
+    // UNANSWERED = wrong, for EVERY type (owner batch 10): full weight in the
+    // denominator, zero earned, and NO review lane — a blank has nothing to
+    // evaluate, so it must never sit "in valutazione" nor reach the AI.
+    if (isBlank(given)) {
+      gradable++;
+      gradablePts += q.points ?? 1;
+      return {
+        qid: q.id,
+        type: q.type,
+        text: q.text,
+        given: "—",
+        correct: correctDisplay(q, localized),
+        ok: false,
+        fraction: 0,
+        unanswered: true,
+      };
+    }
+
     // FILL ("Riempi spazio"): the typed answer is matched, case-insensitive,
     // against the accepted strings (q.correct). Deterministic → auto-graded.
     if (q.type === "fill") {
@@ -176,6 +229,7 @@ export function gradeAnswers(
         given: fmtGiven(given, localized),
         correct: (q.correct ?? []).map(String).join(", "),
         ok,
+        fraction: ok ? 1 : 0,
       };
     }
 
@@ -202,6 +256,7 @@ export function gradeAnswers(
           given: fmtGiven(given, localized),
           correct: key.join(" → "),
           ok,
+          fraction: ok ? 1 : 0,
         };
       }
       // Translated sitting: compare against the translated sequence the student saw.
@@ -246,13 +301,14 @@ export function gradeAnswers(
     }
 
     // Objective choice question → auto-graded, in the student's language.
+    // MULTI earns PARTIAL credit (owner batch 10): the exact set is the full
+    // point, anything else scores proportionally via multiFraction.
     gradable++;
     gradablePts += q.points ?? 1;
     const ok = gradeObjective(given, localized);
-    if (ok) {
-      correct++;
-      correctPts += q.points ?? 1;
-    }
+    const fraction = ok ? 1 : q.type === "multi" ? multiFraction(given, localized) : 0;
+    correctPts += fraction * (q.points ?? 1);
+    if (ok) correct++;
     return {
       qid: q.id,
       type: q.type,
@@ -260,6 +316,7 @@ export function gradeAnswers(
       given: fmtGiven(given, localized),
       correct: q.correct.map((i) => localized.options[Number(i)]).filter(Boolean).join(", "),
       ok,
+      fraction,
     };
   });
 

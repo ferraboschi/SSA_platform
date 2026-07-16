@@ -28,6 +28,15 @@ export interface DayEsitoItem {
   aiMaxPoints?: number;
   aiRationale?: string;
   aiFailed?: boolean;
+  /** MULTI answered partially right — earns its share, chip "Parziale". */
+  partial?: boolean;
+  /** Left blank — zero at full weight, chip "Non risposto" (owner batch 10). */
+  unanswered?: boolean;
+}
+
+export interface DayEsitoSection {
+  name: string;
+  pct: number;
 }
 
 export interface DayEsito {
@@ -40,6 +49,9 @@ export interface DayEsito {
   /** Open answers exist but their AI evaluation hasn't landed yet — the card
    *  shows the wait note and polls until the draft arrives. */
   aiPending?: boolean;
+  /** Per-category subtotals (owner batch 10: "Storia, Produzione, …") —
+   *  computed over every question with a settled score. */
+  sections?: DayEsitoSection[];
   detail: DayEsitoItem[];
 }
 
@@ -90,6 +102,35 @@ export async function buildDayEsito(
   const pct = draft ? draft.combinedPct : res.gradable ? res.autoScore : null;
   const outcome =
     pct == null ? null : pct >= 80 ? "passed" : pct >= 70 ? "retrial" : "failed";
+
+  // Per-category subtotals (owner batch 10): every question with a SETTLED
+  // score contributes fraction×points (objective/blank) or the AI points
+  // (open); still-pending answers stay out — the card shows sections only
+  // once the result is final anyway.
+  const qMeta = new Map(
+    data.questions.map((q) => [q.id, { points: q.points ?? 1, cat: (q.cat ?? "").trim() || "Generale" }]),
+  );
+  const secMap = new Map<string, { earned: number; max: number }>();
+  for (const d of res.detail) {
+    const meta = qMeta.get(d.qid);
+    if (!meta) continue;
+    let earned: number | null = null;
+    if (d.ok !== null) {
+      earned = (d.ok ? 1 : Math.max(0, Math.min(1, d.fraction ?? 0))) * meta.points;
+    } else {
+      const g = gradeByQid.get(d.qid);
+      if (g && !g.failed) earned = Math.max(0, Math.min(meta.points, g.points));
+    }
+    if (earned == null) continue;
+    const s = secMap.get(meta.cat) ?? { earned: 0, max: 0 };
+    s.earned += earned;
+    s.max += meta.points;
+    secMap.set(meta.cat, s);
+  }
+  const sections = [...secMap.entries()]
+    .filter(([, s]) => s.max > 0)
+    .map(([name, s]) => ({ name, pct: Math.round((100 * s.earned) / s.max) }));
+
   return {
     pct,
     outcome,
@@ -97,6 +138,7 @@ export async function buildDayEsito(
     gradable: res.gradable,
     manual: res.manual,
     aiPending: hasOpenAnswers && !draft && submissionId != null,
+    ...(sections.length > 0 ? { sections } : {}),
     detail: res.detail.map((d) => {
       const g = d.ok === null ? gradeByQid.get(d.qid) : undefined;
       return {
@@ -105,6 +147,8 @@ export async function buildDayEsito(
         given: d.given,
         correctText: d.correct,
         ok: d.ok,
+        ...(d.unanswered ? { unanswered: true } : {}),
+        ...(d.ok === false && !d.unanswered && (d.fraction ?? 0) > 0 ? { partial: true } : {}),
         ...(g && !g.failed
           ? { aiVote: g.vote, aiPoints: g.points, aiMaxPoints: g.maxPoints, aiRationale: g.rationale }
           : g?.failed

@@ -18,6 +18,10 @@ export interface CorrectionAnswer {
   correct: string;
   /** null = not auto-graded (open, fill without a usable key, match, order). */
   ok: boolean | null;
+  /** Earned share 0..1 from the objective grader (MULTI partial credit). */
+  fraction?: number;
+  /** Blank answer — scored zero at full weight, shown as "Non risposto". */
+  unanswered?: boolean;
   /** Question category (KB-section key) — used upstream to scope AI retrieval. */
   cat?: string;
 }
@@ -97,8 +101,11 @@ export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDra
     const m = metaOf(a.qid);
     objectiveMax += m.points;
     gradableCount++;
+    // MULTI partial credit rides in via `fraction` (owner batch 10): a fully
+    // right answer earns the point, a partially right one its share.
+    const frac = a.ok ? 1 : Math.max(0, Math.min(1, a.fraction ?? 0));
+    objectiveEarned += frac * m.points;
     if (a.ok) {
-      objectiveEarned += m.points;
       correctCount++;
     } else {
       wrongAnswers.push({

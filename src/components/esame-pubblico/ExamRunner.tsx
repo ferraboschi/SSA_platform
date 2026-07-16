@@ -161,6 +161,12 @@ export function ExamRunner({
   const [lang, setLang] = useState<Lang>(resumedLang ?? forced ?? "it");
   const [langPicked, setLangPicked] = useState<boolean>(Boolean(forced) || Boolean(resumedLang));
   const [idx, setIdx] = useState(resumeState?.currentIdx ?? 0);
+  // Furthest question REACHED — "skipped" only makes sense up to here, and
+  // jumping back to a skipped question offers a one-click return to this point.
+  const [maxIdx, setMaxIdx] = useState(resumeState?.currentIdx ?? 0);
+  useEffect(() => {
+    setMaxIdx((m) => (idx > m ? idx : m));
+  }, [idx]);
   const [answers, setAnswers] = useState<Record<string, string[] | string>>(
     resumeState?.answers ?? {},
   );
@@ -669,14 +675,14 @@ export function ExamRunner({
     })
     .map(({ i }) => i);
 
-  // The chip navigator shows only questions you've actually SKIPPED — moved PAST
-  // without answering. A question ahead of you that you simply haven't reached
-  // yet is NOT skipped, so this stays empty until you skip one (instead of
-  // dumping every remaining question on screen). In review mode it lists every
-  // still-unanswered question so you can jump straight to any of them.
-  const skippedChips = (reviewMode ? unansweredNums : unansweredNums.filter((i) => i < idx)).map(
-    String,
-  );
+  // The chip navigator shows only questions you've actually SKIPPED — SEEN
+  // (reached at least once, i.e. before the furthest point) and left blank.
+  // Questions never reached are NOT skipped (owner batch 10: jumping back to
+  // a skipped one must not flag everything ahead as skipped). In review mode
+  // (from the hand-in prompt) it lists every still-unanswered question.
+  const skippedChips = (
+    reviewMode ? unansweredNums : unansweredNums.filter((i) => i < maxIdx)
+  ).map(String);
 
   // Review-mode navigation cycles through ALL remaining unanswered questions.
   const nextSkipped = unansweredNums.find((n) => n > idx);
@@ -739,8 +745,10 @@ export function ExamRunner({
           {t.question} {idx + 1} {t.of} {total} · {idx + 1}/{total}
         </div>
 
-        {/* Skipped-question tags — jump straight to a question you moved past. */}
-        {skippedChips.length > 0 && (
+        {/* Skipped-question tags — jump straight to a question you moved past,
+            and jump BACK to the furthest point with one click (owner batch 10:
+            from question 3 back to 80 without 77 taps of "Avanti"). */}
+        {(skippedChips.length > 0 || idx < maxIdx) && (
           <div
             style={{
               display: "flex",
@@ -763,7 +771,12 @@ export function ExamRunner({
                 <button
                   key={si}
                   type="button"
-                  onClick={() => enterReview(n)}
+                  // Plain jump — clicking a chip must NOT enter review mode
+                  // (that used to flag every unseen question as "skipped").
+                  onClick={() => {
+                    setPendingPrompt(null);
+                    setIdx(n);
+                  }}
                   style={{
                     minWidth: 30,
                     padding: "3px 9px",
@@ -780,6 +793,26 @@ export function ExamRunner({
                 </button>
               );
             })}
+            {idx < maxIdx && (
+              <button
+                type="button"
+                onClick={() => setIdx(maxIdx)}
+                style={{
+                  marginLeft: "auto",
+                  padding: "3px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--indigo, #635bff)",
+                  background: "#f5f7ff",
+                  color: "var(--indigo, #635bff)",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                ↩ {t.backToQuestion.replace("{n}", String(maxIdx + 1))}
+              </button>
+            )}
           </div>
         )}
         {reviewMode && (

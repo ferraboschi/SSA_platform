@@ -53,7 +53,10 @@ export class ClaudeGradingModel implements GradingModel {
       "RUBRICA: conta SOLO il contenuto — correttezza e completezza dei concetti rispetto " +
       "alla domanda. IGNORA grammatica, ortografia, sintassi, stile e lingua; elenchi " +
       "puntati o risposte schematiche valgono esattamente quanto la prosa se i concetti " +
-      "ci sono. Assegna un VOTO intero da 1 a 5: 1 = sbagliata o non pertinente; 2 = " +
+      "ci sono. Se la risposta mostra che lo studente HA CAPITO il concetto, premialo: " +
+      "la comprensione dimostrata merita un voto alto anche con lacune minori. Una " +
+      "risposta SINTETICA ma corretta vale quanto una estesa — la brevità non è MAI un " +
+      "demerito. Assegna un VOTO intero da 1 a 5: 1 = sbagliata o non pertinente; 2 = " +
       "qualche elemento giusto ma gravemente incompleta o con errori concettuali; 3 = " +
       "parzialmente corretta, coglie il nucleo ma con lacune; 4 = corretta e quasi " +
       "completa, lacune minori; 5 = completa e corretta. Se i passaggi non coprono la " +

@@ -210,6 +210,27 @@ export function EsitoCard({
         <p style={{ fontSize: 13.5, color: "var(--text-2, #374151)", marginBottom: 14 }}>{t.previewNotGradable}</p>
       )}
 
+      {/* Per-section subtotals (owner batch 10) — once the score is settled. */}
+      {!esito.aiPending && (esito.sections?.length ?? 0) > 1 && (
+        <div style={{ maxWidth: 420, margin: "0 auto 18px", textAlign: "left" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-3, #6b7280)", margin: "0 0 8px" }}>
+            {t.sectionsTitle}
+          </div>
+          {esito.sections!.map((s) => {
+            const color = s.pct >= 80 ? "#15803d" : s.pct >= 70 ? "#b45309" : "#b42318";
+            return (
+              <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0", fontSize: 12.5 }}>
+                <span style={{ flex: "0 0 40%", color: "var(--text-2, #374151)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                <span style={{ flex: 1, height: 6, borderRadius: 999, background: "#e5e7eb", overflow: "hidden" }}>
+                  <span style={{ display: "block", height: "100%", width: `${Math.max(2, Math.min(100, s.pct))}%`, borderRadius: 999, background: color }} />
+                </span>
+                <span style={{ flex: "0 0 44px", textAlign: "right", fontWeight: 700, color }}>{s.pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div style={{ textAlign: "left", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-3, #6b7280)", margin: "0 0 8px" }}>
           {t.reviewList}
@@ -218,12 +239,15 @@ export function EsitoCard({
           // Loud per-answer verdict (owner batch 9): a colored chip + row
           // accent, not a lone 13px glyph. Green = right, red = wrong,
           // gray = still under evaluation.
-          const chip =
-            d.ok === true
+          const chip = d.unanswered
+            ? { icon: "—", txt: t.verdictUnanswered, bg: "#fde8e6", fg: "#b42318" }
+            : d.ok === true
               ? { icon: "✓", txt: t.verdictRight, bg: "#e8f6ee", fg: "#1a7f43" }
-              : d.ok === false
-                ? { icon: "✗", txt: t.verdictWrong, bg: "#fde8e6", fg: "#b42318" }
-                : { icon: "…", txt: t.reviewPendingBadge, bg: "#f3f4f6", fg: "#6b7280" };
+              : d.ok === false && d.partial
+                ? { icon: "◐", txt: t.verdictPartial, bg: "#fef3c7", fg: "#b45309" }
+                : d.ok === false
+                  ? { icon: "✗", txt: t.verdictWrong, bg: "#fde8e6", fg: "#b42318" }
+                  : { icon: "…", txt: t.reviewPendingBadge, bg: "#f3f4f6", fg: "#6b7280" };
           return (
           <div
             key={d.qid}
