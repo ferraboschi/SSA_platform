@@ -1336,6 +1336,11 @@ export const en: Dictionary = {
     emailCount: "{n} people with multiple emails",
     emailBadge: "{n} emails",
     emailReviewed: "Reviewed",
+    // Bulk merge of the "near-certain" duplicates (same email/phone)
+    mergeAllBtn: "Merge all certain ones ({n})",
+    mergeAllConfirm:
+      "You are about to merge {n} groups of near-certain duplicates (same email or same phone). Enrollments, attendance, purchases and credits move to each group's main profile; duplicate records are kept but hidden from lists. Name-only groups (possible homonymy) are NOT touched. Proceed?",
+    mergeAllDone: "Merged {people} records into {clusters} groups.",
     repaidTitle: "Paid re-participation (should be free)",
     repaidSubtitle:
       "SSA rule: anyone who already took a course may re-attend the same type for free. These people have more than one PAID enrollment of the same type — the extra amount is likely an error.",

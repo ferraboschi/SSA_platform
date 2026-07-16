@@ -14,6 +14,7 @@ import { isSupabaseConfigured } from "@/lib/integrations/supabase";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { MONTH_TO_NUM } from "@/lib/dates/italian-months";
+import { ANOMALIE_COUNTS_KEY } from "@/lib/anomalie/reconcile";
 import type { SearchIndex, SidebarCourse } from "@/lib/shell";
 import { isSandboxCourse, SANDBOX_COURSE_HANDLE } from "@/lib/corsi/sandbox";
 
@@ -38,7 +39,7 @@ async function fetchShellData(): Promise<ShellData> {
   // flagged "pubblicato" that the read-time date flip would otherwise miss.
   const today = new Date().toISOString().slice(0, 10);
 
-  const [coursesRes, corsistiRes, educatorsRes, iscrizioniRes, countsRes, programMap] =
+  const [coursesRes, corsistiRes, educatorsRes, iscrizioniRes, countsRes, anomalieRes, programMap] =
     await Promise.all([
       svc
         .from("corsi")
@@ -63,6 +64,9 @@ async function fetchShellData(): Promise<ShellData> {
           .neq("handle", SANDBOX_COURSE_HANDLE)
           .gte("start_date", today),
       ]),
+      // Last computed anomaly counts (written by the post-sync reconciliation
+      // pass) — a single cheap row powering the /anomalie nav badge.
+      svc.from("settings_kv").select("value").eq("key", ANOMALIE_COUNTS_KEY).maybeSingle(),
       // Per-course sake-program overlays → the green "programma assegnato" dot.
       loadCourseProgram(),
     ]);
@@ -187,6 +191,10 @@ async function fetchShellData(): Promise<ShellData> {
     educator: eCount.count ?? 0,
     "template-materiali": tCount.count ?? 0,
   };
+  // 0 / missing / unsynced env → no badge (the sidebar only renders set keys).
+  const anomalieTotal =
+    ((anomalieRes.data?.value as { total?: number } | null | undefined)?.total) ?? 0;
+  if (anomalieTotal > 0) counts["anomalie"] = anomalieTotal;
 
   return { searchIndex, sidebarCourses, counts };
 }

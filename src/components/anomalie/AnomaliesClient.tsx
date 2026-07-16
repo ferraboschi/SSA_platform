@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui";
 import { format, useT } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
@@ -9,6 +10,7 @@ import {
   resolveAnomalyAction,
   dismissEmailClusterAction,
   mergeCorsistiAction,
+  mergeAllHighConfidenceAction,
 } from "@/lib/data/anomalie-actions";
 
 interface AnomalyItem {
@@ -78,15 +80,20 @@ export function AnomaliesClient({
   openCredits?: OpenCredit[];
 }) {
   const t = useT().anomalie;
+  const router = useRouter();
   const [resolved, setResolved] = useState<Set<number>>(() => new Set());
   const [dismissedClusters, setDismissedClusters] = useState<Set<string>>(() => new Set());
   const [mergedKeys, setMergedKeys] = useState<Set<string>>(() => new Set());
+  const [bulkResult, setBulkResult] = useState<{ clusters: number; peopleMerged: number } | null>(
+    null,
+  );
   const [pending, startTransition] = useTransition();
 
   const visible = items.filter((it) => !resolved.has(it.id));
   const clusters = emailClusters.filter(
     (c) => !dismissedClusters.has(c.nameKey) && !mergedKeys.has(c.nameKey),
   );
+  const altaClusters = clusters.filter((c) => c.confidence === "alta");
 
   const merge = (c: EmailCluster) => {
     const dupIds = c.members.map((m) => m.id).filter((id) => id !== c.survivorId);
@@ -100,6 +107,26 @@ export function AnomaliesClient({
           n.delete(c.nameKey);
           return n;
         });
+      }
+    });
+  };
+
+  const mergeAll = () => {
+    if (altaClusters.length === 0) return;
+    if (!confirm(format(t.mergeAllConfirm, { n: altaClusters.length }))) return;
+    const keys = altaClusters.map((c) => c.nameKey);
+    startTransition(async () => {
+      try {
+        const res = await mergeAllHighConfidenceAction();
+        setBulkResult(res);
+        setMergedKeys((prev) => {
+          const next = new Set(prev);
+          for (const k of keys) next.add(k);
+          return next;
+        });
+        router.refresh();
+      } catch {
+        // leave the clusters visible so the operator can retry
       }
     });
   };
@@ -195,8 +222,29 @@ export function AnomaliesClient({
           omonimia. &ldquo;Unisci&rdquo; fonde i record in un unico profilo principale (email/telefoni
           e iscrizioni vengono conservati, niente viene cancellato).
         </p>
-        <div style={{ margin: "12px 0", fontSize: 13, color: "var(--text-2)" }}>
-          {clusters.length} gruppi
+        <div
+          style={{
+            margin: "12px 0",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 13, color: "var(--text-2)" }}>{clusters.length} gruppi</span>
+          {altaClusters.length > 0 && (
+            <button className="btn btn-sm btn-primary" disabled={pending} onClick={mergeAll}>
+              <Icon name="users" size={12} /> {format(t.mergeAllBtn, { n: altaClusters.length })}
+            </button>
+          )}
+          {bulkResult && (
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--success-fg)" }}>
+              {format(t.mergeAllDone, {
+                people: bulkResult.peopleMerged,
+                clusters: bulkResult.clusters,
+              })}
+            </span>
+          )}
         </div>
 
         {clusters.length === 0 ? (
