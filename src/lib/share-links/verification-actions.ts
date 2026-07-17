@@ -203,13 +203,22 @@ export interface VerificationState {
  */
 export async function getVerificationStatesAction(
   token: string,
-): Promise<{ ok: boolean; states?: Record<string, VerificationState>; error?: string }> {
+): Promise<{
+  ok: boolean;
+  states?: Record<string, VerificationState>;
+  /** True when a pre-migration fallback select ran: some fields (sentAtIso,
+   *  companion email/confirmed) are UNKNOWN, not cleared — the client must
+   *  not erase its local chips on this snapshot. */
+  degraded?: boolean;
+  error?: string;
+}> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
   if (limiter.isLimited("read", token, RATE_LIMIT_READ)) return { ok: true, states: undefined };
 
   const svc = getSupabaseServiceClient();
   const states: Record<string, VerificationState> = {};
+  let degraded = false;
 
   type IscrRow = {
     corsista_id: number;
@@ -225,12 +234,18 @@ export async function getVerificationStatesAction(
     .eq("corso_id", corsoId);
   iscrRows = rich.data as unknown as IscrRow[] | null;
   if (rich.error) {
+    // Fall back ONLY on a genuinely missing column (pre-migration DB). Any
+    // other failure (transient/network) must surface as an error: the client
+    // now applies snapshots AUTHORITATIVELY, and a fallback row without
+    // confirm_sent_at would read as "cleared" and erase every chip.
+    if (!isMissingTable(rich.error)) return { ok: false, error: rich.error.message };
+    degraded = true;
     const base = await svc
       .from(ISCR_TABLE)
       .select("corsista_id, enrolled_email, email_confirmed_at, corsista:corsisti(phone)")
       .eq("corso_id", corsoId);
     iscrRows = base.data as unknown as IscrRow[] | null;
-    if (base.error) return { ok: true, states: {} };
+    if (base.error) return { ok: true, states: {}, degraded };
   }
   for (const r of iscrRows ?? []) {
     states[`c${r.corsista_id}`] = {
@@ -257,6 +272,8 @@ export async function getVerificationStatesAction(
     .eq("corso_id", corsoId);
   partRows = richP.data as PartRow[] | null;
   if (richP.error) {
+    if (!isMissingTable(richP.error)) return { ok: false, error: richP.error.message };
+    degraded = true;
     const baseP = await svc
       .from(PART_TABLE)
       .select("id, phone")
@@ -274,7 +291,7 @@ export async function getVerificationStatesAction(
     };
   }
 
-  return { ok: true, states };
+  return { ok: true, states, degraded };
 }
 
 /**
@@ -475,14 +492,17 @@ export async function resetAppelloAction(token: string): Promise<{ ok: boolean; 
   const del = await svc.from(TABLE).delete().eq("corso_id", corsoId);
   if (del.error && !isMissingTable(del.error)) return { ok: false, error: del.error.message };
 
-  // 2 · Enrollment stamps — two-tier: retry without confirm_sent_at on a
-  // pre-migration DB; if even email_confirmed_at is missing, the whole
-  // verification feature doesn't exist yet → nothing to clear.
+  // 2 · Enrollment stamps — two-tier: retry without confirm_sent_at ONLY on a
+  // pre-migration DB (missing column). A transient error must NOT fall through
+  // to the base update: it would clear email_confirmed_at, leave
+  // confirm_sent_at standing, and report ok — a silent HALF-reset where the
+  // "Inviata" chips survive the azzeramento (owner batch 12).
   const iscr = await svc
     .from(ISCR_TABLE)
     .update({ email_confirmed_at: null, confirm_sent_at: null })
     .eq("corso_id", corsoId);
   if (iscr.error) {
+    if (!isMissingTable(iscr.error)) return { ok: false, error: iscr.error.message };
     const base = await svc.from(ISCR_TABLE).update({ email_confirmed_at: null }).eq("corso_id", corsoId);
     if (base.error && !isMissingTable(base.error)) return { ok: false, error: base.error.message };
   }
@@ -493,9 +513,20 @@ export async function resetAppelloAction(token: string): Promise<{ ok: boolean; 
     .update({ email_confirmed_at: null, confirm_sent_at: null })
     .eq("corso_id", corsoId);
   if (part.error) {
+    if (!isMissingTable(part.error)) return { ok: false, error: part.error.message };
     const base = await svc.from(PART_TABLE).update({ email_confirmed_at: null }).eq("corso_id", corsoId);
     if (base.error && !isMissingTable(base.error)) return { ok: false, error: base.error.message };
   }
+
+  // 4 · Test-send stamps (settings_kv `exam_link_send:<corso>:*`): a rerun
+  // must start from a clean slate — surviving "Inviato" chips on the day-1
+  // send panels read as a failed reset. Closures/epoch stay: they gate link
+  // VALIDITY, and the sandbox reset owns them.
+  const kv = await svc
+    .from("settings_kv")
+    .delete()
+    .like("key", `exam_link_send:${corsoId}:%`);
+  if (kv.error && !isMissingTable(kv.error)) return { ok: false, error: kv.error.message };
 
   return { ok: true };
 }

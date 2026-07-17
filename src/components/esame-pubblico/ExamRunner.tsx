@@ -78,7 +78,7 @@ function fmtClock(sec: number): string {
 }
 
 /** Real exams are TIMED — the limit comes from the page by test type (owner
- *  batch 9: day tests 10', final/feedback 60') with a "time left" notice near
+ *  batch 9: day tests 10', feedback 15' — batch 12 — final 60') with a "time left" notice near
  *  the end (10' before on long tests, 2' on short ones). `elapsed` is
  *  persisted, so the limit survives a disconnect/resume — reloading buys no
  *  extra time. At the limit the test HANDS ITSELF IN with whatever is
@@ -116,7 +116,6 @@ export function ExamRunner({
   showResult,
   isFinal,
   limitS,
-  watermark,
 }: {
   mode: "exam" | "test" | "validate";
   forcedLang?: string;
@@ -142,9 +141,6 @@ export function ExamRunner({
   showResult?: boolean;
   /** Time limit in seconds for the timed ("exam") mode. Day tests get 10'. */
   limitS?: number;
-  /** Student identity repeated as a faint diagonal overlay on the question
-   *  screens (screenshot deterrence — a leaked capture names its owner). */
-  watermark?: string;
 }) {
   // Only offer a non-Italian language when EVERY question is fully translated into
   // it (text + all options). Otherwise the student would silently receive Italian
@@ -722,36 +718,6 @@ export function ExamRunner({
 
   return (
     <div className="exam-public-shell" {...lockdown}>
-      {/* Screenshot deterrence (owner batch 11): the OS capture can't be
-          blocked from a web page, but every question screen carries WHOSE
-          exam it is — a leaked capture names its owner. Faint, non-
-          interactive, invisible to screen readers. */}
-      {mode === "exam" && watermark && (
-        <div
-          aria-hidden
-          style={{
-            position: "fixed",
-            inset: "-20%",
-            zIndex: 5,
-            pointerEvents: "none",
-            userSelect: "none",
-            transform: "rotate(-28deg)",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "72px 56px",
-            alignContent: "space-around",
-            justifyContent: "space-around",
-            opacity: 0.055,
-            overflow: "hidden",
-          }}
-        >
-          {Array.from({ length: 36 }, (_, i) => (
-            <span key={i} style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", color: "#1f2937" }}>
-              {watermark}
-            </span>
-          ))}
-        </div>
-      )}
       {timed && warned && !warnAck && (
         <div
           role="dialog"

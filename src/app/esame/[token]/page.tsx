@@ -77,8 +77,6 @@ export default async function Page({
   let serverResume:
     | { answers: Record<string, string | string[]>; currentIdx: number; lang: string; elapsed: number }
     | undefined;
-  // Student identity for the on-screen watermark (personal exam links only).
-  let watermark: string | undefined;
   const res = verifyExamToken(token);
   if (!res.ok) {
     if (res.reason === "expired") {
@@ -133,6 +131,9 @@ export default async function Page({
       .eq("test_key", res.payload.t)
       .eq("mode", "exam")
       .eq(subjS != null ? "corsista_id" : "partecipante_id", (subjS ?? subjP)!)
+      // Deterministic pick if legacy duplicates exist (the unique index is
+      // skipped on DBs that already held dupes): the FIRST hand-in counts.
+      .order("created_at", { ascending: true })
       .limit(1);
     if (!priorErr && prior && prior.length > 0) {
       // Day tests are FORMATIVE (owner, batch 7): re-opening the link shows
@@ -215,29 +216,6 @@ export default async function Page({
     } catch {
       /* pre-migration / transient — the exam simply starts fresh */
     }
-
-    // 4) WATERMARK identity (screenshot deterrence, owner batch 11): a leaked
-    //    capture of the questions carries whose exam it was. Best-effort — a
-    //    lookup failure must never block the exam.
-    try {
-      if (subjS != null) {
-        const { data: w } = await sb
-          .from("corsisti")
-          .select("full_name,email")
-          .eq("id", subjS)
-          .maybeSingle();
-        if (w) watermark = [w.full_name, w.email].filter(Boolean).join(" · ") || undefined;
-      } else if (subjP != null) {
-        const { data: w } = await sb
-          .from("corsi_partecipanti")
-          .select("full_name")
-          .eq("id", subjP)
-          .maybeSingle();
-        if (w?.full_name) watermark = w.full_name;
-      }
-    } catch {
-      /* deterrence only */
-    }
   }
 
   const family = corso.type === "shochu" ? "shochu" : "nihonshu";
@@ -294,10 +272,19 @@ export default async function Page({
       }}
       questions={data.questions}
       serverResume={serverResume}
-      watermark={watermark}
       // Day tests are SHORT: 10 minutes with a hard stop (owner batch 9); the
-      // final exam and the feedback keep the full hour.
-      limitS={/^day[1-9]$/.test(res.payload.t) ? 10 * 60 : 60 * 60}
+      // feedback questionnaire gets 15 (owner batch 12); only the final exam
+      // keeps the full hour. Deploy-window edge for feedback: sessions begun
+      // under the old 60' limit may resume with elapsed > 15' — an instant
+      // auto-submit would hand in a half-empty questionnaire and lock the
+      // student out, so the limit stretches to give them 5' to wrap up.
+      limitS={
+        /^day[1-9]$/.test(res.payload.t)
+          ? 10 * 60
+          : res.payload.t === "feedback"
+            ? Math.max(15 * 60, (serverResume?.elapsed ?? 0) + 5 * 60)
+            : 60 * 60
+      }
     />
   );
 }

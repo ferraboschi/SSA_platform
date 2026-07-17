@@ -110,12 +110,20 @@ export async function loadExamProgress(
   progress: Record<string, SubjectProgress>;
   sends: Record<string, import("./send-log").ExamSendStamp>;
   presentForTest: Record<string, boolean> | undefined;
+  /** True when the roll-call has ZERO rows for this test's day (nobody marked
+   *  yet, or wiped by an azzeramento). The Esiti view must NOT brand hand-ins
+   *  "assente" on it (unknowable), while the SEND panel must keep mirroring
+   *  the strict server gate (empty roll-call blocks every send). */
+  rollCallEmpty: boolean;
 }> {
   const svc = getSupabaseServiceClient();
   const t = testKey;
   const sends = await getExamSends(corsoId, t);
   const presentSet = await loadPresentForTest(svc, corsoId, t);
-  const presentForTest = presentSet ? Object.fromEntries([...presentSet].map((k) => [k, true])) : undefined;
+  const presentForTest = presentSet
+    ? Object.fromEntries([...presentSet].map((k) => [k, true]))
+    : undefined;
+  const rollCallEmpty = presentSet != null && presentSet.size === 0;
   type ProgRow = {
     corsista_id: number | null;
     partecipante_id: number | null;
@@ -141,7 +149,7 @@ export async function loadExamProgress(
       .eq("corso_id", corsoId)
       .eq("test_key", t);
     rows = base.data as ProgRow[] | null;
-    if (base.error) return { progress: {}, sends, presentForTest }; // pre-migration → no bars
+    if (base.error) return { progress: {}, sends, presentForTest, rollCallEmpty }; // pre-migration → no bars
   }
 
   // Live auto-grading on READ: one template load per call (answers included),
@@ -180,5 +188,5 @@ export async function loadExamProgress(
       wrong,
     };
   }
-  return { progress, sends, presentForTest };
+  return { progress, sends, presentForTest, rollCallEmpty };
 }

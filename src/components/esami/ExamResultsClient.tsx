@@ -174,7 +174,12 @@ export function ExamResultsClient({
       .catch(() => {});
     getExamProgressForStaffAction(courseId, correctionTest)
       .then((r) => {
-        if (alive && r.ok) setPresentMap(r.presentForTest);
+        if (!alive || !r.ok) return;
+        // An EMPTY roll-call is UNKNOWABLE, not "everyone absent": after an
+        // "Azzera appello" the presence rows are gone while the hand-ins
+        // survive — every row was being branded "Assente all'appello"
+        // (owner batch 12). No map → no badge.
+        setPresentMap(r.rollCallEmpty ? undefined : r.presentForTest);
       })
       .catch(() => {});
     return () => {
@@ -556,7 +561,7 @@ function ResultRow({
           {absent && (
             <span
               style={{ marginLeft: 6, display: "inline-block" }}
-              title="Consegna presente ma lo studente risulta assente all'appello di questo test — verifica l'appello."
+              title="La consegna esiste ma OGGI lo studente risulta assente all'appello di questo test. Probabilmente l'appello è stato corretto o azzerato dopo la consegna; per le consegne più vecchie il controllo presenze potrebbe non essere stato attivo. Verifica l'appello."
             >
               <Badge tone="warning">Assente all&apos;appello</Badge>
             </span>

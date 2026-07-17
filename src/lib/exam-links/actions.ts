@@ -287,6 +287,9 @@ export async function getDayEsitoAction(
       .eq("test_key", t)
       .eq("mode", "exam")
       .eq(corsistaId != null ? "corsista_id" : "partecipante_id", (corsistaId ?? partecipanteId)!)
+      // Deterministic pick if legacy duplicates exist — the FIRST hand-in
+      // counts (same rule as the /esame prior-submission branch).
+      .order("created_at", { ascending: true })
       .limit(1);
     const sub = prior?.[0] as
       | { id: number; answers?: Record<string, string | string[]> | null; lang?: string | null }

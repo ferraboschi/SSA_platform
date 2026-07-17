@@ -12,9 +12,8 @@
 //   • Giorno esame — Appello for the exam day itself, then the final exam's
 //     send panel (ExamSendPanel — live progress bars).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getVerificationStatesAction } from "@/lib/share-links/verification-actions";
-import { newerIso } from "@/lib/share-links/verification-state";
 import AppelloTab from "./AppelloTab";
 import ExamSendPanel from "./ExamSendPanel";
 import ProgrammaTab from "./ProgrammaTab";
@@ -40,32 +39,48 @@ export default function EducatorTabs({
     [dayCount],
   );
   const [tab, setTab] = useState<string>(dayTabIds[0] ?? "day1");
-  const [students, setStudents] = useState<Student[]>(initialStudents);
+  const [students, setStudentsRaw] = useState<Student[]>(initialStudents);
+  // Timestamp of the last LOCAL patch (send/correct/reset done in THIS tab):
+  // a poll snapshot FETCHED before that instant is stale and gets discarded.
+  // Both stamps come from the same client clock — no server skew involved.
+  const lastLocalPatchRef = useRef(0);
+  const setStudents: typeof setStudentsRaw = (next) => {
+    lastLocalPatchRef.current = Date.now();
+    setStudentsRaw(next);
+  };
 
   // LIVE verification states: poll so the educator SEES the green flip the
-  // moment a student completes the confirmation. Newer-wins merge — a poll
-  // computed before a local send can never revert its timestamp.
+  // moment a student completes the confirmation. The server response is
+  // AUTHORITATIVE — a "newer wins" merge could never express a CLEARED stamp,
+  // so after "Azzera appello e verifiche" every other open tab kept showing
+  // "Inviata" forever (owner batch 12). Local optimism is protected by the
+  // snapshot-discard above, not by keeping stale values.
   useEffect(() => {
     let alive = true;
     const tick = () => {
+      const startedAt = Date.now();
       getVerificationStatesAction(token)
         .then((res) => {
           if (!alive || !res.ok || !res.states) return;
+          // A degraded (pre-migration fallback) snapshot lacks fields — its
+          // nulls mean UNKNOWN, not cleared: applying it authoritatively
+          // would erase every chip. Skip it.
+          if (res.degraded) return;
+          // A local patch landed while this snapshot was in flight → discard.
+          if (startedAt < lastLocalPatchRef.current) return;
           const states = res.states;
-          setStudents((prev) =>
+          setStudentsRaw((prev) =>
             prev.map((s) => {
               const st = states[subjKey(s)];
               if (!st) return s;
-              const sentAt = newerIso(s.confirmSentAt, st.sentAtIso);
-              const confirmedAt = st.confirmedAtIso; // server truth (confirmed is final)
               return {
                 ...s,
                 email: st.email || s.email,
                 phone: st.phone || s.phone,
-                confirmSentAt: sentAt,
-                confirmSent: Boolean(sentAt),
-                emailConfirmedAt: confirmedAt,
-                emailConfirmed: Boolean(confirmedAt),
+                confirmSentAt: st.sentAtIso,
+                confirmSent: Boolean(st.sentAtIso),
+                emailConfirmedAt: st.confirmedAtIso,
+                emailConfirmed: Boolean(st.confirmedAtIso),
               };
             }),
           );
@@ -133,10 +148,26 @@ export default function EducatorTabs({
             </>
           )}
           {activeDayNum === dayCount && testByKey("feedback") && (
-            <>
-              <SectionHeading>Feedback</SectionHeading>
+            // The feedback panel sits right under the day-N test panel and the
+            // owner mis-sent one for the other TWICE (batches 9 and 12): a
+            // heading alone doesn't separate them — the whole block gets its
+            // own tinted surface so it reads as a DIFFERENT thing at a glance.
+            <div
+              style={{
+                marginTop: 18,
+                padding: "14px 16px 16px",
+                background: "var(--warning-bg)",
+                border: "1.5px solid var(--warning)",
+                borderRadius: 12,
+              }}
+            >
+              <SectionHeading>
+                <span style={{ color: "var(--warning-fg)" }}>
+                  📋 Feedback — questionario di gradimento (non è un test)
+                </span>
+              </SectionHeading>
               <ExamSendPanel key="feedback" token={token} test={testByKey("feedback")!} students={students} />
-            </>
+            </div>
           )}
         </div>
       )}

@@ -546,9 +546,10 @@ function ResetAppello({ token }: { token: string }) {
       }}
     >
       <p style={{ fontSize: 12.5, color: "var(--danger-fg)", margin: "0 0 10px", lineHeight: 1.5 }}>
-        Cancella <strong>tutte le presenze</strong> e <strong>tutte le conferme email</strong>{" "}
-        di questo corso: l&apos;appello riparte da zero e gli studenti dovranno ri-confermare i
-        dati. Email, telefoni e indirizzi restano salvati. Non si può annullare.
+        Cancella <strong>tutte le presenze</strong>, <strong>tutte le conferme email</strong> e{" "}
+        <strong>lo stato «inviato» dei test</strong> di questo corso: l&apos;appello riparte da
+        zero e gli studenti dovranno ri-confermare i dati. Email, telefoni e indirizzi restano
+        salvati. Le consegne già fatte non vengono toccate. Non si può annullare.
       </p>
       {note && (
         <p style={{ fontSize: 12, color: "var(--danger-fg)", margin: "0 0 8px" }} role="alert">

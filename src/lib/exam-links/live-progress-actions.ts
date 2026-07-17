@@ -50,6 +50,9 @@ export async function getExamProgressForStaffAction(
   progress?: Record<string, SubjectProgress>;
   sends?: Record<string, import("./send-log").ExamSendStamp>;
   presentForTest?: Record<string, boolean>;
+  /** Zero roll-call rows for this test's day — presence is unknowable, the
+   *  Esiti view must not brand hand-ins "assente" (see loadExamProgress). */
+  rollCallEmpty?: boolean;
   roster?: LiveRosterEntry[];
   error?: string;
 }> {

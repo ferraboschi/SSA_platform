@@ -8,7 +8,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { feedbackVariant } from "@/lib/domain";
 import type { CourseTypeKey } from "@/lib/domain";
-import { loadFeedbackSet } from "@/lib/esami/feedback-sets-actions";
+import { loadFeedbackSetWithTranslations } from "@/lib/esami/feedback-sets-actions";
 import type { ExamTestKey } from "./token";
 
 export type RunnerI18n = Partial<Record<"en" | "ja", { text: string; options: string[] }>>;
@@ -223,8 +223,13 @@ export async function loadPublicExam(
     // from the course type; the "long" set falls back to the certificato
     // template's feedback until saved standalone (so nothing is lost).
     const variant = feedbackVariant(courseType);
-    const setQs = await loadFeedbackSet(variant);
-    questions = mapQuestions(setQs as unknown as QJson[], `q-fb-${variant}`, includeAnswers, undefined);
+    const { questions: setQs, translations } = await loadFeedbackSetWithTranslations(variant);
+    questions = mapQuestions(
+      setQs as unknown as QJson[],
+      `q-fb-${variant}`,
+      includeAnswers,
+      translations,
+    );
   } else {
     // final / dayN → the per-family exam template (unchanged). DB
     // exam_templates.family is 'certificato' | 'shochu'.

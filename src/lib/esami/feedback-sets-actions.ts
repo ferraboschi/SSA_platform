@@ -17,9 +17,18 @@ import type { ExamQuestion, FeedbackVariant } from "@/lib/domain";
 
 const KEY = "feedback-sets";
 
+/** Stored EN/JA translations per question id — same shape as the exam
+ *  templates' data.translations, so the public runner's language gate works
+ *  identically (all-or-nothing per variant). */
+export type FeedbackTransMap = Record<
+  string,
+  Partial<Record<"en" | "ja", { text: string; options: string[] }>>
+>;
+
 export interface FeedbackSets {
   short: ExamQuestion[];
   long: ExamQuestion[];
+  translations?: FeedbackTransMap;
 }
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
@@ -64,6 +73,18 @@ export async function loadFeedbackSet(variant: FeedbackVariant): Promise<ExamQue
   return store.short ?? [];
 }
 
+/** Variant questions + stored translations, for the public runner's language
+ *  gate (EN/JA offered only when every question is fully translated). */
+export async function loadFeedbackSetWithTranslations(
+  variant: FeedbackVariant,
+): Promise<{ questions: ExamQuestion[]; translations?: FeedbackTransMap }> {
+  const svc = getSupabaseServiceClient();
+  const { store } = await readStore(svc);
+  const questions =
+    variant === "long" ? (store.long ?? (await deriveLongFromTemplate(svc))) : (store.short ?? []);
+  return { questions, translations: store.translations };
+}
+
 export interface SaveFeedbackResult {
   ok: boolean;
   error?: string;
@@ -85,10 +106,12 @@ export async function saveFeedbackSetAction(
     // A stale editor must not clobber the other variant either — refuse early
     // if the row moved since this editor loaded.
     if (version !== expectedVersion) return { ok: false, error: CONFLICT_MSG, conflict: true };
-    // Ensure the other variant is preserved (and 'long' materialised on first save).
+    // Ensure the other variant AND the stored translations are preserved
+    // (and 'long' materialised on first save).
     const base: FeedbackSets = {
       short: store.short ?? [],
       long: store.long ?? (await deriveLongFromTemplate(svc)),
+      ...(store.translations ? { translations: store.translations } : {}),
     };
     const next: FeedbackSets = { ...base, [variant]: questions };
     const res = await kvCasSave(svc, KEY, next as unknown as Record<string, unknown>, expectedVersion);

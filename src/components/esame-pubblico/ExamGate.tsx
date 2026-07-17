@@ -48,10 +48,6 @@ export interface ExamGateProps {
   /** True only for the FINAL exam — drives the certified thank-you screen (day
    *  tests end with a plain "Grazie"). */
   isFinal?: boolean;
-  /** Student identity stamped as a faint diagonal watermark over the questions
-   *  (screenshot deterrence — an OS screenshot can't be blocked on the web, but
-   *  a leaked capture carries WHOSE exam it was). Personal exam links only. */
-  watermark?: string;
   header: RunnerHeader;
   questions: RunnerQuestion[];
 }

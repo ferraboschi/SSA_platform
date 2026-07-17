@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   sendPersonalExamLinkAction,
   getPersonalExamLinkAction,
@@ -70,6 +70,10 @@ export default function ExamSendPanel({
     progress: Record<string, SubjectProgress>;
     sends: Record<string, ExamSendStamp>;
     presentForTest: Record<string, boolean> | undefined;
+    /** Client clock at the instant the snapshot REQUEST left — rows use it to
+     *  retire their optimistic "Inviato" echo once an authoritative snapshot
+     *  (fetched after the local send) comes back without a stamp. */
+    fetchedAt?: number;
   }>({ progress: {}, sends: {}, presentForTest: undefined });
   // Bumped after "Invia a tutti" so the fresh per-row stamps show at once.
   const [refresh, setRefresh] = useState(0);
@@ -85,11 +89,17 @@ export default function ExamSendPanel({
     if (!testKey || !configured) return;
     let alive = true;
     const tick = () => {
+      const startedAt = Date.now();
       getExamProgressAction(token, testKey)
         .then((r) => {
           if (!alive || !r.ok) return;
           if (!r.progress && !r.sends) return; // rate-limited tick — keep what we have
-          setLive({ progress: r.progress ?? {}, sends: r.sends ?? {}, presentForTest: r.presentForTest });
+          setLive({
+            progress: r.progress ?? {},
+            sends: r.sends ?? {},
+            presentForTest: r.presentForTest,
+            fetchedAt: startedAt,
+          });
         })
         .catch(() => {});
     };
@@ -312,6 +322,7 @@ export default function ExamSendPanel({
                 person={s}
                 progress={live.progress[subjK]}
                 sentStamp={live.sends[subjK]}
+                sendsFetchedAt={live.fetchedAt}
                 absent={absent}
                 last={i === roster.length - 1}
               />
@@ -400,6 +411,7 @@ function StudentSendRow({
   person,
   progress,
   sentStamp,
+  sendsFetchedAt,
   absent,
   last,
 }: {
@@ -410,6 +422,8 @@ function StudentSendRow({
   progress: SubjectProgress | undefined;
   /** Persisted stamp of the last delivery for THIS test (email or copy). */
   sentStamp: ExamSendStamp | undefined;
+  /** Client clock when the current sends snapshot was requested. */
+  sendsFetchedAt: number | undefined;
   /** Absent at the appello (this test's day, or every day for feedback/final)
    *  — the owner's rule: never invite an absent student. Mirrors the
    *  server-side gate so the button is never a dead, confusing tap. */
@@ -423,6 +437,17 @@ function StudentSendRow({
   // Optimistic echo of a send/copy done in THIS session, merged newer-wins
   // with the polled stamp (a later "Invia a tutti" must not be masked by it).
   const [justSent, setJustSent] = useState<ExamSendStamp | null>(null);
+  // Client clock of the local send — compared against the snapshot's request
+  // time, never against server ISO (no clock-skew games).
+  const justSentLocalAtRef = useRef(0);
+  // AUTHORITATIVE retirement of the echo: a snapshot REQUESTED after the local
+  // send that carries NO stamp for this subject means the stamp was cleared
+  // server-side ("Azzera appello e verifiche") — newer-wins alone can never
+  // express a deletion, and this tab would show "Inviato HH:MM" forever.
+  useEffect(() => {
+    if (!justSent || sentStamp || !sendsFetchedAt) return;
+    if (sendsFetchedAt > justSentLocalAtRef.current) setJustSent(null);
+  }, [sendsFetchedAt, sentStamp, justSent]);
   const sent = newerIso(justSent?.at ?? null, sentStamp?.at ?? null);
   const sentMethod: "email" | "copy" =
     sent && sent === justSent?.at ? justSent.method : (sentStamp?.method ?? "email");
@@ -452,6 +477,7 @@ function StudentSendRow({
     }
     if (res.sentTo) {
       setNote(`Inviata a ${res.sentTo}`);
+      justSentLocalAtRef.current = Date.now();
       setJustSent({ at: res.sentAt ?? new Date().toISOString(), method: "email" });
     } else {
       setNote(res.error ?? null);
@@ -490,6 +516,7 @@ function StudentSendRow({
       setNote(res.error || "Generazione del link non riuscita.");
       return;
     }
+    justSentLocalAtRef.current = Date.now();
     setJustSent({ at: res.sentAt ?? new Date().toISOString(), method: "copy" });
     try {
       await navigator.clipboard.writeText(res.url);

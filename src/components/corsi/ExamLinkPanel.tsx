@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createExamLink } from "@/lib/exam-links/actions";
-import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
+import type { ExamTestKey } from "@/lib/exam-links/token";
 
 interface TestDef {
   key: ExamTestKey;
@@ -26,11 +26,11 @@ function testsForFamily(family: "nihonshu" | "shochu"): TestDef[] {
 type LinkState = Record<string, { url: string; copied?: boolean }>;
 
 /**
- * Exam links — one place. Per test: ONE "Link d'esame" (the shared class link:
- * whoever opens it enters the email confirmed at course start; on a match a
- * personal link is minted and they land directly in their own exam — the Esiti
- * tab shows live progress and results) and ONE "Anteprima" (full run to the
- * computed outcome, nothing saved).
+ * Staff PREVIEWS only — one "Anteprima" per test (full run to the computed
+ * outcome, nothing saved). Student link DISTRIBUTION lives exclusively in the
+ * Condividi educator page (batch 12): links minted here carried no issue
+ * stamp (`ia`), so after any closure/reset they were born dead, and they
+ * bypassed the send log and the roll-call gate.
  */
 export function ExamLinkPanel({
   courseId,
@@ -43,12 +43,12 @@ export function ExamLinkPanel({
   const [links, setLinks] = useState<LinkState>({});
   const [busy, setBusy] = useState<string | null>(null);
 
-  const slot = (key: ExamTestKey, mode: ExamLinkMode) => `${key}:${mode}`;
+  const slot = (key: ExamTestKey) => `${key}:test`;
 
-  const generate = async (key: ExamTestKey, mode: ExamLinkMode) => {
-    const id = slot(key, mode);
+  const generate = async (key: ExamTestKey) => {
+    const id = slot(key);
     setBusy(id);
-    const res = await createExamLink({ courseId, testKey: key, mode });
+    const res = await createExamLink({ courseId, testKey: key, mode: "test" });
     setBusy(null);
     if (res.ok && res.url) setLinks((l) => ({ ...l, [id]: { url: res.url! } }));
   };
@@ -63,8 +63,8 @@ export function ExamLinkPanel({
     }
   };
 
-  const Cell = ({ tKey, mode }: { tKey: ExamTestKey; mode: ExamLinkMode }) => {
-    const id = slot(tKey, mode);
+  const Cell = ({ tKey }: { tKey: ExamTestKey }) => {
+    const id = slot(tKey);
     const st = links[id];
     if (st?.url) {
       return (
@@ -83,12 +83,8 @@ export function ExamLinkPanel({
       );
     }
     return (
-      <button
-        className={`btn btn-sm ${mode === "exam" ? "btn-primary" : ""}`}
-        disabled={busy === id}
-        onClick={() => generate(tKey, mode)}
-      >
-        {busy === id ? "…" : mode === "exam" ? "Genera link" : "Genera anteprima"}
+      <button className="btn btn-sm" disabled={busy === id} onClick={() => generate(tKey)}>
+        {busy === id ? "…" : "Genera anteprima"}
       </button>
     );
   };
@@ -107,12 +103,18 @@ export function ExamLinkPanel({
           lineHeight: 1.55,
         }}
       >
-        <strong>Link d&apos;esame generale.</strong> Chi lo apre inserisce l&apos;email che ha
-        confermato all&apos;inizio del corso: se corrisponde, entra direttamente nel proprio
-        esame personale — nessuna sala d&apos;attesa, nessun riconoscimento video.
-        In alternativa l&apos;educator può inviare a ogni studente il suo link personale
-        dalla pagina <strong>Condividi</strong>. L&apos;<strong>anteprima</strong> percorre l&apos;esame
-        fino all&apos;esito (nulla viene salvato). I link scadono.
+        {/* La distribuzione dei link VIVE nella pagina Condividi: i link
+            emessi da qui non portavano il timbro di emissione (`ia`), quindi
+            dopo una chiusura o un reset nascevano già morti — e senza log
+            invii, controllo presenze e riapertura. Qui resta solo
+            l'anteprima staff, che non salva nulla. */}
+        <strong>
+          I link d&apos;esame per gli studenti si inviano dalla pagina condivisa con
+          l&apos;educator (pulsante «Condividi con educator» in alto).
+        </strong>{" "}
+        Lì ogni invio è tracciato, rispetta l&apos;appello e può essere chiuso e
+        riaperto. Da questa scheda puoi solo percorrere ogni test in{" "}
+        <strong>anteprima</strong> fino all&apos;esito (nulla viene salvato).
       </div>
 
       <div className="table-wrap">
@@ -120,7 +122,6 @@ export function ExamLinkPanel({
           <thead>
             <tr>
               <th>Test</th>
-              <th>Link d&apos;esame (per la classe)</th>
               <th style={{ width: 240 }}>Anteprima (fino all&apos;esito)</th>
             </tr>
           </thead>
@@ -144,14 +145,7 @@ export function ExamLinkPanel({
                   </span>
                 </td>
                 <td>
-                  {tst.key === "final" ? (
-                    <Cell tKey={tst.key} mode="exam" />
-                  ) : (
-                    <span style={{ color: "var(--text-4)" }}>—</span>
-                  )}
-                </td>
-                <td>
-                  <Cell tKey={tst.key} mode="test" />
+                  <Cell tKey={tst.key} />
                 </td>
               </tr>
             ))}
