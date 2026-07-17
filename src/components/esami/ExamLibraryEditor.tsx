@@ -19,7 +19,8 @@ import { createExamLink } from "@/lib/exam-links/actions";
 import type { ExamTestKey, ExamLinkMode } from "@/lib/exam-links/token";
 import { translateExamTemplateAction } from "@/lib/esami/ai-actions";
 import { ExamEmailTemplatesEditor } from "@/components/esami/ExamEmailTemplatesEditor";
-import { FeedbackSetsEditor } from "@/components/esami/FeedbackSetsEditor";
+import { COURSE_TYPES, EXAM_COURSE_TYPES } from "@/lib/domain/constants";
+import { FeedbackTemplatesEditor } from "@/components/esami/FeedbackTemplatesEditor";
 import { QuestionDetail, AddQuestionRow } from "@/components/esami/QuestionDetail";
 import type { ExamEmailTemplates, UpcomingCourseLine } from "@/lib/esami/exam-email";
 
@@ -104,6 +105,10 @@ export function ExamLibraryEditor({
     return out;
   });
   const [fam, setFam] = useState<ExamFamily>("nihonshu");
+  // Erogazione is informational for now (tests are shared across deliveries);
+  // it anchors the owner's Tipo→Erogazione→Test navigation and marks where
+  // per-delivery customization will attach.
+  const [erog, setErog] = useState<"presenza" | "online">("presenza");
   const [section, setSection] = useState<Section>("day0");
   // The question opened in the edit modal (null = list view). Replaces the old
   // always-visible right pane: a question now opens full-width with prev/next.
@@ -362,18 +367,50 @@ export function ExamLibraryEditor({
         </div>
       </div>
 
-      {/* Macro family — not applicable to Mail Template (one shared set, not
-          per-family), so it's hidden while that section is active. */}
-      {/* Macro family — not applicable to Mail Template nor Feedback (both are
-          org-wide, not per-family), so hidden while those sections are active. */}
+      {/* THEME picker (owner batch 13): the mental model is Tipo di corso →
+          Erogazione → Test. Today each course type with an exam maps 1:1 to a
+          question family (certificato→nihonshu, shochu→shochu) and the tests
+          are IDENTICAL across erogazioni — the honest note says so, and this
+          is where per-erogazione customization will plug in later. Hidden for
+          Mail Template and Feedback (org-wide, not per-family). */}
       {section !== "mail" && section !== "feedback" && (
-        <div className="segmented" style={{ marginBottom: 14 }}>
-          <button className={fam === "nihonshu" ? "on" : ""} onClick={() => selectFam("nihonshu")}>
-            {esami.famNihonshu}
-          </button>
-          <button className={fam === "shochu" ? "on" : ""} onClick={() => selectFam("shochu")}>
-            {esami.famShochu}
-          </button>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 14,
+          }}
+        >
+          <span className="eyebrow">Tipo di corso</span>
+          <div className="segmented">
+            {EXAM_COURSE_TYPES.map((ct) => {
+              const ctFam = ct === "shochu" ? "shochu" : "nihonshu";
+              return (
+                <button
+                  key={ct}
+                  className={fam === ctFam ? "on" : ""}
+                  onClick={() => selectFam(ctFam)}
+                >
+                  {COURSE_TYPES[ct].label}
+                </button>
+              );
+            })}
+          </div>
+          <span className="eyebrow">Erogazione</span>
+          <div className="segmented">
+            <button className={erog === "presenza" ? "on" : ""} onClick={() => setErog("presenza")}>
+              In presenza
+            </button>
+            <button className={erog === "online" ? "on" : ""} onClick={() => setErog("online")}>
+              Online
+            </button>
+          </div>
+          <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+            I test valgono per entrambe le erogazioni — differenziarli per erogazione è previsto in
+            una fase successiva.
+          </span>
         </div>
       )}
 
@@ -415,7 +452,7 @@ export function ExamLibraryEditor({
       {section === "mail" ? (
         <ExamEmailTemplatesEditor initial={emailTemplates} testTo={testTo} upcoming={upcomingCourses} />
       ) : section === "feedback" ? (
-        <FeedbackSetsEditor />
+        <FeedbackTemplatesEditor />
       ) : (
       <>
       {/* Header + save */}

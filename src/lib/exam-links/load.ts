@@ -6,9 +6,8 @@
 // NOT returned — only prompt + options.
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { feedbackVariant } from "@/lib/domain";
 import type { CourseTypeKey } from "@/lib/domain";
-import { loadFeedbackSetWithTranslations } from "@/lib/esami/feedback-sets-actions";
+import { loadFeedbackForCourse } from "@/lib/esami/feedback-templates-actions";
 import type { ExamTestKey } from "./token";
 
 export type RunnerI18n = Partial<Record<"en" | "ja", { text: string; options: string[] }>>;
@@ -218,15 +217,16 @@ export async function loadPublicExam(
 
   let questions: PublicRunnerQuestion[] = [];
   if (testKey === "feedback") {
-    // Feedback is VARIANT-based (short/long) and family-independent, so every
-    // course type has feedback (Intro/Masterclass too). The variant is chosen
-    // from the course type; the "long" set falls back to the certificato
-    // template's feedback until saved standalone (so nothing is lost).
-    const variant = feedbackVariant(courseType);
-    const { questions: setQs, translations } = await loadFeedbackSetWithTranslations(variant);
+    // Feedback questionnaires are NAMED entities assigned per course type ×
+    // delivery (owner batch 13) — the course resolves its own from the matrix,
+    // falling back to the legacy short/long sets until the store is seeded.
+    const { questions: setQs, translations } = await loadFeedbackForCourse(
+      courseType,
+      (corso.delivery_mode as string | null) ?? null,
+    );
     questions = mapQuestions(
       setQs as unknown as QJson[],
-      `q-fb-${variant}`,
+      `q-fb-${courseType}`,
       includeAnswers,
       translations,
     );
