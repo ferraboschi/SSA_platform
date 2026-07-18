@@ -121,6 +121,22 @@ export async function resetExamSandbox(): Promise<SandboxResetSummary> {
   await dropOverlayEntry(svc, "course_program", id);
   await dropOverlayEntry(svc, "course_economics", id);
 
+  // 3b. Certificate ESITI: a graded demo exam mints a certificate PDF whose
+  //     URL is stored in the shared "exam_certificates" blob keyed by
+  //     corsistaId-corsoId. Drop this course's entries so "pulizia" leaves no
+  //     esito behind (real courses' certificates are untouched — filtered by
+  //     corsoId).
+  await kvCasPatch<{ items?: { corsistaId: number; corsoId: number; url: string }[] }>(
+    svc,
+    "exam_certificates",
+    (cur) => {
+      const items = cur?.items ?? [];
+      const kept = items.filter((it) => it.corsoId !== id);
+      if (kept.length === items.length) return "abort"; // nothing for this course
+      return { ...cur, items: kept };
+    },
+  );
+
   // 4. Freshen the corso row: dates roll to "starts today" so the demo always
   //    looks current, and demo edits (notebook/costs/status) are cleared.
   const now = new Date();
