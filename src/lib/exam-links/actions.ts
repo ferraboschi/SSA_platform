@@ -216,18 +216,31 @@ export async function submitExam(
   }
 
   // Day tests are FORMATIVE (owner, batch 7): hand the student their outcome
-  // right away, graded server-side. Best-effort — a grading hiccup must never
-  // spoil a successful hand-in (the runner falls back to the plain thank-you).
+  // right away, graded server-side. The FINAL exam is corrected too — but in the
+  // background only, its outcome staying PRIVATE (released by the official
+  // correction). Best-effort — a grading hiccup must never spoil a successful
+  // hand-in (the runner falls back to the plain thank-you).
   let esito: DayEsito | undefined;
-  if (/^day[1-9]$/.test(t) && corsoId != null) {
+  const isDay = /^day[1-9]$/.test(t);
+  if (corsoId != null && (isDay || t === "final")) {
     try {
       const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
       const family = corso?.type === "shochu" ? "shochu" : "nihonshu";
-      esito = (await buildDayEsito(c, family, t, answers, input.lang, submissionId ?? undefined)) ?? undefined;
-      // Owner batch 8: open answers are AI-graded RIGHT AFTER hand-in, in the
-      // background (same engine + draft store as the staff batch). The esito
-      // card polls until the draft lands; the staff Esiti gets it for free.
-      if (submissionId != null && esito?.aiPending) {
+      if (isDay) {
+        esito = (await buildDayEsito(c, family, t, answers, input.lang, submissionId ?? undefined)) ?? undefined;
+        // Owner batch 8: open answers are AI-graded RIGHT AFTER hand-in, in the
+        // background (same engine + draft store as the staff batch). The esito
+        // card polls until the draft lands; the staff Esiti gets it for free.
+        if (submissionId != null && esito?.aiPending) {
+          const subId = submissionId;
+          after(() => runSingleSubmissionCorrection(c, family, t, subId).catch(() => false));
+        }
+      } else if (submissionId != null) {
+        // FINAL exam (owner batch 17): correct EVERY answer at hand-in — closed
+        // AND open — so the staff Esiti has the AI grades ready without clicking
+        // "Valuta con AI" per question. Runs in the BACKGROUND and returns no
+        // esito: the student sees only the plain thank-you, never the final
+        // outcome (that stays with the official correction).
         const subId = submissionId;
         after(() => runSingleSubmissionCorrection(c, family, t, subId).catch(() => false));
       }

@@ -43,26 +43,38 @@ export class ClaudeGradingModel implements GradingModel {
       ? `I passaggi provengono dalla sezione "${input.kbSection}" della knowledge base: ` +
         "nella motivazione fai riferimento a quella sezione. "
       : "";
-    // Owner's rubric (batch 7): CONTENT decides, form never does; the model
-    // votes on a 1-5 scale and the code derives the points from it.
+    // Owner's rubric (batch 7 + 17): CONTENT decides, form never does; the model
+    // votes on a 1-5 scale and the code derives the points from it. Batch 17: the
+    // guiding principle is COMPREHENSION OF THE SCOPE — if the student shows they
+    // understood the topic, the answer is CORRECT; missing breadth becomes
+    // enrichment, never a deduction.
     const system =
       "Sei un esaminatore della Sake Sommelier Association. Correggi la risposta aperta " +
       "ESCLUSIVAMENTE in base ai passaggi della knowledge base forniti, che sono l'unica " +
       "fonte di verità. NON usare conoscenze esterne. " +
       sectionNote +
-      "RUBRICA: conta SOLO il contenuto — correttezza e completezza dei concetti rispetto " +
-      "alla domanda. IGNORA grammatica, ortografia, sintassi, stile e lingua; elenchi " +
-      "puntati o risposte schematiche valgono esattamente quanto la prosa se i concetti " +
-      "ci sono. Se la risposta mostra che lo studente HA CAPITO il concetto, premialo: " +
-      "la comprensione dimostrata merita un voto alto anche con lacune minori. Una " +
-      "risposta SINTETICA ma corretta vale quanto una estesa — la brevità non è MAI un " +
-      "demerito. Assegna un VOTO intero da 1 a 5: 1 = sbagliata o non pertinente; 2 = " +
-      "qualche elemento giusto ma gravemente incompleta o con errori concettuali; 3 = " +
-      "parzialmente corretta, coglie il nucleo ma con lacune; 4 = corretta e quasi " +
-      "completa, lacune minori; 5 = completa e corretta. Se i passaggi non coprono la " +
-      "domanda, usa un voto prudente e dillo nella motivazione. La motivazione deve " +
-      "essere completa e comprensibile (400-600 caratteri), citando cosa c'è e cosa " +
-      "manca. Rispondi SOLO con JSON " +
+      "RUBRICA: conta SOLO il contenuto, IGNORA grammatica, ortografia, sintassi, stile e " +
+      "lingua; elenchi puntati o risposte schematiche valgono esattamente quanto la prosa. " +
+      "PRINCIPIO GUIDA: se lo studente dimostra di aver COMPRESO L'AMBITO della domanda, la " +
+      "risposta è CORRETTA. La brevità NON è mai un demerito: una risposta sintetica che " +
+      "coglie il nucleo vale quanto una estesa. Una risposta più STRETTA dell'ampiezza della " +
+      "knowledge base è comunque corretta se il nucleo c'è — la KB è più ampia per natura. " +
+      "Ciò che manca (dettagli, esempi, o anche una parte secondaria della domanda non " +
+      "sviluppata) NON abbassa il voto se l'ambito è colto: elencalo INVECE nella motivazione " +
+      "come SPUNTI DI ARRICCHIMENTO ('per completezza avresti potuto aggiungere…'), come " +
+      "valore aggiunto, MAI come penalità. Assegna un VOTO intero da 1 a 5: " +
+      "1 = sbagliata, non pertinente o nessuna comprensione dell'ambito; " +
+      "2 = comprensione molto lacunosa o con errori concettuali gravi; " +
+      "3 = parziale: coglie qualcosa ma con un errore concettuale reale o una parte " +
+      "IMPORTANTE della domanda sbagliata; " +
+      "4 = corretta, ambito colto, con una sola imprecisione minore reale (non una semplice " +
+      "sintesi); " +
+      "5 = corretta: coglie il nucleo/ambito senza errori, ANCHE se sintetica. " +
+      "In pratica: se ha capito l'argomento e non ha detto nulla di sbagliato, il voto è 5 " +
+      "(o 4 se c'è una piccola imprecisione reale) — mai meno per il solo fatto di essere " +
+      "breve o meno estesa della KB. La motivazione (400-600 caratteri) deve: (a) confermare " +
+      "cosa lo studente ha colto correttamente, (b) offrire gli spunti di arricchimento dalla " +
+      "KB in tono costruttivo. Rispondi SOLO con JSON " +
       '{"voto": number (1..5), "confidence": number (0..1), "rationale": string (in italiano), ' +
       '"citations": number[] (i numeri [[n]] dei passaggi usati)}. Niente commento, niente code fence.';
     const user =

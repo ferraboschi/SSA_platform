@@ -6,6 +6,7 @@ import {
   isObjective,
   gradeAnswers,
   certifiedScore,
+  isCorrectSubset,
   type GradableQuestion,
 } from "./grading";
 
@@ -294,7 +295,9 @@ describe("gradeAnswers — multilingual (student graded in the language they SAW
   });
 
   it("marks a WRONG English answer wrong (no false 100%)", () => {
-    const r = gradeAnswers(multilingual, { tf: ["False"], m: ["Acidity"] }, "en");
+    // "Sweetness" is NOT in the key {Acidity, Umami} — a genuine wrong pick, not
+    // an "either/or" subset (which batch 17 would accept).
+    const r = gradeAnswers(multilingual, { tf: ["False"], m: ["Sweetness"] }, "en");
     expect(r.correct).toBe(0);
   });
 
@@ -427,5 +430,59 @@ describe("unanswered & partial credit (batch 10)", () => {
     // single (1pt) right + multi (3pt) at 2/3 → (1 + 2) / 4 = 75
     const r = gradeAnswers([single, multi], { s1: ["A"], m1: ["A", "B"] });
     expect(r.autoScore).toBe(75);
+  });
+});
+
+// ── Batch 17 (owner): MULTI "either / or / both" for a TWO-correct key ───────
+describe("multi either/or/both — a two-correct key accepts any non-empty subset", () => {
+  // "Il bouquet suggerisce honjozo O junmai?" — key {honjozo, junmai}.
+  const bouquet = q({
+    id: "b",
+    type: "multi",
+    options: ["Honjozo", "Junmai", "Ginjo"],
+    correct: [0, 1],
+    points: 2,
+  });
+
+  it("isCorrectSubset: one of the two correct options is a valid subset", () => {
+    expect(isCorrectSubset(["Junmai"], bouquet)).toBe(true);
+    expect(isCorrectSubset(["Honjozo"], bouquet)).toBe(true);
+    expect(isCorrectSubset(["Honjozo", "Junmai"], bouquet)).toBe(true);
+    expect(isCorrectSubset(["Ginjo"], bouquet)).toBe(false); // a wrong pick
+    expect(isCorrectSubset(["Junmai", "Ginjo"], bouquet)).toBe(false); // one wrong
+    expect(isCorrectSubset([], bouquet)).toBe(false); // empty
+  });
+
+  it("naming ONE of the two correct options scores full marks", () => {
+    const r = gradeAnswers([bouquet], { b: ["Junmai"] });
+    expect(r.detail[0].ok).toBe(true);
+    expect(r.detail[0].fraction).toBe(1);
+    expect(r.autoScore).toBe(100);
+    expect(r.correct).toBe(1);
+  });
+
+  it("naming BOTH still scores full marks (unchanged)", () => {
+    const r = gradeAnswers([bouquet], { b: ["Honjozo", "Junmai"] });
+    expect(r.detail[0].ok).toBe(true);
+    expect(r.autoScore).toBe(100);
+  });
+
+  it("a wrong pick is NOT accepted (falls back to partial credit)", () => {
+    const r = gradeAnswers([bouquet], { b: ["Ginjo"] });
+    expect(r.detail[0].ok).toBe(false);
+    expect(r.detail[0].fraction).toBe(0);
+  });
+
+  it("mixing a correct and a wrong pick is not a clean subset → 0 (1 hit − 1 wrong)/2", () => {
+    const r = gradeAnswers([bouquet], { b: ["Junmai", "Ginjo"] });
+    expect(r.detail[0].ok).toBe(false);
+    expect(r.detail[0].fraction).toBe(0);
+  });
+
+  it("a THREE-correct key keeps batch-10 partial credit (not either/or)", () => {
+    const three = q({ id: "t", type: "multi", options: ["A", "B", "C", "D"], correct: [0, 1, 2] });
+    const r = gradeAnswers([three], { t: ["A"] });
+    expect(r.detail[0].ok).toBe(false); // one of three is NOT full credit
+    expect(r.detail[0].fraction).toBeCloseTo(1 / 3);
   });
 });

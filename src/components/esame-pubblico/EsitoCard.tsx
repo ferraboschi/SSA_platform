@@ -257,8 +257,11 @@ export function EsitoCard({
                     ? // The AI verdict LANDED: the chip must agree with the "Voto
                       // AI: n/5" box right below it, not keep saying "in
                       // valutazione" forever (open answers keep ok === null).
-                      // Green ONLY for full marks — 2..4/5 earn partial credit
-                      // in the score, so the chip says so.
+                      // GREEN only at 5/5 = full marks. The batch-17 rubric
+                      // already sends a scope-correct answer (even a synthetic
+                      // one) to 5, so brevity isn't penalised; a 4/5 carries a
+                      // REAL minor imprecision (75% of the points) → stays partial
+                      // to match the number in the box below it.
                       d.aiVote >= 5
                       ? { icon: "✓", txt: t.verdictRight, bg: "#e8f6ee", fg: "#1a7f43" }
                       : d.aiVote >= 2

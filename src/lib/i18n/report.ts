@@ -25,6 +25,11 @@ export interface ReportStrings {
   correctAnswer: string;
   yourAnswer: string;
   footer: string;
+  /** Prominent non-official notice (owner batch 17): this is a personal record,
+   *  NOT an SSA document, and does not replace the official outcome. */
+  disclaimer: string;
+  /** Small qualifier next to the outcome: it's a personal, non-official indication. */
+  personalIndication: string;
   advice: Record<ExamResultStatus, string>;
   /** "Soglia di promozione" — the fixed 80% reference under the score. */
   refThreshold: string;
@@ -41,26 +46,29 @@ export interface ReportStrings {
 
 export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
   it: {
-    cert: "Certificato di Esame",
+    cert: "Resoconto personale della prova",
     family: {
-      nihonshu: "Sake Sommelier · Livello Certificato",
-      shochu: "Shochu Sommelier · Livello Certificato",
+      nihonshu: "Prova per la certificazione Sake Sommelier",
+      shochu: "Prova per la certificazione Shochu Sommelier",
     },
     passedTitle: "Promosso",
     retrialTitle: "Promosso con riserva",
     failedTitle: "Non promosso",
-    score: "Punteggio finale",
+    score: "Punteggio della prova",
     breakdown: "Punteggio per categoria",
     aiSummary: "Sintesi del percorso",
     weakAreas: "Aree da approfondire",
-    issued: "Rilasciato il",
+    issued: "Prova sostenuta il",
     examDate: "Data esame",
     location: "Sede",
     educator: "Educator",
     importantWrong: "Domande importanti da rivedere",
     correctAnswer: "Risposta corretta",
     yourAnswer: "La tua risposta",
-    footer: "Sake Sommelier Association · sakesommelierassociation.it",
+    footer: "Documento personale · non ufficiale · sakesommelierassociation.it",
+    disclaimer:
+      "Documento personale a uso interno. Non è un documento ufficiale della Sake Sommelier Association e non sostituisce l'esito ufficiale della prova, comunicato dalla SSA. Da non condividere sui social.",
+    personalIndication: "indicazione personale · l'esito ufficiale è comunicato dalla SSA",
     advice: {
       passed:
         "Ottimo lavoro. Hai dimostrato una buona padronanza del programma. Continua con masterclass per consolidare l'esperienza.",
@@ -93,26 +101,29 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
     },
   },
   en: {
-    cert: "Examination Report",
+    cert: "Personal exam record",
     family: {
-      nihonshu: "Sake Sommelier · Certified Level",
-      shochu: "Shochu Sommelier · Certified Level",
+      nihonshu: "Sake Sommelier certification exam",
+      shochu: "Shochu Sommelier certification exam",
     },
     passedTitle: "Passed",
     retrialTitle: "Passed with reservation",
     failedTitle: "Not passed",
-    score: "Final score",
+    score: "Exam score",
     breakdown: "Score by category",
     aiSummary: "Path summary",
     weakAreas: "Areas to deepen",
-    issued: "Issued on",
+    issued: "Exam taken on",
     examDate: "Exam date",
     location: "Location",
     educator: "Educator",
     importantWrong: "Important questions to review",
     correctAnswer: "Correct answer",
     yourAnswer: "Your answer",
-    footer: "Sake Sommelier Association · sakesommelierassociation.it",
+    footer: "Personal document · not official · sakesommelierassociation.it",
+    disclaimer:
+      "Personal document for internal use. This is not an official Sake Sommelier Association document and does not replace the official exam outcome, which is communicated by the SSA. Please do not share on social media.",
+    personalIndication: "personal indication · the official outcome is communicated by the SSA",
     advice: {
       passed:
         "Excellent work. You demonstrated strong mastery of the program. Continue with masterclasses to consolidate your experience.",
@@ -145,26 +156,29 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
     },
   },
   ja: {
-    cert: "試験報告書",
+    cert: "試験の個人記録",
     family: {
-      nihonshu: "酒ソムリエ · 認定レベル",
-      shochu: "焼酎ソムリエ · 認定レベル",
+      nihonshu: "酒ソムリエ認定試験",
+      shochu: "焼酎ソムリエ認定試験",
     },
     passedTitle: "合格",
     retrialTitle: "条件付き合格",
     failedTitle: "不合格",
-    score: "最終点数",
+    score: "試験の点数",
     breakdown: "カテゴリ別点数",
     aiSummary: "学習の要約",
     weakAreas: "復習が必要な分野",
-    issued: "発行日",
+    issued: "受験日",
     examDate: "試験日",
     location: "会場",
     educator: "講師",
     importantWrong: "復習すべき重要な問題",
     correctAnswer: "正解",
     yourAnswer: "あなたの回答",
-    footer: "サケソムリエ協会 · sakesommelierassociation.it",
+    footer: "個人的な文書 · 非公式 · sakesommelierassociation.it",
+    disclaimer:
+      "内部利用のための個人的な文書です。これはサケソムリエ協会（SSA）の公式文書ではなく、SSAから通知される公式な試験結果に代わるものではありません。SNS上で共有しないでください。",
+    personalIndication: "個人的な参考情報 · 公式な結果はSSAから通知されます",
     advice: {
       passed:
         "素晴らしい成果です。プログラム全体に対する確かな理解を示しました。マスタークラスを継続しましょう。",

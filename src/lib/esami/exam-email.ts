@@ -54,7 +54,7 @@ export const DEFAULT_EXAM_EMAIL_TEMPLATES: ExamEmailTemplates = {
     body:
       "Ciao {nome},\n\n" +
       "complimenti! Hai superato l'esame del corso {corso} con un punteggio del {punteggio}%. È un traguardo di cui andare fieri.\n\n" +
-      "In allegato trovi il tuo certificato ufficiale. Continua il tuo percorso con gli altri corsi SSA: sarebbe un piacere riaverti in aula.\n\n" +
+      "In allegato trovi il resoconto personale della tua prova (documento non ufficiale). Continua il tuo percorso con gli altri corsi SSA: sarebbe un piacere riaverti in aula.\n\n" +
       "A presto,\nSake Sommelier Association",
   },
   retrial: {
@@ -82,7 +82,7 @@ const DEFAULT_EXAM_EMAIL_TEMPLATES_EN: ExamEmailTemplates = {
     body:
       "Hi {nome},\n\n" +
       "congratulations! You passed the exam for the {corso} course with a score of {punteggio}%. It's an achievement to be proud of.\n\n" +
-      "Your official certificate is attached. Keep going with the other SSA courses: we'd love to have you back in the classroom.\n\n" +
+      "A personal record of your exam is attached (not an official document). Keep going with the other SSA courses: we'd love to have you back in the classroom.\n\n" +
       "See you soon,\nSake Sommelier Association",
   },
   retrial: {
@@ -110,7 +110,7 @@ const DEFAULT_EXAM_EMAIL_TEMPLATES_JA: ExamEmailTemplates = {
     body:
       "{nome}様\n\n" +
       "おめでとうございます。{corso}コースの試験に{punteggio}%の得点で合格されました。誇りに思える素晴らしい成果です。\n\n" +
-      "公式の認定証を本メールに添付しております。ぜひ他のSSAコースへも学びを続けてください。またお会いできることを楽しみにしております。\n\n" +
+      "試験の個人記録を本メールに添付しております（非公式の文書です）。ぜひ他のSSAコースへも学びを続けてください。またお会いできることを楽しみにしております。\n\n" +
       "今後ともよろしくお願いいたします。\nサケソムリエ協会",
   },
   retrial: {
@@ -147,7 +147,7 @@ export const EXAM_EMAIL_BODY_NOSCORE: Record<ExamOutcome, string> = {
   passed:
     "Ciao {nome},\n\n" +
     "complimenti! Hai superato l'esame del corso {corso}. È un traguardo di cui andare fieri.\n\n" +
-    "In allegato trovi il tuo certificato ufficiale. Continua il tuo percorso con gli altri corsi SSA: sarebbe un piacere riaverti in aula.\n\n" +
+    "In allegato trovi il resoconto personale della tua prova (documento non ufficiale). Continua il tuo percorso con gli altri corsi SSA: sarebbe un piacere riaverti in aula.\n\n" +
     "A presto,\nSake Sommelier Association",
   retrial:
     "Ciao {nome},\n\n" +
@@ -166,7 +166,7 @@ const EXAM_EMAIL_BODY_NOSCORE_EN: Record<ExamOutcome, string> = {
   passed:
     "Hi {nome},\n\n" +
     "congratulations! You passed the exam for the {corso} course. It's an achievement to be proud of.\n\n" +
-    "Your official certificate is attached. Keep going with the other SSA courses: we'd love to have you back in the classroom.\n\n" +
+    "A personal record of your exam is attached (not an official document). Keep going with the other SSA courses: we'd love to have you back in the classroom.\n\n" +
     "See you soon,\nSake Sommelier Association",
   retrial:
     "Hi {nome},\n\n" +
@@ -185,7 +185,7 @@ const EXAM_EMAIL_BODY_NOSCORE_JA: Record<ExamOutcome, string> = {
   passed:
     "{nome}様\n\n" +
     "おめでとうございます。{corso}コースの試験に合格されました。誇りに思える素晴らしい成果です。\n\n" +
-    "公式の認定証を本メールに添付しております。ぜひ他のSSAコースへも学びを続けてください。またお会いできることを楽しみにしております。\n\n" +
+    "試験の個人記録を本メールに添付しております（非公式の文書です）。ぜひ他のSSAコースへも学びを続けてください。またお会いできることを楽しみにしております。\n\n" +
     "今後ともよろしくお願いいたします。\nサケソムリエ協会",
   retrial:
     "{nome}様\n\n" +
@@ -243,7 +243,7 @@ interface ExamEmailUi {
 const EMAIL_UI_BY_LANG: Record<ExamEmailLang, ExamEmailUi> = {
   it: {
     scoreBadgeLabel: "Punteggio",
-    certNote: "📎 Il tuo certificato ufficiale è allegato a questa email in formato PDF.",
+    certNote: "📎 In allegato trovi il resoconto personale della tua prova (PDF): è un documento non ufficiale, non sostituisce l'esito ufficiale SSA.",
     coursesHeading: "Continua il tuo percorso · prossimi corsi",
     coursesButton: "Vedi tutti i corsi",
     privacy: "Questo esito è personale: ti chiediamo di non pubblicare questo documento sui social.",
@@ -251,7 +251,7 @@ const EMAIL_UI_BY_LANG: Record<ExamEmailLang, ExamEmailUi> = {
   },
   en: {
     scoreBadgeLabel: "Score",
-    certNote: "📎 Your official certificate is attached to this email as a PDF.",
+    certNote: "📎 A personal record of your exam is attached (PDF): it is not an official document and does not replace the official SSA outcome.",
     coursesHeading: "Continue your journey · upcoming courses",
     coursesButton: "See all courses",
     privacy: "This result is personal: please do not publish this document on social media.",
@@ -259,7 +259,7 @@ const EMAIL_UI_BY_LANG: Record<ExamEmailLang, ExamEmailUi> = {
   },
   ja: {
     scoreBadgeLabel: "得点",
-    certNote: "📎 公式の認定証をPDF形式で本メールに添付しております。",
+    certNote: "📎 試験の個人記録をPDFで添付しています（非公式の文書であり、SSAの公式な結果に代わるものではありません）。",
     coursesHeading: "学びを続けましょう · 今後のコース",
     coursesButton: "すべてのコースを見る",
     privacy: "この結果は個人的なものです。本書類をSNS上に公開しないようお願いします。",

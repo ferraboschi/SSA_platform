@@ -5,14 +5,11 @@ import "server-only";
 // fetch. Japanese needs a CJK font: we register Noto Sans JP (see JA_FONT below)
 // and render a true Japanese page — never tofu/blank.
 
-import { readFileSync } from "fs";
-import { join } from "path";
 import {
   Document,
   Page,
   Text,
   View,
-  Image,
   Font,
   StyleSheet,
   renderToBuffer,
@@ -55,23 +52,6 @@ function ensureJaFont(): boolean {
   return jaFontReady;
 }
 
-// SSA logo loaded once as a data URI for the PDF header (falls back to a text
-// mark if the asset can't be read).
-const LOGO_DATA_URI: string | null = (() => {
-  try {
-    const buf = readFileSync(join(process.cwd(), "public", "ssa-logo.png"));
-    return `data:image/png;base64,${buf.toString("base64")}`;
-  } catch {
-    return null;
-  }
-})();
-
-const PRIVACY_NOTE: Record<ReportLang, string> = {
-  it: "Questo esito è personale: ti chiediamo di non pubblicare questo documento sui social.",
-  en: "This result is personal: please do not publish this document on social media.",
-  ja: "この結果は個人的なものです。本書類をSNS上に公開しないようお願いします。",
-};
-
 export interface CertificatePdfInput {
   name: string;
   family: ExamFamily;
@@ -110,21 +90,20 @@ const PASS_PCT = Math.round(EXAM_THRESHOLDS.pass * 100);
 
 const styles = StyleSheet.create({
   page: { paddingTop: 48, paddingBottom: 40, paddingHorizontal: 48, fontSize: 11, color: COLORS.text, fontFamily: "Helvetica" },
-  headRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1.5, borderBottomColor: COLORS.navy, paddingBottom: 12 },
-  brand: { fontSize: 9, color: COLORS.mute, letterSpacing: 1, textTransform: "uppercase", fontFamily: "Helvetica-Bold" },
-  certWord: { fontSize: 13, marginTop: 4, fontFamily: "Helvetica-Bold" },
-  mark: { width: 34, height: 34, backgroundColor: COLORS.navy, color: "#fff", textAlign: "center", paddingTop: 8, fontSize: 16, fontFamily: "Helvetica-Bold", borderRadius: 4 },
-  logo: { height: 38, objectFit: "contain" },
-  privacy: { fontSize: 9, color: COLORS.faint, fontStyle: "italic", marginTop: 22, lineHeight: 1.4 },
-  family: { fontSize: 9, color: COLORS.mute, letterSpacing: 1, textTransform: "uppercase", marginTop: 22, fontFamily: "Helvetica-Bold" },
-  name: { fontSize: 26, marginTop: 6, fontFamily: "Helvetica-Bold" },
+  headRow: { borderBottomWidth: 1.5, borderBottomColor: COLORS.navy, paddingBottom: 12 },
+  docTitle: { fontSize: 16, color: COLORS.navy, fontFamily: "Helvetica-Bold", letterSpacing: 0.3 },
+  docSub: { fontSize: 10, color: COLORS.mute, marginTop: 3 },
+  disclaimerBox: { marginTop: 14, padding: 9, backgroundColor: "#fafafb", borderWidth: 1, borderColor: COLORS.border, borderRadius: 5 },
+  disclaimerText: { fontSize: 8.5, color: COLORS.mute, lineHeight: 1.45 },
+  name: { fontSize: 24, marginTop: 18, fontFamily: "Helvetica-Bold" },
   meta: { fontSize: 10, color: COLORS.mute, marginTop: 8 },
-  scoreBox: { marginTop: 22, padding: 16, borderWidth: 1.5, borderRadius: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  scoreBox: { marginTop: 18, padding: 16, borderWidth: 1.5, borderRadius: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   scoreLabel: { fontSize: 9, letterSpacing: 1, textTransform: "uppercase", fontFamily: "Helvetica-Bold" },
   scoreNum: { fontSize: 38, fontFamily: "Helvetica-Bold" },
   scoreRight: { alignItems: "flex-end" },
   statusBig: { fontSize: 22, fontFamily: "Helvetica-Bold" },
   scoreRef: { fontSize: 8.5, color: COLORS.mute, marginTop: 5, fontFamily: "Helvetica-Bold" },
+  personalNote: { fontSize: 7.5, color: COLORS.faint, fontStyle: "italic", marginTop: 3, maxWidth: 230, textAlign: "right" },
   sectionTitle: { fontSize: 9, color: COLORS.mute, letterSpacing: 1, textTransform: "uppercase", marginTop: 22, marginBottom: 8, fontFamily: "Helvetica-Bold" },
   advice: { fontSize: 10.5, lineHeight: 1.5, marginTop: 8 },
   barRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
@@ -184,19 +163,18 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
 
   return (
     <Page size="A4" style={[styles.page, jaFont]}>
+      {/* Personal record — NOT an official SSA certificate (owner batch 17):
+          no SSA logo/letterhead, a personal title, and a prominent non-official
+          disclaimer. The SSA name appears only descriptively. */}
       <View style={styles.headRow}>
-        <View>
-          <Text style={[styles.brand, jaFont]}>Sake Sommelier Association</Text>
-          <Text style={[styles.certWord, jaFont]}>{t.cert}</Text>
-        </View>
-        {LOGO_DATA_URI ? (
-          <Image src={LOGO_DATA_URI} style={styles.logo} />
-        ) : (
-          <Text style={[styles.mark, jaFont]}>S</Text>
-        )}
+        <Text style={[styles.docTitle, jaFont]}>{t.cert}</Text>
+        <Text style={[styles.docSub, jaFont]}>{t.family[input.family]}</Text>
       </View>
 
-      <Text style={[styles.family, jaFont]}>{t.family[input.family]}</Text>
+      <View style={styles.disclaimerBox}>
+        <Text style={[styles.disclaimerText, jaFont]}>{t.disclaimer}</Text>
+      </View>
+
       <Text style={[styles.name, jaFont]}>{input.name}</Text>
       <Text style={[styles.meta, jaFont]}>
         {t.examDate}: {input.course.day} {input.course.month} {input.course.year} · {t.location}: {input.course.city} · {t.educator}: {input.course.educatorName}
@@ -212,6 +190,7 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
         <View style={styles.scoreRight}>
           <Text style={[styles.statusBig, jaFont, { color: sc }]}>{title}</Text>
           {input.score != null && <Text style={[styles.scoreRef, jaFont]}>{refLine}</Text>}
+          <Text style={[styles.personalNote, jaFont]}>{t.personalIndication}</Text>
         </View>
       </View>
 
@@ -249,8 +228,6 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
       <View style={[styles.calloutBox, { borderColor: sc, backgroundColor: statusBg(input.status) }]}>
         <Text style={[styles.calloutText, jaFont]}>{t.next[input.status]}</Text>
       </View>
-
-      <Text style={[styles.privacy, jaFont]}>{PRIVACY_NOTE[lang]}</Text>
 
       {/* `fixed` pins the footer to the bottom of every page, so if a long
           verdict ever spills past one A4 the issued/branding line still lands

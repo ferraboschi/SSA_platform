@@ -198,23 +198,18 @@ function ReportPage({
         borderRadius: 4,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 12 * FS, borderBottom: "1.5px solid var(--navy)" }}>
-        <div>
-          <div className="mono" style={{ fontSize: 9.5 * FS, letterSpacing: "var(--ls-caps)", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600 }}>
-            Sake Sommelier Association
-          </div>
-          <div style={{ fontWeight: 600, fontSize: 13 * FS, marginTop: 4, letterSpacing: "-0.005em" }}>{t.cert}</div>
-        </div>
-        <div style={{ width: 36 * FS, height: 36 * FS, background: "var(--navy)", color: "white", display: "grid", placeItems: "center", borderRadius: 4, position: "relative", overflow: "hidden" }}>
-          <span style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, var(--indigo) 0%, transparent 60%)", opacity: 0.6 }} />
-          <span style={{ position: "relative", zIndex: 1, fontWeight: 700, fontSize: 18 * FS, letterSpacing: "-0.02em" }}>S</span>
-        </div>
+      {/* Personal record — NOT an official SSA certificate (owner batch 17): no
+          SSA logo/letterhead, a personal title, and a prominent disclaimer. */}
+      <div style={{ paddingBottom: 12 * FS, borderBottom: "1.5px solid var(--navy)" }}>
+        <div style={{ fontWeight: 700, fontSize: 15 * FS, color: "var(--navy)", letterSpacing: "-0.005em" }}>{t.cert}</div>
+        <div className="mono" style={{ fontSize: 10 * FS, color: "var(--text-3)", marginTop: 3 }}>{t.family[family]}</div>
+      </div>
+
+      <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6, padding: 10 * FS, fontSize: 9.5 * FS, lineHeight: 1.45, color: "var(--text-3)" }}>
+        {t.disclaimer}
       </div>
 
       <div>
-        <div className="mono" style={{ fontSize: 9.5 * FS, letterSpacing: "var(--ls-caps)", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 6 }}>
-          {t.family[family]}
-        </div>
         <h1 style={{ fontSize: 28 * FS, margin: 0, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{result.name}</h1>
         <div style={{ marginTop: 8, fontSize: 11 * FS, color: "var(--text-3)" }}>
           {t.examDate}:{" "}
@@ -256,6 +251,9 @@ function ReportPage({
               {refLine}
             </div>
           )}
+          <div style={{ fontSize: 8 * FS, color: "var(--text-4)", fontStyle: "italic", textAlign: "right", maxWidth: 220 * FS }}>
+            {t.personalIndication}
+          </div>
         </div>
       </div>
 

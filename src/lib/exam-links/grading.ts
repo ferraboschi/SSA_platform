@@ -67,6 +67,25 @@ const asArray = (given: string | string[] | undefined): string[] =>
 const isBlank = (given: string | string[] | undefined): boolean =>
   asArray(given).every((v) => String(v).trim() === "");
 
+/** MULTI "either / or / both" rule (owner batch 17): when the answer key lists
+ *  more than one correct option, naming ANY non-empty subset of them — and no
+ *  wrong option — is fully correct. A bouquet that "suggests honjozo OR junmai"
+ *  is answered right by naming just one of the two. Returns true only when every
+ *  pick is a correct option and at least one pick was made; a single wrong pick
+ *  disqualifies it (→ falls back to multiFraction's partial credit). */
+export function isCorrectSubset(
+  given: string | string[] | undefined,
+  q: GradableQuestion,
+): boolean {
+  const correctSet = new Set(
+    (q.correct ?? []).map((i) => normStr(q.options[Number(i)])).filter(Boolean),
+  );
+  if (correctSet.size === 0) return false;
+  const picks = [...new Set(asArray(given).map(normStr).filter(Boolean))];
+  if (picks.length === 0) return false;
+  return picks.every((p) => correctSet.has(p));
+}
+
 /** Partial credit for MULTI (owner batch 10): the exact set earns 1; otherwise
  *  (right picks − wrong picks) / total right, floored at zero. */
 export function multiFraction(
@@ -305,7 +324,14 @@ export function gradeAnswers(
     // point, anything else scores proportionally via multiFraction.
     gradable++;
     gradablePts += q.points ?? 1;
-    const ok = gradeObjective(given, localized);
+    // MULTI "either/or/both" (owner batch 17): when the key lists exactly TWO
+    // correct options, naming a non-empty subset of them (no wrong pick) is fully
+    // correct — "il bouquet suggerisce honjozo O junmai" is answered by naming
+    // one. Keys with 3+ correct options keep batch 10's partial credit (a
+    // "select-all" question isn't satisfied by one pick).
+    const ok =
+      gradeObjective(given, localized) ||
+      (q.type === "multi" && (q.correct?.length ?? 0) === 2 && isCorrectSubset(given, localized));
     const fraction = ok ? 1 : q.type === "multi" ? multiFraction(given, localized) : 0;
     correctPts += fraction * (q.points ?? 1);
     if (ok) correct++;
