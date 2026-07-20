@@ -105,7 +105,7 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
     },
     openReviewTitle: "Domande aperte · dove migliorare",
     openReviewIntro:
-      "Per ogni risposta aperta: cosa hai colto, cosa manca e come integrarla dalla knowledge base.",
+      "Per ogni risposta aperta: cosa hai colto, cosa manca e come integrarla con le nozioni della Sake Sommelier Association.",
     aiVote: "Voto AI",
   },
   en: {
@@ -164,7 +164,7 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
     },
     openReviewTitle: "Open answers · where to improve",
     openReviewIntro:
-      "For each open answer: what you captured, what's missing, and how to complete it from the knowledge base.",
+      "For each open answer: what you captured, what's missing, and how to complete it with the Sake Sommelier Association's notions.",
     aiVote: "AI score",
   },
   ja: {
@@ -223,7 +223,7 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
     },
     openReviewTitle: "記述問題 · 改善点",
     openReviewIntro:
-      "各記述回答について：理解できた点、不足している点、知識ベースから補う方法。",
+      "各記述回答について：理解できた点、不足している点、サケソムリエ協会の知見で補う方法。",
     aiVote: "AI評価",
   },
 };

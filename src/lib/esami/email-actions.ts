@@ -61,21 +61,22 @@ export async function sendExamResultEmailAction(
   // and the certificate PDF. Null/unknown falls back to Italian downstream.
   const lang = result.lang;
 
-  // Enrichment (owner batch 16-18): per-area breakdown, open-answer review page,
+  // Enrichment (owner batch 16-19): per-area breakdown, open-answer review page,
   // and cohort media. All best-effort — a failure here must never block the
   // result email, so the resoconto degrades to the plain score it already showed.
+  const docLang = lang === "en" ? "en" : lang === "ja" ? "ja" : "it";
   const [certData, classAvg] = await Promise.all([
-    buildCertificateData(course.id, family, subs, result).catch(() => ({ sections: [], openReview: [] })),
+    buildCertificateData(course.id, family, subs, result, docLang).catch(() => ({ sections: [], openReview: [] })),
     getClassAverage(family).catch(() => null),
   ]);
 
   const base = appConfig.baseUrl.replace(/\/$/, "");
   const reportUrl = `${base}/esami/${courseId}/report/${encodeURIComponent(email)}`;
   try {
-    // Certificate language(s): render in the student's own language. Italian keeps
-    // the historical IT+EN pages; en/ja students get a single page in their language.
-    const certLangs: ReportLang[] =
-      lang === "en" ? ["en"] : lang === "ja" ? ["ja"] : ["it", "en"];
+    // Resoconto language (owner batch 19): the WHOLE document in the one language
+    // the student sat the exam in — English → all English, Japanese → all
+    // Japanese, otherwise Italian. No more IT+EN dual pages.
+    const certLangs: ReportLang[] = lang === "en" ? ["en"] : lang === "ja" ? ["ja"] : ["it"];
     let pdf: { filename: string; base64: string } | undefined;
     try {
       const buf = await renderCertificatePdf(

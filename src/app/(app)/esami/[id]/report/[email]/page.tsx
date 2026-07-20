@@ -49,8 +49,9 @@ export default async function Page({
       // Same enrichment the emailed PDF gets, so the printable staff report and
       // the student's resoconto stay in lock-step (owner batch 16). The HTML
       // report shows the areas; the open-answer review is a PDF-only page.
+      const docLang = sub.lang === "en" ? "en" : sub.lang === "ja" ? "ja" : "it";
       const [certData, avg] = await Promise.all([
-        buildCertificateData(course.id, family, subs, sub).catch(() => ({ sections: [], openReview: [] })),
+        buildCertificateData(course.id, family, subs, sub, docLang).catch(() => ({ sections: [], openReview: [] })),
         getClassAverage(family).catch(() => null),
       ]);
       const secs = certData.sections;

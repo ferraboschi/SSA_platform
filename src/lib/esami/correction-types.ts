@@ -21,7 +21,9 @@ export interface OpenGrade {
   vote?: number;
   /** Model confidence in [0, 1]; 0 when failed=true. */
   confidence: number;
-  /** Grading rationale (Italian) — cites the KB passages it relied on. */
+  /** Grading rationale, in the draft's `rationaleLang` (Italian, or English for
+   *  an English sitting; batch 19). Addresses the student directly ("tu") and
+   *  refers to the SSA notions, never a "knowledge base". */
   rationale: string;
   /** True when the suggestion is grounded in retrieved KB passages. */
   grounded: boolean;
@@ -59,6 +61,11 @@ export interface CorrectionDraft {
   verdict: ExamOutcome;
   /** Which grading backend produced the open-answer points. */
   aiProvider: "model" | "stub" | "none";
+  /** Language the open-answer rationales are written in ("it" | "en"; absent on
+   *  legacy drafts = "it"). The resoconto shows the open-review page only when
+   *  this matches the student's document language, so a stale-language draft is
+   *  never rendered under mismatched headers (owner batch 19). */
+  rationaleLang?: string;
   openGrades: OpenGrade[];
   /** Wrong objective answers, important-first (report: "domande da rivedere"). */
   wrongAnswers: WrongAnswer[];

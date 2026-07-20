@@ -95,7 +95,7 @@ export async function sendExamResultTestAction(
           points: 1.5,
           maxPoints: 2,
           rationale:
-            "Cogli bene acidità alta (1,9) e secchezza (SMV +7 = pochi zuccheri) e la correlazione acidità→corpo. Per completezza avresti potuto indicare il bicchiere richiesto dalla domanda: un calice ampio per esaltare aromi e struttura.",
+            "Hai colto bene acidità alta (1,9) e secchezza (SMV +7 = pochi zuccheri) e la correlazione acidità→corpo. Per completezza avresti potuto indicare il bicchiere richiesto dalla domanda: un calice ampio per esaltare aromi e struttura.",
         },
         {
           question: "Quali piatti si abbinerebbero meglio ad un ginjō?",
@@ -104,7 +104,7 @@ export async function sendExamResultTestAction(
           points: 1.5,
           maxPoints: 2,
           rationale:
-            "Corretto il nucleo: il ginjō (aromatico/kunshu) si abbina a piatti freschi e crudi. Per arricchire: esempi come carpaccio marinato in limone/ponzu o crostacei crudi, evitando fritti, grassi e piatti molto pomodorosi.",
+            "Hai centrato il nucleo: il ginjō (aromatico/kunshu) si abbina a piatti freschi e crudi. Per arricchire: esempi come carpaccio marinato in limone/ponzu o crostacei crudi, evitando fritti, grassi e piatti molto pomodorosi.",
         },
         {
           question:
@@ -115,12 +115,12 @@ export async function sendExamResultTestAction(
           points: 2,
           maxPoints: 2,
           rationale:
-            "Cogli l'elemento chiave del sokujo: l'acido lattico aggiunto direttamente allo shubo abbassa subito il pH, con gli ingredienti corretti. Spunto: il metodo dimezza i tempi (~15 giorni) rispetto al kimoto.",
+            "Hai colto l'elemento chiave del sokujo: l'acido lattico aggiunto direttamente allo shubo abbassa subito il pH, con gli ingredienti corretti. Spunto: il metodo dimezza i tempi (~15 giorni) rispetto al kimoto.",
         },
       ],
       course: { day: 14, month: "Settembre", year: 2026, city: "Online", educatorName: "—" },
       completedAt: new Date().toISOString(),
-    });
+    }, ["it"]);
     attachments = [
       { filename: "esito-esame-prova.pdf", content: buf.toString("base64"), contentType: "application/pdf" },
     ];

@@ -313,24 +313,23 @@ export async function renderCertificatePdf(
   input: CertificatePdfInput,
   langs: ReportLang[] = ["it", "en"],
 ): Promise<Buffer> {
-  // Resolve the pages to render. If a Japanese page is requested we must have the
-  // CJK font registered; if that fails, degrade JA → EN so we never emit a blank
-  // or tofu page (the localized email is the primary win regardless).
-  const pages: ReportLang[] = langs.map((l) => {
-    if (l !== "ja") return l;
-    return ensureJaFont() ? "ja" : "en";
-  });
-  // The open-answer justifications come from the AI in Italian, so the review
-  // page renders only on the Italian pass — under localized EN/JA headers the
-  // Italian body would read as broken. An EN/JA-only resoconto therefore has no
-  // review page until the rationales are translated (a future step). An IT
-  // student gets the historical ["it","en"] cert, so the page still appears
-  // (once) after their Italian page.
+  // Single-language document (the student's exam language, owner batch 19); the
+  // AI justifications are produced in that same language, so the review page
+  // follows page 1 directly — EXCEPT for Japanese: the review's length caps are
+  // character-based (fine for Latin), but the same char count in CJK is far
+  // taller and could spill past the two-page limit. So JA keeps page 1 (fully
+  // Japanese) but skips the review page until it gets width-aware CJK layout.
+  // The gate is on the REQUESTED language: a JA request that degrades to an EN
+  // page (font fetch failed) must STILL skip the review — its rationale text is
+  // Japanese and would render as tofu under Helvetica.
   const hasReview = (input.openReview?.length ?? 0) > 0;
   const els: ReactElement[] = [];
-  pages.forEach((l, i) => {
-    els.push(<CertPage key={`c-${l}-${i}`} input={input} lang={l} />);
-    if (hasReview && l === "it") els.push(<OpenReviewPage key={`r-${l}-${i}`} input={input} lang={l} />);
+  langs.forEach((orig, i) => {
+    // If a Japanese page is requested we must have the CJK font registered; if
+    // that fails, degrade JA → EN so we never emit a blank/tofu page 1.
+    const l: ReportLang = orig !== "ja" ? orig : ensureJaFont() ? "ja" : "en";
+    els.push(<CertPage key={`c-${i}`} input={input} lang={l} />);
+    if (hasReview && orig !== "ja") els.push(<OpenReviewPage key={`r-${i}`} input={input} lang={l} />);
   });
   return renderToBuffer(<Document>{els}</Document>);
 }

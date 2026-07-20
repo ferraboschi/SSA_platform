@@ -96,6 +96,11 @@ export async function buildCertificateData(
   family: ExamFamily,
   subs: GradedSubmission[],
   confirmed: GradedSubmission,
+  /** The resoconto's document language ("it" | "en" | "ja"). The open-review
+   *  page is included ONLY when the draft's rationale language matches it, so a
+   *  stale-language draft (e.g. an old Italian draft under a new English
+   *  document) degrades to no review page instead of rendering mismatched. */
+  docLang: string,
 ): Promise<CertificateData> {
   const finalSub = resolveFinalSubmission(subs, confirmed);
   if (!finalSub) return EMPTY;
@@ -122,7 +127,10 @@ export async function buildCertificateData(
       .eq("key", correctionKey(Number(courseId), finalSub.id))
       .maybeSingle();
     const draft = (row?.value as CorrectionDraft | null) ?? null;
-    openReview = (draft?.openGrades ?? [])
+    // Language guard: only surface the review when the rationales are in the
+    // document's language (legacy drafts have no tag → treated as Italian).
+    const draftLang = draft ? draft.rationaleLang ?? "it" : null;
+    openReview = (draftLang !== docLang ? [] : draft?.openGrades ?? [])
       // Answered, actually graded (a failed AI call has no justification to show).
       .filter((g) => !g.failed && g.given && g.given !== "—" && g.rationale?.trim())
       // Worst-first: the answers that most need explaining lead — and survive the cap.

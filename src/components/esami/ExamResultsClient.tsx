@@ -257,7 +257,7 @@ export function ExamResultsClient({
                   className="btn btn-sm btn-primary"
                   onClick={runCorrection}
                   disabled={correcting}
-                  title="Corregge tutte le consegne del test attivo: domande oggettive in automatico, domande aperte con AI (voto 1-5) basata sulla knowledge base SSA. Genera una bozza per studente — l'esito ufficiale lo confermi tu."
+                  title="Corregge tutte le consegne del test attivo: domande oggettive in automatico, domande aperte con AI (voto 1-5) basata sulle nozioni della Sake Sommelier Association. Genera una bozza per studente — l'esito ufficiale lo confermi tu."
                 >
                   <Icon name="check" size={12} />
                   {correcting ? "Correggo…" : activeTab === "final" ? "Correggi" : `Correggi ${activeTab.replace("day", "giorno ")}`}
@@ -422,7 +422,7 @@ function AiGradeButton({
             {res.vote != null ? `Voto AI: ${res.vote}/5 · ` : ""}
             {res.score}/5 punti
           </strong>{" "}
-          · {res.grounded ? "✓ basato su KB" : "⚠ nessuna fonte KB"}
+          · {res.grounded ? "✓ basato sulle nozioni SSA" : "⚠ nessuna nozione SSA pertinente"}
           {res.feedback && <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{res.feedback}</div>}
         </div>
       )}
@@ -454,7 +454,7 @@ function DraftGradeBlock({ g }: { g: OpenGrade }) {
             {g.vote != null ? `Voto AI: ${g.vote}/5 · ` : "AI: "}
             {g.points}/{g.maxPoints} punti
           </strong>{" "}
-          · conf. {Math.round(g.confidence * 100)}% · {g.grounded ? "✓ basata su KB" : "⚠ nessuna fonte KB"}
+          · conf. {Math.round(g.confidence * 100)}% · {g.grounded ? "✓ basata sulle nozioni SSA" : "⚠ nessuna nozione SSA pertinente"}
         </>
       )}
       {g.rationale && <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{g.rationale}</div>}

@@ -6,6 +6,7 @@ import { buildCertificateData } from "@/lib/esami/certificate-data";
 import { getClassAverage } from "@/lib/esami/class-average";
 import { loadCourseExamResults, findConfirmedResultByEmail } from "@/lib/exam-links/results";
 import type { ExamFamily } from "@/lib/domain";
+import type { ReportLang } from "@/lib/i18n/report";
 
 // Per-student exam-result PDF (IT+EN), inline so it can be previewed in an iframe
 // and downloaded. Admin/manager only.
@@ -35,28 +36,33 @@ export async function GET(
   const sub = findConfirmedResultByEmail(subs, email);
   if (!sub) return NextResponse.json({ ok: false, error: "result not found" }, { status: 404 });
 
+  // Single language = the one the student sat the exam in (owner batch 19).
+  const certLang: ReportLang = sub.lang === "en" ? "en" : sub.lang === "ja" ? "ja" : "it";
   const [certData, classAvg] = await Promise.all([
-    buildCertificateData(course.id, family, subs, sub).catch(() => ({ sections: [], openReview: [] })),
+    buildCertificateData(course.id, family, subs, sub, certLang).catch(() => ({ sections: [], openReview: [] })),
     getClassAverage(family).catch(() => null),
   ]);
 
-  const buf = await renderCertificatePdf({
-    name: sub.studentName,
-    family,
-    status: sub.currentResult as "passed" | "retrial" | "failed",
-    score: sub.currentScore,
-    sections: certData.sections,
-    classAvg,
-    openReview: certData.openReview,
-    course: {
-      day: course.day,
-      month: course.month,
-      year: course.year,
-      city: course.city,
-      educatorName: course.educator.name,
+  const buf = await renderCertificatePdf(
+    {
+      name: sub.studentName,
+      family,
+      status: sub.currentResult as "passed" | "retrial" | "failed",
+      score: sub.currentScore,
+      sections: certData.sections,
+      classAvg,
+      openReview: certData.openReview,
+      course: {
+        day: course.day,
+        month: course.month,
+        year: course.year,
+        city: course.city,
+        educatorName: course.educator.name,
+      },
+      completedAt: sub.submittedAt,
     },
-    completedAt: sub.submittedAt,
-  });
+    [certLang],
+  );
 
   const slug = sub.studentName.normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
   return new NextResponse(new Uint8Array(buf), {

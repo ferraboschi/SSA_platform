@@ -59,6 +59,13 @@ export async function runSingleSubmissionCorrection(
     questionMeta.set(q.id, { points: q.points ?? 1, important: q.important ?? false });
   }
 
+  // Rationale language (owner batch 19): the STUDENT's resoconto review page is
+  // rendered for Italian and English only (JA is skipped), so grade an English
+  // sitting in English (student reads it, staff can too) and everything else in
+  // Italian — that keeps a JA sitting's rationale legible to the Italian
+  // educator who audits the draft before confirming the official outcome.
+  const gradeLang = sub.lang === "en" ? "en" : undefined;
+
   const svc = getSupabaseServiceClient();
   const at = new Date().toISOString();
   const openResults = new Map<string, OpenAnswerResult>();
@@ -72,7 +79,7 @@ export async function runSingleSubmissionCorrection(
     if (!gradableOpen) continue;
     const maxPoints = questionMeta.get(a.qid)?.points ?? 1;
     try {
-      const sug = await gradeOpenAnswer({ question: a.text, answer: a.given, maxPoints, kbSection: a.cat });
+      const sug = await gradeOpenAnswer({ question: a.text, answer: a.given, maxPoints, kbSection: a.cat, lang: gradeLang });
       openResults.set(a.qid, {
         points: sug.suggestedPoints,
         vote: sug.vote,
@@ -105,7 +112,10 @@ export async function runSingleSubmissionCorrection(
   });
   const { error } = await svc
     .from("settings_kv")
-    .upsert({ key: correctionKey(corsoId, sub.id), value: draft }, { onConflict: "key" });
+    .upsert(
+      { key: correctionKey(corsoId, sub.id), value: { ...draft, rationaleLang: gradeLang ?? "it" } },
+      { onConflict: "key" },
+    );
   return !error;
 }
 
@@ -147,6 +157,9 @@ export async function runCourseCorrection(
   // provider's rate limits and makes failures attributable per answer.
   for (const sub of finals) {
     try {
+      // Same rule as the submit-time path: English sitting → English rationale,
+      // everything else → Italian (see runSingleSubmissionCorrection).
+      const gradeLang = sub.lang === "en" ? "en" : undefined;
       const openResults = new Map<string, OpenAnswerResult>();
       for (const a of sub.answers) {
         // EVERY answered question the objective grader could not close
@@ -162,6 +175,7 @@ export async function runCourseCorrection(
             answer: a.given,
             maxPoints,
             kbSection: a.cat,
+            lang: gradeLang,
           });
           openResults.set(a.qid, {
             points: sug.suggestedPoints,
@@ -199,7 +213,10 @@ export async function runCourseCorrection(
       });
       const { error } = await svc
         .from("settings_kv")
-        .upsert({ key: correctionKey(corsoId, sub.id), value: draft }, { onConflict: "key" });
+        .upsert(
+          { key: correctionKey(corsoId, sub.id), value: { ...draft, rationaleLang: gradeLang ?? "it" } },
+          { onConflict: "key" },
+        );
       if (error) throw new Error(error.message);
       run.graded++;
     } catch (e) {

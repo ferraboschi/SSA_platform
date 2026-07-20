@@ -145,7 +145,7 @@ const TYPE_TIPS: Record<string, string> = {
   truefalse: "Vero / Falso: due opzioni, segna quella corretta. Auto-correzione.",
   image: "Identifica immagine: mostra un'immagine (incolla l'URL qui sotto) e lo studente sceglie l'opzione corretta. Segna la corretta. Auto-correzione.",
   fill: "Riempi spazio: lo studente DIGITA la risposta. Elenca le risposte accettate separate da virgola (maiuscole/minuscole e spazi non contano). Auto-correzione.",
-  open: "Testo libero: risposta aperta, corretta dall'AI in base alla knowledge base SSA (suggerimento, poi confermi a mano).",
+  open: "Testo libero: risposta aperta, corretta dall'AI in base alle nozioni della Sake Sommelier Association (suggerimento, poi confermi a mano).",
   match: "Abbinamento: lo studente abbina gli elementi di sinistra a quelli di destra. ⚠ Non ancora disponibile nel test studente.",
   order: "Ordina: lo studente mette gli elementi nell'ordine corretto. ⚠ Non ancora disponibile nel test studente.",
   rating: "Valutazione 1–5 stelle (usata nel modulo di feedback di fine corso, non nell'esame).",
