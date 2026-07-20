@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { hasRole } from "@/lib/auth/guard";
+import { revalidateClassAverage } from "@/lib/esami/class-average";
 import type { ExamOutcome } from "./results";
 
 export interface GradeResult {
@@ -37,6 +38,8 @@ export async function gradeEnrollmentAction(
     revalidatePath(`/esami/${courseId}/risultati`);
     revalidatePath(`/esami/${courseId}`);
     revalidatePath("/corsisti");
+    // A new confirmed score shifts the cohort media printed on certificates.
+    revalidateClassAverage();
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Errore." };
@@ -72,6 +75,7 @@ export async function gradePartecipanteAction(
     }
     revalidatePath(`/esami/${courseId}/risultati`);
     revalidatePath(`/esami/${courseId}`);
+    revalidateClassAverage();
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Errore." };

@@ -10,6 +10,8 @@ import { appConfig, examEmailConfig } from "@/lib/integrations/config";
 import { sendExamResultEmail } from "@/lib/alerts/emails";
 import { loadCourseExamResults, findConfirmedResultByEmail } from "@/lib/exam-links/results";
 import { renderCertificatePdf } from "./certificate-pdf";
+import { buildCertificateSections } from "./certificate-data";
+import { getClassAverage } from "./class-average";
 import type { ExamFamily } from "@/lib/domain";
 import type { ReportLang } from "@/lib/i18n/report";
 
@@ -59,6 +61,14 @@ export async function sendExamResultEmailAction(
   // and the certificate PDF. Null/unknown falls back to Italian downstream.
   const lang = result.lang;
 
+  // Enrichment (owner batch 16): per-area breakdown + cohort media. Both are
+  // best-effort — a failure here must never block the result email, so the
+  // certificate degrades to the plain score it already showed.
+  const [sections, classAvg] = await Promise.all([
+    buildCertificateSections(course.id, family, subs, result).catch(() => []),
+    getClassAverage(family).catch(() => null),
+  ]);
+
   const base = appConfig.baseUrl.replace(/\/$/, "");
   const reportUrl = `${base}/esami/${courseId}/report/${encodeURIComponent(email)}`;
   try {
@@ -74,7 +84,8 @@ export async function sendExamResultEmailAction(
           family,
           status: outcome,
           score: scorePct,
-          sections: [],
+          sections,
+          classAvg,
           course: {
             day: course.day,
             month: course.month,

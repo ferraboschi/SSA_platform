@@ -12,6 +12,7 @@ import { loadPublicExam } from "./load";
 import { gradeAnswers } from "./grading";
 import type { ExamTestKey } from "./token";
 import { correctionKey, type CorrectionDraft } from "@/lib/esami/correction-types";
+import { computeSections } from "@/lib/esami/exam-sections";
 
 export interface DayEsitoItem {
   qid: string;
@@ -109,30 +110,14 @@ export async function buildDayEsito(
   // Per-category subtotals (owner batch 10): every question with a SETTLED
   // score contributes fraction×points (objective/blank) or the AI points
   // (open); still-pending answers stay out — the card shows sections only
-  // once the result is final anyway.
+  // once the result is final anyway. Same engine the certificate uses.
   const qMeta = new Map(
     data.questions.map((q) => [q.id, { points: q.points ?? 1, cat: (q.cat ?? "").trim() || "Generale" }]),
   );
-  const secMap = new Map<string, { earned: number; max: number }>();
-  for (const d of res.detail) {
-    const meta = qMeta.get(d.qid);
-    if (!meta) continue;
-    let earned: number | null = null;
-    if (d.ok !== null) {
-      earned = (d.ok ? 1 : Math.max(0, Math.min(1, d.fraction ?? 0))) * meta.points;
-    } else {
-      const g = gradeByQid.get(d.qid);
-      if (g && !g.failed) earned = Math.max(0, Math.min(meta.points, g.points));
-    }
-    if (earned == null) continue;
-    const s = secMap.get(meta.cat) ?? { earned: 0, max: 0 };
-    s.earned += earned;
-    s.max += meta.points;
-    secMap.set(meta.cat, s);
-  }
-  const sections = [...secMap.entries()]
-    .filter(([, s]) => s.max > 0)
-    .map(([name, s]) => ({ name, pct: Math.round((100 * s.earned) / s.max) }));
+  const openByQid = new Map(
+    [...gradeByQid.entries()].map(([qid, g]) => [qid, { points: g.points, failed: g.failed }]),
+  );
+  const sections = computeSections(res.detail, qMeta, openByQid);
 
   return {
     pct,

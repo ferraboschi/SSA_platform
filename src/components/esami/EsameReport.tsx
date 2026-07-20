@@ -4,8 +4,13 @@ import { useState } from "react";
 import { Icon } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { REPORT_I18N, type ReportLang } from "@/lib/i18n/report";
+import { EXAM_THRESHOLDS } from "@/lib/domain/constants";
+import { weakAreas } from "@/lib/esami/exam-sections";
 import { EmailReportButton } from "./EmailReportButton";
 import type { ExamFamily, ExamResult } from "@/lib/domain";
+
+/** Pass threshold as a whole percentage (80) — the certificate's fixed reference. */
+const PASS_PCT = Math.round(EXAM_THRESHOLDS.pass * 100);
 
 interface ReportCourse {
   day: number;
@@ -21,12 +26,14 @@ export interface EsameReportProps {
   course: ReportCourse;
   /** Course id — needed to send the result email. */
   courseId: string;
+  /** Cohort media to print next to the pass threshold, or null (threshold alone). */
+  classAvg?: number | null;
 }
 
 const LANGS: ReportLang[] = ["it", "en", "ja"];
 const LOCALE_TAG: Record<ReportLang, string> = { it: "it-IT", en: "en-GB", ja: "ja-JP" };
 
-export function EsameReport({ result, family, course, courseId }: EsameReportProps) {
+export function EsameReport({ result, family, course, courseId, classAvg = null }: EsameReportProps) {
   const t = useT().esami.reportView;
   const [lang, setLang] = useState<ReportLang>("it");
   const [view, setView] = useState<"single" | "trio">("single");
@@ -123,9 +130,11 @@ export function EsameReport({ result, family, course, courseId }: EsameReportPro
         }}
       >
         {view === "single" ? (
-          <ReportPage result={result} family={family} course={course} lang={lang} />
+          <ReportPage result={result} family={family} course={course} lang={lang} classAvg={classAvg} />
         ) : (
-          LANGS.map((l) => <ReportPage key={l} result={result} family={family} course={course} lang={l} mini />)
+          LANGS.map((l) => (
+            <ReportPage key={l} result={result} family={family} course={course} lang={l} classAvg={classAvg} mini />
+          ))
         )}
       </div>
     </div>
@@ -137,12 +146,14 @@ function ReportPage({
   family,
   course,
   lang,
+  classAvg,
   mini,
 }: {
   result: ExamResult;
   family: ExamFamily;
   course: ReportCourse;
   lang: ReportLang;
+  classAvg?: number | null;
   mini?: boolean;
 }) {
   const t = REPORT_I18N[lang];
@@ -158,6 +169,18 @@ function ReportPage({
     month: "long",
     year: "numeric",
   });
+  // Reference line under the score + the derived "areas to consolidate" block —
+  // same source (weakAreas) and copy the emailed PDF uses, so both agree.
+  const refLine =
+    `${t.refThreshold} ${PASS_PCT}%` +
+    (classAvg != null ? ` · ${t.classAvg} ${classAvg}%` : "");
+  const weak = weakAreas(
+    result.sections.map((s) => ({ name: s.label, pct: s.pct })),
+    result.status,
+  );
+  const weakList = weak
+    ? weak.items.map((s) => `${s.name} (${Math.round(s.pct)}%)`).join(", ")
+    : "";
 
   return (
     <div
@@ -224,8 +247,15 @@ function ReportPage({
             </div>
           </div>
         )}
-        <div style={{ fontWeight: 700, fontSize: 24 * FS, color: statusFg, letterSpacing: "-0.01em" }}>
-          {isPass ? t.passedTitle : isRetrial ? t.retrialTitle : t.failedTitle}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 * FS }}>
+          <div style={{ fontWeight: 700, fontSize: 24 * FS, color: statusFg, letterSpacing: "-0.01em" }}>
+            {isPass ? t.passedTitle : isRetrial ? t.retrialTitle : t.failedTitle}
+          </div>
+          {result.score != null && (
+            <div className="num" style={{ fontSize: 9.5 * FS, color: "var(--text-3)", fontWeight: 600, textAlign: "right" }}>
+              {refLine}
+            </div>
+          )}
         </div>
       </div>
 
@@ -236,41 +266,65 @@ function ReportPage({
         <p style={{ fontSize: 11.5 * FS, lineHeight: 1.55, color: "var(--text)", margin: 0 }}>{t.advice[result.status]}</p>
       </div>
 
-      <div>
-        <div className="mono" style={{ fontSize: 9.5 * FS, letterSpacing: "var(--ls-caps)", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 10 }}>
-          {t.breakdown}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 * FS }}>
-          {result.sections.map((sec) => (
-            <div key={sec.cat} style={{ display: "grid", gridTemplateColumns: "1fr 50px", gap: 10, alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 11.5 * FS, marginBottom: 3, fontWeight: 500 }}>{sec.label}</div>
-                <div style={{ height: 4, background: "var(--surface-2)", borderRadius: 2 }}>
-                  <div
-                    style={{
-                      width: sec.pct + "%",
-                      height: "100%",
-                      background: sec.pct >= 80 ? "var(--success)" : sec.pct >= 70 ? "var(--warning)" : "var(--danger)",
-                      borderRadius: 2,
-                    }}
-                  />
+      {result.sections.length > 0 && (
+        <div>
+          <div className="mono" style={{ fontSize: 9.5 * FS, letterSpacing: "var(--ls-caps)", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 10 }}>
+            {t.breakdown}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 * FS }}>
+            {result.sections.map((sec) => (
+              <div key={sec.cat} style={{ display: "grid", gridTemplateColumns: "1fr 50px", gap: 10, alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 11.5 * FS, marginBottom: 3, fontWeight: 500 }}>{sec.label}</div>
+                  <div style={{ position: "relative", height: 4, background: "var(--surface-2)", borderRadius: 2 }}>
+                    <div
+                      style={{
+                        width: sec.pct + "%",
+                        height: "100%",
+                        background: sec.pct >= 80 ? "var(--success)" : sec.pct >= 70 ? "var(--warning)" : "var(--danger)",
+                        borderRadius: 2,
+                      }}
+                    />
+                    <div style={{ position: "absolute", left: `${PASS_PCT}%`, top: -1.5, bottom: -1.5, width: 1, background: "var(--text-4)" }} />
+                  </div>
+                </div>
+                <div
+                  className="num"
+                  style={{
+                    textAlign: "right",
+                    fontSize: 11 * FS,
+                    fontWeight: 600,
+                    color: sec.pct >= 80 ? "var(--success-fg)" : sec.pct >= 70 ? "var(--warning-fg)" : "var(--danger-fg)",
+                  }}
+                >
+                  {Math.round(sec.pct)}%
                 </div>
               </div>
-              <div
-                className="num"
-                style={{
-                  textAlign: "right",
-                  fontSize: 11 * FS,
-                  fontWeight: 600,
-                  color: sec.pct >= 80 ? "var(--success-fg)" : sec.pct >= 70 ? "var(--warning-fg)" : "var(--danger-fg)",
-                }}
-              >
-                {Math.round(sec.pct)}%
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {weak && (
+        <div>
+          <div className="mono" style={{ fontSize: 9.5 * FS, letterSpacing: "var(--ls-caps)", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>
+            {t.consolidate[result.status]}
+          </div>
+          <div
+            style={{
+              fontSize: 11 * FS,
+              lineHeight: 1.5,
+              color: "var(--text)",
+              background: statusBg,
+              border: "1px solid " + statusBorder,
+              borderRadius: 6,
+              padding: 10 * FS,
+            }}
+          >
+            {t.weakLead[weak.leadKey]} <strong>{weakList}</strong>
+          </div>
+        </div>
+      )}
 
       {result.wrongImportant.length > 0 && (
         <div>
@@ -292,6 +346,25 @@ function ReportPage({
           </div>
         </div>
       )}
+
+      <div>
+        <div className="mono" style={{ fontSize: 9.5 * FS, letterSpacing: "var(--ls-caps)", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>
+          {t.nextTitle}
+        </div>
+        <div
+          style={{
+            fontSize: 11 * FS,
+            lineHeight: 1.5,
+            color: "var(--text)",
+            background: statusBg,
+            border: "1px solid " + statusBorder,
+            borderRadius: 6,
+            padding: 10 * FS,
+          }}
+        >
+          {t.next[result.status]}
+        </div>
+      </div>
 
       <div
         style={{

@@ -4,6 +4,8 @@ import { getDataSource } from "@/lib/data";
 import { requireNavAccess } from "@/lib/auth/guard";
 import { EsameReport } from "@/components/esami/EsameReport";
 import { loadCourseExamResults, findConfirmedResultByEmail } from "@/lib/exam-links/results";
+import { buildCertificateSections } from "@/lib/esami/certificate-data";
+import { getClassAverage } from "@/lib/esami/class-average";
 import type { ExamFamily, ExamResult, ExamResultStatus } from "@/lib/domain";
 
 export default async function Page({
@@ -36,6 +38,7 @@ export default async function Page({
     course?.type === "certificato" ? "nihonshu" : course?.type === "shochu" ? "shochu" : null;
 
   let result: ExamResult | null = null;
+  let classAvg: number | null = null;
   if (course && family) {
     const subs = await loadCourseExamResults(id, family);
     // Only a CONFIRMED outcome yields a certificate — matching the email/PDF/
@@ -43,6 +46,13 @@ export default async function Page({
     // email (corsista row wins) — see findConfirmedResultByEmail.
     const sub = findConfirmedResultByEmail(subs, decoded);
     if (sub) {
+      // Same enrichment the emailed PDF gets, so the printable staff report and
+      // the student's certificate stay in lock-step (owner batch 16).
+      const [secs, avg] = await Promise.all([
+        buildCertificateSections(course.id, family, subs, sub).catch(() => []),
+        getClassAverage(family).catch(() => null),
+      ]);
+      classAvg = avg;
       result = {
         email: sub.studentEmail,
         name: sub.studentName,
@@ -50,7 +60,7 @@ export default async function Page({
         status: (sub.currentResult as ExamResultStatus | null) ?? sub.suggested,
         completedAt: sub.submittedAt,
         durationMin: 0,
-        sections: [],
+        sections: secs.map((s) => ({ cat: s.name, label: s.name, short: s.name, pct: s.pct })),
         wrongImportant: sub.answers
           .filter((a) => a.ok === false)
           .map((a) => ({
@@ -82,6 +92,7 @@ export default async function Page({
       result={result}
       family={family}
       courseId={id}
+      classAvg={classAvg}
       course={{
         day: course.day,
         month: course.month,

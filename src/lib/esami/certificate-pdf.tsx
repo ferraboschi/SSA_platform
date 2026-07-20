@@ -18,6 +18,8 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { REPORT_I18N, type ReportLang } from "@/lib/i18n/report";
+import { EXAM_THRESHOLDS } from "@/lib/domain/constants";
+import { weakAreas, type ExamSection } from "./exam-sections";
 import type { ExamFamily } from "@/lib/domain";
 
 // CJK font for the Japanese certificate page. Static (non-variable) Noto Sans JP
@@ -77,7 +79,11 @@ export interface CertificatePdfInput {
   /** Objective score %, or null when no number is certified (all-manual exam or
    *  operator override) — the certificate then shows the outcome alone. */
   score: number | null;
-  sections: { label: string; pct: number }[];
+  /** Per-area score bars ({name, pct}); [] hides the breakdown block. */
+  sections: ExamSection[];
+  /** Cohort average % to print next to the pass threshold, or null to show the
+   *  threshold alone (thin data → no misleading media; owner batch 16). */
+  classAvg?: number | null;
   course: { day: number; month: string; year: number; city: string; educatorName: string };
   completedAt: string;
 }
@@ -88,10 +94,19 @@ const COLORS = {
   mute: "#6b7280",
   faint: "#9ca3af",
   border: "#e5e7eb",
+  track: "#f0f0f3",
   pass: "#1a7f43",
   retrial: "#b45309",
   fail: "#b42318",
+  // Soft per-verdict tints for the callout / next-steps boxes (React-PDF has no
+  // color-mix — these are the verdict hues at ~7% over white).
+  passBg: "#eef7f1",
+  retrialBg: "#fdf4e8",
+  failBg: "#fdeeec",
 };
+
+/** Pass threshold as a whole percentage (80) — the fixed reference under the score. */
+const PASS_PCT = Math.round(EXAM_THRESHOLDS.pass * 100);
 
 const styles = StyleSheet.create({
   page: { paddingTop: 48, paddingBottom: 40, paddingHorizontal: 48, fontSize: 11, color: COLORS.text, fontFamily: "Helvetica" },
@@ -107,18 +122,26 @@ const styles = StyleSheet.create({
   scoreBox: { marginTop: 22, padding: 16, borderWidth: 1.5, borderRadius: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   scoreLabel: { fontSize: 9, letterSpacing: 1, textTransform: "uppercase", fontFamily: "Helvetica-Bold" },
   scoreNum: { fontSize: 38, fontFamily: "Helvetica-Bold" },
+  scoreRight: { alignItems: "flex-end" },
   statusBig: { fontSize: 22, fontFamily: "Helvetica-Bold" },
+  scoreRef: { fontSize: 8.5, color: COLORS.mute, marginTop: 5, fontFamily: "Helvetica-Bold" },
   sectionTitle: { fontSize: 9, color: COLORS.mute, letterSpacing: 1, textTransform: "uppercase", marginTop: 22, marginBottom: 8, fontFamily: "Helvetica-Bold" },
   advice: { fontSize: 10.5, lineHeight: 1.5, marginTop: 8 },
   barRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
   barLabel: { width: 200, fontSize: 10 },
-  barTrack: { flex: 1, height: 5, backgroundColor: "#f0f0f3", borderRadius: 2, marginHorizontal: 8 },
+  barTrack: { flex: 1, height: 5, backgroundColor: COLORS.track, borderRadius: 2, marginHorizontal: 8, position: "relative" },
+  barThresh: { position: "absolute", left: `${PASS_PCT}%`, top: -1.5, bottom: -1.5, width: 1, backgroundColor: COLORS.faint },
   barPct: { width: 34, fontSize: 10, textAlign: "right", fontFamily: "Helvetica-Bold" },
+  calloutBox: { marginTop: 8, padding: 10, borderWidth: 1, borderRadius: 6 },
+  calloutText: { fontSize: 10, lineHeight: 1.5 },
   footer: { position: "absolute", bottom: 32, left: 48, right: 48, flexDirection: "row", justifyContent: "space-between", fontSize: 8.5, color: COLORS.faint, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 10 },
 });
 
 function statusColor(status: CertificatePdfInput["status"]): string {
   return status === "passed" ? COLORS.pass : status === "retrial" ? COLORS.retrial : COLORS.fail;
+}
+function statusBg(status: CertificatePdfInput["status"]): string {
+  return status === "passed" ? COLORS.passBg : status === "retrial" ? COLORS.retrialBg : COLORS.failBg;
 }
 function barColor(pct: number): string {
   return pct >= 80 ? COLORS.pass : pct >= 70 ? COLORS.retrial : COLORS.fail;
@@ -142,6 +165,22 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
   // byte-identically while keeping the style arrays free of undefined elements.
   const jaFont: { fontFamily?: string } =
     lang === "ja" ? { fontFamily: JA_FONT_FAMILY } : {};
+  // Bold emphasis inside a mixed Text: JA has a single weight (no Helvetica-Bold
+  // face registered), so emphasis there just reuses the CJK family.
+  const boldFont: { fontFamily: string } =
+    lang === "ja" ? { fontFamily: JA_FONT_FAMILY } : { fontFamily: "Helvetica-Bold" };
+
+  // Reference line under the score: the fixed 80% pass threshold, plus the
+  // cohort media only when enough results back it (else the threshold alone).
+  const refLine =
+    `${t.refThreshold} ${PASS_PCT}%` +
+    (input.classAvg != null ? ` · ${t.classAvg} ${input.classAvg}%` : "");
+  // Areas to consolidate — derived from the per-area bars (null when the exam
+  // has no category breakdown, i.e. sections weren't supplied).
+  const weak = weakAreas(input.sections, input.status);
+  const weakList = weak
+    ? weak.items.map((s) => `${s.name} (${Math.round(s.pct)}%)`).join(", ")
+    : "";
 
   return (
     <Page size="A4" style={[styles.page, jaFont]}>
@@ -170,20 +209,21 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
             <Text style={[styles.scoreNum, jaFont, { color: sc }]}>{input.score}%</Text>
           </View>
         )}
-        <Text style={[styles.statusBig, jaFont, { color: sc }]}>{title}</Text>
+        <View style={styles.scoreRight}>
+          <Text style={[styles.statusBig, jaFont, { color: sc }]}>{title}</Text>
+          {input.score != null && <Text style={[styles.scoreRef, jaFont]}>{refLine}</Text>}
+        </View>
       </View>
-
-      <Text style={[styles.sectionTitle, jaFont]}>{t.aiSummary}</Text>
-      <Text style={[styles.advice, jaFont]}>{t.advice[input.status]}</Text>
 
       {input.sections.length > 0 && (
         <>
           <Text style={[styles.sectionTitle, jaFont]}>{t.breakdown}</Text>
           {input.sections.map((s, i) => (
             <View key={i} style={styles.barRow}>
-              <Text style={[styles.barLabel, jaFont]}>{s.label}</Text>
+              <Text style={[styles.barLabel, jaFont]}>{s.name}</Text>
               <View style={styles.barTrack}>
                 <View style={{ width: `${Math.max(0, Math.min(100, s.pct))}%`, height: 5, backgroundColor: barColor(s.pct), borderRadius: 2 }} />
+                <View style={styles.barThresh} />
               </View>
               <Text style={[styles.barPct, jaFont, { color: barColor(s.pct) }]}>{Math.round(s.pct)}%</Text>
             </View>
@@ -191,9 +231,31 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
         </>
       )}
 
+      {weak && (
+        <>
+          <Text style={[styles.sectionTitle, jaFont]}>{t.consolidate[input.status]}</Text>
+          <View style={[styles.calloutBox, { borderColor: sc, backgroundColor: statusBg(input.status) }]}>
+            <Text style={[styles.calloutText, jaFont]}>
+              {t.weakLead[weak.leadKey]} <Text style={boldFont}>{weakList}</Text>
+            </Text>
+          </View>
+        </>
+      )}
+
+      <Text style={[styles.sectionTitle, jaFont]}>{t.aiSummary}</Text>
+      <Text style={[styles.advice, jaFont]}>{t.advice[input.status]}</Text>
+
+      <Text style={[styles.sectionTitle, jaFont]}>{t.nextTitle}</Text>
+      <View style={[styles.calloutBox, { borderColor: sc, backgroundColor: statusBg(input.status) }]}>
+        <Text style={[styles.calloutText, jaFont]}>{t.next[input.status]}</Text>
+      </View>
+
       <Text style={[styles.privacy, jaFont]}>{PRIVACY_NOTE[lang]}</Text>
 
-      <View style={styles.footer}>
+      {/* `fixed` pins the footer to the bottom of every page, so if a long
+          verdict ever spills past one A4 the issued/branding line still lands
+          correctly instead of appearing only on whichever page it flows onto. */}
+      <View style={styles.footer} fixed>
         <Text style={jaFont}>{t.issued}: {issued}</Text>
         <Text style={jaFont}>{t.footer}</Text>
       </View>

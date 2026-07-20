@@ -74,7 +74,16 @@ export async function sendExamResultTestAction(
       family: "nihonshu",
       status: outcome,
       score: 82,
-      sections: [],
+      // Sample per-area breakdown + cohort media so the test email shows the
+      // enriched certificate exactly as a real student would receive it.
+      sections: [
+        { name: "Storia & Cultura", pct: 92 },
+        { name: "Produzione & Tecnica", pct: 78 },
+        { name: "Varietà & Stili", pct: 84 },
+        { name: "Degustazione & Sensoriale", pct: 66 },
+        { name: "Servizio & Pairing", pct: 88 },
+      ],
+      classAvg: 79,
       course: { day: 14, month: "Settembre", year: 2026, city: "Online", educatorName: "—" },
       completedAt: new Date().toISOString(),
     });
