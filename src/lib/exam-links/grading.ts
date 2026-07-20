@@ -67,6 +67,17 @@ const asArray = (given: string | string[] | undefined): string[] =>
 const isBlank = (given: string | string[] | undefined): boolean =>
   asArray(given).every((v) => String(v).trim() === "");
 
+/** Accepted FILL answers, split on comma, semicolon OR newline (owner batch 21).
+ *  The editor stores what the author typed; a key entered as "taruzake;taru-zake;taru"
+ *  would otherwise be ONE accepted string, so a student typing "taruzake" — a value
+ *  literally in the list — was marked wrong. Splitting here fixes existing keys too. */
+export function splitAccepted(correct: Array<number | string> | undefined): string[] {
+  return (correct ?? [])
+    .flatMap((c) => String(c).split(/[,;\n]+/))
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 /** MULTI "either / or / both" rule (owner batch 17): when the answer key lists
  *  more than one correct option, naming ANY non-empty subset of them — and no
  *  wrong option — is fully correct. A bouquet that "suggests honjozo OR junmai"
@@ -105,7 +116,7 @@ export function multiFraction(
 
 /** Human-readable correct answer for a question, per type ("—" when keyless). */
 function correctDisplay(q: GradableQuestion, localized: GradableQuestion): string {
-  if (q.type === "fill") return (q.correct ?? []).map(String).join(", ") || "—";
+  if (q.type === "fill") return splitAccepted(q.correct).join(", ") || "—";
   if (q.type === "order") return (q.correct ?? []).map(String).join(" → ") || "—";
   if (isObjective(q.type) && q.correct?.length) {
     return q.correct.map((i) => localized.options[Number(i)]).filter(Boolean).join(", ") || "—";
@@ -224,7 +235,7 @@ export function gradeAnswers(
     // FILL ("Riempi spazio"): the typed answer is matched, case-insensitive,
     // against the accepted strings (q.correct). Deterministic → auto-graded.
     if (q.type === "fill") {
-      const accepted = (q.correct ?? []).map((c) => normStr(c)).filter(Boolean);
+      const accepted = splitAccepted(q.correct).map(normStr).filter(Boolean);
       // Accepted answers exist in Italian only. If the student saw a TRANSLATED
       // version of this question there is no localized key to compare against →
       // route to manual review (never auto-fail a correct EN/JA answer vs the IT key).
@@ -246,7 +257,7 @@ export function gradeAnswers(
         type: q.type,
         text: q.text,
         given: fmtGiven(given, localized),
-        correct: (q.correct ?? []).map(String).join(", "),
+        correct: splitAccepted(q.correct).join(", "),
         ok,
         fraction: ok ? 1 : 0,
       };

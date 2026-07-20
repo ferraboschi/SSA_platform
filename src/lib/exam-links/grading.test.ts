@@ -7,6 +7,7 @@ import {
   gradeAnswers,
   certifiedScore,
   isCorrectSubset,
+  splitAccepted,
   type GradableQuestion,
 } from "./grading";
 
@@ -430,6 +431,26 @@ describe("unanswered & partial credit (batch 10)", () => {
     // single (1pt) right + multi (3pt) at 2/3 → (1 + 2) / 4 = 75
     const r = gradeAnswers([single, multi], { s1: ["A"], m1: ["A", "B"] });
     expect(r.autoScore).toBe(75);
+  });
+});
+
+// ── Batch 21 (owner): FILL accepted answers split on comma/semicolon/newline ──
+describe("fill accepted answers — separator-robust", () => {
+  it("splitAccepted breaks on comma, semicolon and newline, trims, drops empties", () => {
+    expect(splitAccepted(["taruzake;taru-zake;taru"])).toEqual(["taruzake", "taru-zake", "taru"]);
+    expect(splitAccepted(["a; b ,c\nd", "  ", "e"])).toEqual(["a", "b", "c", "d", "e"]);
+    expect(splitAccepted([])).toEqual([]);
+    expect(splitAccepted(undefined)).toEqual([]);
+  });
+
+  it("a key authored with semicolons accepts EACH variant (the taruzake bug)", () => {
+    const taru = q({ id: "t", type: "fill", options: [], correct: ["taruzake;taru-zake;taru"] });
+    expect(gradeAnswers([taru], { t: "taruzake" }).correct).toBe(1);
+    expect(gradeAnswers([taru], { t: "TARU-ZAKE" }).correct).toBe(1); // case-insensitive
+    expect(gradeAnswers([taru], { t: " taru " }).correct).toBe(1); // trimmed
+    expect(gradeAnswers([taru], { t: "sake" }).correct).toBe(0); // genuinely wrong
+    // The correct-answer display is cleaned up too (semicolons → comma list).
+    expect(gradeAnswers([taru], { t: "sake" }).detail[0].correct).toBe("taruzake, taru-zake, taru");
   });
 });
 

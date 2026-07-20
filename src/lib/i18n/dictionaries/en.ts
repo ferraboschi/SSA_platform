@@ -766,7 +766,7 @@ export const en: Dictionary = {
       aiNotePre: "The AI compares the student's answer with the model and assigns a score 0–{points}. Auto-confirm threshold: ",
       aiNoteStrong: "confidence ≥ 80%",
       aiNotePost: ". Answers below it go to the manual review queue.",
-      fillHint: "Accepted answers (case-insensitive, comma-separated):",
+      fillHint: "Accepted answers (case-insensitive; separate with comma, semicolon or newline):",
       categoria: "Category",
       puntiField: "Points",
       importanteField: "Important",

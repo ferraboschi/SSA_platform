@@ -144,7 +144,7 @@ const TYPE_TIPS: Record<string, string> = {
   multi: "Scelta multipla: lo studente può sceglierne PIÙ di una. Segna TUTTE le corrette. Auto-correzione (devono coincidere esattamente).",
   truefalse: "Vero / Falso: due opzioni, segna quella corretta. Auto-correzione.",
   image: "Identifica immagine: mostra un'immagine (incolla l'URL qui sotto) e lo studente sceglie l'opzione corretta. Segna la corretta. Auto-correzione.",
-  fill: "Riempi spazio: lo studente DIGITA la risposta. Elenca le risposte accettate separate da virgola (maiuscole/minuscole e spazi non contano). Auto-correzione.",
+  fill: "Riempi spazio: lo studente DIGITA la risposta. Elenca le risposte accettate separandole con virgola, punto e virgola o a capo (maiuscole/minuscole e spazi non contano). Auto-correzione.",
   open: "Testo libero: risposta aperta, corretta dall'AI in base alle nozioni della Sake Sommelier Association (suggerimento, poi confermi a mano).",
   match: "Abbinamento: lo studente abbina gli elementi di sinistra a quelli di destra. ⚠ Non ancora disponibile nel test studente.",
   order: "Ordina: lo studente mette gli elementi nell'ordine corretto. ⚠ Non ancora disponibile nel test studente.",
@@ -398,7 +398,7 @@ export function QuestionDetail({
             <input
               className="input"
               value={((q.correct ?? []) as Array<number | string>).join(", ")}
-              onChange={(e) => onChange({ correct: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+              onChange={(e) => onChange({ correct: e.target.value.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean) })}
             />
           </div>
         )}

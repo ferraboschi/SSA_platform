@@ -768,7 +768,7 @@ export const it = {
       aiNotePre: "L'AI confronterà la risposta dello studente con il modello e assegnerà un punteggio 0–{points}. Soglia auto-conferma: ",
       aiNoteStrong: "confidenza ≥ 80%",
       aiNotePost: ". Le risposte sotto vanno in coda di revisione manuale.",
-      fillHint: "Risposte accettate (case-insensitive, separa con virgola):",
+      fillHint: "Risposte accettate (case-insensitive; separa con virgola, punto e virgola o a capo):",
       categoria: "Categoria",
       puntiField: "Punti",
       importanteField: "Importante",
