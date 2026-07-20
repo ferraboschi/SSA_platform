@@ -28,6 +28,16 @@ function enDate(day: number | null | undefined, monthIt: string, year: number): 
   if (mIdx < 0 || !year) return "";
   return `${day || 1} ${EN_MONTHS[mIdx]} ${year}`;
 }
+/** DOB is now collected via a date picker (ISO YYYY-MM-DD) — render it in the
+ *  template's "1 January 1980" form. A legacy free-typed value passes through. */
+function enDob(raw: string | undefined | null): string {
+  const v = (raw ?? "").trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return v;
+  const [, y, mo, d] = m;
+  const mi = Number(mo) - 1;
+  return mi >= 0 && mi < 12 ? `${Number(d)} ${EN_MONTHS[mi]} ${y}` : v;
+}
 
 /** "Maschile"/"Male"/"男性" → the template's M/F/Other. */
 function genderMFO(raw: string | undefined): string {
@@ -83,7 +93,7 @@ export async function GET(
       passFail: res?.currentResult ? passFail(res.currentResult) : "",
       gender: genderMFO(reg?.gender),
       nationality: reg?.nationality ?? "",
-      dob: reg?.dob ?? "",
+      dob: enDob(reg?.dob),
       occupation: reg?.occupation ?? "",
       residency: reg?.residency ?? "",
       contactNumber: phone ?? phoneByEmail.get(key) ?? "",

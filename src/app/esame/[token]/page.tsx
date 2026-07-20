@@ -255,7 +255,10 @@ export default async function Page({
       // doesn't have (identity fields stay server-derived — never re-typed).
       registrationFields={
         mode === "exam" && res.payload.t === "final"
-          ? ["gender", "nationality", "dob", "occupation", "residency"]
+          ? // "residency" removed (owner batch 15): redundant with the delivery
+            // address we already have. The XLS Residency column stays and is
+            // filled from that address / by SSA London.
+            ["gender", "nationality", "dob", "occupation"]
           : undefined
       }
       reveal={mode === "validate"}

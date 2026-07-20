@@ -53,7 +53,8 @@ describe("verdictFromPct — round to integer THEN compare to thresholds", () =>
 describe("buildCorrectionDraft — mixed exam", () => {
   // Objective right + wrong (incl. an important one), a model-graded open, a
   // blank open with NO grading result, a stub-graded fill, and a match question
-  // that must stay outside both point pools.
+  // (ok===null, no key) — batch 15: it now enters the AI/open lane and, lacking
+  // a grading result here, counts as a failed 0-point open grade (never ignored).
   const answers = [
     ans({ qid: "q1", ok: true, given: "Junmai", correct: "Junmai" }),
     ans({ qid: "q2", ok: false, given: "Honjozo", correct: "Ginjo" }),
@@ -82,14 +83,14 @@ describe("buildCorrectionDraft — mixed exam", () => {
     expect(d.totals.objectiveEarned).toBe(1);
     expect(d.totals.objectiveMax).toBe(4);
   });
-  it("sums the open lane over open/fill only — match/order excluded from both pools", () => {
-    expect(d.totals.openEarned).toBe(3); // 2.5 + 0 (missing) + 0.5
-    expect(d.totals.openMax).toBe(7); // 3 + 3 + 1 — q7's 2 points nowhere
-    expect(d.totals.max).toBe(11);
+  it("sums the open lane over EVERY ok===null answer — keyless/match now included", () => {
+    expect(d.totals.openEarned).toBe(3); // 2.5 + 0 (blank) + 0.5 + 0 (match, ungraded)
+    expect(d.totals.openMax).toBe(9); // 3 + 3 + 1 + 2 (q7's points now count)
+    expect(d.totals.max).toBe(13);
     expect(d.totals.earned).toBe(4);
   });
   it("computes combinedPct rounded and the verdict from it", () => {
-    expect(d.combinedPct).toBe(36); // round(100 * 4 / 11)
+    expect(d.combinedPct).toBe(31); // round(100 * 4 / 13)
     expect(d.verdict).toBe("failed");
   });
   it("computes objectivePct count-based, like the live auto-corrector", () => {
@@ -99,8 +100,8 @@ describe("buildCorrectionDraft — mixed exam", () => {
     expect(d.wrongAnswers.map((w) => w.qid)).toEqual(["q2", "q3"]);
     expect(d.wrongAnswers[0]).toMatchObject({ important: true, points: 2, correct: "Ginjo" });
   });
-  it("produces one OpenGrade per open/fill answer, in input order", () => {
-    expect(d.openGrades.map((g) => g.qid)).toEqual(["q4", "q5", "q6"]);
+  it("produces one OpenGrade per ok===null answer, in input order", () => {
+    expect(d.openGrades.map((g) => g.qid)).toEqual(["q4", "q5", "q6", "q7"]);
     expect(d.openGrades[0]).toMatchObject({
       points: 2.5,
       maxPoints: 3,
@@ -110,9 +111,10 @@ describe("buildCorrectionDraft — mixed exam", () => {
       failed: false,
     });
   });
-  it("marks the missing grading result as failed with 0 points", () => {
+  it("marks answers with no grading result as failed with 0 points", () => {
     expect(d.openGrades[1]).toMatchObject({ qid: "q5", points: 0, confidence: 0, failed: true });
-    expect(d.totals.openFailed).toBe(1);
+    expect(d.openGrades[3]).toMatchObject({ qid: "q7", points: 0, failed: true });
+    expect(d.totals.openFailed).toBe(2); // q5 (blank) + q7 (match, no result)
   });
   it("reports provider 'model' when any answer was model-graded", () => {
     expect(d.aiProvider).toBe("model");
@@ -232,5 +234,21 @@ describe("buildCorrectionDraft — guards", () => {
     const d = build([ans({ qid: "ghost", ok: false })]);
     expect(d.totals.objectiveMax).toBe(1);
     expect(d.wrongAnswers[0]).toMatchObject({ points: 1, important: false });
+  });
+
+  // Owner batch 15: a CHOICE question whose answer key was left empty grades to
+  // ok===null; it must be AI-graded and its points COUNTED (never left "in
+  // valutazione", never silently dropped from the total).
+  it("scores a keyless multi via the AI open lane and counts its points", () => {
+    const d = build(
+      [ans({ qid: "water", type: "multi", ok: null, given: "Ferro, Solfato" })],
+      { water: { points: 2, important: false } },
+      { water: graded({ points: 1, vote: 3, confidence: 0.7 }) }, // ~50%
+    );
+    expect(d.openGrades.map((g) => g.qid)).toEqual(["water"]);
+    expect(d.openGrades[0]).toMatchObject({ points: 1, maxPoints: 2, vote: 3, failed: false });
+    expect(d.totals.openMax).toBe(2);
+    expect(d.totals.openEarned).toBe(1);
+    expect(d.combinedPct).toBe(50); // 1 / 2
   });
 });

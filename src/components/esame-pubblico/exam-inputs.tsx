@@ -139,6 +139,18 @@ export function RegInput({
         </div>
       ) : field === "name" ? (
         <NameField value={val} onChange={onChange} parts={nameParts} onParts={onNameParts} />
+      ) : field === "dob" ? (
+        // Native date picker → a calendar, no free-typed formats to get wrong.
+        // Stored ISO (YYYY-MM-DD); the XLS export renders it "1 January 1990".
+        <input
+          className="exam-public-input"
+          type="date"
+          value={/^\d{4}-\d{2}-\d{2}$/.test(val) ? val : ""}
+          max={new Date().toISOString().slice(0, 10)}
+          min="1920-01-01"
+          onChange={(e) => onChange(e.target.value)}
+          style={{ maxWidth: 240 }}
+        />
       ) : field === "address" ? (
         <GoogleAddressInput value={val} onChange={onChange} />
       ) : field === "email" ? (

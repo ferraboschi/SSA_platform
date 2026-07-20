@@ -145,6 +145,11 @@ export async function buildDayEsito(
     detail: res.detail.map((d) => {
       const g = d.ok === null ? gradeByQid.get(d.qid) : undefined;
       const cat = qMeta.get(d.qid)?.cat;
+      // Belt & braces: once grading is DONE (a draft exists) an answered
+      // ok===null question with no AI grade must NOT stay "in valutazione"
+      // forever — surface it as "Da rivedere" so every question is closed.
+      const strandedAfterGrading =
+        d.ok === null && !d.unanswered && draft != null && !g && d.given !== "" && d.given !== "—";
       return {
         qid: d.qid,
         text: textById.get(d.qid) ?? d.text,
@@ -158,7 +163,7 @@ export async function buildDayEsito(
         ...(d.ok === false && !d.unanswered && (d.fraction ?? 0) > 0 ? { partial: true } : {}),
         ...(g && !g.failed
           ? { aiVote: g.vote, aiPoints: g.points, aiMaxPoints: g.maxPoints, aiRationale: g.rationale }
-          : g?.failed
+          : g?.failed || strandedAfterGrading
             ? { aiFailed: true }
             : {}),
       };

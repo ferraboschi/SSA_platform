@@ -390,10 +390,17 @@ export function ExamRunner({
   }, [collectRegistration, registrationFields, questions]);
 
   const total = steps.length;
+  // Registration/context steps lead the flow and are NOT test questions (owner
+  // batch 15: the question counter must start at 1 from the first real
+  // question). `qNumber` maps a step index → its 1-based question number.
+  const regCount = steps.reduce((n, s) => n + (s.kind === "reg" ? 1 : 0), 0);
+  const numQuestions = total - regCount;
+  const qNumber = (stepIdx: number) => Math.max(1, stepIdx - regCount + 1);
   // Clamp a resumed/stale idx into range (defensive: the question set could have
   // shrunk between sessions). `step` falls back so the render never reads undefined.
   const safeIdx = total > 0 ? Math.min(Math.max(0, idx), total - 1) : 0;
   const step = steps[safeIdx];
+  const onReg = step?.kind === "reg";
   useEffect(() => {
     if (total > 0 && idx > total - 1) setIdx(total - 1);
   }, [total, idx]);
@@ -750,7 +757,9 @@ export function ExamRunner({
           <div className="exam-public-progress-bar" style={{ width: `${pct}%` }} />
         </div>
         <div className="exam-public-counter">
-          {t.question} {idx + 1} {t.of} {total} · {idx + 1}/{total}
+          {onReg
+            ? t.regInfoStep
+            : `${t.question} ${qNumber(idx)} ${t.of} ${numQuestions} · ${qNumber(idx)}/${numQuestions}`}
         </div>
 
         {/* Skipped-question tags — jump straight to a question you moved past,
@@ -797,7 +806,7 @@ export function ExamRunner({
                     cursor: "pointer",
                   }}
                 >
-                  {n + 1}
+                  {qNumber(n)}
                 </button>
               );
             })}
@@ -818,7 +827,7 @@ export function ExamRunner({
                   whiteSpace: "nowrap",
                 }}
               >
-                ↩ {t.backToQuestion.replace("{n}", String(maxIdx + 1))}
+                ↩ {t.backToQuestion.replace("{n}", String(qNumber(maxIdx)))}
               </button>
             )}
           </div>
@@ -1005,7 +1014,7 @@ export function ExamRunner({
                   style={{ padding: "4px 11px", fontSize: 13, minWidth: 0 }}
                   onClick={() => enterReview(Number(si))}
                 >
-                  {t.question} {Number(si) + 1}
+                  {t.question} {qNumber(Number(si))}
                 </button>
               ))}
             </div>

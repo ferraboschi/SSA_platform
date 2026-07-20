@@ -63,8 +63,12 @@ export async function runSingleSubmissionCorrection(
   const at = new Date().toISOString();
   const openResults = new Map<string, OpenAnswerResult>();
   for (const a of sub.answers) {
-    const gradableOpen =
-      a.ok === null && (a.type === "open" || a.type === "fill") && a.given !== "" && a.given !== "—";
+    // Grade with the AI EVERY answered question the objective grader could not
+    // close (ok === null): open/fill without a key AND — the owner's rule "a
+    // fine valutazione ogni domanda deve avere un esito" — a CHOICE question
+    // whose answer key was left empty in the library (else it would sit "in
+    // valutazione" forever, since it is neither auto-graded nor open).
+    const gradableOpen = a.ok === null && a.given !== "" && a.given !== "—";
     if (!gradableOpen) continue;
     const maxPoints = questionMeta.get(a.qid)?.points ?? 1;
     try {
@@ -145,13 +149,11 @@ export async function runCourseCorrection(
     try {
       const openResults = new Map<string, OpenAnswerResult>();
       for (const a of sub.answers) {
-        // Only open/fill answers the objective grader could not auto-grade,
-        // and only when the student actually wrote something ("—" = blank).
-        const gradableOpen =
-          a.ok === null &&
-          (a.type === "open" || a.type === "fill") &&
-          a.given !== "" &&
-          a.given !== "—";
+        // EVERY answered question the objective grader could not close
+        // (ok === null) goes to the AI — open/fill without a key AND a choice
+        // question whose key was left empty in the library — so nothing is
+        // ever left "in valutazione". Blank ("—") answers are already 0.
+        const gradableOpen = a.ok === null && a.given !== "" && a.given !== "—";
         if (!gradableOpen) continue;
         const maxPoints = questionMeta.get(a.qid)?.points ?? 1;
         try {

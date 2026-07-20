@@ -68,11 +68,16 @@ const MISSING_GRADE_RATIONALE =
  *  persisted totals must not carry float noise into the JSON. */
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
-/** True when the answer belongs to the AI-graded open lane: open/fill questions
- *  the objective grader routed to manual review. match/order also grade to
- *  ok===null but are NOT AI-gradable → they stay outside both point pools. */
+/** True when the answer belongs to the AI-graded open lane. `ok === null` means
+ *  the objective grader could NOT close it — open/fill without a usable key,
+ *  match/order, AND a choice question whose answer key was left empty in the
+ *  library (owner batch 15: it must still be scored, not ignored). Blank
+ *  answers never reach here (they resolve to ok=false in the objective lane),
+ *  so `ok === null` is exactly "answered but objectively ungradeable" → the AI
+ *  grades it and its points count toward the total. Must stay in lock-step with
+ *  the grading predicate in correction-run.ts. */
 function isOpenLane(a: CorrectionAnswer): boolean {
-  return a.ok === null && (a.type === "open" || a.type === "fill");
+  return a.ok === null;
 }
 
 /** Draft verdict from a combined percentage. Rounds to the NEAREST INTEGER
