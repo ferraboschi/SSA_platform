@@ -118,12 +118,17 @@ describe("gradeAnswers — fill (Riempi spazio)", () => {
     expect(r.correct).toBe(1);
     expect(r.detail[0].ok).toBe(true);
   });
-  it("marks a wrong fill answer incorrect (still gradable)", () => {
+  it("routes an ANSWERED non-matching fill to the AI (batch 21), not a hard fail", () => {
+    // Owner batch 21: a paraphrase/more-complete typed answer isn't auto-failed —
+    // it leaves the objective lane (ok=null) so the generous AI can grade it,
+    // with the accepted answer carried along as the reference.
     const fill = q({ id: "f2", type: "fill", correct: ["Gohyakumangoku"] });
     const r = gradeAnswers([fill], { f2: "Yamada Nishiki" });
-    expect(r.gradable).toBe(1);
+    expect(r.detail[0].ok).toBeNull(); // → AI lane, not a deterministic wrong
+    expect(r.manual).toBe(1);
+    expect(r.gradable).toBe(0); // no longer counted in the objective denominator
     expect(r.correct).toBe(0);
-    expect(r.detail[0].ok).toBe(false);
+    expect(r.detail[0].correct).toBe("Gohyakumangoku"); // reference for the AI
   });
   it("sends a fill with NO accepted answers to manual review", () => {
     const fill = q({ id: "f3", type: "fill", correct: [] });
@@ -448,9 +453,10 @@ describe("fill accepted answers — separator-robust", () => {
     expect(gradeAnswers([taru], { t: "taruzake" }).correct).toBe(1);
     expect(gradeAnswers([taru], { t: "TARU-ZAKE" }).correct).toBe(1); // case-insensitive
     expect(gradeAnswers([taru], { t: " taru " }).correct).toBe(1); // trimmed
-    expect(gradeAnswers([taru], { t: "sake" }).correct).toBe(0); // genuinely wrong
+    // A non-matching answer is no longer a hard fail — it goes to the AI (ok=null).
+    expect(gradeAnswers([taru], { t: "sakè" }).detail[0].ok).toBeNull();
     // The correct-answer display is cleaned up too (semicolons → comma list).
-    expect(gradeAnswers([taru], { t: "sake" }).detail[0].correct).toBe("taruzake, taru-zake, taru");
+    expect(gradeAnswers([taru], { t: "sakè" }).detail[0].correct).toBe("taruzake, taru-zake, taru");
   });
 });
 

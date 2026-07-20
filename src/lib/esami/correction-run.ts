@@ -79,7 +79,11 @@ export async function runSingleSubmissionCorrection(
     if (!gradableOpen) continue;
     const maxPoints = questionMeta.get(a.qid)?.points ?? 1;
     try {
-      const sug = await gradeOpenAnswer({ question: a.text, answer: a.given, maxPoints, kbSection: a.cat, lang: gradeLang });
+      // A fill routed to the AI (batch 21) carries its accepted answer in a.correct
+      // — pass it as the reference so the model grades against the intended answer,
+      // not KB retrieval alone. Open questions have a.correct === "—" → no rubric.
+      const rubricKey = a.correct && a.correct !== "—" ? a.correct : undefined;
+      const sug = await gradeOpenAnswer({ question: a.text, answer: a.given, maxPoints, kbSection: a.cat, lang: gradeLang, rubricKey });
       openResults.set(a.qid, {
         points: sug.suggestedPoints,
         vote: sug.vote,
@@ -176,6 +180,8 @@ export async function runCourseCorrection(
             maxPoints,
             kbSection: a.cat,
             lang: gradeLang,
+            // Fill reference answer (batch 21); open questions pass "—" → no rubric.
+            rubricKey: a.correct && a.correct !== "—" ? a.correct : undefined,
           });
           openResults.set(a.qid, {
             points: sug.suggestedPoints,

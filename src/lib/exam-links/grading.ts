@@ -244,22 +244,37 @@ export function gradeAnswers(
         manual++;
         return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: "—", ok: null };
       }
-      gradable++;
-      gradablePts += q.points ?? 1;
       const givenNorm = normStr(Array.isArray(given) ? given[0] : given);
-      const ok = givenNorm !== "" && accepted.includes(givenNorm);
-      if (ok) {
+      const exact = givenNorm !== "" && accepted.includes(givenNorm);
+      if (exact) {
+        gradable++;
+        gradablePts += q.points ?? 1;
         correct++;
         correctPts += q.points ?? 1;
+        return {
+          qid: q.id,
+          type: q.type,
+          text: q.text,
+          given: fmtGiven(given, localized),
+          correct: splitAccepted(q.correct).join(", "),
+          ok: true,
+          fraction: 1,
+        };
       }
+      // Owner batch 21: an ANSWERED fill that doesn't match the key exactly is NOT
+      // auto-failed — a paraphrase or more-complete answer ("distillato a base di
+      // vari cereali" vs "distillato") goes to the GENEROUS AI (like an open
+      // question), graded against the accepted answer as reference (passed as
+      // rubricKey by correction-run). Blanks were already closed as ok=false above
+      // (isBlank), so only genuinely-answered misses reach here → ok=null.
+      manual++;
       return {
         qid: q.id,
         type: q.type,
         text: q.text,
         given: fmtGiven(given, localized),
         correct: splitAccepted(q.correct).join(", "),
-        ok,
-        fraction: ok ? 1 : 0,
+        ok: null,
       };
     }
 
