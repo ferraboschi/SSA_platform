@@ -69,15 +69,47 @@ function resolveFinalSubmission(
   return subs.find((s) => s.testKey === "final" && sameSubject(s, confirmed)) ?? null;
 }
 
-/** Trim text to a max length, cutting on a word boundary when possible. Keeps
- *  every review field bounded so an over-long answer can't push page 2 past one
- *  page (react-pdf hangs on an unbreakable block taller than the page). */
+/** Trim text to a max length, cutting on a word boundary when possible. Used for
+ *  the question and the student's answer, where a trailing "…" is fine. */
 function trimTo(s: string | undefined, max: number): string {
   const t = (s ?? "").trim();
   if (t.length <= max) return t;
   const cut = t.slice(0, max);
   const lastSpace = cut.lastIndexOf(" ");
   return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
+}
+
+/** Trim a RATIONALE to whole sentences (owner batch 20: "accorciare va bene ma
+ *  devi finire la frase e creare un contenuto di senso compiuto"). Keeps
+ *  complete sentences up to `max`, never cutting one off and never leaving a
+ *  dangling "…"; if the very first sentence already exceeds `max` it is kept
+ *  whole (a slightly-long complete thought beats a truncated one). */
+function trimToSentences(s: string | undefined, max: number): string {
+  // Strip any ellipsis the model may have slipped in ("…" or "..") — the comment
+  // must read as a finished thought, never trail off.
+  const t = (s ?? "").replace(/…|\.{2,}/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  if (t.length <= max && /[.!?。！？]$/.test(t)) return t;
+  // Whole sentences only: a run of non-terminators + ONE end mark (Latin or CJK).
+  // A trailing unterminated fragment is intentionally excluded, not kept.
+  const sentences = t.match(/[^.!?。！？]+[.!?。！？]/g);
+  if (!sentences || sentences.length === 0) {
+    // No complete sentence (one long run-on): word-cut, closed with a period so
+    // it still reads as a whole rather than trailing off.
+    if (t.length <= max) return /[.!?。！？]$/.test(t) ? t : t + ".";
+    const cut = t.slice(0, max);
+    const lastSpace = cut.lastIndexOf(" ");
+    return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd().replace(/[,;:]+$/, "") + ".";
+  }
+  let out = "";
+  for (const raw of sentences) {
+    const p = raw.trim();
+    const next = out ? `${out} ${p}` : p;
+    if (out && next.length > max) break; // adding this sentence would overflow
+    out = next;
+    if (out.length >= max) break;
+  }
+  return out || sentences[0].trim();
 }
 
 /** Sections + open-answer review for a FINAL-exam resoconto.
@@ -127,10 +159,13 @@ export async function buildCertificateData(
       .eq("key", correctionKey(Number(courseId), finalSub.id))
       .maybeSingle();
     const draft = (row?.value as CorrectionDraft | null) ?? null;
-    // Language guard: only surface the review when the rationales are in the
-    // document's language (legacy drafts have no tag → treated as Italian).
-    const draftLang = draft ? draft.rationaleLang ?? "it" : null;
-    openReview = (draftLang !== docLang ? [] : draft?.openGrades ?? [])
+    // Only surface the review for a NEW-rubric draft whose rationale language
+    // matches the document (owner batch 20). `rationaleLang` is stamped only by
+    // the batch-19+ corrector, so an OLD draft (no tag) — third-person, "KB"
+    // wording, hard-truncated — is skipped entirely until it's re-corrected,
+    // rather than rendered with the stale tone.
+    const usable = draft?.rationaleLang != null && draft.rationaleLang === docLang;
+    openReview = (usable ? draft.openGrades : [])
       // Answered, actually graded (a failed AI call has no justification to show).
       .filter((g) => !g.failed && g.given && g.given !== "—" && g.rationale?.trim())
       // Worst-first: the answers that most need explaining lead — and survive the cap.
@@ -146,7 +181,8 @@ export async function buildCertificateData(
         ...(g.vote != null ? { vote: g.vote } : {}),
         points: g.points,
         maxPoints: g.maxPoints,
-        rationale: trimTo(g.rationale, RATIONALE_MAX),
+        // The comment must read as a complete thought — trim to whole sentences.
+        rationale: trimToSentences(g.rationale, RATIONALE_MAX),
       }));
   } catch {
     /* no draft / pre-migration — the resoconto simply omits the review page */

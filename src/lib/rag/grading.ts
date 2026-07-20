@@ -81,14 +81,16 @@ export class ClaudeGradingModel implements GradingModel {
       "5 = corretta: coglie il nucleo/ambito senza errori, ANCHE se sintetica. " +
       "In pratica: se ha capito l'argomento e non ha detto nulla di sbagliato, il voto è 5 " +
       "(o 4 se c'è una piccola imprecisione reale) — mai meno per il solo fatto di essere breve. " +
-      `MOTIVAZIONE (400-600 caratteri), scritta in ${outLang}: rivolgiti DIRETTAMENTE allo ` +
-      "studente in SECONDA PERSONA, dandogli del tu ('Hai colto…', 'Avresti potuto…'), MAI in " +
-      "terza persona ('Lo studente…'). NON nominare mai la 'knowledge base', i 'passaggi', le " +
-      "'fonti' o un 'database': parla delle nozioni della Sake Sommelier Association (o delle " +
-      "nozioni sul sake). La motivazione deve: (a) confermare cosa HAI colto correttamente, " +
-      "(b) offrire gli spunti di arricchimento dalle nozioni SSA in tono costruttivo. " +
-      `Rispondi SOLO con JSON {"voto": number (1..5), "confidence": number (0..1), ` +
-      `"rationale": string (in ${outLang}), "citations": number[] (i numeri [[n]] usati)}. ` +
+      `MOTIVAZIONE BREVE (1-2 frasi, massimo ~300 caratteri), scritta in ${outLang}: DEVE essere ` +
+      "di SENSO COMPIUTO, con TUTTE le frasi CONCLUSE — non lasciare MAI una frase a metà né " +
+      "terminare con puntini di sospensione. Rivolgiti DIRETTAMENTE allo studente in SECONDA " +
+      "PERSONA, dandogli del tu ('Hai colto…', 'Avresti potuto…'), MAI in terza persona ('Lo " +
+      "studente…', 'Il candidato…'). NON nominare MAI 'knowledge base', 'KB', 'passaggi', 'fonti' " +
+      "o 'database': parla dei CONTENUTI DEL CORSO (o delle nozioni della Sake Sommelier " +
+      "Association). Struttura: (a) una frase su cosa HAI colto correttamente; (b) se manca " +
+      "qualcosa, UNA frase con l'integrazione dai contenuti del corso. Concludi sempre l'ultima " +
+      `frase. Rispondi SOLO con JSON {"voto": number (1..5), "confidence": number (0..1), ` +
+      `"rationale": string (in ${outLang}, frasi complete), "citations": number[] (i numeri [[n]] usati)}. ` +
       "Niente commento, niente code fence.";
     const user =
       `NOZIONI SAKE SOMMELIER ASSOCIATION:\n${passages}\n\n` +
