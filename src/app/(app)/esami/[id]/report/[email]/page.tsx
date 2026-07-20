@@ -4,7 +4,7 @@ import { getDataSource } from "@/lib/data";
 import { requireNavAccess } from "@/lib/auth/guard";
 import { EsameReport } from "@/components/esami/EsameReport";
 import { loadCourseExamResults, findConfirmedResultByEmail } from "@/lib/exam-links/results";
-import { buildCertificateSections } from "@/lib/esami/certificate-data";
+import { buildCertificateData } from "@/lib/esami/certificate-data";
 import { getClassAverage } from "@/lib/esami/class-average";
 import type { ExamFamily, ExamResult, ExamResultStatus } from "@/lib/domain";
 
@@ -47,11 +47,13 @@ export default async function Page({
     const sub = findConfirmedResultByEmail(subs, decoded);
     if (sub) {
       // Same enrichment the emailed PDF gets, so the printable staff report and
-      // the student's certificate stay in lock-step (owner batch 16).
-      const [secs, avg] = await Promise.all([
-        buildCertificateSections(course.id, family, subs, sub).catch(() => []),
+      // the student's resoconto stay in lock-step (owner batch 16). The HTML
+      // report shows the areas; the open-answer review is a PDF-only page.
+      const [certData, avg] = await Promise.all([
+        buildCertificateData(course.id, family, subs, sub).catch(() => ({ sections: [], openReview: [] })),
         getClassAverage(family).catch(() => null),
       ]);
+      const secs = certData.sections;
       classAvg = avg;
       result = {
         email: sub.studentEmail,

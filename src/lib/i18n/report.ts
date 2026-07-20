@@ -42,6 +42,10 @@ export interface ReportStrings {
   /** "Cosa succede ora" block: title + the per-verdict body (spilla/diploma). */
   nextTitle: string;
   next: Record<ExamResultStatus, string>;
+  /** Open-answer review page (batch 18): title, one-line intro, AI-score label. */
+  openReviewTitle: string;
+  openReviewIntro: string;
+  aiVote: string;
 }
 
 export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
@@ -99,6 +103,10 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
       failed:
         "In questo esito la spilla e il diploma non vengono rilasciati. Ti invitiamo a ripetere il percorso e a ripresentarti all'esame dopo aver recuperato le aree indicate sopra.",
     },
+    openReviewTitle: "Domande aperte · dove migliorare",
+    openReviewIntro:
+      "Per ogni risposta aperta: cosa hai colto, cosa manca e come integrarla dalla knowledge base.",
+    aiVote: "Voto AI",
   },
   en: {
     cert: "Personal exam record",
@@ -154,6 +162,10 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
       failed:
         "In this outcome the pin and diploma are not issued. We invite you to repeat the course and re-sit the exam once you have recovered the areas indicated above.",
     },
+    openReviewTitle: "Open answers · where to improve",
+    openReviewIntro:
+      "For each open answer: what you captured, what's missing, and how to complete it from the knowledge base.",
+    aiVote: "AI score",
   },
   ja: {
     cert: "試験の個人記録",
@@ -209,5 +221,9 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
       failed:
         "この結果ではバッジと認定証は発行されません。上記の分野を補ったうえで、コースを再受講し再試験を受けてください。",
     },
+    openReviewTitle: "記述問題 · 改善点",
+    openReviewIntro:
+      "各記述回答について：理解できた点、不足している点、知識ベースから補う方法。",
+    aiVote: "AI評価",
   },
 };

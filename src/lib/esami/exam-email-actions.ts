@@ -84,6 +84,40 @@ export async function sendExamResultTestAction(
         { name: "Servizio & Pairing", pct: 88 },
       ],
       classAvg: 79,
+      // Sample open-answer review so the test email shows the second page too.
+      openReview: [
+        {
+          question:
+            "Basandoti su queste informazioni (純米酒, acidità 1,9, SMV +7), come ti aspetteresti questo sake e in che bicchiere lo serviresti?",
+          given:
+            "una acidità spiccata, una secchezza che ne aumenta la beverinità, mi aspetto un profilo secco ma con un bel corpo",
+          vote: 4,
+          points: 1.5,
+          maxPoints: 2,
+          rationale:
+            "Cogli bene acidità alta (1,9) e secchezza (SMV +7 = pochi zuccheri) e la correlazione acidità→corpo. Per completezza avresti potuto indicare il bicchiere richiesto dalla domanda: un calice ampio per esaltare aromi e struttura.",
+        },
+        {
+          question: "Quali piatti si abbinerebbero meglio ad un ginjō?",
+          given: "piatti crudi, piatti che vengono serviti freschi",
+          vote: 4,
+          points: 1.5,
+          maxPoints: 2,
+          rationale:
+            "Corretto il nucleo: il ginjō (aromatico/kunshu) si abbina a piatti freschi e crudi. Per arricchire: esempi come carpaccio marinato in limone/ponzu o crostacei crudi, evitando fritti, grassi e piatti molto pomodorosi.",
+        },
+        {
+          question:
+            "Con metodo sokujo, qual è il corretto procedimento iniziale di preparazione dello shubo?",
+          given:
+            "nell'acqua aggiungo kojimai, kakemai, acido lattico e poi, amalgamato l'acido, aggiungo i lieviti",
+          vote: 5,
+          points: 2,
+          maxPoints: 2,
+          rationale:
+            "Cogli l'elemento chiave del sokujo: l'acido lattico aggiunto direttamente allo shubo abbassa subito il pH, con gli ingredienti corretti. Spunto: il metodo dimezza i tempi (~15 giorni) rispetto al kimoto.",
+        },
+      ],
       course: { day: 14, month: "Settembre", year: 2026, city: "Online", educatorName: "—" },
       completedAt: new Date().toISOString(),
     });

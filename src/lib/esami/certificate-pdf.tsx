@@ -14,9 +14,11 @@ import {
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
 import { REPORT_I18N, type ReportLang } from "@/lib/i18n/report";
 import { EXAM_THRESHOLDS } from "@/lib/domain/constants";
 import { weakAreas, type ExamSection } from "./exam-sections";
+import type { OpenReviewItem } from "./certificate-data";
 import type { ExamFamily } from "@/lib/domain";
 
 // CJK font for the Japanese certificate page. Static (non-variable) Noto Sans JP
@@ -64,6 +66,9 @@ export interface CertificatePdfInput {
   /** Cohort average % to print next to the pass threshold, or null to show the
    *  threshold alone (thin data → no misleading media; owner batch 16). */
   classAvg?: number | null;
+  /** Open-answer justifications (owner batch 18) → a SECOND page per language.
+   *  Empty/omitted → no second page (the resoconto stays one page). */
+  openReview?: OpenReviewItem[];
   course: { day: number; month: string; year: number; city: string; educatorName: string };
   completedAt: string;
 }
@@ -113,6 +118,14 @@ const styles = StyleSheet.create({
   barPct: { width: 34, fontSize: 10, textAlign: "right", fontFamily: "Helvetica-Bold" },
   calloutBox: { marginTop: 8, padding: 10, borderWidth: 1, borderRadius: 6 },
   calloutText: { fontSize: 10, lineHeight: 1.5 },
+  // ── Open-answer review page (batch 18) ──
+  pageTitle: { fontSize: 15, color: COLORS.navy, fontFamily: "Helvetica-Bold", letterSpacing: 0.2 },
+  pageIntro: { fontSize: 9.5, color: COLORS.mute, marginTop: 4, marginBottom: 4, lineHeight: 1.4 },
+  reviewItem: { marginTop: 12, paddingLeft: 10, borderLeftWidth: 2 },
+  reviewQ: { fontSize: 10.5, fontFamily: "Helvetica-Bold", lineHeight: 1.4 },
+  reviewGiven: { fontSize: 9.5, color: COLORS.mute, marginTop: 3, lineHeight: 1.4 },
+  reviewVote: { fontSize: 8.5, color: COLORS.mute, marginTop: 3, fontFamily: "Helvetica-Bold" },
+  reviewRationale: { fontSize: 9.5, color: COLORS.text, marginTop: 4, lineHeight: 1.45 },
   footer: { position: "absolute", bottom: 32, left: 48, right: 48, flexDirection: "row", justifyContent: "space-between", fontSize: 8.5, color: COLORS.faint, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 10 },
 });
 
@@ -240,7 +253,62 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
   );
 }
 
-/** Render the certificate to a PDF Buffer (one page per requested language). */
+/** Colour of an open-answer badge/accent by how close it is to full marks. */
+function reviewColor(vote: number | undefined, points: number, maxPoints: number): string {
+  const ratio = vote != null ? (vote - 1) / 4 : maxPoints > 0 ? points / maxPoints : 0;
+  return ratio >= 1 ? COLORS.pass : ratio >= 0.7 ? COLORS.retrial : COLORS.fail;
+}
+/** Points as a compact string (fractional AI points keep one decimal). */
+const fmtPts = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+/** Page 2 (owner batch 18): open answers, each justified — where/what/why it
+ *  fell short — with the missing pieces integrated from the knowledge base
+ *  (the AI rationale). Capped upstream to one page, so a resoconto never exceeds
+ *  two pages per language. */
+function OpenReviewPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLang }) {
+  const t = REPORT_I18N[lang];
+  const jaFont: { fontFamily?: string } = lang === "ja" ? { fontFamily: JA_FONT_FAMILY } : {};
+  const issued = new Date(input.completedAt).toLocaleDateString(
+    lang === "it" ? "it-IT" : lang === "en" ? "en-GB" : "ja-JP",
+    { day: "numeric", month: "long", year: "numeric" },
+  );
+  const items = input.openReview ?? [];
+
+  return (
+    <Page size="A4" style={[styles.page, jaFont]}>
+      <View style={styles.headRow}>
+        <Text style={[styles.pageTitle, jaFont]}>{t.openReviewTitle}</Text>
+        <Text style={[styles.pageIntro, jaFont]}>{t.openReviewIntro}</Text>
+      </View>
+
+      {items.map((it, i) => {
+        const c = reviewColor(it.vote, it.points, it.maxPoints);
+        const scoreLine =
+          `${t.aiVote}: ` + (it.vote != null ? `${it.vote}/5 · ` : "") + `${fmtPts(it.points)}/${fmtPts(it.maxPoints)}`;
+        return (
+          <View key={i} style={[styles.reviewItem, { borderLeftColor: c }]}>
+            <Text style={[styles.reviewQ, jaFont]}>
+              {i + 1}. {it.question}
+            </Text>
+            <Text style={[styles.reviewGiven, jaFont]}>
+              {t.yourAnswer}: {it.given}
+            </Text>
+            <Text style={[styles.reviewVote, jaFont, { color: c }]}>{scoreLine}</Text>
+            <Text style={[styles.reviewRationale, jaFont]}>{it.rationale}</Text>
+          </View>
+        );
+      })}
+
+      <View style={styles.footer} fixed>
+        <Text style={jaFont}>{t.issued}: {issued}</Text>
+        <Text style={jaFont}>{t.footer}</Text>
+      </View>
+    </Page>
+  );
+}
+
+/** Render the resoconto to a PDF Buffer: a page 1 per requested language, plus a
+ *  page 2 (open-answer review) whenever there are justifications to show. */
 export async function renderCertificatePdf(
   input: CertificatePdfInput,
   langs: ReportLang[] = ["it", "en"],
@@ -252,12 +320,17 @@ export async function renderCertificatePdf(
     if (l !== "ja") return l;
     return ensureJaFont() ? "ja" : "en";
   });
-  const doc = (
-    <Document>
-      {pages.map((l, i) => (
-        <CertPage key={`${l}-${i}`} input={input} lang={l} />
-      ))}
-    </Document>
-  );
-  return renderToBuffer(doc);
+  // The open-answer justifications come from the AI in Italian, so the review
+  // page renders only on the Italian pass — under localized EN/JA headers the
+  // Italian body would read as broken. An EN/JA-only resoconto therefore has no
+  // review page until the rationales are translated (a future step). An IT
+  // student gets the historical ["it","en"] cert, so the page still appears
+  // (once) after their Italian page.
+  const hasReview = (input.openReview?.length ?? 0) > 0;
+  const els: ReactElement[] = [];
+  pages.forEach((l, i) => {
+    els.push(<CertPage key={`c-${l}-${i}`} input={input} lang={l} />);
+    if (hasReview && l === "it") els.push(<OpenReviewPage key={`r-${l}-${i}`} input={input} lang={l} />);
+  });
+  return renderToBuffer(<Document>{els}</Document>);
 }

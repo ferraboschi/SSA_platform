@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
 import { hasRole } from "@/lib/auth/guard";
 import { renderCertificatePdf } from "@/lib/esami/certificate-pdf";
-import { buildCertificateSections } from "@/lib/esami/certificate-data";
+import { buildCertificateData } from "@/lib/esami/certificate-data";
 import { getClassAverage } from "@/lib/esami/class-average";
 import { loadCourseExamResults, findConfirmedResultByEmail } from "@/lib/exam-links/results";
 import type { ExamFamily } from "@/lib/domain";
@@ -35,8 +35,8 @@ export async function GET(
   const sub = findConfirmedResultByEmail(subs, email);
   if (!sub) return NextResponse.json({ ok: false, error: "result not found" }, { status: 404 });
 
-  const [sections, classAvg] = await Promise.all([
-    buildCertificateSections(course.id, family, subs, sub).catch(() => []),
+  const [certData, classAvg] = await Promise.all([
+    buildCertificateData(course.id, family, subs, sub).catch(() => ({ sections: [], openReview: [] })),
     getClassAverage(family).catch(() => null),
   ]);
 
@@ -45,8 +45,9 @@ export async function GET(
     family,
     status: sub.currentResult as "passed" | "retrial" | "failed",
     score: sub.currentScore,
-    sections,
+    sections: certData.sections,
     classAvg,
+    openReview: certData.openReview,
     course: {
       day: course.day,
       month: course.month,
