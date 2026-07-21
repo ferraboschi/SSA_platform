@@ -14,7 +14,7 @@ import { verifyShareToken } from "./token";
 import { deliverExamInvite, buildPersonalExamUrl } from "@/lib/exam-links/invite-email";
 import { recordExamSend } from "@/lib/exam-links/send-log";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
-import { finalizeInProgressOnClose } from "@/lib/exam-links/close-finalize";
+import { finalizeInProgressOnClose, undoCloseFinalized } from "@/lib/exam-links/close-finalize";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
 import { after } from "next/server";
 import type { ExamTestKey } from "@/lib/exam-links/token";
@@ -456,7 +456,8 @@ export async function closeExamLinksAction(
 export async function reopenExamLinksAction(
   token: string,
   testKey: string,
-): Promise<{ ok: boolean; error?: string }> {
+  undoFinalized = false,
+): Promise<{ ok: boolean; error?: string; undone?: number }> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
   if (limiter.isLimited("send", token, RATE_LIMIT_SEND)) {
@@ -465,5 +466,12 @@ export async function reopenExamLinksAction(
   const t = String(testKey);
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
   const ok = await clearClosure(corsoId, t);
-  return ok ? { ok: true } : { ok: false, error: "Riapertura non riuscita, riprova." };
+  if (!ok) return { ok: false, error: "Riapertura non riuscita, riprova." };
+  // "Chiuso per sbaglio": also undo the submissions THIS close auto-finalized so
+  // those students resume from where they were (never touches a real hand-in).
+  if (undoFinalized) {
+    const res = await undoCloseFinalized(corsoId, t);
+    return { ok: true, undone: res.count };
+  }
+  return { ok: true };
 }

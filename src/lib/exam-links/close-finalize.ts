@@ -10,7 +10,26 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { runSingleSubmissionCorrection } from "@/lib/esami/correction-run";
+import { correctionKey } from "@/lib/esami/correction-types";
 import { after } from "next/server";
+
+// The submissions THIS close auto-created are recorded here so a mistaken close
+// can be undone precisely (`undoCloseFinalized`) — only these rows are removed,
+// never a genuine hand-in. One settings_kv row per (course, test).
+const FINALIZED_KEY_PREFIX = "exam_close_finalized:";
+function finalizedKey(corsoId: number, testKey: string): string {
+  return `${FINALIZED_KEY_PREFIX}${corsoId}:${testKey}`;
+}
+type FinalizedSubjCol = "corsista_id" | "partecipante_id";
+interface FinalizedItem {
+  id: number;
+  subjCol: FinalizedSubjCol;
+  subjId: number;
+}
+interface StoredFinalized {
+  at?: string;
+  items?: FinalizedItem[];
+}
 
 type DbErr = { code?: string; message: string } | null;
 /** True only for a genuinely MISSING COLUMN (pre-migration), never an FK error. */
@@ -51,6 +70,9 @@ export async function finalizeInProgressOnClose(corsoId: number, testKey: string
   const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
   const family = (corso as { type?: string } | null)?.type === "shochu" ? "shochu" : "nihonshu";
   const nowIso = new Date().toISOString();
+  // Rows THIS close actually created (never a swallowed duplicate) — recorded so
+  // a mistaken close can be undone precisely.
+  const finalized: FinalizedItem[] = [];
 
   for (const r of data as ProgressRow[]) {
     const corsistaId = r.corsista_id ?? null;
@@ -114,7 +136,72 @@ export async function finalizeInProgressOnClose(corsoId: number, testKey: string
 
     if (submissionId != null) {
       const subId = submissionId;
+      finalized.push({ id: subId, subjCol: subjCol as FinalizedSubjCol, subjId });
       after(() => runSingleSubmissionCorrection(String(corsoId), family, testKey, subId).catch(() => false));
     }
   }
+
+  // Record this close's auto-created submissions (only when it created any, so a
+  // second close with nothing left in-progress can't wipe the first's undo set).
+  if (finalized.length > 0) {
+    await svc
+      .from("settings_kv")
+      .upsert(
+        { key: finalizedKey(corsoId, testKey), value: { at: nowIso, items: finalized } },
+        { onConflict: "key" },
+      )
+      .then(() => {}, () => {});
+  }
+}
+
+/**
+ * Undo the auto-finalizations of the most recent close for a (course, test):
+ * delete exactly the submissions this module created (never a genuine hand-in),
+ * clear their draft corrections, and un-stamp their progress so those students
+ * resume from where they were. Used by "riapri e annulla consegne" for a close
+ * made by mistake. Idempotent; returns how many submissions were undone.
+ */
+export async function undoCloseFinalized(
+  corsoId: number,
+  testKey: string,
+): Promise<{ ok: boolean; count: number }> {
+  const svc = getSupabaseServiceClient();
+  const key = finalizedKey(corsoId, testKey);
+  const { data, error } = await svc
+    .from("settings_kv")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  if (error) return { ok: false, count: 0 };
+  const items = ((data?.value as StoredFinalized | null)?.items ?? []).filter(
+    (it) => it && Number.isFinite(it.id) && Number.isFinite(it.subjId),
+  );
+  if (items.length === 0) {
+    await svc.from("settings_kv").delete().eq("key", key).then(() => {}, () => {});
+    return { ok: true, count: 0 };
+  }
+
+  const ids = items.map((it) => it.id);
+  // Remove the auto-created submissions + any draft corrections keyed to them.
+  await svc.from("exam_submissions").delete().in("id", ids).then(() => {}, () => {});
+  await svc
+    .from("settings_kv")
+    .delete()
+    .in("key", ids.map((id) => correctionKey(corsoId, id)))
+    .then(() => {}, () => {});
+
+  // Un-stamp progress so each student resumes exactly where the close caught them.
+  const nowIso = new Date().toISOString();
+  for (const it of items) {
+    await svc
+      .from("exam_progress")
+      .update({ submitted_at: null, updated_at: nowIso })
+      .eq("corso_id", corsoId)
+      .eq("test_key", testKey)
+      .eq(it.subjCol, it.subjId)
+      .then(() => {}, () => {});
+  }
+
+  await svc.from("settings_kv").delete().eq("key", key).then(() => {}, () => {});
+  return { ok: true, count: ids.length };
 }

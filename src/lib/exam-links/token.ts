@@ -69,11 +69,11 @@ export type VerifyResult =
   | { ok: true; payload: ExamTokenPayload }
   | { ok: false; reason: "malformed" | "bad-signature" | "expired" };
 
-/** Verify signature + expiry and return the decoded payload.
- *  `graceSeconds` loosens ONLY the expiry check — used by submit so a student
- *  who started near the link's end-of-day expiry can still hand in their work
- *  (entry keeps zero grace). */
-export function verifyExamToken(token: string, graceSeconds = 0): VerifyResult {
+/** Verify signature + expiry and return the decoded payload. Expiry is checked
+ *  with ZERO tolerance: once a link is expired (or closed) no one may submit or
+ *  keep working — closing/expiry blocks everyone immediately (owner's rule,
+ *  call-debug follow-up). Entry, submit and the live poll all use this. */
+export function verifyExamToken(token: string): VerifyResult {
   const parts = token.split(".");
   if (parts.length !== 2) return { ok: false, reason: "malformed" };
   const [body, mac] = parts;
@@ -89,7 +89,7 @@ export function verifyExamToken(token: string, graceSeconds = 0): VerifyResult {
   } catch {
     return { ok: false, reason: "malformed" };
   }
-  if (typeof payload.e !== "number" || (payload.e + graceSeconds) * 1000 < Date.now()) {
+  if (typeof payload.e !== "number" || payload.e * 1000 < Date.now()) {
     return { ok: false, reason: "expired" };
   }
   return { ok: true, payload };

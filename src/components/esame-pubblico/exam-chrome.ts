@@ -91,6 +91,8 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     aiFailedNote: "valutazione non riuscita — sarà rivista dallo staff",
     closedTitle: "Test chiuso",
     closedBody: "L'educator ha chiuso questo test. Il link non è più attivo: se ti serve un nuovo accesso, chiedi all'educator.",
+    expiredTitle: "Link scaduto",
+    expiredBody: "Questo link non è più attivo. Se ti serve un nuovo accesso, chiedi all'educator.",
   },
   en: {
     test: "TEST MODE",
@@ -180,6 +182,8 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     aiFailedNote: "evaluation failed — staff will review it",
     closedTitle: "Test closed",
     closedBody: "The educator closed this test. The link is no longer active: ask the educator if you need new access.",
+    expiredTitle: "Link expired",
+    expiredBody: "This link is no longer active. Ask the educator if you need new access.",
   },
   ja: {
     test: "テストモード",
@@ -269,6 +273,8 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     aiFailedNote: "評価に失敗しました。スタッフが確認します",
     closedTitle: "テストは終了しました",
     closedBody: "講師がこのテストを終了しました。リンクは無効です。新しいアクセスが必要な場合は講師にお問い合わせください。",
+    expiredTitle: "リンクの有効期限が切れました",
+    expiredBody: "このリンクは無効です。新しいアクセスが必要な場合は講師にお問い合わせください。",
   },
 };
 

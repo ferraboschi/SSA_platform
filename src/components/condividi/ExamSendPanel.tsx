@@ -129,6 +129,36 @@ export default function ExamSendPanel({
     }
   };
 
+  // "Chiuso per sbaglio": reopen AND undo the consegne this close auto-finalized,
+  // so students mid-exam resume from where they were (never touches a real
+  // hand-in). Deliberate + confirmed — it removes the auto-generated results.
+  const reopenAndUndo = async () => {
+    if (lifeBusy) return;
+    if (
+      !window.confirm(
+        "Riaprire il test e annullare le consegne generate automaticamente dalla chiusura? " +
+          "Gli studenti che erano a metà riprenderanno da dove erano. Le consegne reali non vengono toccate.",
+      )
+    )
+      return;
+    setLifeBusy(true);
+    setAllNote(null);
+    const res = await reopenExamLinksAction(token, testKey, true).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof reopenExamLinksAction>>,
+    );
+    setLifeBusy(false);
+    if (res.ok) {
+      setClosed(null);
+      setAllNote(
+        res.undone
+          ? `Test riaperto · ${res.undone} consegn${res.undone === 1 ? "a" : "e"} automatic${res.undone === 1 ? "a" : "he"} annullat${res.undone === 1 ? "a" : "e"}.`
+          : "Test riaperto.",
+      );
+    } else {
+      setAllNote(res.error || "Operazione non riuscita.");
+    }
+  };
+
   const copyGeneral = async () => {
     try {
       await navigator.clipboard.writeText(test.url);
@@ -248,6 +278,17 @@ export default function ExamSendPanel({
         <button type="button" onClick={toggleClosure} disabled={lifeBusy} style={miniBtn(false)}>
           {lifeBusy ? "…" : isClosed ? "Riapri" : "Chiudi per tutti"}
         </button>
+        {isClosed && (
+          <button
+            type="button"
+            onClick={reopenAndUndo}
+            disabled={lifeBusy}
+            title="Se hai chiuso per sbaglio: riapre e riammette chi era a metà"
+            style={miniBtn(false)}
+          >
+            Annulla consegne e riapri
+          </button>
+        )}
       </div>
 
       {/* General class link (email-gated) + send-to-all */}

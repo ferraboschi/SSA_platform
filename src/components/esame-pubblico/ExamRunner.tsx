@@ -186,6 +186,8 @@ export function ExamRunner({
   // Live "the educator closed this test" push (owner batch 8): polled while
   // the exam is open so an already-open page reacts within seconds.
   const [closedLive, setClosedLive] = useState(false);
+  // Link expired while the runner was open (0 grace: no window to keep working).
+  const [expiredLive, setExpiredLive] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string[] | null>(null);
   const [reviewMode, setReviewMode] = useState(false);
   // Personal scratchpad — constant across questions, never submitted/saved.
@@ -337,6 +339,10 @@ export function ExamRunner({
         // screen, NOT the "Riprova" loop (retrying only re-hits the closure).
         // The snapshot was captured by finalize-on-close; leave finishingRef set.
         setClosedLive(true);
+      } else if (r.expired) {
+        // Link expired (0 grace): a terminal "scaduto" screen, not a dead retry
+        // loop — refreshing/retrying can't revive an expired token.
+        setExpiredLive(true);
       } else {
         setSubmitError(true);
         finishingRef.current = false; // allow autosave to resume for a retry
@@ -354,11 +360,13 @@ export function ExamRunner({
     const id = setInterval(() => {
       getLinkStateAction(token)
         .then((r) => {
-          // ONLY a real educator closure flips the screen (same filter as
-          // EsitoCard): the state action verifies WITH the 3h submit grace, so a
-          // merely expired token reports reason:"expired" (not "closed") and we
-          // deliberately ignore it — the student keeps the 3h grace to hand in.
-          if (r.ok && r.closed && r.reason === "closed") setClosedLive(true);
+          // Zero grace: BOTH a closure and an expiry block the open runner
+          // within ~10s (owner's rule — no window to keep working). Closure →
+          // "test chiuso"; expiry → "link scaduto".
+          if (r.ok && r.closed) {
+            if (r.reason === "closed") setClosedLive(true);
+            else if (r.reason === "expired") setExpiredLive(true);
+          }
         })
         .catch(() => {});
     }, 10_000);
@@ -462,12 +470,28 @@ export function ExamRunner({
     </header>
   );
 
+  // Link expired while the page was open (0 grace) → terminal "scaduto" screen.
+  // Wins over the submit-retry state: retrying can't revive an expired token.
+  if (expiredLive && !done) {
+    return (
+      <div className="exam-public-shell" {...lockdown}>
+        <div className="exam-public-card">
+          {headerBar}
+          <div className="exam-public-thanks">
+            <div className="exam-public-thanks-check">✕</div>
+            <h2>{t.expiredTitle}</h2>
+            <p>{t.expiredBody}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Closed by the educator while the page was open → replace the exam with an
-  // honest screen (answers stay in localStorage/server if they re-open later).
-  // Renders BEFORE the language picker (a student parked on the first screen
-  // never saw the closure until a manual reload) but NEVER over the submit-
-  // retry screen: a failed hand-in must keep its Riprova path — the 3h submit
-  // grace exists exactly for finishing across the expiry boundary.
+  // honest screen. Renders BEFORE the language picker (a student parked on the
+  // first screen never saw the closure until a manual reload) but NEVER over the
+  // submit-retry screen unless the failure WAS the closure (finish() routes a
+  // closed hand-in straight here, so no retry loop can form).
   if (closedLive && !done && !submitError) {
     return (
       <div className="exam-public-shell" {...lockdown}>
