@@ -77,11 +77,11 @@ export async function sendExamResultTestAction(
       // Sample per-area breakdown + cohort media so the test email shows the
       // enriched certificate exactly as a real student would receive it.
       sections: [
-        { name: "Storia & Cultura", pct: 92 },
-        { name: "Produzione & Tecnica", pct: 78 },
-        { name: "Varietà & Stili", pct: 84 },
-        { name: "Degustazione & Sensoriale", pct: 66 },
-        { name: "Servizio & Pairing", pct: 88 },
+        { name: "Storia & Cultura", pct: 92, correct: 11, total: 12 },
+        { name: "Produzione & Tecnica", pct: 78, correct: 7, total: 9 },
+        { name: "Varietà & Stili", pct: 84, correct: 8, total: 10 },
+        { name: "Degustazione & Sensoriale", pct: 66, correct: 4, total: 7 },
+        { name: "Servizio & Pairing", pct: 88, correct: 6, total: 7 },
       ],
       classAvg: 79,
       // Sample open-answer review so the test email shows the second page too.

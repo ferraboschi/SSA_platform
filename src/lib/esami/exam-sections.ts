@@ -37,22 +37,36 @@ export interface ExamSection {
   name: string;
   /** Rounded 0..100 — earned points over gradeable points in this bucket. */
   pct: number;
+  /** Fully-correct OBJECTIVE answers in this bucket (owner debug call: a per-area
+   *  "X / Y" count next to the bar). Open answers aren't counted — they aren't
+   *  a clean right/wrong. */
+  correct: number;
+  /** Objective (settled) answers in this bucket — the denominator of "X / Y". */
+  total: number;
 }
 
 /** Bucket every SETTLED answer's score by category. An objective answer earns
  *  `fraction × points`; an open answer earns its clamped AI points; anything
- *  still unsettled (open with no/failed AI grade) is dropped entirely — it
+ *  still unsettled (open with no/failed AI grade) is dropped from the pct — it
  *  neither earns nor inflates the bucket's max, so a pending answer never
- *  deflates a section. Mirrors the day-esito algorithm exactly. */
+ *  deflates a section. Also tallies a fully-correct / total OBJECTIVE count per
+ *  area. Mirrors the day-esito algorithm exactly. */
 export function computeSections(
   detail: SectionDetail[],
   qMeta: Map<string, SectionQMeta>,
   openByQid: Map<string, SectionOpenGrade>,
 ): ExamSection[] {
-  const secMap = new Map<string, { earned: number; max: number }>();
+  const secMap = new Map<string, { earned: number; max: number; correct: number; total: number }>();
   for (const d of detail) {
     const meta = qMeta.get(d.qid);
     if (!meta) continue;
+    const s = secMap.get(meta.cat) ?? { earned: 0, max: 0, correct: 0, total: 0 };
+    // X / Y count: settled OBJECTIVE answers only (ok !== null). Open answers
+    // (ok === null) are subjective — they don't count toward right/wrong.
+    if (d.ok !== null) {
+      s.total++;
+      if (d.ok === true) s.correct++;
+    }
     let earned: number | null = null;
     if (d.ok !== null) {
       earned = (d.ok ? 1 : Math.max(0, Math.min(1, d.fraction ?? 0))) * meta.points;
@@ -60,15 +74,15 @@ export function computeSections(
       const g = openByQid.get(d.qid);
       if (g && !g.failed) earned = Math.max(0, Math.min(meta.points, g.points));
     }
-    if (earned == null) continue;
-    const s = secMap.get(meta.cat) ?? { earned: 0, max: 0 };
-    s.earned += earned;
-    s.max += meta.points;
+    if (earned != null) {
+      s.earned += earned;
+      s.max += meta.points;
+    }
     secMap.set(meta.cat, s);
   }
   return [...secMap.entries()]
     .filter(([, s]) => s.max > 0)
-    .map(([name, s]) => ({ name, pct: Math.round((100 * s.earned) / s.max) }));
+    .map(([name, s]) => ({ name, pct: Math.round((100 * s.earned) / s.max), correct: s.correct, total: s.total }));
 }
 
 /** Which lead sentence the certificate's "Aree da consolidare" block should use,
@@ -80,10 +94,10 @@ export function computeSections(
  *     (or, defensively, the single lowest if none are below).
  *  Returns null when there are no areas to reason about. */
 export function weakAreas(
-  sections: ExamSection[],
+  sections: { name: string; pct: number }[],
   status: "passed" | "retrial" | "failed",
   max = 3,
-): { leadKey: "passed" | "retrial" | "failed" | "strong"; items: ExamSection[] } | null {
+): { leadKey: "passed" | "retrial" | "failed" | "strong"; items: { name: string; pct: number }[] } | null {
   if (sections.length === 0) return null;
   const byLowest = [...sections].sort((a, b) => a.pct - b.pct);
   const weak = byLowest.filter((s) => s.pct < PASS_PCT);

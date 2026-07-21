@@ -115,6 +115,7 @@ const styles = StyleSheet.create({
   barLabel: { width: 200, fontSize: 10 },
   barTrack: { flex: 1, height: 5, backgroundColor: COLORS.track, borderRadius: 2, marginHorizontal: 8, position: "relative" },
   barThresh: { position: "absolute", left: `${PASS_PCT}%`, top: -1.5, bottom: -1.5, width: 1, backgroundColor: COLORS.faint },
+  barCount: { width: 40, fontSize: 9, color: COLORS.mute, textAlign: "right", marginRight: 4 },
   barPct: { width: 34, fontSize: 10, textAlign: "right", fontFamily: "Helvetica-Bold" },
   calloutBox: { marginTop: 8, padding: 10, borderWidth: 1, borderRadius: 6 },
   calloutText: { fontSize: 10, lineHeight: 1.5 },
@@ -217,6 +218,8 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
                 <View style={{ width: `${Math.max(0, Math.min(100, s.pct))}%`, height: 5, backgroundColor: barColor(s.pct), borderRadius: 2 }} />
                 <View style={styles.barThresh} />
               </View>
+              {/* Owner debug call: the raw "X / Y" count next to the % bar. */}
+              <Text style={[styles.barCount, jaFont]}>{s.total > 0 ? `${s.correct}/${s.total}` : ""}</Text>
               <Text style={[styles.barPct, jaFont, { color: barColor(s.pct) }]}>{Math.round(s.pct)}%</Text>
             </View>
           ))}
@@ -283,8 +286,9 @@ function OpenReviewPage({ input, lang }: { input: CertificatePdfInput; lang: Rep
 
       {items.map((it, i) => {
         const c = reviewColor(it.vote, it.points, it.maxPoints);
-        const scoreLine =
-          `${t.aiVote}: ` + (it.vote != null ? `${it.vote}/5 · ` : "") + `${fmtPts(it.points)}/${fmtPts(it.maxPoints)}`;
+        // Points only — no "Voto AI n/5" (owner debug call: the student's document
+        // must carry no AI reference). The 1-5 vote still drives the accent colour.
+        const scoreLine = `${t.aiVote}: ${fmtPts(it.points)}/${fmtPts(it.maxPoints)}`;
         return (
           <View key={i} style={[styles.reviewItem, { borderLeftColor: c }]}>
             <Text style={[styles.reviewQ, jaFont]}>

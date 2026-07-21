@@ -106,7 +106,7 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
     openReviewTitle: "Domande aperte · dove migliorare",
     openReviewIntro:
       "Per ogni risposta aperta: cosa hai colto, cosa manca e come integrarla con le nozioni della Sake Sommelier Association.",
-    aiVote: "Voto AI",
+    aiVote: "Punteggio",
   },
   en: {
     cert: "Personal exam record",
@@ -165,7 +165,7 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
     openReviewTitle: "Open answers · where to improve",
     openReviewIntro:
       "For each open answer: what you captured, what's missing, and how to complete it with the Sake Sommelier Association's notions.",
-    aiVote: "AI score",
+    aiVote: "Score",
   },
   ja: {
     cert: "試験の個人記録",
@@ -224,6 +224,6 @@ export const REPORT_I18N: Record<ReportLang, ReportStrings> = {
     openReviewTitle: "記述問題 · 改善点",
     openReviewIntro:
       "各記述回答について：理解できた点、不足している点、サケソムリエ協会の知見で補う方法。",
-    aiVote: "AI評価",
+    aiVote: "点数",
   },
 };

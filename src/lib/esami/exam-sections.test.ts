@@ -28,8 +28,8 @@ describe("computeSections — bucket settled scores by category", () => {
     ];
     const secs = computeSections(detail, qMeta, open({ q4: { points: 1.5, failed: false } }));
     expect(secs).toEqual([
-      { name: "Storia", pct: 83 }, // round(100 * 2.5 / 3)
-      { name: "Produzione", pct: 30 }, // round(100 * 1.5 / 5)
+      { name: "Storia", pct: 83, correct: 1, total: 2 }, // round(100 * 2.5 / 3)
+      { name: "Produzione", pct: 30, correct: 0, total: 1 }, // round(100 * 1.5 / 5)
     ]);
   });
 
@@ -39,7 +39,7 @@ describe("computeSections — bucket settled scores by category", () => {
       { qid: "q4", ok: null }, // open, ungraded → excluded entirely
     ];
     const secs = computeSections(detail, qMeta, open({}));
-    expect(secs).toEqual([{ name: "Produzione", pct: 100 }]); // q4 not in the max
+    expect(secs).toEqual([{ name: "Produzione", pct: 100, correct: 1, total: 1 }]); // q4 not in the max
   });
 
   it("drops an open answer whose AI grade FAILED (never a 0-point deflation)", () => {
@@ -48,7 +48,7 @@ describe("computeSections — bucket settled scores by category", () => {
       { qid: "q4", ok: null },
     ];
     const secs = computeSections(detail, qMeta, open({ q4: { points: 0, failed: true } }));
-    expect(secs).toEqual([{ name: "Produzione", pct: 100 }]);
+    expect(secs).toEqual([{ name: "Produzione", pct: 100, correct: 1, total: 1 }]);
   });
 
   it("counts a blank (ok===false, fraction 0) at full weight in the denominator", () => {
@@ -57,7 +57,7 @@ describe("computeSections — bucket settled scores by category", () => {
       { qid: "q2", ok: false, fraction: 0 }, // 0 / 1 (blank)
     ];
     const secs = computeSections(detail, qMeta, open({}));
-    expect(secs).toEqual([{ name: "Storia", pct: 67 }]); // round(100 * 2 / 3)
+    expect(secs).toEqual([{ name: "Storia", pct: 67, correct: 1, total: 2 }]); // round(100 * 2 / 3)
   });
 
   it("ignores answers whose question meta is unknown (template edited)", () => {
@@ -66,13 +66,13 @@ describe("computeSections — bucket settled scores by category", () => {
       { qid: "ghost", ok: false, fraction: 0 },
     ];
     const secs = computeSections(detail, qMeta, open({}));
-    expect(secs).toEqual([{ name: "Storia", pct: 100 }]);
+    expect(secs).toEqual([{ name: "Storia", pct: 100, correct: 1, total: 1 }]);
   });
 
   it("clamps an AI open grade into [0, points]", () => {
     const detail: SectionDetail[] = [{ qid: "q4", ok: null }];
     const over = computeSections(detail, qMeta, open({ q4: { points: 99, failed: false } }));
-    expect(over).toEqual([{ name: "Produzione", pct: 100 }]); // clamped to 2/2
+    expect(over).toEqual([{ name: "Produzione", pct: 100, correct: 0, total: 0 }]); // clamped to 2/2
   });
 });
 

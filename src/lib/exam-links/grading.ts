@@ -213,6 +213,12 @@ export function gradeAnswers(
     // Grade against the version the student SAW (their language), so an answer
     // stored as translated option text matches the (translated) correct option.
     const localized: GradableQuestion = { ...q, options: seenOptions(q, lang) };
+    // Show the QUESTION TEXT in the language the student sat the exam in (debug
+    // call): the staff Esiti + resoconto used to show Italian text on an EN/JA
+    // exam. Falls back to the Italian original when a translation is missing —
+    // exactly what the runner's localizeQ / buildDayEsito do.
+    const qText =
+      (lang === "en" || lang === "ja") && q.i18n?.[lang]?.text ? q.i18n[lang]!.text : q.text;
 
     // UNANSWERED = wrong, for EVERY type (owner batch 10): full weight in the
     // denominator, zero earned, and NO review lane — a blank has nothing to
@@ -223,7 +229,7 @@ export function gradeAnswers(
       return {
         qid: q.id,
         type: q.type,
-        text: q.text,
+        text: qText,
         given: "—",
         correct: correctDisplay(q, localized),
         ok: false,
@@ -242,7 +248,7 @@ export function gradeAnswers(
       const sawTranslated = (lang === "en" || lang === "ja") && !!q.i18n?.[lang];
       if (accepted.length === 0 || sawTranslated) {
         manual++;
-        return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: "—", ok: null };
+        return { qid: q.id, type: q.type, text: qText, given: fmtGiven(given, localized), correct: "—", ok: null };
       }
       const givenNorm = normStr(Array.isArray(given) ? given[0] : given);
       const exact = givenNorm !== "" && accepted.includes(givenNorm);
@@ -254,7 +260,7 @@ export function gradeAnswers(
         return {
           qid: q.id,
           type: q.type,
-          text: q.text,
+          text: qText,
           given: fmtGiven(given, localized),
           correct: splitAccepted(q.correct).join(", "),
           ok: true,
@@ -271,7 +277,7 @@ export function gradeAnswers(
       return {
         qid: q.id,
         type: q.type,
-        text: q.text,
+        text: qText,
         given: fmtGiven(given, localized),
         correct: splitAccepted(q.correct).join(", "),
         ok: null,
@@ -297,7 +303,7 @@ export function gradeAnswers(
         return {
           qid: q.id,
           type: q.type,
-          text: q.text,
+          text: qText,
           given: fmtGiven(given, localized),
           correct: key.join(" → "),
           ok,
@@ -325,7 +331,7 @@ export function gradeAnswers(
             return {
               qid: q.id,
               type: q.type,
-              text: q.text,
+              text: qText,
               given: fmtGiven(given, localized),
               correct: key.join(" → "),
               ok,
@@ -334,7 +340,7 @@ export function gradeAnswers(
         }
       }
       manual++;
-      return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: key.length ? key.join(" → ") : "—", ok: null };
+      return { qid: q.id, type: q.type, text: qText, given: fmtGiven(given, localized), correct: key.length ? key.join(" → ") : "—", ok: null };
     }
 
     // Open / match (or a choice question with no answer key) → manual.
@@ -342,7 +348,7 @@ export function gradeAnswers(
     // (mirrors the fill branch's `accepted.length === 0` guard above).
     if (!isObjective(q.type) || !q.correct || q.correct.length === 0) {
       manual++;
-      return { qid: q.id, type: q.type, text: q.text, given: fmtGiven(given, localized), correct: "—", ok: null };
+      return { qid: q.id, type: q.type, text: qText, given: fmtGiven(given, localized), correct: "—", ok: null };
     }
 
     // Objective choice question → auto-graded, in the student's language.
@@ -364,7 +370,7 @@ export function gradeAnswers(
     return {
       qid: q.id,
       type: q.type,
-      text: q.text,
+      text: qText,
       given: fmtGiven(given, localized),
       correct: q.correct.map((i) => localized.options[Number(i)]).filter(Boolean).join(", "),
       ok,
