@@ -388,6 +388,7 @@ export function QuestionInput({
   onChange,
   answerLabel,
   dragHint,
+  multiHint,
   reveal,
 }: {
   q: RunnerQuestion;
@@ -395,6 +396,7 @@ export function QuestionInput({
   onChange: (v: string[] | string) => void;
   answerLabel: string;
   dragHint: string;
+  multiHint: string;
   reveal?: boolean;
 }): ReactNode {
   const multi = q.type === "multi";
@@ -418,7 +420,11 @@ export function QuestionInput({
       }
     };
     return (
-      <div className="exam-public-options">
+      <div>
+        {/* Multi questions look just like single-choice; say it plainly so the
+            student knows more than one answer is allowed (owner call-debug batch). */}
+        {multi && <div className="exam-public-multihint">◨ {multiHint}</div>}
+        <div className="exam-public-options">
         {q.options.map((opt, i) => {
           const isCorrect = reveal && correctSet.has(i);
           return (
@@ -428,7 +434,7 @@ export function QuestionInput({
               className={`exam-public-opt ${selected.includes(opt) ? "selected" : ""} ${isCorrect ? "correct" : ""}`}
               onClick={() => toggle(opt)}
             >
-              <span className="exam-public-opt-mark" aria-hidden>
+              <span className={`exam-public-opt-mark${multi ? " multi" : ""}`} aria-hidden>
                 {multi
                   ? selected.includes(opt)
                     ? "☑"
@@ -446,6 +452,7 @@ export function QuestionInput({
             </button>
           );
         })}
+        </div>
       </div>
     );
   }

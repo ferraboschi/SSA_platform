@@ -167,6 +167,16 @@ export function ExamRunner({
   useEffect(() => {
     setMaxIdx((m) => (idx > m ? idx : m));
   }, [idx]);
+  // Preliminary registration/context steps lead the flow and are NOT test
+  // questions. `regCount` is how many there are; both the question counter and
+  // the timer key off it. Derived from props so it's available before the timer
+  // effects below (it equals the number of reg steps built in `steps`).
+  const regCount = (registrationFields ?? (collectRegistration ? REG_ORDER : [])).length;
+  // Arm the exam timer only once the FIRST REAL question has been reached (owner
+  // call-debug batch: the countdown must not start during the anagraphics).
+  // maxIdx is monotonic, so stepping BACK to a reg field can never pause/exploit
+  // the clock; day tests (regCount 0) arm immediately at idx 0.
+  const timerStarted = maxIdx >= regCount;
   const [answers, setAnswers] = useState<Record<string, string[] | string>>(
     resumeState?.answers ?? {},
   );
@@ -346,7 +356,7 @@ export function ExamRunner({
           if (r.ok && r.closed && r.reason === "closed") setClosedLive(true);
         })
         .catch(() => {});
-    }, 30_000);
+    }, 10_000);
     return () => clearInterval(id);
   }, [mode, done, token]);
 
@@ -356,7 +366,7 @@ export function ExamRunner({
   // locked phone throttles timers, and a drifting count would grant extra time
   // past the hard limit. Each (re)activation re-anchors at the current elapsed.
   useEffect(() => {
-    if (!langPicked || done || submitError) return;
+    if (!langPicked || done || submitError || !timerStarted) return;
     const t0 = Date.now();
     const base = stateRef.current.elapsed;
     const sync = () => setElapsed(base + Math.floor((Date.now() - t0) / 1000));
@@ -369,16 +379,16 @@ export function ExamRunner({
       document.removeEventListener("visibilitychange", sync);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [langPicked, done, submitError]);
+  }, [langPicked, done, submitError, timerStarted]);
 
   // Timed exam: "time left" notice near the end, HARD STOP at the limit — the
   // test hands itself in with whatever has been answered (owner batch 9).
   useEffect(() => {
-    if (!timed || !langPicked || done || submitError) return;
+    if (!timed || !langPicked || done || submitError || !timerStarted) return;
     if (elapsed >= warnAt && elapsed < limit && !warned) setWarned(true);
     if (elapsed >= limit && !finishingRef.current) void finish();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elapsed, timed, langPicked, done, submitError, warned]);
+  }, [elapsed, timed, langPicked, done, submitError, warned, timerStarted]);
 
   // Flatten the flow: registration fields (final exam only) + graded questions.
   const steps = useMemo<Step[]>(() => {
@@ -390,10 +400,9 @@ export function ExamRunner({
   }, [collectRegistration, registrationFields, questions]);
 
   const total = steps.length;
-  // Registration/context steps lead the flow and are NOT test questions (owner
-  // batch 15: the question counter must start at 1 from the first real
-  // question). `qNumber` maps a step index → its 1-based question number.
-  const regCount = steps.reduce((n, s) => n + (s.kind === "reg" ? 1 : 0), 0);
+  // `qNumber` maps a step index → its 1-based question number (owner batch 15:
+  // the counter starts at 1 from the first real question). `regCount` is defined
+  // above (with the timer gate) — the number of preliminary reg steps.
   const numQuestions = total - regCount;
   const qNumber = (stepIdx: number) => Math.max(1, stepIdx - regCount + 1);
   // Clamp a resumed/stale idx into range (defensive: the question set could have
@@ -419,7 +428,7 @@ export function ExamRunner({
             VALIDAZIONE
           </span>
         )}
-        {langPicked && (
+        {langPicked && (!timed || timerStarted) && (
           <span
             className="exam-public-clock"
             aria-label="timer"
@@ -722,6 +731,10 @@ export function ExamRunner({
   const emailInvalid =
     typeof curEmail === "string" && curEmail.trim() !== "" && !EMAIL_RE.test(curEmail.trim());
   const atLast = idx === total - 1;
+  // Single forward button (owner call-debug batch): "Avanti" while there's
+  // somewhere to go, else it BECOMES "Ho finito" in the same slot — no more
+  // permanently-greyed finish button. goFinish still re-prompts on blanks.
+  const canAdvance = reviewMode ? nextSkipped != null : !atLast;
 
   return (
     <div className="exam-public-shell" {...lockdown}>
@@ -810,26 +823,6 @@ export function ExamRunner({
                 </button>
               );
             })}
-            {idx < maxIdx && (
-              <button
-                type="button"
-                onClick={() => setIdx(maxIdx)}
-                style={{
-                  marginLeft: "auto",
-                  padding: "3px 12px",
-                  borderRadius: 999,
-                  border: "1px solid var(--indigo, #635bff)",
-                  background: "#f5f7ff",
-                  color: "var(--indigo, #635bff)",
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                ↩ {t.backToQuestion.replace("{n}", String(qNumber(maxIdx)))}
-              </button>
-            )}
           </div>
         )}
         {reviewMode && (
@@ -903,6 +896,7 @@ export function ExamRunner({
                     onChange={(v) => setAnswer(step.q.id, v)}
                     answerLabel={t.yourAnswer}
                     dragHint={t.dragHint}
+                    multiHint={t.multiHint}
                     reveal={reveal}
                   />
                 </>
@@ -924,37 +918,46 @@ export function ExamRunner({
           >
             {t.back}
           </button>
-          {(reviewMode ? nextSkipped != null : !atLast) && (
-            <button
-              type="button"
-              className="exam-public-btn primary"
-              onClick={() =>
-                reviewMode && nextSkipped != null
-                  ? setIdx(nextSkipped)
-                  : setIdx((i) => Math.min(total - 1, i + 1))
-              }
-              disabled={emailInvalid}
-            >
-              {t.next}
-            </button>
-          )}
-          {/* "Ho finito": active on the last step (normal) or once no skipped
-              question remains (review mode). */}
-          <button
-            type="button"
-            className="exam-public-btn"
-            onClick={goFinish}
-            disabled={
-              (reviewMode ? unansweredNums.filter((n) => n !== idx).length > 0 : !atLast) || submitting
-            }
-            style={
-              (reviewMode ? unansweredNums.filter((n) => n !== idx).length === 0 : atLast)
-                ? { background: "#f59e0b", borderColor: "#f59e0b", color: "#fff" }
-                : { opacity: 0.45 }
-            }
-          >
-            {submitting ? "…" : t.iDone}
-          </button>
+          <div className="exam-public-nav-fwd">
+            {/* Jump back to your furthest point — moved here next to the forward
+                action so it's actually seen (owner call-debug batch). */}
+            {idx < maxIdx && (
+              <button
+                type="button"
+                className="exam-public-btn ghost"
+                onClick={() => setIdx(maxIdx)}
+                style={{ whiteSpace: "nowrap" }}
+              >
+                ↩ {t.backToQuestion.replace("{n}", String(qNumber(maxIdx)))}
+              </button>
+            )}
+            {/* ONE primary button: "Avanti" until there's nowhere left to go,
+                then it becomes "Ho finito" in place. */}
+            {canAdvance ? (
+              <button
+                type="button"
+                className="exam-public-btn primary"
+                onClick={() =>
+                  reviewMode && nextSkipped != null
+                    ? setIdx(nextSkipped)
+                    : setIdx((i) => Math.min(total - 1, i + 1))
+                }
+                disabled={emailInvalid}
+              >
+                {t.next}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="exam-public-btn primary"
+                style={{ background: "#f59e0b", borderColor: "#f59e0b", color: "#fff" }}
+                onClick={goFinish}
+                disabled={submitting}
+              >
+                {submitting ? "…" : t.iDone}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Personal notes — constant across questions, never saved/submitted.

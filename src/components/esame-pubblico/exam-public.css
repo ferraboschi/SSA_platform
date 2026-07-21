@@ -176,6 +176,25 @@
   color: var(--indigo-600, #4f46e5);
   font-size: 14px;
 }
+/* Multi-select: a bigger, unmistakable checkbox so it doesn't read as a radio. */
+.exam-public-opt-mark.multi {
+  font-size: 21px;
+  line-height: 1;
+}
+/* "You can choose more than one answer" banner above multi options. */
+.exam-public-multihint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff7ed;
+  border: 1px solid #f59e0b;
+  color: #b45309;
+  font-size: 12.5px;
+  font-weight: 700;
+}
 
 /* User-typed answers MUST allow normal input (no select-none here) */
 .exam-public-input,
@@ -225,6 +244,24 @@
   background: var(--indigo-600, #4f46e5);
   color: #fff;
   margin-left: auto;
+}
+/* Forward-action cluster: "↩ torna alla domanda N" sits to the LEFT of the
+   single Avanti/Ho finito button (owner call-debug batch). The cluster carries
+   the right-alignment, so the primary inside it must not also push right. */
+.exam-public-nav-fwd {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-left: auto;
+}
+.exam-public-nav-fwd .exam-public-btn.primary {
+  margin-left: 0;
+}
+@media (max-width: 480px) {
+  .exam-public-nav-fwd {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* Thanks + invalid */

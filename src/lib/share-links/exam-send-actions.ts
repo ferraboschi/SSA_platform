@@ -14,7 +14,9 @@ import { verifyShareToken } from "./token";
 import { deliverExamInvite, buildPersonalExamUrl } from "@/lib/exam-links/invite-email";
 import { recordExamSend } from "@/lib/exam-links/send-log";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
+import { finalizeInProgressOnClose } from "@/lib/exam-links/close-finalize";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
+import { after } from "next/server";
 import type { ExamTestKey } from "@/lib/exam-links/token";
 // NOTE: no `export type { … }` re-exports here — this is a "use server"
 // module, and Next's action transform registers every export CLAUSE name as a
@@ -420,7 +422,12 @@ export async function closeExamLinksAction(
   }
   const t = String(testKey);
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
+  // Close FIRST (stops any new writes), THEN finalize the still-open sittings in
+  // the background so the educator's click returns immediately. Ordering matters:
+  // once setClosure lands, the heartbeat gate rejects any resurrection, so a late
+  // heartbeat's `.is(submitted_at, null)` update no-ops against a stamped row.
   const ok = await setClosure(corsoId, t);
+  if (ok) after(() => finalizeInProgressOnClose(corsoId, t).catch(() => {}));
   return ok ? { ok: true } : { ok: false, error: "Chiusura non riuscita, riprova." };
 }
 

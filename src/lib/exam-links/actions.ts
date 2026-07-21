@@ -259,7 +259,13 @@ export async function submitExam(
 export async function getLinkStateAction(
   token: string,
 ): Promise<{ ok: boolean; closed?: boolean; reason?: "closed" | "expired" }> {
-  const res = verifyExamToken(token);
+  // Verify WITH the 3h submit grace (call-debug batch): once a link expires
+  // end-of-day, a still-open runner used to report only "expired" and never
+  // learn it was CLOSED — so a closed test never flipped the screen within the
+  // legit hand-in window. Applying the grace here lets closure be checked for an
+  // expired-in-grace token too; only a truly-expired (past grace) token reports
+  // "expired".
+  const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) {
     return res.reason === "expired"
       ? { ok: true, closed: true, reason: "expired" }
