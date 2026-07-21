@@ -101,11 +101,19 @@ export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDra
   let gradableCount = 0;
   let correctCount = 0;
   const wrongAnswers: WrongAnswer[] = [];
+  // Per-category X / Y count of OBJECTIVE answers (owner debug call: the bozza
+  // shows "Storia 5/20" instead of a long list of individual questions).
+  const catCounts = new Map<string, { correct: number; total: number }>();
   for (const a of answers) {
     if (a.ok === null) continue;
     const m = metaOf(a.qid);
     objectiveMax += m.points;
     gradableCount++;
+    const cat = (a.cat ?? "").trim() || "Generale";
+    const cc = catCounts.get(cat) ?? { correct: 0, total: 0 };
+    cc.total++;
+    if (a.ok) cc.correct++;
+    catCounts.set(cat, cc);
     // MULTI partial credit rides in via `fraction` (owner batch 10): a fully
     // right answer earns the point, a partially right one its share.
     const frac = a.ok ? 1 : Math.max(0, Math.min(1, a.fraction ?? 0));
@@ -194,6 +202,11 @@ export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDra
     aiProvider: sawModel ? "model" : sawStub ? "stub" : "none",
     openGrades,
     wrongAnswers,
+    categoryCounts: [...catCounts.entries()].map(([name, c]) => ({
+      name,
+      correct: c.correct,
+      total: c.total,
+    })),
     totals: {
       earned: round2(objectiveEarned + openEarned),
       max,

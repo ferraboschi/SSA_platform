@@ -125,6 +125,9 @@ const styles = StyleSheet.create({
   ground: { fontSize: 8, color: COLORS.faint, marginTop: 2, lineHeight: 1.3 },
   empty: { fontSize: 9.5, color: COLORS.successFg },
   moreNote: { fontSize: 8.5, color: COLORS.mute, marginTop: 2 },
+  catRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 3, paddingRight: 4 },
+  catName: { fontSize: 10 },
+  catCount: { fontSize: 10, fontFamily: "Helvetica-Bold" },
   footer: { position: "absolute", bottom: 28, left: 48, right: 48, flexDirection: "row", justifyContent: "space-between", borderTopWidth: 0.75, borderTopColor: COLORS.border, paddingTop: 8 },
   footerText: { fontSize: 7.5, color: COLORS.faint },
   footerNote: { fontSize: 7.5, color: COLORS.faint, flex: 1, paddingRight: 12 },
@@ -165,7 +168,7 @@ function fmtDateTimeIt(iso: string): string {
 // the AI-graded open answers get their OWN uncapped section (they are few by
 // nature and are the heart of the report; a long wrong-list must never crowd
 // them off the page).
-const MAX_REVIEW_ITEMS = 12;
+const MAX_REVIEW_ITEMS = 6;
 function buildWrongItems(draft: CorrectionDraft): { items: WrongAnswer[]; extra: number } {
   const all = [
     ...draft.wrongAnswers.filter((w) => w.important),
@@ -296,6 +299,22 @@ export async function renderCorrectionPdf(args: {
             <Text style={styles.sectionLabel}>Valutazione domande aperte (AI su knowledge base)</Text>
             {draft.openGrades.map((g) => (
               <OpenItem key={`o-${g.qid}`} g={g} />
+            ))}
+          </>
+        )}
+
+        {/* ── Riepilogo per categoria (owner debug call: X/Y per area invece di
+               una lista lunga di singole domande) ── */}
+        {draft.categoryCounts && draft.categoryCounts.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>Riepilogo per categoria</Text>
+            {draft.categoryCounts.map((c) => (
+              <View key={c.name} style={styles.catRow}>
+                <Text style={styles.catName}>{c.name}</Text>
+                <Text style={styles.catCount}>
+                  {c.correct}/{c.total}
+                </Text>
+              </View>
             ))}
           </>
         )}

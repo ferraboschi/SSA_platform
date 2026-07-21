@@ -12,6 +12,12 @@ import type { PlannerSaved } from "@/lib/pianificatore";
 import { COURSE_TYPES } from "@/lib/domain/constants";
 import "@/components/esame-pubblico/exam-public.css";
 
+// Always render live (debug call): the one-time server-rendered roster
+// (initialStudents) must reflect the current DB on every open — after a sandbox
+// reset re-seeds the roster, a cached render would show a viewer the pre-reset
+// list while another device sees the fresh one. Mirrors /invito and /conferma.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "SSA · Corso condiviso",
   robots: { index: false, follow: false },

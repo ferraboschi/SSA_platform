@@ -69,6 +69,10 @@ export interface CorrectionDraft {
   openGrades: OpenGrade[];
   /** Wrong objective answers, important-first (report: "domande da rivedere"). */
   wrongAnswers: WrongAnswer[];
+  /** Per-category X / Y count of OBJECTIVE answers (debug call: the bozza shows a
+   *  "Riepilogo per categoria" instead of a long per-question list). Absent on
+   *  legacy drafts. */
+  categoryCounts?: { name: string; correct: number; total: number }[];
   totals: {
     /** Points earned (objective + AI). */
     earned: number;
