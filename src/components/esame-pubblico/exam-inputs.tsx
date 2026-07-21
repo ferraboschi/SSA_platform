@@ -6,29 +6,8 @@ import { EMAIL_RE } from "./exam-chrome";
 // Google Places address autocomplete lives in the SHARED component — also used
 // by the /conferma attendee page.
 import { GoogleAddressInput } from "@/components/address/AddressInput";
-
-// Country dial codes — Italy first (the SSA audience), then common ones.
-const COUNTRY_CODES: { c: string; n: string }[] = [
-  { c: "+39", n: "Italia" },
-  { c: "+1", n: "USA / Canada" },
-  { c: "+44", n: "Regno Unito" },
-  { c: "+33", n: "Francia" },
-  { c: "+49", n: "Germania" },
-  { c: "+34", n: "Spagna" },
-  { c: "+41", n: "Svizzera" },
-  { c: "+43", n: "Austria" },
-  { c: "+32", n: "Belgio" },
-  { c: "+31", n: "Paesi Bassi" },
-  { c: "+81", n: "Giappone" },
-  { c: "+86", n: "Cina" },
-  { c: "+61", n: "Australia" },
-];
-
-function splitPhone(val: string): { code: string; num: string } {
-  const m = /^(\+\d{1,4})\s*(.*)$/.exec(val.trim());
-  if (m && COUNTRY_CODES.some((x) => x.c === m[1])) return { code: m[1], num: m[2] };
-  return { code: "+39", num: val.replace(/^\+\d{1,4}\s*/, "") };
-}
+import { MONTH_NAMES_IT } from "@/lib/dates/italian-months";
+import { COUNTRY_CODES, splitPhone } from "@/lib/phone/dial-codes";
 
 
 export interface NameParts {
@@ -140,17 +119,48 @@ export function RegInput({
       ) : field === "name" ? (
         <NameField value={val} onChange={onChange} parts={nameParts} onParts={onNameParts} />
       ) : field === "dob" ? (
-        // Native date picker → a calendar, no free-typed formats to get wrong.
-        // Stored ISO (YYYY-MM-DD); the XLS export renders it "1 January 1990".
-        <input
-          className="exam-public-input"
-          type="date"
-          value={/^\d{4}-\d{2}-\d{2}$/.test(val) ? val : ""}
-          max={new Date().toISOString().slice(0, 10)}
-          min="1920-01-01"
-          onChange={(e) => onChange(e.target.value)}
-          style={{ maxWidth: 240 }}
-        />
+        // Three selects (Giorno / Mese / Anno) instead of a native calendar: the
+        // native year picker means dozens of month-steps back to a birth year,
+        // and browsers differ; a <select> jumps to a year with type-ahead and
+        // works the same on desktop and mobile. Still emits zero-padded ISO
+        // (YYYY-MM-DD) so the XLS export ("1 January 1990") is unaffected.
+        (() => {
+          const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(val);
+          const yy = m?.[1] ?? "";
+          const mm = m?.[2] ?? "";
+          const dd = m?.[3] ?? "";
+          const nowY = new Date().getFullYear();
+          const compose = (y: string, mo: string, d: string) =>
+            y && mo && d ? `${y}-${mo}-${d}` : "";
+          const daysIn = yy && mm ? new Date(Number(yy), Number(mm), 0).getDate() : 31;
+          const sel = { maxWidth: 130 } as const;
+          return (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select className="exam-public-input" style={sel} value={dd} aria-label="Giorno"
+                onChange={(e) => onChange(compose(yy, mm, e.target.value))}>
+                <option value="">GG</option>
+                {Array.from({ length: daysIn }, (_, i) => String(i + 1).padStart(2, "0")).map((d) => (
+                  <option key={d} value={d}>{Number(d)}</option>
+                ))}
+              </select>
+              <select className="exam-public-input" style={sel} value={mm} aria-label="Mese"
+                onChange={(e) => onChange(compose(yy, e.target.value, dd))}>
+                <option value="">Mese</option>
+                {MONTH_NAMES_IT.map((name, i) => {
+                  const mo = String(i + 1).padStart(2, "0");
+                  return <option key={mo} value={mo}>{name}</option>;
+                })}
+              </select>
+              <select className="exam-public-input" style={sel} value={yy} aria-label="Anno"
+                onChange={(e) => onChange(compose(e.target.value, mm, dd))}>
+                <option value="">Anno</option>
+                {Array.from({ length: nowY - 1920 + 1 }, (_, i) => nowY - i).map((y) => (
+                  <option key={y} value={String(y)}>{y}</option>
+                ))}
+              </select>
+            </div>
+          );
+        })()
       ) : field === "address" ? (
         <GoogleAddressInput value={val} onChange={onChange} />
       ) : field === "email" ? (

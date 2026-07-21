@@ -84,16 +84,16 @@ async function partecipanteTarget(
   svc: Svc,
   corsoId: number,
   partecipanteId: number,
-): Promise<{ name: string; email: string } | null> {
+): Promise<{ name: string; email: string; confirmed: boolean } | null> {
   const { data, error } = await svc
     .from("corsi_partecipanti")
-    .select("id, full_name, email")
+    .select("id, full_name, email, email_confirmed_at")
     .eq("id", partecipanteId)
     .eq("corso_id", corsoId)
     .maybeSingle();
   if (error || !data) return null;
-  const r = data as { full_name: string | null; email?: string | null };
-  return { name: r.full_name ?? "", email: (r.email ?? "").trim() };
+  const r = data as { full_name: string | null; email?: string | null; email_confirmed_at?: string | null };
+  return { name: r.full_name ?? "", email: (r.email ?? "").trim(), confirmed: Boolean(r.email_confirmed_at) };
 }
 
 // Guard + resolve a corsista's name + target email (enrolled_email snapshot
@@ -102,10 +102,10 @@ async function corsistaTarget(
   svc: Svc,
   corsoId: number,
   corsistaId: number,
-): Promise<{ name: string; email: string } | null> {
+): Promise<{ name: string; email: string; confirmed: boolean } | null> {
   const { data, error } = await svc
     .from("corsi_iscrizioni")
-    .select("id, corsista:corsisti(full_name, email)")
+    .select("id, email_confirmed_at, corsista:corsisti(full_name, email)")
     .eq("corso_id", corsoId)
     .eq("corsista_id", corsistaId)
     .maybeSingle();
@@ -114,6 +114,7 @@ async function corsistaTarget(
   // object at runtime — cast through unknown (mirrors load.ts).
   const row = data as unknown as {
     id: number;
+    email_confirmed_at: string | null;
     corsista: { full_name: string | null; email: string | null } | null;
   };
   const c = row.corsista;
@@ -125,7 +126,7 @@ async function corsistaTarget(
     .eq("id", row.id)
     .maybeSingle();
   if (!snap.error && snap.data?.enrolled_email) email = String(snap.data.enrolled_email).trim();
-  return { name: c.full_name ?? "", email };
+  return { name: c.full_name ?? "", email, confirmed: Boolean(row.email_confirmed_at) };
 }
 
 export interface SendExamLinkResult {
@@ -177,6 +178,12 @@ export async function sendPersonalExamLinkAction(
       ? await corsistaTarget(svc, corsoId, cid)
       : await partecipanteTarget(svc, corsoId, cid);
   if (!target) return { ok: false, error: "Destinatario non trovato in questo corso." };
+  // Owner (debug call): never send the exam link before the student has CONFIRMED
+  // (sanitized) their data — the invite carries their identity, so it must be sent
+  // on trustworthy data only.
+  if (!target.confirmed) {
+    return { ok: false, error: "Lo studente non ha ancora confermato i suoi dati: attendi la conferma nell'Appello." };
+  }
 
   const res = await deliverExamInvite({
     courseId: String(corsoId),
@@ -236,6 +243,11 @@ export async function getPersonalExamLinkAction(
       ? await corsistaTarget(svc, corsoId, cid)
       : await partecipanteTarget(svc, corsoId, cid);
   if (!target) return { ok: false, error: "Destinatario non trovato in questo corso." };
+  // Same confirmation gate as the email send: the copied link carries the
+  // student's identity, so the data must be confirmed first (owner debug call).
+  if (!target.confirmed) {
+    return { ok: false, error: "Lo studente non ha ancora confermato i suoi dati: attendi la conferma nell'Appello." };
+  }
 
   const url = buildPersonalExamUrl(
     String(corsoId),
@@ -258,6 +270,8 @@ export interface SendExamLinksAllResult {
   /** Skipped because absent at the appello (this test's day, or every day
    *  for feedback/final) — the owner's rule: never invite an absent student. */
   absent?: number;
+  /** Skipped because the student hasn't confirmed their data yet. */
+  notConfirmed?: number;
   error?: string;
 }
 
@@ -283,10 +297,11 @@ export async function sendPersonalExamLinksToAllAction(
 
   const { data } = await svc
     .from("corsi_iscrizioni")
-    .select("corsista_id, corsista:corsisti(full_name, email)")
+    .select("corsista_id, email_confirmed_at, corsista:corsisti(full_name, email)")
     .eq("corso_id", corsoId);
   const rows = (data ?? []) as unknown as {
     corsista_id: number;
+    email_confirmed_at: string | null;
     corsista: { full_name: string | null; email: string | null } | null;
   }[];
 
@@ -304,9 +319,16 @@ export async function sendPersonalExamLinksToAllAction(
   let sent = 0;
   let noEmail = 0;
   let absent = 0;
+  let notConfirmed = 0;
   for (const r of rows) {
     if (isBlockedByAbsence(present, `c${r.corsista_id}`)) {
       absent++;
+      continue;
+    }
+    // Never send before the student confirmed their data — symmetric with the
+    // companions branch below and the single-send gate (owner debug call).
+    if (!r.email_confirmed_at) {
+      notConfirmed++;
       continue;
     }
     const email = enrolledEmail.get(r.corsista_id) || (r.corsista?.email ?? "").trim();
@@ -368,7 +390,7 @@ export async function sendPersonalExamLinksToAllAction(
       }
     }
   }
-  return { ok: true, total: rows.length + companions, sent, noEmail, absent };
+  return { ok: true, total: rows.length + companions, sent, noEmail, absent, notConfirmed };
 }
 
 // ── Live progress (educator's per-student bar) ──────────────────────────────

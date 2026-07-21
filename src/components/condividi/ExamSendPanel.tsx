@@ -154,7 +154,8 @@ export default function ExamSendPanel({
     setAllNote(
       `Inviate ${res.sent ?? 0}/${res.total ?? 0}` +
         `${res.noEmail ? ` · ${res.noEmail} senza email` : ""}` +
-        `${res.absent ? ` · ${res.absent} assenti all'appello` : ""}.`,
+        `${res.absent ? ` · ${res.absent} assenti all'appello` : ""}` +
+        `${res.notConfirmed ? ` · ${res.notConfirmed} non confermati` : ""}.`,
     );
     // Pull the just-persisted per-row stamps NOW, not at the next 10s tick —
     // the summary and the rows must never contradict each other.
@@ -393,6 +394,8 @@ function miniIconBtn(disabled = false): React.CSSProperties {
 // the owner's rule: only a present student can sit the exam.
 const ABSENT_WARNING =
   "Persona o studente non presente. Lo studente deve essere presente per sostenere l'esame.";
+const NOT_CONFIRMED_WARNING =
+  "Dati non ancora confermati. Lo studente deve confermare i suoi dati nell'Appello prima di ricevere il link.";
 
 // Chain/link glyph (inline SVG — the public page is self-contained, no icon lib).
 function LinkIcon() {
@@ -462,6 +465,11 @@ function StudentSendRow({
       setNote(ABSENT_WARNING);
       return;
     }
+    if (!person.emailConfirmed) {
+      setLink(null);
+      setNote(NOT_CONFIRMED_WARNING);
+      return;
+    }
     setBusy(true);
     setNote(null);
     setLink(null);
@@ -503,6 +511,11 @@ function StudentSendRow({
     if (absent) {
       setLink(null);
       setNote(ABSENT_WARNING);
+      return;
+    }
+    if (!person.emailConfirmed) {
+      setLink(null);
+      setNote(NOT_CONFIRMED_WARNING);
       return;
     }
     setBusy(true);
@@ -619,10 +632,12 @@ function StudentSendRow({
           title={
             absent
               ? ABSENT_WARNING
-              : "Copia il link personale (per SMS o consegna a voce, se non ha email/WhatsApp)"
+              : !person.emailConfirmed
+                ? NOT_CONFIRMED_WARNING
+                : "Copia il link personale (per SMS o consegna a voce, se non ha email/WhatsApp)"
           }
           aria-label="Copia il link personale"
-          style={miniIconBtn(busy || absent)}
+          style={miniIconBtn(busy || absent || !person.emailConfirmed)}
         >
           <LinkIcon />
         </button>
@@ -630,8 +645,8 @@ function StudentSendRow({
           type="button"
           onClick={send}
           disabled={busy}
-          title={absent ? ABSENT_WARNING : undefined}
-          style={miniBtn(true, busy || absent)}
+          title={absent ? ABSENT_WARNING : !person.emailConfirmed ? NOT_CONFIRMED_WARNING : undefined}
+          style={miniBtn(true, busy || absent || !person.emailConfirmed)}
         >
           {busy ? "…" : "Invia"}
         </button>

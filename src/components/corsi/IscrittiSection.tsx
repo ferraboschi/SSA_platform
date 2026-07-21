@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
+import { COUNTRY_CODES } from "@/lib/phone/dial-codes";
 import type { Student } from "@/lib/domain";
 import {
   completeSeatAction,
@@ -299,6 +300,7 @@ function PlaceholderRow({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [dialCode, setDialCode] = useState("+39");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -320,7 +322,7 @@ function PlaceholderRow({
     const res = await completeSeatAction(Number(courseId), iscrId, {
       name: `${firstName.trim().replace(/\s+/g, " ")} ${lastName.trim().replace(/\s+/g, " ")}`,
       email: email.trim(),
-      phone: phone.trim(),
+      phone: `${dialCode} ${phone.trim()}`.trim(),
     }).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatAction>>);
     setBusy(false);
     if (res.ok) {
@@ -401,20 +403,35 @@ function PlaceholderRow({
                     style={seatInput}
                   />
                 </SeatField>
-                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 150px" }}>
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    maxLength={40}
-                    disabled={busy}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") save();
-                      if (e.key === "Escape") setOpen(false);
-                    }}
-                    style={seatInput}
-                  />
+                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 190px" }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <select
+                      value={dialCode}
+                      onChange={(e) => setDialCode(e.target.value)}
+                      disabled={busy}
+                      aria-label="Prefisso internazionale"
+                      style={{ ...seatInput, flex: "0 0 96px" }}
+                    >
+                      {COUNTRY_CODES.map((cc) => (
+                        <option key={cc.c} value={cc.c}>
+                          {cc.c} {cc.n}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      maxLength={40}
+                      disabled={busy}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") save();
+                        if (e.key === "Escape") setOpen(false);
+                      }}
+                      style={{ ...seatInput, flex: 1 }}
+                    />
+                  </div>
                 </SeatField>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "0 0 auto" }}>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
