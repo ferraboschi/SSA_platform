@@ -109,7 +109,7 @@ export default async function Page({
     .select("type")
     .eq("id", Number(res.payload.c))
     .maybeSingle();
-  if (!corso) return <Invalid reason="Corso non trovato." />;
+  if (!corso) return <Invalid title="Corso non disponibile" reason="Corso non trovato." />;
 
   // ── Server-side integrity gates (real exams on a PERSONAL token only) ─────
   // Previews (test/validate) and the shared class link (email gate) skip both.
@@ -122,25 +122,40 @@ export default async function Page({
     // 1) ALREADY SUBMITTED → blocking screen. The DB unique index already
     //    forbids a second submission; this stops the student from re-entering
     //    the questions at all (refresh/other device/cleared storage). Scoped
-    //    strictly per test_key; FAIL-OPEN on query error (an infra hiccup must
-    //    never lock a student out mid-exam — the submit path stays guarded).
-    const { data: prior, error: priorErr } = await sb
-      .from("exam_submissions")
-      .select("id, answers, lang")
-      .eq("corso_id", corsoId)
-      .eq("test_key", res.payload.t)
-      .eq("mode", "exam")
-      .eq(subjS != null ? "corsista_id" : "partecipante_id", (subjS ?? subjP)!)
-      // Deterministic pick if legacy duplicates exist (the unique index is
-      // skipped on DBs that already held dupes): the FIRST hand-in counts.
-      .order("created_at", { ascending: true })
-      .limit(1);
+    //    strictly per test_key.
+    const isDayTest = /^day[1-9]$/.test(res.payload.t);
+    const queryPrior = () =>
+      sb
+        .from("exam_submissions")
+        .select("id, answers, lang")
+        .eq("corso_id", corsoId)
+        .eq("test_key", res.payload.t)
+        .eq("mode", "exam")
+        .eq(subjS != null ? "corsista_id" : "partecipante_id", (subjS ?? subjP)!)
+        // Deterministic pick if legacy duplicates exist (the unique index is
+        // skipped on DBs that already held dupes): the FIRST hand-in counts.
+        .order("created_at", { ascending: true })
+        .limit(1);
+    let { data: prior, error: priorErr } = await queryPrior();
+    // One retry: whether a student already handed in is an integrity decision —
+    // it must not hinge on a single transient blip.
+    if (priorErr) ({ data: prior, error: priorErr } = await queryPrior());
+    // If we STILL can't tell, fail OPEN for day tests (formative — never lock a
+    // student out mid-exam; the submit path stays guarded by the unique index)
+    // but fail CLOSED for the final/feedback: a transient error must never
+    // re-expose the graded questions to someone who already submitted. They can
+    // refresh — their answers are heartbeated server-side.
+    if (priorErr && !isDayTest) {
+      return (
+        <Blocked icon="…" title={CHROME[lang].unavailableTitle} body={CHROME[lang].unavailableBody} />
+      );
+    }
     if (!priorErr && prior && prior.length > 0) {
       // Day tests are FORMATIVE (owner, batch 7): re-opening the link shows
       // the student their result again — not a wall — until the educator
       // closes it (the closure check above runs first). The FINAL exam stays
       // locked: no outcome, no questions.
-      if (/^day[1-9]$/.test(res.payload.t)) {
+      if (isDayTest) {
         const sub = prior[0] as {
           id: number;
           answers?: Record<string, string | string[]> | null;
@@ -225,7 +240,7 @@ export default async function Page({
   // the end. Only "validate" reveals answers DURING the run; "test" is a clean
   // student-like preview that ends with the computed esito.
   const data = await loadPublicExam(res.payload.c, family, res.payload.t, isPreview);
-  if (!data) return <Invalid reason="Corso non trovato." />;
+  if (!data) return <Invalid title="Corso non disponibile" reason="Corso non trovato." />;
 
   const baseLabel =
     res.payload.t === "final"

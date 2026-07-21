@@ -332,6 +332,11 @@ export function ExamRunner({
         if (r.alreadySubmitted) setAlreadySubmitted(true);
         if (r.esito) setEsito(r.esito);
         setDone(true);
+      } else if (r.closed) {
+        // Educator closed the test during the hand-in: show the honest closed
+        // screen, NOT the "Riprova" loop (retrying only re-hits the closure).
+        // The snapshot was captured by finalize-on-close; leave finishingRef set.
+        setClosedLive(true);
       } else {
         setSubmitError(true);
         finishingRef.current = false; // allow autosave to resume for a retry
@@ -350,9 +355,9 @@ export function ExamRunner({
       getLinkStateAction(token)
         .then((r) => {
           // ONLY a real educator closure flips the screen (same filter as
-          // EsitoCard): the state action verifies with ZERO grace, so a merely
-          // expired token would otherwise masquerade as "chiuso dall'educator"
-          // and cut off a student the 3h submit grace still accepts.
+          // EsitoCard): the state action verifies WITH the 3h submit grace, so a
+          // merely expired token reports reason:"expired" (not "closed") and we
+          // deliberately ignore it — the student keeps the 3h grace to hand in.
           if (r.ok && r.closed && r.reason === "closed") setClosedLive(true);
         })
         .catch(() => {});

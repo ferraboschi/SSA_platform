@@ -91,7 +91,7 @@ export interface SubmitExamInput {
 export async function submitExam(
   token: string,
   input: SubmitExamInput,
-): Promise<{ ok: boolean; error?: string; alreadySubmitted?: boolean; esito?: DayEsito }> {
+): Promise<{ ok: boolean; error?: string; alreadySubmitted?: boolean; esito?: DayEsito; closed?: boolean }> {
   // 3h submit-only grace: a link that expires end-of-day must never reject the
   // hand-in of a student who STARTED before the expiry (entry has zero grace).
   const res = verifyExamToken(token, 3 * 3600);
@@ -134,7 +134,11 @@ export async function submitExam(
     // open from before must not write fresh state back.
     const closedAt = await getClosure(corsoId, t);
     if (isBlockedByClosure(closedAt, res.payload.ia)) {
-      return { ok: false, error: "Questo test è stato chiuso dall'educator." };
+      // `closed` lets the runner show the honest "test chiuso" screen instead of
+      // a generic "salvataggio non riuscito · Riprova" dead loop (every retry
+      // would re-hit this block). The finalize-on-close already captured the
+      // last heartbeated snapshot, so nothing further is lost here.
+      return { ok: false, error: "Questo test è stato chiuso dall'educator.", closed: true };
     }
   }
   const row = {
