@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { confirmAttendeeAction } from "@/lib/attendee/confirm-actions";
 import { GoogleAddressInput, type AddressPlaceMeta } from "@/components/address/AddressInput";
 import { addressHasCivico } from "@/lib/attendee/civico";
+import { COUNTRY_CODES, splitPhone } from "@/lib/phone/dial-codes";
 
 /**
  * Public "confirm your details" form. ALL fields are mandatory:
@@ -39,11 +40,11 @@ export function ConfirmForm({
   alreadyConfirmed: boolean;
 }) {
   const uid = useId();
-  const initialPhoneParts = splitPhone(initialPhone);
+  const initialPhoneParts = splitPhone(initialPhone); // { code, num }
   const [fullName, setFullName] = useState(name);
   const [email, setEmail] = useState(initialEmail);
   const [dialCode, setDialCode] = useState(initialPhoneParts.code);
-  const [phoneNumber, setPhoneNumber] = useState(initialPhoneParts.number);
+  const [phoneNumber, setPhoneNumber] = useState(initialPhoneParts.num);
   const [address, setAddress] = useState(initialAddress);
   // Street-number detection (owner batch 7): Google tells us whether the
   // selected address carries a civic number; null = typed by hand / unknown.
@@ -197,9 +198,9 @@ export function ConfirmForm({
             onChange={(e) => setDialCode(e.target.value)}
             style={{ ...field, width: "auto", flex: "0 0 auto", maxWidth: 150 }}
           >
-            {COUNTRIES.map((c) => (
-              <option key={c.code + c.name} value={c.code}>
-                {c.flag} {c.code}
+            {COUNTRY_CODES.map((c) => (
+              <option key={c.c + c.n} value={c.c}>
+                {c.f} {c.c}
               </option>
             ))}
           </select>
@@ -345,51 +346,6 @@ export function ConfirmForm({
 // Official SSA legal pages (Shopify-hosted policy pages on the SSA domain).
 const PRIVACY_URL = "https://www.sakesommelierassociation.it/policies/privacy-policy";
 const TERMS_URL = "https://www.sakesommelierassociation.it/policies/terms-of-service";
-
-// International dial codes for the phone field. Italy is the default (the vast
-// majority of attendees); the rest cover the common origins. Order = Italy +
-// neighbours first, then broader.
-const COUNTRIES: { code: string; flag: string; name: string }[] = [
-  { code: "+39", flag: "🇮🇹", name: "Italia" },
-  { code: "+41", flag: "🇨🇭", name: "Svizzera" },
-  { code: "+378", flag: "🇸🇲", name: "San Marino" },
-  { code: "+33", flag: "🇫🇷", name: "Francia" },
-  { code: "+49", flag: "🇩🇪", name: "Germania" },
-  { code: "+44", flag: "🇬🇧", name: "Regno Unito" },
-  { code: "+34", flag: "🇪🇸", name: "Spagna" },
-  { code: "+43", flag: "🇦🇹", name: "Austria" },
-  { code: "+32", flag: "🇧🇪", name: "Belgio" },
-  { code: "+31", flag: "🇳🇱", name: "Paesi Bassi" },
-  { code: "+351", flag: "🇵🇹", name: "Portogallo" },
-  { code: "+30", flag: "🇬🇷", name: "Grecia" },
-  { code: "+353", flag: "🇮🇪", name: "Irlanda" },
-  { code: "+352", flag: "🇱🇺", name: "Lussemburgo" },
-  { code: "+386", flag: "🇸🇮", name: "Slovenia" },
-  { code: "+385", flag: "🇭🇷", name: "Croazia" },
-  { code: "+420", flag: "🇨🇿", name: "Rep. Ceca" },
-  { code: "+48", flag: "🇵🇱", name: "Polonia" },
-  { code: "+46", flag: "🇸🇪", name: "Svezia" },
-  { code: "+45", flag: "🇩🇰", name: "Danimarca" },
-  { code: "+47", flag: "🇳🇴", name: "Norvegia" },
-  { code: "+1", flag: "🇺🇸", name: "USA / Canada" },
-  { code: "+81", flag: "🇯🇵", name: "Giappone" },
-  { code: "+86", flag: "🇨🇳", name: "Cina" },
-  { code: "+61", flag: "🇦🇺", name: "Australia" },
-  { code: "+971", flag: "🇦🇪", name: "Emirati Arabi" },
-];
-
-/** Split a stored phone into a known dial code + the rest. Defaults to Italy
- *  (+39) when there's no recognizable prefix, so the local number stays intact. */
-function splitPhone(raw: string): { code: string; number: string } {
-  const s = (raw || "").trim();
-  if (s.startsWith("+")) {
-    // Longest match wins so "+378"/"+351" beat "+3…".
-    const codes = COUNTRIES.map((c) => c.code).sort((a, b) => b.length - a.length);
-    const match = codes.find((c) => s.startsWith(c));
-    if (match) return { code: match, number: s.slice(match.length).trim() };
-  }
-  return { code: "+39", number: s };
-}
 
 const link: React.CSSProperties = {
   color: "var(--indigo-600)",

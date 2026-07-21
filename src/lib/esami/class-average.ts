@@ -35,7 +35,12 @@ async function computeFamilyAverage(family: ExamFamily): Promise<{ avg: number; 
     .from("corsi")
     .select("id")
     .eq("type", COURSE_TYPE[family]);
-  if (corsiErr) return { avg: 0, n: 0 };
+  // THROW (don't return zeros) on a total failure: this runs inside
+  // unstable_cache, which stores returned values but NOT thrown errors — so a
+  // returned {n:0} would poison the cohort media on every certificate for 30
+  // min after one cold-cache DB hiccup. Throwing lets getClassAverage's catch
+  // fail-open to null without caching the miss (same rule as catalog.ts).
+  if (corsiErr) throw new Error(`class-average: corsi query failed: ${corsiErr.message}`);
   const ids = (corsi ?? []).map((c) => (c as { id: number }).id);
   if (ids.length === 0) return { avg: 0, n: 0 };
 

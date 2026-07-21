@@ -380,7 +380,3 @@ export function companyName(w: Winner, lang: LangKey) {
 export function regionKeyOf(w: Winner): RegionKey {
   return w.region && (REGION_KEYS as string[]).includes(w.region) ? (w.region as RegionKey) : "altro";
 }
-export function fmtPrice(v: number | string) {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? `¥${n.toLocaleString("ja-JP")}` : String(v);
-}

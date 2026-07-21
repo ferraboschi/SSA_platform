@@ -8,7 +8,6 @@ import type {
   Exam,
   ExamMeta,
   ExamQuestion,
-  ExamResult,
   ExamTemplate,
 } from "@/lib/domain";
 import { EXAM_COURSE_TYPES } from "@/lib/domain";

@@ -6,11 +6,6 @@
 
 import { resendConfig } from "../config";
 
-export interface EmailAddress {
-  email: string;
-  name?: string;
-}
-
 export interface EmailAttachment {
   filename: string;
   /** Base64-encoded file content (Resend's `attachments[].content` format). */

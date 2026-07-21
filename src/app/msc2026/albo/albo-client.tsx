@@ -9,7 +9,7 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   VISIBLE, MEDAL_ORDER, MEDAL_META, SESSION_ORDER, SESSION_META, CATEGORY_GROUPS, CATEGORIES_BY_SESSION, SEARCH_ENTITIES, UI,
-  companyName, medalImageFor, type Winner, type SessionKey, type MedalKey, type LangKey, type SearchTag,
+  companyName, medalImageFor, type Winner, type SessionKey, type LangKey, type SearchTag,
 } from "../shared";
 
 type SortKey = "name" | "company" | "prefecture";

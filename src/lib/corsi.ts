@@ -160,44 +160,6 @@ export function sortCourses(
   return [...list].sort((a, b) => (dir === "asc" ? fn(a, b) : fn(b, a)));
 }
 
-// ===== Iscritti model (course detail · Iscritti tab) =====
-// Deterministic, seeded enrichment of the order list into editable enrolment
-// rows: buyer, attendees, gift/multi flags, and name/email typo flags. Pure so
-// it can seed client state identically on every render.
-
-export interface Attendee {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  isBuyer: boolean;
-  isGift?: boolean;
-  confirmed: boolean;
-  pending?: boolean;
-  typoName?: boolean;
-  typoEmail?: boolean;
-  hasWA?: boolean;
-}
-
-export interface IscrittoModel {
-  id: string;
-  buyer: {
-    name: string;
-    email: string;
-    phone: string;
-    hasWA: boolean;
-    orderNumber: string;
-    amount: number;
-    discountCode: string | null;
-  };
-  seats: number;
-  isGift: boolean;
-  isMulti: boolean;
-  attendees: Attendee[];
-  totalAmount: number;
-  flags: { typoName: boolean; typoEmail: boolean };
-}
-
 // Days-to-start for the detail countdown, anchored to the real current date.
 export function daysToStart(course: Pick<Course, "year" | "month" | "day">): number {
   const start = new Date(course.year, Math.max(0, monthIndexIt(course.month)), course.day);
