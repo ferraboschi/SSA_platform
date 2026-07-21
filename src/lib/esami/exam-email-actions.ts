@@ -8,49 +8,65 @@ import { assertRole } from "@/lib/auth/guard";
 import { getEmailService } from "@/lib/integrations/email";
 import { appConfig } from "@/lib/integrations/config";
 import { renderCertificatePdf } from "./certificate-pdf";
-import { loadExamEmailTemplates, writeExamEmailTemplates } from "./exam-email-store";
+import {
+  loadExamEmailTemplatesForLang,
+  writeAllExamEmailTemplates,
+} from "./exam-email-store";
 import { getUpcomingCourseLines } from "./upcoming-courses";
 import {
   renderExamEmail,
   EXAM_OUTCOMES,
+  EXAM_EMAIL_LANGS,
   OUTCOME_LABEL_IT,
+  OUTCOME_LABEL_BY_LANG,
+  LANG_LABEL,
+  normalizeExamLang,
+  type ExamEmailLang,
   type ExamEmailTemplate,
   type ExamEmailTemplates,
   type ExamOutcome,
 } from "./exam-email";
 
 export async function saveExamEmailTemplatesAction(
-  templates: ExamEmailTemplates,
+  byLang: Record<ExamEmailLang, ExamEmailTemplates>,
 ): Promise<{ ok: boolean; error?: string }> {
   await assertRole(["admin", "manager"]);
-  for (const o of EXAM_OUTCOMES) {
-    const t = templates?.[o];
-    if (!t || !t.subject?.trim() || !t.body?.trim()) {
-      return { ok: false, error: `Oggetto e testo sono obbligatori (${OUTCOME_LABEL_IT[o]}).` };
+  // Validate + normalise every language × outcome; persist only the known ones.
+  const clean = {} as Record<ExamEmailLang, ExamEmailTemplates>;
+  for (const l of EXAM_EMAIL_LANGS) {
+    const langTpls = byLang?.[l];
+    const cleanLang = {} as ExamEmailTemplates;
+    for (const o of EXAM_OUTCOMES) {
+      const t = langTpls?.[o];
+      if (!t || !t.subject?.trim() || !t.body?.trim()) {
+        return {
+          ok: false,
+          error: `Oggetto e testo sono obbligatori (${LANG_LABEL[l]} · ${OUTCOME_LABEL_IT[o]}).`,
+        };
+      }
+      cleanLang[o] = { subject: t.subject.trim(), body: t.body };
     }
+    clean[l] = cleanLang;
   }
-  // Persist only the three known outcomes (ignore anything else).
-  const clean = {} as ExamEmailTemplates;
-  for (const o of EXAM_OUTCOMES) {
-    clean[o] = { subject: templates[o].subject.trim(), body: templates[o].body };
-  }
-  await writeExamEmailTemplates(clean);
+  await writeAllExamEmailTemplates(clean);
   return { ok: true };
 }
 
-/** Send a TEST of one outcome's email to `to`, using the (optionally unsaved)
- *  draft passed from the editor, with sample data. */
+/** Send a TEST of one outcome's email to `to`, in `lang`, using the (optionally
+ *  unsaved) draft passed from the editor, with sample data. */
 export async function sendExamResultTestAction(
   outcome: ExamOutcome,
   to: string,
   draft?: ExamEmailTemplate,
+  langInput?: string,
 ): Promise<{ ok: boolean; status?: string; error?: string }> {
   await assertRole(["admin", "manager"]);
   const dest = (to || "").trim().toLowerCase();
   if (!dest || !dest.includes("@")) return { ok: false, error: "Email di prova non valida." };
   if (!EXAM_OUTCOMES.includes(outcome)) return { ok: false, error: "Esito non valido." };
+  const lang = normalizeExamLang(langInput);
 
-  const tpl = draft ?? (await loadExamEmailTemplates())[outcome];
+  const tpl = draft ?? (await loadExamEmailTemplatesForLang(lang))[outcome];
   if (!tpl?.subject?.trim() || !tpl?.body?.trim()) {
     return { ok: false, error: "Oggetto e testo sono obbligatori." };
   }
@@ -62,9 +78,9 @@ export async function sendExamResultTestAction(
       nome: "Mario Rossi",
       corso: "Sake Sommelier Certificato",
       punteggio: 82,
-      esito: OUTCOME_LABEL_IT[outcome],
+      esito: OUTCOME_LABEL_BY_LANG[lang][outcome],
     },
-    { reportUrl: `${base}/esami`, outcome, courses },
+    { reportUrl: `${base}/esami`, outcome, courses, lang },
   );
   // Attach a sample outcome PDF so the test also shows the branded attachment.
   let attachments: { filename: string; content: string; contentType?: string }[] | undefined;
@@ -120,7 +136,7 @@ export async function sendExamResultTestAction(
       ],
       course: { day: 14, month: "Settembre", year: 2026, city: "Online", educatorName: "—" },
       completedAt: new Date().toISOString(),
-    }, ["it"]);
+    }, [lang]);
     attachments = [
       { filename: "esito-esame-prova.pdf", content: buf.toString("base64"), contentType: "application/pdf" },
     ];

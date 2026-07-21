@@ -3,7 +3,7 @@ import { requireNavAccess } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import type { ExamFamily, ExamTemplate } from "@/lib/domain";
 import { ExamLibraryEditor } from "@/components/esami/ExamLibraryEditor";
-import { loadExamEmailTemplates } from "@/lib/esami/exam-email-store";
+import { loadAllExamEmailTemplates } from "@/lib/esami/exam-email-store";
 import { getUpcomingCourseLines } from "@/lib/esami/upcoming-courses";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function Page() {
   const [list, courses, emailTemplates] = await Promise.all([
     ds.examTemplates.list(),
     ds.courses.list(),
-    loadExamEmailTemplates(),
+    loadAllExamEmailTemplates(),
   ]);
   // Reuse the list already in hand: courses.list() is the app's heaviest read
   // and this page used to run it TWICE per render (saves included).

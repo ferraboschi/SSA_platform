@@ -22,7 +22,7 @@ import { ExamEmailTemplatesEditor } from "@/components/esami/ExamEmailTemplatesE
 import { COURSE_TYPES, EXAM_COURSE_TYPES } from "@/lib/domain/constants";
 import { FeedbackTemplatesEditor } from "@/components/esami/FeedbackTemplatesEditor";
 import { QuestionDetail, AddQuestionRow } from "@/components/esami/QuestionDetail";
-import type { ExamEmailTemplates, UpcomingCourseLine } from "@/lib/esami/exam-email";
+import type { ExamEmailLang, ExamEmailTemplates, UpcomingCourseLine } from "@/lib/esami/exam-email";
 
 type Section = "esame" | "feedback" | "mail" | `day${number}`;
 
@@ -31,8 +31,9 @@ export interface ExamLibraryEditorProps {
   /** Representative course id per family, to mint preview links. */
   previewCourse?: Partial<Record<ExamFamily, string>>;
   /** "Mail Template" section, right after "Esame" — Bocciato/Rimandato/
-   *  Promosso outcome emails (not per-family: one shared set for the org). */
-  emailTemplates: ExamEmailTemplates;
+   *  Promosso outcome emails, one set per language (it / en / ja). Not
+   *  per-family: one shared set for the org. */
+  emailTemplates: Record<ExamEmailLang, ExamEmailTemplates>;
   testTo: string;
   upcomingCourses: UpcomingCourseLine[];
 }

@@ -24,6 +24,16 @@ export type ExamEmailTemplates = Record<ExamOutcome, ExamEmailTemplate>;
 
 export const EXAM_OUTCOMES: ExamOutcome[] = ["passed", "retrial", "failed"];
 
+/** The languages staff can edit result emails in (matches DEFAULTS_BY_LANG). */
+export const EXAM_EMAIL_LANGS: ExamEmailLang[] = ["it", "en", "ja"];
+
+/** Human labels for the editor's language switcher. */
+export const LANG_LABEL: Record<ExamEmailLang, string> = {
+  it: "Italiano",
+  en: "English",
+  ja: "日本語",
+};
+
 export const OUTCOME_LABEL_IT: Record<ExamOutcome, string> = {
   passed: "Promosso",
   retrial: "Rimandato",
@@ -381,13 +391,49 @@ export function renderExamEmail(
   return { subject, html };
 }
 
-/** Merge a possibly-partial saved object with defaults (every outcome present). */
+/** Persisted shape of the staff-edited templates: a partial tree keyed by language,
+ *  then outcome. Every level is optional — a missing language/outcome/field falls
+ *  back to that language's built-in default at read time. */
+export type ExamEmailTemplatesByLang = Partial<
+  Record<ExamEmailLang, Partial<Record<ExamOutcome, Partial<ExamEmailTemplate>>>>
+>;
+
+/** Interpret a raw settings_kv value as the per-language saved shape.
+ *  Back-compat: the historical value was a FLAT ExamEmailTemplates (Italian only,
+ *  owner-edited, keyed by outcome) — treat it as the `it` slice so no existing edit
+ *  is lost when the store upgrades to the per-language shape. */
+export function coerceSavedEmailTemplates(raw: unknown): ExamEmailTemplatesByLang {
+  if (!raw || typeof raw !== "object") return {};
+  const obj = raw as Record<string, unknown>;
+  // New nested shape: keyed by language.
+  if ("it" in obj || "en" in obj || "ja" in obj) {
+    const out: ExamEmailTemplatesByLang = {};
+    for (const l of EXAM_EMAIL_LANGS) {
+      const slice = obj[l];
+      if (slice && typeof slice === "object") {
+        out[l] = slice as Partial<Record<ExamOutcome, Partial<ExamEmailTemplate>>>;
+      }
+    }
+    return out;
+  }
+  // Legacy flat shape (keyed by outcome) → the Italian slice.
+  if ("passed" in obj || "retrial" in obj || "failed" in obj) {
+    return { it: obj as Partial<Record<ExamOutcome, Partial<ExamEmailTemplate>>> };
+  }
+  return {};
+}
+
+/** Merge a possibly-partial saved slice with the defaults for `lang` (every outcome
+ *  present). `lang` selects which built-in defaults form the base — so an unedited
+ *  English send still reads the English default text, and an edited one wins. */
 export function mergeExamEmailTemplates(
   saved: Partial<Record<ExamOutcome, Partial<ExamEmailTemplate>>> | null | undefined,
+  lang: ExamEmailLang = "it",
 ): ExamEmailTemplates {
+  const base = DEFAULTS_BY_LANG[lang];
   const out = {} as ExamEmailTemplates;
   for (const o of EXAM_OUTCOMES) {
-    out[o] = { ...DEFAULT_EXAM_EMAIL_TEMPLATES[o], ...(saved?.[o] ?? {}) };
+    out[o] = { ...base[o], ...(saved?.[o] ?? {}) };
   }
   return out;
 }

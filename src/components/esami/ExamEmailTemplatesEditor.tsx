@@ -5,8 +5,12 @@ import { Icon } from "@/components/ui";
 import {
   renderExamEmail,
   EXAM_OUTCOMES,
+  EXAM_EMAIL_LANGS,
   OUTCOME_LABEL_IT,
+  OUTCOME_LABEL_BY_LANG,
+  LANG_LABEL,
   EXAM_EMAIL_VARS,
+  type ExamEmailLang,
   type ExamEmailTemplates,
   type ExamOutcome,
   type UpcomingCourseLine,
@@ -27,11 +31,12 @@ export function ExamEmailTemplatesEditor({
   testTo,
   upcoming = [],
 }: {
-  initial: ExamEmailTemplates;
+  initial: Record<ExamEmailLang, ExamEmailTemplates>;
   testTo: string;
   upcoming?: UpcomingCourseLine[];
 }) {
-  const [templates, setTemplates] = useState<ExamEmailTemplates>(initial);
+  const [byLang, setByLang] = useState<Record<ExamEmailLang, ExamEmailTemplates>>(initial);
+  const [lang, setLang] = useState<ExamEmailLang>("it");
   const [active, setActive] = useState<ExamOutcome>("passed");
   const [testEmail, setTestEmail] = useState(testTo || "");
   const [savePending, startSave] = useTransition();
@@ -42,9 +47,12 @@ export function ExamEmailTemplatesEditor({
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const lastFocused = useRef<"subject" | "body">("body");
 
-  const cur = templates[active];
+  const cur = byLang[lang][active];
   const setCur = (patch: Partial<{ subject: string; body: string }>) =>
-    setTemplates((t) => ({ ...t, [active]: { ...t[active], ...patch } }));
+    setByLang((prev) => ({
+      ...prev,
+      [lang]: { ...prev[lang], [active]: { ...prev[lang][active], ...patch } },
+    }));
 
   const insertVar = (v: string) => {
     const field = lastFocused.current;
@@ -67,7 +75,7 @@ export function ExamEmailTemplatesEditor({
   const save = () => {
     setMsg(null);
     startSave(async () => {
-      const r = await saveExamEmailTemplatesAction(templates);
+      const r = await saveExamEmailTemplatesAction(byLang);
       setMsg({ ok: r.ok, text: r.ok ? "Modelli salvati ✓" : r.error || "Errore nel salvataggio." });
     });
   };
@@ -75,7 +83,7 @@ export function ExamEmailTemplatesEditor({
   const sendTest = () => {
     setMsg(null);
     startTest(async () => {
-      const r = await sendExamResultTestAction(active, testEmail, templates[active]);
+      const r = await sendExamResultTestAction(active, testEmail, byLang[lang][active], lang);
       setMsg({
         ok: r.ok && r.status !== "skipped",
         text: r.ok
@@ -93,9 +101,9 @@ export function ExamEmailTemplatesEditor({
       nome: "Mario Rossi",
       corso: "Sake Sommelier Certificato",
       punteggio: 82,
-      esito: OUTCOME_LABEL_IT[active],
+      esito: OUTCOME_LABEL_BY_LANG[lang][active],
     },
-    { reportUrl: "#", outcome: active, courses: upcoming },
+    { reportUrl: "#", outcome: active, courses: upcoming, lang },
   );
 
   return (
@@ -111,14 +119,28 @@ export function ExamEmailTemplatesEditor({
         }}
       >
         <p className="text-3" style={{ fontSize: 13, lineHeight: 1.5, margin: 0, maxWidth: 560 }}>
-          Personalizza le 3 email inviate allo studente in base all&apos;esito.
-          Usa le variabili per inserire automaticamente nome, corso e punteggio.
-          Il certificato PDF resta allegato in automatico.
+          Personalizza le email inviate allo studente in base all&apos;esito, in ogni
+          lingua. Lo studente riceve l&apos;email nella lingua scelta per l&apos;esame.
+          Usa le variabili per inserire automaticamente nome, corso e punteggio;
+          il certificato PDF resta allegato in automatico.
         </p>
         <button className="btn btn-primary" disabled={savePending} onClick={save}>
           <Icon name="save" size={13} />
           {savePending ? "Salvo…" : "Salva modelli"}
         </button>
+      </div>
+
+      {/* Language switcher — one editable set per language */}
+      <div className="tabs" style={{ marginBottom: 12 }}>
+        {EXAM_EMAIL_LANGS.map((l) => (
+          <button
+            key={l}
+            className={`tab ${lang === l ? "active" : ""}`}
+            onClick={() => setLang(l)}
+          >
+            {LANG_LABEL[l]}
+          </button>
+        ))}
       </div>
 
       {/* Outcome tabs */}
@@ -200,7 +222,7 @@ export function ExamEmailTemplatesEditor({
                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 <Icon name="mail" size={13} />
-                {testPending ? "Invio…" : `Invia prova "${OUTCOME_LABEL_IT[active]}"`}
+                {testPending ? "Invio…" : `Invia prova "${OUTCOME_LABEL_IT[active]}" (${LANG_LABEL[lang]})`}
               </button>
             </div>
             <div style={{ fontSize: 11.5, color: "var(--text-4)" }}>

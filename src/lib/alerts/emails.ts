@@ -8,11 +8,10 @@
 import "server-only";
 import { appConfig, alertRecipients } from "@/lib/integrations/config";
 import { getEmailService, type EmailSendResult } from "@/lib/integrations/email";
-import { loadExamEmailTemplates } from "@/lib/esami/exam-email-store";
+import { loadExamEmailTemplatesForLang } from "@/lib/esami/exam-email-store";
 import {
   renderExamEmail,
   normalizeExamLang,
-  DEFAULTS_BY_LANG,
   OUTCOME_LABEL_BY_LANG,
 } from "@/lib/esami/exam-email";
 import { getUpcomingCourseLines } from "@/lib/esami/upcoming-courses";
@@ -153,17 +152,16 @@ export interface ExamResultEmailInput {
   pdf?: { filename: string; base64: string };
 }
 
-/** Personal exam-result email to the student. For Italian students it uses the
- *  staff-editable templates (one per outcome); for en/ja students it uses the
- *  built-in localized defaults. Rendered with the student's data + certificate. */
+/** Personal exam-result email to the student. Uses the staff-editable templates
+ *  for the student's language (it / en / ja), each of which falls back to its
+ *  built-in localized default when unedited. Rendered with the student's data +
+ *  certificate. */
 export async function sendExamResultEmail(input: ExamResultEmailInput): Promise<EmailSendResult> {
   const lang = normalizeExamLang(input.lang);
-  const [savedTemplates, courses] = await Promise.all([
-    loadExamEmailTemplates(),
+  const [templates, courses] = await Promise.all([
+    loadExamEmailTemplatesForLang(lang),
     getUpcomingCourseLines(4),
   ]);
-  // Italian = the staff-editable templates; en/ja = the built-in localized defaults.
-  const templates = lang === "it" ? savedTemplates : DEFAULTS_BY_LANG[lang];
   const { subject, html } = renderExamEmail(
     templates[input.status],
     {
