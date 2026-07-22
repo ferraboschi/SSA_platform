@@ -360,9 +360,10 @@ export function ExamRunner({
     const id = setInterval(() => {
       getLinkStateAction(token)
         .then((r) => {
-          // Zero grace: BOTH a closure and an expiry block the open runner
-          // within ~10s (owner's rule — no window to keep working). Closure →
-          // "test chiuso"; expiry → "link scaduto".
+          // A CLOSURE flips the runner to "test chiuso" within ~10s (blocks
+          // everyone instantly). A token only reports "expired" once it is past
+          // the 3h submit grace — i.e. genuinely done — so the "scaduto" flip
+          // never cuts off a student still inside the legit hand-in window.
           if (r.ok && r.closed) {
             if (r.reason === "closed") setClosedLive(true);
             else if (r.reason === "expired") setExpiredLive(true);
@@ -470,8 +471,8 @@ export function ExamRunner({
     </header>
   );
 
-  // Link expired while the page was open (0 grace) → terminal "scaduto" screen.
-  // Wins over the submit-retry state: retrying can't revive an expired token.
+  // Link expired past the 3h grace while the page was open → terminal "scaduto"
+  // screen. Wins over the submit-retry state: retrying can't revive it.
   if (expiredLive && !done) {
     return (
       <div className="exam-public-shell" {...lockdown}>

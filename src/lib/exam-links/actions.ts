@@ -92,10 +92,13 @@ export async function submitExam(
   token: string,
   input: SubmitExamInput,
 ): Promise<{ ok: boolean; error?: string; alreadySubmitted?: boolean; esito?: DayEsito; closed?: boolean; expired?: boolean }> {
-  // ZERO grace (owner's rule): once a link is closed or expired, NO ONE may hand
-  // in — there is no window in which work can still be submitted. `expired` lets
-  // the runner show a terminal "link scaduto" screen instead of a retry loop.
-  const res = verifyExamToken(token);
+  // Submit keeps a 3h grace on the NATURAL end-of-day expiry so a student who
+  // started before midnight can still hand in — otherwise their in-progress work
+  // is silently orphaned (no expiry-side finalize exists). This grace can NEVER
+  // bypass a CLOSURE: isBlockedByClosure below blocks any pre-closure token
+  // regardless, so "Chiudi per tutti" still stops everyone instantly. `expired`
+  // (past the grace) lets the runner show a terminal screen, not a retry loop.
+  const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto.", expired: true };
   const { c, t, m, s, p } = res.payload;
   if (m !== "exam") return { ok: true }; // preview/validation: no write
@@ -264,10 +267,10 @@ export async function submitExam(
 export async function getLinkStateAction(
   token: string,
 ): Promise<{ ok: boolean; closed?: boolean; reason?: "closed" | "expired" }> {
-  // ZERO grace, like entry/submit: a closed OR expired link must flip the open
-  // runner to a blocked screen within seconds — no window to keep working. An
-  // expired token reports reason:"expired"; a closed one reason:"closed".
-  const res = verifyExamToken(token);
+  // Same 3h grace as submit: within it, a still-open runner keeps polling and the
+  // student can hand in. A CLOSURE flips the screen to "test chiuso" immediately;
+  // only a token past the grace reports reason:"expired" → terminal "scaduto".
+  const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) {
     return res.reason === "expired"
       ? { ok: true, closed: true, reason: "expired" }
@@ -290,7 +293,7 @@ export async function getLinkStateAction(
 export async function getDayEsitoAction(
   token: string,
 ): Promise<{ ok: boolean; esito?: DayEsito; error?: string }> {
-  const res = verifyExamToken(token);
+  const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
   const { c, t, m, s, p } = res.payload;
   if (m !== "exam" || !/^day[1-9]$/.test(t)) return { ok: false, error: "Non disponibile." };
@@ -341,7 +344,7 @@ export async function getExamExplanationAction(
   qid: string,
   lang?: string,
 ): Promise<{ ok: boolean; text?: string; error?: string }> {
-  const res = verifyExamToken(token);
+  const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
   const { c, t } = res.payload;
   if (!/^day[1-9]$/.test(t)) return { ok: false, error: "Approfondimenti disponibili solo per i test giornalieri." };

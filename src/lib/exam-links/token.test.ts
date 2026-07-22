@@ -42,6 +42,20 @@ describe("exam-link tokens (HMAC, signed + expiring)", () => {
     expect(res).toEqual({ ok: false, reason: "expired" });
   });
 
+  it("graceSeconds accepts a recently-expired token (submit hand-in) but not past the grace", () => {
+    const expired30minAgo = Math.floor(Date.now() / 1000) - 30 * 60;
+    const tok = signExamToken({ ...base, e: expired30minAgo });
+    // Zero grace (entry) rejects it; the 3h submit grace still accepts the hand-in.
+    expect(verifyExamToken(tok).ok).toBe(false);
+    expect(verifyExamToken(tok, 3 * 3600).ok).toBe(true);
+    // Past the grace it is expired even for submit.
+    const expired4hAgo = Math.floor(Date.now() / 1000) - 4 * 3600;
+    expect(verifyExamToken(signExamToken({ ...base, e: expired4hAgo }), 3 * 3600)).toEqual({
+      ok: false,
+      reason: "expired",
+    });
+  });
+
   it("rejects a malformed token (no dot / junk)", () => {
     expect(verifyExamToken("not-a-token")).toEqual({ ok: false, reason: "malformed" });
     expect(verifyExamToken("a.b.c")).toEqual({ ok: false, reason: "malformed" });
