@@ -1,93 +1,50 @@
 "use client";
 
 import { useState } from "react";
-import { createExamLink } from "@/lib/exam-links/actions";
-import type { ExamTestKey } from "@/lib/exam-links/token";
-
-interface TestDef {
-  key: ExamTestKey;
-  label: string;
-  important?: boolean;
-}
-
-// Order: Test day 1..N → Feedback → ESAME (last, the most important).
-function testsForFamily(family: "nihonshu" | "shochu"): TestDef[] {
-  const days = family === "shochu" ? 2 : 3;
-  return [
-    ...Array.from({ length: days }, (_, i) => ({
-      key: `day${i + 1}` as ExamTestKey,
-      label: `Test giorno ${i + 1}`,
-    })),
-    { key: "feedback" as ExamTestKey, label: "Feedback" },
-    { key: "final" as ExamTestKey, label: "Esame finale", important: true },
-  ];
-}
-
-type LinkState = Record<string, { url: string; copied?: boolean }>;
+import { createEmergencyExamLink } from "@/lib/exam-links/actions";
 
 /**
- * Staff PREVIEWS only — one "Anteprima" per test (full run to the computed
- * outcome, nothing saved). Student link DISTRIBUTION lives exclusively in the
- * Condividi educator page (batch 12): links minted here carried no issue
- * stamp (`ia`), so after any closure/reset they were born dead, and they
- * bypassed the send log and the roll-call gate.
+ * EMERGENCY channel (owner). Normally the educator sends the exam links from the
+ * Condividi page — that is the standard flow. This panel exists ONLY for the rare
+ * case where the educator can't do it from their usual device (broken/dead phone):
+ * the SSA responsible mints the REAL generic "room" link for the FINAL exam here
+ * and hands it off via an external channel (WhatsApp). The link is identical to the
+ * one the educator would generate — it respects every rule (confirmed data,
+ * presence at the appello, closure) via the /esame email gate.
  */
-export function ExamLinkPanel({
-  courseId,
-  family,
-}: {
-  courseId: string;
-  family: "nihonshu" | "shochu";
-}) {
-  const tests = testsForFamily(family);
-  const [links, setLinks] = useState<LinkState>({});
-  const [busy, setBusy] = useState<string | null>(null);
+export function ExamLinkPanel({ courseId }: { courseId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const slot = (key: ExamTestKey) => `${key}:test`;
-
-  const generate = async (key: ExamTestKey) => {
-    const id = slot(key);
-    setBusy(id);
-    const res = await createExamLink({ courseId, testKey: key, mode: "test" });
-    setBusy(null);
-    if (res.ok && res.url) setLinks((l) => ({ ...l, [id]: { url: res.url! } }));
-  };
-
-  const copy = async (id: string, url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setLinks((l) => ({ ...l, [id]: { ...l[id], copied: true } }));
-      setTimeout(() => setLinks((l) => ({ ...l, [id]: { ...l[id], copied: false } })), 1800);
-    } catch {
-      window.prompt("Copia il link:", url);
-    }
-  };
-
-  const Cell = ({ tKey }: { tKey: ExamTestKey }) => {
-    const id = slot(tKey);
-    const st = links[id];
-    if (st?.url) {
-      return (
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input
-            readOnly
-            value={st.url}
-            onFocus={(e) => e.currentTarget.select()}
-            className="input mono"
-            style={{ flex: 1, minWidth: 0, fontSize: 11.5 }}
-          />
-          <button className="btn btn-sm" onClick={() => copy(id, st.url)} style={{ flexShrink: 0 }}>
-            {st.copied ? "Copiato ✓" : "Copia"}
-          </button>
-        </div>
-      );
-    }
-    return (
-      <button className="btn btn-sm" disabled={busy === id} onClick={() => generate(tKey)}>
-        {busy === id ? "…" : "Genera anteprima"}
-      </button>
+  const generate = async () => {
+    setBusy(true);
+    setError(null);
+    const res = await createEmergencyExamLink(courseId).catch(
+      () => ({ ok: false, error: "Errore di rete." }) as Awaited<ReturnType<typeof createEmergencyExamLink>>,
     );
+    setBusy(false);
+    if (res.ok && res.url) setLink(res.url);
+    else setError(res.error || "Generazione non riuscita.");
   };
+
+  const copy = async () => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      window.prompt("Copia il link:", link);
+    }
+  };
+
+  const waHref = link
+    ? `https://wa.me/?text=${encodeURIComponent(
+        `Link per l'Esame finale SSA. Aprilo e inserisci la tua email (quella confermata all'appello) per accedere e svolgere l'esame:\n${link}`,
+      )}`
+    : "#";
 
   return (
     <div>
@@ -95,62 +52,81 @@ export function ExamLinkPanel({
         className="card card-pad"
         style={{
           marginBottom: 16,
-          background: "var(--indigo-50)",
-          border: "1px solid var(--indigo-100)",
+          background: "#fef3c7",
+          border: "1px solid #fcd34d",
           boxShadow: "none",
           fontSize: 13,
-          color: "var(--text-2)",
+          color: "#92400e",
           lineHeight: 1.55,
         }}
       >
-        {/* La distribuzione dei link VIVE nella pagina Condividi: i link
-            emessi da qui non portavano il timbro di emissione (`ia`), quindi
-            dopo una chiusura o un reset nascevano già morti — e senza log
-            invii, controllo presenze e riapertura. Qui resta solo
-            l'anteprima staff, che non salva nulla. */}
-        <strong>
-          I link d&apos;esame per gli studenti si inviano dalla pagina condivisa con
-          l&apos;educator (pulsante «Condividi con educator» in alto).
-        </strong>{" "}
-        Lì ogni invio è tracciato, rispetta l&apos;appello e può essere chiuso e
-        riaperto. Da questa scheda puoi solo percorrere ogni test in{" "}
-        <strong>anteprima</strong> fino all&apos;esito (nulla viene salvato).
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Solo per emergenze</div>
+        In condizioni normali i link d&apos;esame li invia l&apos;<strong>educator</strong> dalla pagina
+        «Condividi con educator». Usa questa scheda <strong>solo</strong> se l&apos;educator non può
+        farlo dal suo dispositivo (es. telefono rotto o scarico): genera qui il{" "}
+        <strong>link della stanza</strong> per l&apos;Esame finale e recapitalo tramite un canale
+        esterno (WhatsApp). Il link rispetta le stesse regole di sempre — dati confermati,
+        presenza all&apos;appello, chiusura — perché all&apos;apertura chiede la mail confermata.
       </div>
 
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Test</th>
-              <th style={{ width: 240 }}>Anteprima (fino all&apos;esito)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tests.map((tst) => (
-              <tr
-                key={tst.key}
-                style={tst.important ? { background: "var(--indigo-50)" } : undefined}
+      <div className="card card-pad" style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>
+              Esame finale{" "}
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", color: "var(--indigo-600)" }}>
+                OBBLIGATORIO
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-4)", marginTop: 2 }}>
+              Un unico link per la stanza · ogni studente entra con la propria email confermata.
+            </div>
+          </div>
+          {!link && (
+            <button className="btn btn-primary" disabled={busy} onClick={generate}>
+              {busy ? "Genero…" : "Genera link della stanza"}
+            </button>
+          )}
+        </div>
+
+        {error && <div style={{ fontSize: 12.5, color: "var(--danger-fg, #b91c1c)" }}>{error}</div>}
+
+        {link && (
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                readOnly
+                value={link}
+                onFocus={(e) => e.currentTarget.select()}
+                className="input mono"
+                style={{ flex: "1 1 220px", minWidth: 0, fontSize: 11.5 }}
+              />
+              <button className="btn btn-sm" onClick={copy} style={{ flexShrink: 0 }}>
+                {copied ? "Copiato ✓" : "Copia"}
+              </button>
+              <a
+                className="btn btn-sm"
+                href={waHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6 }}
               >
-                <td style={{ whiteSpace: "nowrap" }}>
-                  <strong style={{ fontWeight: tst.important ? 700 : 500 }}>{tst.label}</strong>{" "}
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: ".04em",
-                      color: tst.important ? "var(--indigo-600)" : "var(--text-4)",
-                    }}
-                  >
-                    {tst.important ? "OBBLIGATORIO" : "facoltativo"}
-                  </span>
-                </td>
-                <td>
-                  <Cell tKey={tst.key} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                Invia via WhatsApp
+              </a>
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--text-4)" }}>
+              Condividi questo link con la stanza dell&apos;esame. Se serve, puoi rigenerarlo.
+            </div>
+            <button
+              className="btn btn-sm"
+              onClick={generate}
+              disabled={busy}
+              style={{ justifySelf: "start" }}
+            >
+              {busy ? "Genero…" : "Rigenera link"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

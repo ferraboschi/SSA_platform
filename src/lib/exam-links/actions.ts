@@ -17,6 +17,7 @@ import { buildDayEsito, type DayEsito } from "./esito";
 import { runSingleSubmissionCorrection } from "@/lib/esami/correction-run";
 import { after } from "next/server";
 import { loadPublicExam } from "./load";
+import { loadTemplateTests } from "./template-tests";
 import { explainQuestionWithKb } from "@/lib/rag/explain";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 
@@ -76,6 +77,47 @@ export async function createExamLink(
     url: `${base}/esame/${token}`,
     expiresAt: new Date(exp * 1000).toISOString(),
   };
+}
+
+/**
+ * EMERGENCY channel (owner): when the educator can't send the exam link from
+ * their usual page (broken/dead phone), the SSA responsible mints the REAL
+ * generic "room" link for the FINAL exam here, to hand off via an external
+ * channel (e.g. WhatsApp). It is the EXACT token the Condividi page mints —
+ * `m:"exam"` with an `ia` issue stamp so it survives a prior closure/reset, and
+ * NO subject, so the /esame email gate binds identity and re-checks every rule
+ * (confirmed data + presence + closure) just as if the educator had sent it.
+ * Admin/manager only.
+ */
+export async function createEmergencyExamLink(
+  courseId: string,
+): Promise<{ ok: boolean; url?: string; expiresAt?: string; error?: string }> {
+  const session = await getSession();
+  const roleKey = session?.user?.roleKey;
+  if (roleKey !== "admin" && roleKey !== "manager") {
+    return { ok: false, error: "Non autorizzato." };
+  }
+  const svc = getSupabaseServiceClient();
+  const { data: corso } = await svc
+    .from("corsi")
+    .select("type")
+    .eq("id", Number(courseId))
+    .maybeSingle();
+  if (!corso) return { ok: false, error: "Corso non trovato." };
+  if (corso.type !== "certificato" && corso.type !== "shochu") {
+    return { ok: false, error: "Questo corso non prevede un esame (solo Certificato o Shochu)." };
+  }
+  // The final must have questions — never hand out a link to an empty exam.
+  const family = corso.type === "shochu" ? "shochu" : "nihonshu";
+  const finalTest = (await loadTemplateTests(family)).find((x) => x.key === "final");
+  if (!finalTest?.configured) {
+    return { ok: false, error: "L'esame finale non è ancora configurato (nessuna domanda)." };
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + EXAM_LINK_TTL_HOURS.exam * 3600;
+  const token = signExamToken({ c: courseId, t: "final", m: "exam", ia: now, e: exp });
+  const base = appConfig.baseUrl.replace(/\/$/, "");
+  return { ok: true, url: `${base}/esame/${token}`, expiresAt: new Date(exp * 1000).toISOString() };
 }
 
 export interface SubmitExamInput {

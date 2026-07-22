@@ -18,6 +18,7 @@ import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { shopifyAdminProductsUrl } from "@/lib/integrations/shopify/admin-url";
 import { CourseStat } from "@/components/corsi/CourseStat";
 import { CourseSections } from "@/components/corsi/CourseSections";
+import { countFinalSubmissions } from "@/lib/exam-links/submission-count";
 import { ShareEducatorButton } from "@/components/corsi/ShareEducatorButton";
 import { ShareEnrolButton } from "@/components/corsi/ShareEnrolButton";
 import { IgnoreProductButton } from "@/components/corsi/IgnoreProductButton";
@@ -102,6 +103,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         ? "shochu"
         : null;
   const templates = allTemplates.map(toTemplateData);
+  // Esiti tab badge: how many FINAL exams have been handed in (grows live as
+  // students submit, before staff correct them). Only exam-bearing courses.
+  const esitiCount = examFamily ? await countFinalSubmissions(course.id) : 0;
 
   return (
     <div className="page">
@@ -314,6 +318,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         templates={templates}
         esame={esame}
         examFamily={examFamily}
+        esitiCount={esitiCount}
         expectedDayCount={expectedDays(course.type, course.mode)}
       />
 

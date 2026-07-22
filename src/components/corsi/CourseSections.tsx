@@ -28,6 +28,7 @@ export function CourseSections({
   templates,
   esame,
   examFamily = null,
+  esitiCount = 0,
   expectedDayCount,
 }: {
   courseId: string;
@@ -41,6 +42,8 @@ export function CourseSections({
   templates: TemplateData[];
   esame: EsameData | null;
   examFamily?: "nihonshu" | "shochu" | null;
+  /** Handed-in FINAL exams for the Esiti tab badge (grows as students submit). */
+  esitiCount?: number;
   /** Expected day count for this course type+mode (COURSE_PROFILE baseline). */
   expectedDayCount?: number;
 }) {
@@ -74,7 +77,7 @@ export function CourseSections({
     { id: "iscritti", label: t.tabIscritti, n: enrolled },
     { id: "programma", label: t.tabProgramma, n: programSakeCount },
     ...(hasExam ? [{ id: "esame" as const, label: t.tabEsame, n: esame?.totalQuestions ?? 0, accent: true }] : []),
-    ...(examFamily ? [{ id: "esiti" as const, label: "Esiti", n: 0 }] : []),
+    ...(examFamily ? [{ id: "esiti" as const, label: "Esiti", n: esitiCount }] : []),
   ];
 
   return (
@@ -107,7 +110,7 @@ export function CourseSections({
       {section === "esame" && (
         <div style={{ display: "grid", gap: 18 }}>
           {esame && <EsameTabSummary courseId={courseId} esame={esame} />}
-          {examFamily && <ExamLinkPanel courseId={courseId} family={examFamily} />}
+          {examFamily && <ExamLinkPanel courseId={courseId} />}
         </div>
       )}
       {section === "esiti" && examFamily && (
