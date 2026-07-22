@@ -12,6 +12,7 @@ import {
 } from "./token";
 import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
 import { getClosure, isBlockedByClosure } from "./lifecycle";
+import { resolveSubjectIds } from "./access";
 import { buildDayEsito, type DayEsito } from "./esito";
 import { runSingleSubmissionCorrection } from "@/lib/esami/correction-run";
 import { after } from "next/server";
@@ -119,10 +120,9 @@ export async function submitExam(
   }
 
   const svc = getSupabaseServiceClient();
-  const corsoId = /^\d+$/.test(c) ? Number(c) : null;
-  const corsistaId = s && /^\d+$/.test(s) ? Number(s) : null;
-  // Companion personal links carry `p` instead of `s` (at most one is set).
-  const partecipanteId = p && /^\d+$/.test(p) ? Number(p) : null;
+  // Same strict `/^\d+$/` parse as every other entry point (companion links
+  // carry `p` instead of `s`; at most one is set).
+  const { corsoId, corsistaId, partecipanteId } = resolveSubjectIds(res.payload);
 
   // Owner's rule re-checked at HAND-IN: the page gate runs at render time, so
   // a student flipped to absent while the runner was already open (or someone
@@ -300,10 +300,8 @@ export async function getDayEsitoAction(
   if (!s && !p) return { ok: false, error: "Link non personale." };
   try {
     const svc = getSupabaseServiceClient();
-    const corsoId = /^\d+$/.test(c) ? Number(c) : null;
+    const { corsoId, corsistaId, partecipanteId } = resolveSubjectIds(res.payload);
     if (corsoId == null) return { ok: false, error: "Link non valido." };
-    const corsistaId = s && /^\d+$/.test(s) ? Number(s) : null;
-    const partecipanteId = p && /^\d+$/.test(p) ? Number(p) : null;
     const { data: prior } = await svc
       .from("exam_submissions")
       .select("id, answers, lang")
@@ -356,7 +354,7 @@ export async function getExamExplanationAction(
 
   try {
     const svc = getSupabaseServiceClient();
-    const corsoId = /^\d+$/.test(c) ? Number(c) : null;
+    const { corsoId } = resolveSubjectIds(res.payload);
     if (corsoId == null) return { ok: false, error: "Link non valido." };
     const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
     const family = corso?.type === "shochu" ? "shochu" : "nihonshu";

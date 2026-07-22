@@ -8,6 +8,7 @@ import type { Metadata } from "next";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyExamToken } from "@/lib/exam-links/token";
 import { getClosure, isBlockedByClosure } from "@/lib/exam-links/lifecycle";
+import { resolveSubjectIds } from "@/lib/exam-links/access";
 import { loadPublicExam } from "@/lib/exam-links/load";
 import {
   loadPresentForTest,
@@ -113,8 +114,8 @@ export default async function Page({
 
   // ── Server-side integrity gates (real exams on a PERSONAL token only) ─────
   // Previews (test/validate) and the shared class link (email gate) skip both.
-  const subjS = res.payload.s && /^\d+$/.test(res.payload.s) ? Number(res.payload.s) : null;
-  const subjP = res.payload.p && /^\d+$/.test(res.payload.p) ? Number(res.payload.p) : null;
+  // Same strict subject parse as every other entry point (resolveSubjectIds).
+  const { corsistaId: subjS, partecipanteId: subjP } = resolveSubjectIds(res.payload);
   if (res.payload.m === "exam" && (subjS != null || subjP != null)) {
     const lang: Lang = LANGS.includes(res.payload.l as Lang) ? (res.payload.l as Lang) : "it";
     const corsoId = Number(res.payload.c);
