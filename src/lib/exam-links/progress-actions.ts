@@ -12,6 +12,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { getClosure, isBlockedByClosure } from "./lifecycle";
 import { verifyExamToken } from "./token";
+import { resolveSubjectIds, hasSubject, subjectColId } from "./access";
 
 const limiter = createFixedWindowLimiter(60_000);
 const RATE_LIMIT_REPORT = 30; // ~1 report every 2s max per link
@@ -31,14 +32,12 @@ export async function reportExamProgressAction(
 ): Promise<{ ok: boolean }> {
   const res = verifyExamToken(token);
   if (!res.ok) return { ok: false };
-  const { c, t, m, s, p } = res.payload;
+  const { t, m } = res.payload;
   if (m !== "exam") return { ok: true }; // previews report nothing
   if (limiter.isLimited("progress", token, RATE_LIMIT_REPORT)) return { ok: true };
 
-  const corsoId = /^\d+$/.test(c) ? Number(c) : null;
-  const corsistaId = s && /^\d+$/.test(s) ? Number(s) : null;
-  const partecipanteId = p && /^\d+$/.test(p) ? Number(p) : null;
-  if (corsoId == null || (corsistaId == null && partecipanteId == null)) return { ok: false };
+  const { corsoId, corsistaId, partecipanteId } = resolveSubjectIds(res.payload);
+  if (corsoId == null || !hasSubject({ corsistaId, partecipanteId })) return { ok: false };
 
   // A closure — or the sandbox-reset epoch — kills outstanding links: their
   // heartbeats must not resurrect freshly wiped progress rows.
@@ -60,8 +59,8 @@ export async function reportExamProgressAction(
   }
 
   const svc = getSupabaseServiceClient();
-  const subjCol = corsistaId != null ? "corsista_id" : "partecipante_id";
-  const subjId = corsistaId ?? partecipanteId!;
+  // hasSubject was asserted above → subjectColId is non-null here.
+  const { col: subjCol, id: subjId } = subjectColId({ corsistaId, partecipanteId })!;
 
   // Manual upsert (the unique indexes are PARTIAL, which PostgREST's
   // on_conflict can't target): update-first, insert when no row yet. A rare

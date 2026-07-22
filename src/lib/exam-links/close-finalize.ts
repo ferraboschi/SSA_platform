@@ -11,6 +11,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { runSingleSubmissionCorrection } from "@/lib/esami/correction-run";
 import { correctionKey } from "@/lib/esami/correction-types";
+import { subjectColId } from "./access";
 import { after } from "next/server";
 
 // The submissions THIS close auto-created are recorded here so a mistaken close
@@ -75,9 +76,8 @@ export async function finalizeInProgressOnClose(corsoId: number, testKey: string
   const finalized: FinalizedItem[] = [];
 
   for (const r of data as ProgressRow[]) {
-    const corsistaId = r.corsista_id ?? null;
-    const partecipanteId = r.partecipante_id ?? null;
-    if (corsistaId == null && partecipanteId == null) continue;
+    const subj = subjectColId({ corsistaId: r.corsista_id, partecipanteId: r.partecipante_id });
+    if (!subj) continue;
 
     // Split registration ("reg:<field>") from graded answers + strip __lang,
     // mirroring submitExam and the page-resume snapshot.
@@ -93,8 +93,7 @@ export async function finalizeInProgressOnClose(corsoId: number, testKey: string
     // no graded answers; finalizing would brand a no-show 0/100.
     if (Object.keys(answers).length === 0) continue;
 
-    const subjCol = corsistaId != null ? "corsista_id" : "partecipante_id";
-    const subjId = (corsistaId ?? partecipanteId)!;
+    const { col: subjCol, id: subjId } = subj;
     const base = {
       corso_id: corsoId,
       course_ref: String(corsoId),
