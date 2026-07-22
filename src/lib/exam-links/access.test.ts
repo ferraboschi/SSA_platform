@@ -76,3 +76,13 @@ describe("subjectColId", () => {
     expect(subjectColId({ corsistaId: null, partecipanteId: null })).toBeNull();
   });
 });
+
+describe("corsista-first precedence (documents the s-XOR-p invariant fallback)", () => {
+  // A personal link carries EXACTLY ONE subject, so this never happens in
+  // practice; pinning it guarantees the migrated call sites (which used a mix of
+  // corsista-first and partecipante-first inline) stay deterministic if it ever does.
+  it("both ids set → corsista wins for key + column", () => {
+    expect(subjectKeyOf({ corsistaId: 7, partecipanteId: 5 })).toBe("c7");
+    expect(subjectColId({ corsistaId: 7, partecipanteId: 5 })).toEqual({ col: "corsista_id", id: 7 });
+  });
+});
