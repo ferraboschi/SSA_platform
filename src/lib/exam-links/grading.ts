@@ -163,11 +163,15 @@ export function fmtGiven(given: string | string[] | undefined, q: GradableQuesti
   return arr.join(", ");
 }
 
-/** Map an auto score (0–100) to the suggested outcome via the SSA thresholds. */
+/** Map a score (0–100) to the suggested outcome via the SSA thresholds. Rounds
+ *  to the nearest integer first (a no-op for the count-based autoScore, but it
+ *  makes 79.5 → 80 → promosso), so this is the ONE score→outcome rule — the
+ *  correction's verdictFromPct and every UI copy delegate here. */
 export function scoreToOutcome(autoScore: number): ExamOutcome {
-  return autoScore >= EXAM_THRESHOLDS.pass * 100
+  const s = Math.round(autoScore);
+  return s >= EXAM_THRESHOLDS.pass * 100
     ? "passed"
-    : autoScore >= EXAM_THRESHOLDS.retrial * 100
+    : s >= EXAM_THRESHOLDS.retrial * 100
       ? "retrial"
       : "failed";
 }

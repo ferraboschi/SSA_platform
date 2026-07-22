@@ -15,7 +15,7 @@ export interface ConfirmedResultRow {
 }
 
 const TONE: Record<string, BadgeTone> = { passed: "success", retrial: "warning", failed: "danger" };
-const LABEL: Record<string, string> = { passed: "Promosso", retrial: "Recupero", failed: "Bocciato" };
+const LABEL: Record<string, string> = { passed: "Promosso", retrial: "Rimandato", failed: "Bocciato" };
 
 function scoreColor(s: number): string {
   return s >= 80 ? "var(--success-fg)" : s >= 70 ? "var(--warning-fg)" : "var(--danger-fg)";

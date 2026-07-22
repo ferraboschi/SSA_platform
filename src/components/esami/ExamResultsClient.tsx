@@ -25,7 +25,7 @@ const OUTCOME_TONE: Record<string, BadgeTone> = {
 };
 const OUTCOME_LABEL: Record<string, string> = {
   passed: "Promosso",
-  retrial: "Recupero",
+  retrial: "Rimandato",
   failed: "Bocciato",
 };
 // Tone token stem per outcome — drives the confirmed-button fill (bg/fg vars).
@@ -236,7 +236,7 @@ export function ExamResultsClient({
       <PageHeader
         eyebrow="Esiti & correzione"
         title={`Risultati esame${courseTitle ? ` — ${courseTitle}` : ""}`}
-        sub="Consegne reali degli studenti, corrette in automatico sulle domande oggettive. L'esito (Promosso/Recupero/Bocciato) è la certificazione dell'esame finale: si conferma sulla riga «final» e vale per lo studente; i mini-test giornalieri sono solo di verifica."
+        sub="Consegne reali degli studenti, corrette in automatico sulle domande oggettive. L'esito (Promosso/Rimandato/Bocciato) è la certificazione dell'esame finale: si conferma sulla riga «final» e vale per lo studente; i mini-test giornalieri sono solo di verifica."
         actions={
           hasExam ? (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

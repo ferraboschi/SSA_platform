@@ -49,7 +49,7 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     previewTitle: "Anteprima · esito calcolato",
     previewScore: "Punteggio (domande oggettive)",
     previewPassed: "Promosso",
-    previewRetrial: "Recupero",
+    previewRetrial: "Rimandato",
     previewFailed: "Non superato",
     previewManual: "domande aperte da valutare a mano",
     previewNotGradable: "Nessuna domanda a correzione automatica in questo test.",

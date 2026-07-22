@@ -9,7 +9,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadPublicExam } from "./load";
-import { gradeAnswers } from "./grading";
+import { gradeAnswers, scoreToOutcome } from "./grading";
 import type { ExamTestKey } from "./token";
 import { correctionKey, type CorrectionDraft } from "@/lib/esami/correction-types";
 import { computeSections } from "@/lib/esami/exam-sections";
@@ -104,8 +104,7 @@ export async function buildDayEsito(
   // With the AI draft in, the combined (points-weighted, AI included) score is
   // the student's real number; before it lands, the weighted objective score.
   const pct = draft ? draft.combinedPct : res.gradable ? res.autoScore : null;
-  const outcome =
-    pct == null ? null : pct >= 80 ? "passed" : pct >= 70 ? "retrial" : "failed";
+  const outcome = pct == null ? null : scoreToOutcome(pct);
 
   // Per-category subtotals (owner batch 10): every question with a SETTLED
   // score contributes fraction×points (objective/blank) or the AI points

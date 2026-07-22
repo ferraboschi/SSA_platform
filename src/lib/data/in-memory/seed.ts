@@ -11,6 +11,7 @@ import {
   SHOCHU_CATS,
 } from "@/lib/domain";
 import { MONTH_NAMES_IT } from "@/lib/dates/italian-months";
+import { scoreToOutcome } from "@/lib/exam-links/grading";
 import type {
   Course,
   CourseCosts,
@@ -486,7 +487,7 @@ function buildResults(course: Course, exam: Exam): ExamResult[] | undefined {
     if (bucket < 60) pct = 80 + (k % 20);
     else if (bucket < 85) pct = 70 + (k % 10);
     else pct = 40 + (k % 30);
-    const status: ExamResultStatus = pct >= 80 ? "passed" : pct >= 70 ? "retrial" : "failed";
+    const status: ExamResultStatus = scoreToOutcome(pct);
     const sections: ExamResultSection[] = exam.cats.map((c) => ({
       cat: c.id,
       label: c.label,

@@ -386,6 +386,17 @@ export function FeedbackTemplatesEditor() {
 
       {loading ? (
         <div className="text-3" style={{ padding: 18, fontSize: 12.5 }}>Carico…</div>
+      ) : loadError ? (
+        // A load failure must be VISIBLE + retryable — never an empty editor that
+        // reads as "nessun questionario". Retry re-runs the load effect (loadTick).
+        <div className="card card-pad" style={{ display: "grid", gap: 10, justifyItems: "start" }}>
+          <p className="text-3" style={{ fontSize: 13, margin: 0 }}>
+            Non è stato possibile caricare i questionari. Controlla la connessione e riprova.
+          </p>
+          <button className="btn" onClick={() => setLoadTick((t) => t + 1)}>
+            Riprova
+          </button>
+        </div>
       ) : view === "questionari" ? (
         <div className="fb-master-detail">
           {/* ── Master: template list ── */}

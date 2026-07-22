@@ -52,7 +52,7 @@ export const EXAM_EMAIL_VARS: { key: string; desc: string }[] = [
   { key: "{nome}", desc: "Nome dello studente" },
   { key: "{corso}", desc: "Titolo del corso" },
   { key: "{punteggio}", desc: "Punteggio % ottenuto" },
-  { key: "{esito}", desc: "Esito (Promosso / Recupero / Bocciato)" },
+  { key: "{esito}", desc: "Esito (Promosso / Rimandato / Bocciato)" },
 ];
 
 /** Italian defaults — also the base the staff-editable templates are merged onto

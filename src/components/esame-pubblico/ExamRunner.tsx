@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { submitExam, getLinkStateAction } from "@/lib/exam-links/actions";
-import { gradeAnswers } from "@/lib/exam-links/grading";
+import { gradeAnswers, scoreToOutcome } from "@/lib/exam-links/grading";
 import { CHROME, EMAIL_RE, LANGS, type Lang } from "./exam-chrome";
 import { EsitoCard } from "./EsitoCard";
 import type { DayEsito } from "@/lib/exam-links/esito";
@@ -632,7 +632,7 @@ export function ExamRunner({
       }
       const pct = Math.round((correct / gradable) * 100);
       // Mirror the real three-tier outcome: pass ≥80, retrial ≥70, else fail.
-      const outcome = pct >= 80 ? "passed" : pct >= 70 ? "retrial" : "failed";
+      const outcome = scoreToOutcome(pct);
       const accent = outcome === "passed" ? "#15803d" : outcome === "retrial" ? "#b45309" : "#b42318";
       const outcomeLabel = outcome === "passed" ? t.previewPassed : outcome === "retrial" ? t.previewRetrial : t.previewFailed;
       return (

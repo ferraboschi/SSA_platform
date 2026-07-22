@@ -5,8 +5,7 @@
 // returns the persistable CorrectionDraft. The draft is ADVISORY — staff still
 // confirms the official verdict in the Esiti tab.
 
-import { EXAM_THRESHOLDS } from "@/lib/domain/constants";
-import type { ExamOutcome } from "@/lib/exam-links/grading";
+import { scoreToOutcome, type ExamOutcome } from "@/lib/exam-links/grading";
 import type { CorrectionDraft, OpenGrade, WrongAnswer } from "./correction-types";
 
 /** One graded answer as loadCourseExamResults produces it (GradedAnswer + cat). */
@@ -80,14 +79,12 @@ function isOpenLane(a: CorrectionAnswer): boolean {
   return a.ok === null;
 }
 
-/** Draft verdict from a combined percentage. Rounds to the NEAREST INTEGER
- *  first, then compares to the SSA thresholds (79.5 → 80 → promosso, while
- *  79.4 → 79 → rimandato). Thresholds come from EXAM_THRESHOLDS, never literals. */
+/** Draft verdict from a combined percentage — the ONE score→outcome rule lives
+ *  in scoreToOutcome (rounds to nearest int, then compares to EXAM_THRESHOLDS:
+ *  79.5 → 80 → promosso, 79.4 → 79 → rimandato). Kept as a named alias so the
+ *  correction code reads in its own vocabulary. */
 export function verdictFromPct(pct: number): ExamOutcome {
-  const rounded = Math.round(pct);
-  if (rounded >= EXAM_THRESHOLDS.pass * 100) return "passed";
-  if (rounded >= EXAM_THRESHOLDS.retrial * 100) return "retrial";
-  return "failed";
+  return scoreToOutcome(pct);
 }
 
 export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDraft {
