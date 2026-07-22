@@ -19,7 +19,7 @@ phase('Scan')
 const result = await agent(
   REPO + '. Verify the exam ACCESS/PERMISSION logic is still consolidated in src/lib/exam-links/access.ts, not re-inlined. Grep src/ (exclude access.ts itself and *.test.ts) for DRIFT — copies that should use the shared helpers:\n' +
   '1. Inline subject parse: `/^\\d+$/.test(` applied to a token subject field (s/p) or `Number(res.payload.s)` style — should be resolveSubjectIds.\n' +
-  '2. Inline subject key: template strings building `c${...}` / `p${...}` for a corsista/companion key — should be subjectKeyOf.\n' +
+  '2. Inline subject key: template strings building `c${...}` / `p${...}` for an ACCESS / PRESENCE / PROGRESS key (fed to isBlockedByAbsence, exam_progress, a send log) — should be subjectKeyOf. EXCLUDE React list/display keys (a `key=` prop for reconciliation is a different concern, not an access decision).\n' +
   '3. Inline subject column: `corsistaId != null ? "corsista_id" : "partecipante_id"` — should be subjectColId.\n' +
   '4. Hardcoded exam thresholds: literal `>= 80` / `>= 70` (or `>= 0.8`/`>= 0.7`) deciding a passed/retrial/failed outcome — should be scoreToOutcome / EXAM_THRESHOLDS.\n' +
   '5. A confirmation check `email_confirmed_at` re-implemented in a NEW place beyond the known send/email-gate sites.\n' +

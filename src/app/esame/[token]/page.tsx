@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyExamToken } from "@/lib/exam-links/token";
 import { getClosure, isBlockedByClosure } from "@/lib/exam-links/lifecycle";
-import { resolveSubjectIds } from "@/lib/exam-links/access";
+import { resolveSubjectIds, subjectKeyOf, subjectColId } from "@/lib/exam-links/access";
 import { loadPublicExam } from "@/lib/exam-links/load";
 import {
   loadPresentForTest,
@@ -119,6 +119,8 @@ export default async function Page({
   if (res.payload.m === "exam" && (subjS != null || subjP != null)) {
     const lang: Lang = LANGS.includes(res.payload.l as Lang) ? (res.payload.l as Lang) : "it";
     const corsoId = Number(res.payload.c);
+    // One subject is set (guard above) → the shared column/id + presence key.
+    const subjSel = subjectColId({ corsistaId: subjS, partecipanteId: subjP })!;
 
     // 1) ALREADY SUBMITTED → blocking screen. The DB unique index already
     //    forbids a second submission; this stops the student from re-entering
@@ -132,7 +134,7 @@ export default async function Page({
         .eq("corso_id", corsoId)
         .eq("test_key", res.payload.t)
         .eq("mode", "exam")
-        .eq(subjS != null ? "corsista_id" : "partecipante_id", (subjS ?? subjP)!)
+        .eq(subjSel.col, subjSel.id)
         // Deterministic pick if legacy duplicates exist (the unique index is
         // skipped on DBs that already held dupes): the FIRST hand-in counts.
         .order("created_at", { ascending: true })
@@ -196,7 +198,7 @@ export default async function Page({
     //    gate (day test ↔ that day; feedback/final ↔ any attended day); fails
     //    open only when attendance is UNKNOWN (DB error / pre-migration).
     const present = await loadPresentForTest(sb, corsoId, res.payload.t);
-    const subjectKey = subjS != null ? `c${subjS}` : `p${subjP}`;
+    const subjectKey = subjectKeyOf({ corsistaId: subjS, partecipanteId: subjP })!;
     if (isBlockedByAbsence(present, subjectKey)) {
       return (
         <Blocked icon="!" title="Accesso non disponibile" body={absentAccessError(res.payload.t)} />
@@ -214,7 +216,7 @@ export default async function Page({
         .select("answers, current_idx, elapsed_seconds")
         .eq("corso_id", corsoId)
         .eq("test_key", res.payload.t)
-        .eq(subjS != null ? "corsista_id" : "partecipante_id", (subjS ?? subjP)!)
+        .eq(subjSel.col, subjSel.id)
         .is("submitted_at", null)
         .maybeSingle();
       const rawAnswers = (prog?.answers ?? null) as Record<string, string | string[]> | null;

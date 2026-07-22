@@ -12,7 +12,7 @@ import {
 } from "./token";
 import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
 import { getClosure, isBlockedByClosure } from "./lifecycle";
-import { resolveSubjectIds } from "./access";
+import { resolveSubjectIds, subjectKeyOf, subjectColId } from "./access";
 import { buildDayEsito, type DayEsito } from "./esito";
 import { runSingleSubmissionCorrection } from "@/lib/esami/correction-run";
 import { after } from "next/server";
@@ -130,7 +130,7 @@ export async function submitExam(
   // Fail-open on unknown attendance, like every other gate.
   if (corsoId != null) {
     const present = await loadPresentForTest(svc, corsoId, t).catch(() => null);
-    const subjKey = partecipanteId != null ? `p${partecipanteId}` : `c${corsistaId}`;
+    const subjKey = subjectKeyOf({ corsistaId, partecipanteId })!;
     if (isBlockedByAbsence(present, subjKey)) {
       return { ok: false, error: absentAccessError(t) };
     }
@@ -212,14 +212,14 @@ export async function submitExam(
 
   // Close the LIVE PROGRESS row (educator's bar jumps to "Consegnato").
   // Best-effort: a missing table/row never affects the submission.
-  if (corsoId != null && (corsistaId != null || partecipanteId != null)) {
-    const subjCol = corsistaId != null ? "corsista_id" : "partecipante_id";
+  const progressSubj = subjectColId({ corsistaId, partecipanteId });
+  if (corsoId != null && progressSubj) {
     await svc
       .from("exam_progress")
       .update({ submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq("corso_id", corsoId)
       .eq("test_key", t)
-      .eq(subjCol, (corsistaId ?? partecipanteId)!)
+      .eq(progressSubj.col, progressSubj.id)
       .then(() => {}, () => {});
   }
 
@@ -302,13 +302,15 @@ export async function getDayEsitoAction(
     const svc = getSupabaseServiceClient();
     const { corsoId, corsistaId, partecipanteId } = resolveSubjectIds(res.payload);
     if (corsoId == null) return { ok: false, error: "Link non valido." };
+    const subj = subjectColId({ corsistaId, partecipanteId });
+    if (!subj) return { ok: false, error: "Link non valido." };
     const { data: prior } = await svc
       .from("exam_submissions")
       .select("id, answers, lang")
       .eq("corso_id", corsoId)
       .eq("test_key", t)
       .eq("mode", "exam")
-      .eq(corsistaId != null ? "corsista_id" : "partecipante_id", (corsistaId ?? partecipanteId)!)
+      .eq(subj.col, subj.id)
       // Deterministic pick if legacy duplicates exist — the FIRST hand-in
       // counts (same rule as the /esame prior-submission branch).
       .order("created_at", { ascending: true })

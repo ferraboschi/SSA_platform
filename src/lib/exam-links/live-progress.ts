@@ -9,6 +9,7 @@ import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { getExamSends } from "./send-log";
 import { loadPublicExam, type PublicRunnerQuestion } from "./load";
 import { gradeAnswers } from "./grading";
+import { subjectKeyOf } from "./access";
 import type { ExamTestKey } from "./token";
 import { courseDayInfo } from "@/lib/share-links/attendance-db";
 
@@ -166,7 +167,7 @@ export async function loadExamProgress(
 
   const progress: Record<string, SubjectProgress> = {};
   for (const r of rows ?? []) {
-    const key = r.corsista_id != null ? `c${r.corsista_id}` : r.partecipante_id != null ? `p${r.partecipante_id}` : null;
+    const key = subjectKeyOf({ corsistaId: r.corsista_id, partecipanteId: r.partecipante_id });
     if (!key) continue;
     const total = Math.max(1, r.total);
     const pct = r.submitted_at ? 100 : Math.min(99, Math.round((r.current_idx / total) * 100));
