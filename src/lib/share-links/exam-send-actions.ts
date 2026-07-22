@@ -31,6 +31,7 @@ import {
   loadExamProgress,
   type SubjectProgress,
 } from "@/lib/exam-links/live-progress";
+import { subjectKeyOf } from "@/lib/exam-links/access";
 
 const limiter = createFixedWindowLimiter(60_000);
 const RATE_LIMIT_SEND = 120;
@@ -142,6 +143,56 @@ function ttlChoice(v: unknown): ExamLinkTtlChoice {
   return v === "7d" ? "7d" : "eod";
 }
 
+/** Shared send-eligibility gate for the SINGLE-subject actions (send + copy),
+ *  in the historical order with the exact messages: test configured → present at
+ *  appello → subject belongs to this course → data confirmed. Returns the
+ *  resolved target (name + email + subjKey) or the block error. Assumes `cid` is
+ *  already validated (positive integer) by the caller. The bulk "send to all"
+ *  path keeps its OWN per-loop sequence (different counter semantics — do not
+ *  route it through here). */
+async function resolveSendTarget(
+  svc: Svc,
+  corsoId: number,
+  testKey: string,
+  cid: number,
+  kind: "corsista" | "partecipante",
+): Promise<
+  | {
+      ok: true;
+      k: "corsista" | "partecipante";
+      subjKey: string;
+      target: { name: string; email: string; confirmed: boolean };
+    }
+  | { ok: false; error: string }
+> {
+  const k = kind === "partecipante" ? "partecipante" : "corsista";
+  const notReady = await unconfiguredError(svc, corsoId, testKey);
+  if (notReady) return { ok: false, error: notReady };
+
+  const subjKey = subjectKeyOf(
+    k === "corsista"
+      ? { corsistaId: cid, partecipanteId: null }
+      : { corsistaId: null, partecipanteId: cid },
+  )!;
+  const present = await loadPresentForTest(svc, corsoId, testKey);
+  if (isBlockedByAbsence(present, subjKey)) return { ok: false, error: absentSendError(testKey) };
+
+  const target =
+    k === "corsista"
+      ? await corsistaTarget(svc, corsoId, cid)
+      : await partecipanteTarget(svc, corsoId, cid);
+  if (!target) return { ok: false, error: "Destinatario non trovato in questo corso." };
+  // Owner (debug call): never send/mint the identity-bearing link before the
+  // student has CONFIRMED (sanitized) their data.
+  if (!target.confirmed) {
+    return {
+      ok: false,
+      error: "Lo studente non ha ancora confermato i suoi dati: attendi la conferma nell'Appello.",
+    };
+  }
+  return { ok: true, k, subjKey, target };
+}
+
 /** Send one personal exam link to one subject (corsista or "doppio" companion).
  *  The kind is EXPLICIT — corsista and partecipante ids are separate sequences,
  *  so a bare number must never be assumed to be a corsista. */
@@ -161,33 +212,16 @@ export async function sendPersonalExamLinkAction(
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
   const cid = Number(subjectId);
   if (!Number.isInteger(cid) || cid <= 0) return { ok: false, error: "Destinatario non valido." };
-  const k = kind === "partecipante" ? "partecipante" : "corsista";
 
   const svc = getSupabaseServiceClient();
-  const notReady = await unconfiguredError(svc, corsoId, t);
-  if (notReady) return { ok: false, error: notReady };
-
-  const present = await loadPresentForTest(svc, corsoId, t);
-  if (isBlockedByAbsence(present, `${k === "corsista" ? "c" : "p"}${cid}`)) {
-    return { ok: false, error: absentSendError(t) };
-  }
-
-  const target =
-    k === "corsista"
-      ? await corsistaTarget(svc, corsoId, cid)
-      : await partecipanteTarget(svc, corsoId, cid);
-  if (!target) return { ok: false, error: "Destinatario non trovato in questo corso." };
-  // Owner (debug call): never send the exam link before the student has CONFIRMED
-  // (sanitized) their data — the invite carries their identity, so it must be sent
-  // on trustworthy data only.
-  if (!target.confirmed) {
-    return { ok: false, error: "Lo studente non ha ancora confermato i suoi dati: attendi la conferma nell'Appello." };
-  }
+  const gate = await resolveSendTarget(svc, corsoId, t, cid, kind);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  const { target, subjKey } = gate;
 
   const res = await deliverExamInvite({
     courseId: String(corsoId),
     testKey: t as ExamTestKey,
-    subject: { kind: k, id: String(cid) },
+    subject: { kind: gate.k, id: String(cid) },
     testLabel: testLabel(t),
     toEmail: target.email,
     name: target.name,
@@ -196,7 +230,7 @@ export async function sendPersonalExamLinkAction(
   });
   if (res.sentTo) {
     const at = new Date().toISOString();
-    await recordExamSend(corsoId, t, `${k === "corsista" ? "c" : "p"}${cid}`, res.sentTo, at);
+    await recordExamSend(corsoId, t, subjKey, res.sentTo, at);
     return { ok: true, ...res, sentAt: at };
   }
   return { ok: true, ...res };
@@ -225,39 +259,24 @@ export async function getPersonalExamLinkAction(
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
   const cid = Number(subjectId);
   if (!Number.isInteger(cid) || cid <= 0) return { ok: false, error: "Destinatario non valido." };
-  const k = kind === "partecipante" ? "partecipante" : "corsista";
 
   const svc = getSupabaseServiceClient();
-  const notReady = await unconfiguredError(svc, corsoId, t);
-  if (notReady) return { ok: false, error: notReady };
-
-  const present = await loadPresentForTest(svc, corsoId, t);
-  if (isBlockedByAbsence(present, `${k === "corsista" ? "c" : "p"}${cid}`)) {
-    return { ok: false, error: absentSendError(t) };
-  }
-
-  // Bind the subject to THIS course (same ownership guard as the email send).
-  const target =
-    k === "corsista"
-      ? await corsistaTarget(svc, corsoId, cid)
-      : await partecipanteTarget(svc, corsoId, cid);
-  if (!target) return { ok: false, error: "Destinatario non trovato in questo corso." };
-  // Same confirmation gate as the email send: the copied link carries the
-  // student's identity, so the data must be confirmed first (owner debug call).
-  if (!target.confirmed) {
-    return { ok: false, error: "Lo studente non ha ancora confermato i suoi dati: attendi la conferma nell'Appello." };
-  }
+  // Same eligibility gate as the email send (test configured, present, owned,
+  // confirmed): the copied link carries the student's identity too.
+  const gate = await resolveSendTarget(svc, corsoId, t, cid, kind);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  const { target, subjKey } = gate;
 
   const url = buildPersonalExamUrl(
     String(corsoId),
     t as ExamTestKey,
-    { kind: k, id: String(cid) },
+    { kind: gate.k, id: String(cid) },
     ttlChoice(ttl),
   );
   const at = new Date().toISOString();
   // Copied, not emailed: the stamp records method "copy" so the roster row
   // honestly reads "Copiato HH:MM" instead of "Inviato".
-  await recordExamSend(corsoId, t, `${k === "corsista" ? "c" : "p"}${cid}`, target.email || "link-manuale", at, "copy");
+  await recordExamSend(corsoId, t, subjKey, target.email || "link-manuale", at, "copy");
   return { ok: true, url, sentAt: at };
 }
 

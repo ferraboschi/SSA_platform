@@ -12,6 +12,7 @@ import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyExamToken, signExamToken } from "./token";
 import { getClosure, isBlockedByClosure, expiryForChoice } from "./lifecycle";
 import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
+import { subjectKeyOf } from "./access";
 
 // Token-keyed, per-instance limiter — the gate is an email-enumeration surface.
 const limiter = createFixedWindowLimiter(60_000);
@@ -97,7 +98,10 @@ export async function resolveExamAccessByEmailAction(
   // is UNKNOWN (DB error / pre-migration) — the /esame page re-checks anyway.
   {
     const present = await loadPresentForTest(svc, corsoId, t);
-    const subjectKey = row ? `c${row.corsista_id}` : `p${partRow!.id}`;
+    const subjectKey = subjectKeyOf({
+      corsistaId: row ? row.corsista_id : null,
+      partecipanteId: row ? null : partRow!.id,
+    })!;
     if (isBlockedByAbsence(present, subjectKey)) {
       return { ok: false, error: absentAccessError(t) };
     }
