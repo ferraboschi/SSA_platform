@@ -55,8 +55,10 @@ export async function loadPresentForTest(svc: Svc, corsoId: number, testKey: str
   if (error) return null;
   const present = new Set<string>();
   for (const r of (data ?? []) as { corsista_id: number | null; partecipante_id: number | null }[]) {
-    if (r.corsista_id != null) present.add(`c${r.corsista_id}`);
-    else if (r.partecipante_id != null) present.add(`p${r.partecipante_id}`);
+    // Same key builder the access gates use to LOOK UP presence (subjectKeyOf),
+    // so producer and consumer can never disagree on the c<id>/p<id> shape.
+    const key = subjectKeyOf({ corsistaId: r.corsista_id, partecipanteId: r.partecipante_id });
+    if (key) present.add(key);
   }
   return present;
 }

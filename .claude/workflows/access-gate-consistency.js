@@ -17,7 +17,9 @@ const REPO = '/Users/ferraboschi/Documents/sakeplatform'
 phase('Scan')
 
 const result = await agent(
-  REPO + '. Verify the exam ACCESS/PERMISSION logic is still consolidated in src/lib/exam-links/access.ts, not re-inlined. Grep src/ (exclude access.ts itself and *.test.ts) for DRIFT — copies that should use the shared helpers:\n' +
+  REPO + '. Verify the exam ACCESS/PERMISSION DECISION is still consolidated in src/lib/exam-links/access.ts, not re-inlined.\n' +
+  'SCOPE: only the access-decision surface — src/lib/exam-links/** (incl. live-progress.ts, the presence key producer/consumer), src/lib/share-links/exam-send-actions.ts, src/app/esame/[token]/**. EXCLUDE access.ts itself, *.test.ts, and the broader app: attendance writes (attendance-actions.ts, which owns corsi_presenze), results-display presence maps (ExamResultsClient.tsx). Those are adjacent subject-keying in OTHER domains — a separate future dedup, NOT drift on the access gate; do not report them.\n' +
+  'Within scope, grep for DRIFT — copies that should use the shared helpers:\n' +
   '1. Inline subject parse: `/^\\d+$/.test(` applied to a token subject field (s/p) or `Number(res.payload.s)` style — should be resolveSubjectIds.\n' +
   '2. Inline subject key: template strings building `c${...}` / `p${...}` for an ACCESS / PRESENCE / PROGRESS key (fed to isBlockedByAbsence, exam_progress, a send log) — should be subjectKeyOf. EXCLUDE React list/display keys (a `key=` prop for reconciliation is a different concern, not an access decision).\n' +
   '3. Inline subject column: `corsistaId != null ? "corsista_id" : "partecipante_id"` — should be subjectColId.\n' +

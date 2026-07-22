@@ -339,7 +339,8 @@ export async function sendPersonalExamLinksToAllAction(
   let absent = 0;
   let notConfirmed = 0;
   for (const r of rows) {
-    if (isBlockedByAbsence(present, `c${r.corsista_id}`)) {
+    const subjKey = subjectKeyOf({ corsistaId: r.corsista_id, partecipanteId: null })!;
+    if (isBlockedByAbsence(present, subjKey)) {
       absent++;
       continue;
     }
@@ -366,7 +367,7 @@ export async function sendPersonalExamLinksToAllAction(
     });
     if (res.sentTo) {
       sent++;
-      await recordExamSend(corsoId, t, `c${r.corsista_id}`, res.sentTo, new Date().toISOString());
+      await recordExamSend(corsoId, t, subjKey, res.sentTo, new Date().toISOString());
     }
   }
 
@@ -386,7 +387,8 @@ export async function sendPersonalExamLinksToAllAction(
       for (const pr of (parts ?? []) as { id: number; full_name: string | null; email: string | null }[]) {
         const email = (pr.email ?? "").trim();
         if (!email) continue;
-        if (isBlockedByAbsence(present, `p${pr.id}`)) {
+        const subjKey = subjectKeyOf({ corsistaId: null, partecipanteId: pr.id })!;
+        if (isBlockedByAbsence(present, subjKey)) {
           absent++;
           continue;
         }
@@ -403,7 +405,7 @@ export async function sendPersonalExamLinksToAllAction(
         });
         if (res.sentTo) {
           sent++;
-          await recordExamSend(corsoId, t, `p${pr.id}`, res.sentTo, new Date().toISOString());
+          await recordExamSend(corsoId, t, subjKey, res.sentTo, new Date().toISOString());
         }
       }
     }
