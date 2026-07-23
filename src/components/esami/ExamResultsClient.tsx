@@ -524,9 +524,22 @@ function ResultRow({
   }
   const colSpan = showOutcome ? 6 : 4;
 
+  // Open-question outcomes are part of the vote (owner): if the AI grading FAILED
+  // on any of them ("valutazione non riuscita"), the final score is incomplete and
+  // must NOT be published — the operator resolves each with "Rivaluta" (in the
+  // expanded answers) first, then the outcome buttons unlock.
+  const openFailed = draft?.totals.openFailed ?? 0;
+  const blockedByFailed = openFailed > 0;
+
   const grade = (outcome: ExamOutcome) => {
     if (!canGrade) {
       setErr("Studente non trovato tra gli iscritti — impossibile registrare l'esito.");
+      return;
+    }
+    if (blockedByFailed) {
+      setErr(
+        `${openFailed} ${openFailed === 1 ? "domanda non è stata valutata" : "domande non sono state valutate"} (valutazione non riuscita): usa "Rivaluta" nelle risposte prima di pubblicare l'esito.`,
+      );
       return;
     }
     setErr(null);
@@ -624,16 +637,18 @@ function ResultRow({
                     <button
                       key={o}
                       className="btn btn-xs"
-                      disabled={pending || !canGrade}
+                      disabled={pending || !canGrade || blockedByFailed}
                       onClick={() => grade(o)}
                       title={
                         !canGrade
                           ? "Studente non iscritto"
-                          : confirmed
-                            ? `Esito confermato: ${OUTCOME_LABEL[o]}`
-                            : r.gradable === 0
-                              ? "Valutazione manuale — nessuna domanda a correzione automatica"
-                              : `Suggerito: ${OUTCOME_LABEL[r.suggested]}`
+                          : blockedByFailed
+                            ? `${openFailed} da rivedere — risolvi con "Rivaluta" prima di pubblicare`
+                            : confirmed
+                              ? `Esito confermato: ${OUTCOME_LABEL[o]}`
+                              : r.gradable === 0
+                                ? "Valutazione manuale — nessuna domanda a correzione automatica"
+                                : `Suggerito: ${OUTCOME_LABEL[r.suggested]}`
                       }
                       style={{
                         // Confirmed = filled (the saved outcome); suggested = outline hint.
@@ -648,6 +663,11 @@ function ResultRow({
                   );
                 })}
               </div>
+              {blockedByFailed && (
+                <div style={{ color: "var(--warning-fg)", fontSize: 11, marginTop: 4, fontWeight: 600 }}>
+                  ⚠ {openFailed} da rivedere — non pubblicabile finché non risolvi
+                </div>
+              )}
               {err && <div style={{ color: "var(--danger-fg)", fontSize: 11, marginTop: 4 }}>{err}</div>}
           </td>
         )}

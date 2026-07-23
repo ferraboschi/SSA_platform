@@ -1,6 +1,20 @@
 export type Lang = "it" | "en" | "ja";
 export const LANGS: Lang[] = ["it", "en", "ja"];
 
+// A plain WORD for the 0–5 per-question vote (owner): the student reads the
+// meaning of the number, never the question's hidden weight. Index = vote 0…5;
+// a blank answer shows SCORE_WORD_BLANK instead of the "0" word.
+export const SCORE_WORDS: Record<Lang, readonly [string, string, string, string, string, string]> = {
+  it: ["Errato", "Insufficiente", "Parziale", "Buono", "Quasi perfetto", "Perfetto"],
+  en: ["Wrong", "Insufficient", "Partial", "Good", "Almost perfect", "Perfect"],
+  ja: ["不正解", "不十分", "部分的", "良好", "ほぼ完璧", "完璧"],
+};
+export const SCORE_WORD_BLANK: Record<Lang, string> = {
+  it: "Non risposto",
+  en: "Not answered",
+  ja: "未回答",
+};
+
 export const CHROME: Record<Lang, Record<string, string>> = {
   it: {
     test: "MODALITÀ TEST",

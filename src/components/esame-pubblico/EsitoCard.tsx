@@ -8,15 +8,14 @@
 // this card: its outcome stays private until the official correction.
 
 import { useEffect, useState } from "react";
-import { CHROME, type Lang } from "./exam-chrome";
+import { CHROME, SCORE_WORDS, SCORE_WORD_BLANK, type Lang } from "./exam-chrome";
 import { getDayEsitoAction, getExamExplanationAction, getLinkStateAction } from "@/lib/exam-links/actions";
 import type { DayEsito } from "@/lib/exam-links/esito";
 
-const ACCENT: Record<string, string> = {
-  passed: "#15803d",
-  retrial: "#b45309",
-  failed: "#b42318",
-};
+// A day test is FORMATIVE, not a certifying exam (owner): it shows the score as
+// a study indicator but NEVER a pass/fail verdict (no "promosso/rimandato"), so
+// the whole card stays neutral — no green/amber/red outcome coloring.
+const NEUTRAL = "#4f46e5";
 
 function Explain({ token, qid, lang }: { token: string; qid: string; lang: Lang }) {
   const t = CHROME[lang];
@@ -147,9 +146,7 @@ export function EsitoCard({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [esito.aiPending, token]);
-  const accent = esito.outcome ? ACCENT[esito.outcome] : "#4f46e5";
-  const outcomeLabel =
-    esito.outcome === "passed" ? t.previewPassed : esito.outcome === "retrial" ? t.previewRetrial : t.previewFailed;
+  const accent = NEUTRAL;
 
   if (closed) {
     return (
@@ -206,7 +203,7 @@ export function EsitoCard({
           <div style={{ fontSize: 44, fontWeight: 800, color: accent, lineHeight: 1.05, margin: "4px 0" }}>
             {esito.pct}%
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: accent }}>{outcomeLabel}</div>
+          {/* NO pass/fail verdict on a formative day test (owner). */}
           <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)", marginTop: 8 }}>
             {esito.correct}/{esito.gradable}
             {esito.manual > 0 ? ` · ${esito.manual} ${t.previewManual}` : ""}
@@ -315,7 +312,11 @@ export function EsitoCard({
             {d.aiFailed && (
               <div style={{ fontSize: 11.5, color: "#b45309", marginLeft: 20 }}>({t.aiFailedNote})</div>
             )}
-            {d.aiVote != null && (
+            {/* Valutazione ALWAYS shown for a settled question (owner) — open OR
+                closed, right OR wrong. Vote + a plain word; never the hidden
+                per-question weight. Hidden only while pending / grading failed
+                (those states have their own note). */}
+            {d.score5 != null && (
               <div
                 style={{
                   marginLeft: 20,
@@ -329,8 +330,8 @@ export function EsitoCard({
                 }}
               >
                 <strong>
-                  {t.aiVoteLabel}: {d.aiVote}/5
-                  {d.aiPoints != null && d.aiMaxPoints != null ? ` · ${d.aiPoints}/${d.aiMaxPoints}` : ""}
+                  {t.aiVoteLabel}: {d.score5}/5 ·{" "}
+                  {d.unanswered ? SCORE_WORD_BLANK[lang] : SCORE_WORDS[lang][d.score5]}
                 </strong>
                 {d.aiRationale && <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{d.aiRationale}</div>}
               </div>

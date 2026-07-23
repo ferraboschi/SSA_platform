@@ -23,6 +23,11 @@ export interface DayEsitoItem {
   correctText: string;
   /** true/false = auto-graded; null = pending manual/AI review. */
   ok: boolean | null;
+  /** 0–5 vote for the ALWAYS-visible "Valutazione" box (owner): open answers
+   *  use the AI vote; closed answers map right/partial/wrong/blank onto the same
+   *  5-point scale so every settled question shows an evaluation + a word.
+   *  Absent only while an open answer is still pending or its grading failed. */
+  score5?: number;
   /** AI evaluation from the submit-time correction (owner batch 8). */
   aiVote?: number;
   aiPoints?: number;
@@ -134,6 +139,16 @@ export async function buildDayEsito(
       // forever — surface it as "Da rivedere" so every question is closed.
       const strandedAfterGrading =
         d.ok === null && !d.unanswered && draft != null && !g && d.given !== "" && d.given !== "—";
+      // 0–5 vote for the always-visible "Valutazione" box. Open → AI vote;
+      // blank → 0; closed-right → 5; closed-partial (MULTI) → mid range (never
+      // 0 or 5); closed-wrong → 0. Left undefined only while pending or failed.
+      let score5: number | undefined;
+      if (g && !g.failed) score5 = g.vote;
+      else if (d.unanswered) score5 = 0;
+      else if (d.ok === true) score5 = 5;
+      else if (d.ok === false && (d.fraction ?? 0) > 0)
+        score5 = Math.min(4, Math.max(1, Math.round((d.fraction ?? 0) * 5)));
+      else if (d.ok === false) score5 = 0;
       return {
         qid: d.qid,
         text: textById.get(d.qid) ?? d.text,
@@ -145,6 +160,7 @@ export async function buildDayEsito(
         ...(cat && cat !== "Generale" ? { cat } : {}),
         ...(d.unanswered ? { unanswered: true } : {}),
         ...(d.ok === false && !d.unanswered && (d.fraction ?? 0) > 0 ? { partial: true } : {}),
+        ...(score5 != null ? { score5 } : {}),
         ...(g && !g.failed
           ? { aiVote: g.vote, aiPoints: g.points, aiMaxPoints: g.maxPoints, aiRationale: g.rationale }
           : g?.failed || strandedAfterGrading
