@@ -403,18 +403,20 @@ function PlaceholderRow({
                     style={seatInput}
                   />
                 </SeatField>
-                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 190px" }}>
-                  <div style={{ display: "flex", gap: 6 }}>
+                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 200px" }}>
+                  <div style={{ display: "flex", gap: 6, minWidth: 0 }}>
                     <select
                       value={dialCode}
                       onChange={(e) => setDialCode(e.target.value)}
                       disabled={busy}
                       aria-label="Prefisso internazionale"
-                      style={{ ...seatInput, flex: "0 0 96px" }}
+                      // Flag + code only (compact) so the number input beside it is
+                      // never squeezed off-screen when the row narrows.
+                      style={{ ...seatInput, flex: "0 0 auto", width: 92 }}
                     >
                       {COUNTRY_CODES.map((cc) => (
                         <option key={cc.c} value={cc.c}>
-                          {cc.c} {cc.n}
+                          {cc.f} {cc.c}
                         </option>
                       ))}
                     </select>
@@ -429,7 +431,7 @@ function PlaceholderRow({
                         if (e.key === "Enter") save();
                         if (e.key === "Escape") setOpen(false);
                       }}
-                      style={{ ...seatInput, flex: 1 }}
+                      style={{ ...seatInput, flex: "1 1 60px", minWidth: 0 }}
                     />
                   </div>
                 </SeatField>
