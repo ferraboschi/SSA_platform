@@ -119,7 +119,11 @@ function correctDisplay(q: GradableQuestion, localized: GradableQuestion): strin
   if (q.type === "fill") return splitAccepted(q.correct).join(", ") || "—";
   if (q.type === "order") return (q.correct ?? []).map(String).join(" → ") || "—";
   if (isObjective(q.type) && q.correct?.length) {
-    return q.correct.map((i) => localized.options[Number(i)]).filter(Boolean).join(", ") || "—";
+    // SINGLE shows only ONE correct option — even when the key accepts several
+    // ("Abilita più risposte corrette"), the student must never learn there was
+    // more than one right answer (owner). MULTI legitimately lists them all.
+    const idxs = q.type === "single" ? q.correct.slice(0, 1) : q.correct;
+    return idxs.map((i) => localized.options[Number(i)]).filter(Boolean).join(", ") || "—";
   }
   return "—";
 }
@@ -384,7 +388,9 @@ export function gradeAnswers(
       type: q.type,
       text: qText,
       given: fmtGiven(given, localized),
-      correct: q.correct.map((i) => localized.options[Number(i)]).filter(Boolean).join(", "),
+      // SINGLE shows a single correct option (see correctDisplay) so a
+      // multi-correct key never reveals it accepted more than one.
+      correct: correctDisplay(q, localized),
       ok,
       fraction,
     };

@@ -177,6 +177,9 @@ describe("gradeAnswers — manual-review types", () => {
     const wrong = gradeAnswers([s], { s: "B" });
     expect(wrong.autoScore).toBe(0);
     expect(wrong.detail[0].ok).toBe(false);
+    // The correct answer shown to the student is ONE option, never the whole set —
+    // the multi-correct design must stay hidden.
+    expect(wrong.detail[0].correct).toBe("A");
   });
   it("a normal SINGLE (one correct) is unchanged by the membership rule", () => {
     const one = q({ id: "s1", type: "single", options: ["A", "B"], correct: [1] });

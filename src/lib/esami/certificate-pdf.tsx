@@ -16,6 +16,7 @@ import {
 } from "@react-pdf/renderer";
 import type { ReactElement } from "react";
 import { REPORT_I18N, type ReportLang } from "@/lib/i18n/report";
+import { SCORE_WORDS } from "@/components/esame-pubblico/exam-chrome";
 import { EXAM_THRESHOLDS } from "@/lib/domain/constants";
 import { weakAreas, type ExamSection } from "./exam-sections";
 import type { OpenReviewItem } from "./certificate-data";
@@ -261,8 +262,6 @@ function reviewColor(vote: number | undefined, points: number, maxPoints: number
   const ratio = vote != null ? (vote - 1) / 4 : maxPoints > 0 ? points / maxPoints : 0;
   return ratio >= 1 ? COLORS.pass : ratio >= 0.7 ? COLORS.retrial : COLORS.fail;
 }
-/** Points as a compact string (fractional AI points keep one decimal). */
-const fmtPts = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /** Page 2 (owner batch 18): open answers, each justified — where/what/why it
  *  fell short — with the missing pieces integrated from the knowledge base
@@ -286,9 +285,12 @@ function OpenReviewPage({ input, lang }: { input: CertificatePdfInput; lang: Rep
 
       {items.map((it, i) => {
         const c = reviewColor(it.vote, it.points, it.maxPoints);
-        // Points only — no "Voto AI n/5" (owner debug call: the student's document
-        // must carry no AI reference). The 1-5 vote still drives the accent colour.
-        const scoreLine = `${t.aiVote}: ${fmtPts(it.points)}/${fmtPts(it.maxPoints)}`;
+        // Vote (0–5) + a plain WORD, never the question's hidden weight (owner):
+        // the student reads the meaning of the number, not "3/3 points". Derive
+        // the vote from the point ratio when the AI didn't emit one.
+        const ratio = it.maxPoints > 0 ? it.points / it.maxPoints : 0;
+        const v5 = Math.max(0, Math.min(5, it.vote != null ? it.vote : Math.round(ratio * 5)));
+        const scoreLine = `${t.aiVote}: ${v5}/5 · ${SCORE_WORDS[lang][v5]}`;
         return (
           <View key={i} style={[styles.reviewItem, { borderLeftColor: c }]}>
             <Text style={[styles.reviewQ, jaFont]}>
