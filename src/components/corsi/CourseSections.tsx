@@ -20,6 +20,7 @@ export function CourseSections({
   courseId,
   courseTitle = "",
   enrolled,
+  capacity,
   programSakeCount,
   students,
   whatsappLink,
@@ -34,6 +35,7 @@ export function CourseSections({
   courseId: string;
   courseTitle?: string;
   enrolled: number;
+  capacity?: number;
   programSakeCount: number;
   students: Student[];
   whatsappLink: string;
@@ -96,7 +98,7 @@ export function CourseSections({
       </div>
 
       {section === "iscritti" && (
-        <IscrittiSection courseId={courseId} students={students} whatsappLink={whatsappLink} />
+        <IscrittiSection courseId={courseId} students={students} whatsappLink={whatsappLink} capacity={capacity} />
       )}
       {section === "programma" && (
         <ProgrammaEconomiaSection

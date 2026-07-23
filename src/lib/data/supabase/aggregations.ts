@@ -54,6 +54,9 @@ export interface EnrollmentJoinRow {
   /** Multi-ticket seat position within the order line (F4). 1 = buyer; 2..N =
    *  the extra seats materialized as their own rows. Absent pre-migration → 1. */
   seat_index?: number | null;
+  /** Set when the student was removed from the course (refund/credit). Such a
+   *  seat leaves the roster + collected revenue. Absent pre-migration → active. */
+  annullata_at?: string | null;
   corsista:
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean; placeholder?: boolean }
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean; placeholder?: boolean }[]
@@ -68,6 +71,9 @@ export interface EnrollmentAggRow {
   amount_cents: number;
   discount_cents: number | null;
   financial_status?: string | null;
+  /** Removed-from-course seat (refund/credit) — excluded from headcount + revenue.
+   *  Absent pre-migration → counts as active. */
+  annullata_at?: string | null;
 }
 
 /** A corsi_crediti row scoped to a single destination course (already filtered on
@@ -158,10 +164,14 @@ export function buildStudentsFromEnrollments(
 ): StudentRosterResult {
   let revenue = 0;
   const examResults = { passed: 0, retrial: 0, failed: 0 };
+  // A student removed from the course (refund/credit) leaves the roster and the
+  // collected revenue — but the row is kept in the DB for audit. Drop it here so
+  // every course-detail reader (roster, revenue, exam tally) sees only active seats.
+  const activeRows = enrollJoinRows.filter((r) => !r.annullata_at);
   // Lines whose extra seats are already materialized as their own rows (F4): the
   // legacy seat inference is suppressed for them (see expandedLineItemIds).
-  const expanded = expandedLineItemIds(enrollJoinRows);
-  const students: Student[] = enrollJoinRows.map((r) => {
+  const expanded = expandedLineItemIds(activeRows);
+  const students: Student[] = activeRows.map((r) => {
     if (r.exam_result) examResults[r.exam_result]++;
     const c = Array.isArray(r.corsista) ? r.corsista[0] : r.corsista;
     const isPlaceholder = Boolean(c?.placeholder);
@@ -265,6 +275,7 @@ export function aggregateCourseEnrollments(
 ): Map<number, { n: number; nLive: number; rev: number }> {
   const agg = new Map<number, { n: number; nLive: number; rev: number }>();
   for (const i of enrollAggRows) {
+    if (i.annullata_at) continue; // removed-from-course seat: not enrolled, no revenue
     const a = agg.get(i.corso_id) ?? { n: 0, nLive: 0, rev: 0 };
     a.n++; // headcount = all enrollments (enrolled ≠ collected)
     // Live seats exclude dead orders — deriveLifecycle uses this so a fully

@@ -39,6 +39,30 @@ export async function linkCreditoAction(
     throw new Error("Iscrizione di destinazione non valida.");
   }
 
+  // SAME-LEVEL only (owner): a credit is redeemable on a course of the same
+  // `type` as the one it came from. Compare origin vs destination level; skip the
+  // check only if the type column can't be read (pre-migration safety).
+  const { data: credito } = await svc
+    .from("corsi_crediti")
+    .select("corso_origine_id")
+    .eq("id", creditoId)
+    .maybeSingle();
+  const origineId = (credito as { corso_origine_id: number | null } | null)?.corso_origine_id ?? null;
+  if (origineId != null) {
+    const { data: courses, error: tErr } = await svc
+      .from("corsi")
+      .select("id,type")
+      .in("id", [origineId, corsoDestinazioneId]);
+    if (!tErr && courses) {
+      const byId = new Map((courses as { id: number; type: string | null }[]).map((c) => [c.id, c.type]));
+      const tOrig = byId.get(origineId);
+      const tDest = byId.get(corsoDestinazioneId);
+      if (tOrig && tDest && tOrig !== tDest) {
+        throw new Error("Il credito si può riassegnare solo a un corso dello stesso livello.");
+      }
+    }
+  }
+
   const { error } = await svc
     .from("corsi_crediti")
     .update({

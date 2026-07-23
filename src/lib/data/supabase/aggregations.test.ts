@@ -112,6 +112,20 @@ describe("buildStudentsFromEnrollments", () => {
     expect(revenue).toBe(120);
   });
 
+  it("excludes an annullata seat from the roster, revenue, and exam tally", () => {
+    const { students, revenue, examResults } = buildStudentsFromEnrollments(
+      [
+        enroll({ id: 1, corsista_id: 100, amount_cents: 12000, financial_status: "paid" }),
+        enroll({ id: 2, corsista_id: 200, amount_cents: 15000, financial_status: "paid", exam_result: "passed", annullata_at: "2026-07-23T10:00:00Z" }),
+      ],
+      noTickets,
+      noCompanions,
+    );
+    expect(students).toHaveLength(1); // the annullata seat is gone from the roster
+    expect(revenue).toBe(120); // and its €150 is no longer collected revenue
+    expect(examResults.passed).toBe(0); // nor counted in the exam tally
+  });
+
   it("a 100%-off seat gives paid 0 (clamped), still listed", () => {
     const { students, revenue } = buildStudentsFromEnrollments(
       [
@@ -446,6 +460,14 @@ describe("aggregateCourseEnrollments", () => {
       agg({ corso_id: 1, amount_cents: 12000, financial_status: "pending" }),
     ]);
     expect(map.get(1)).toEqual({ n: 2, nLive: 2, rev: 120 });
+  });
+
+  it("excludes an annullata (removed-from-course) seat from headcount and revenue", () => {
+    const map = aggregateCourseEnrollments([
+      agg({ corso_id: 1, amount_cents: 12000, financial_status: "paid" }),
+      agg({ corso_id: 1, amount_cents: 9000, financial_status: "paid", annullata_at: "2026-07-23T10:00:00Z" }),
+    ]);
+    expect(map.get(1)).toEqual({ n: 1, nLive: 1, rev: 120 });
   });
 
   it("treats a null/absent financial_status as paid (legacy rows)", () => {

@@ -9,3 +9,10 @@ export function shopifyAdminProductsUrl(query?: string): string {
   const base = `https://admin.shopify.com/store/${STORE_SLUG}/products`;
   return query ? `${base}?query=${encodeURIComponent(query)}` : base;
 }
+
+/** Admin "Orders" page, optionally pre-filtered (e.g. by an order name/number)
+ *  so staff can open the exact order to issue a refund. */
+export function shopifyAdminOrdersUrl(query?: string): string {
+  const base = `https://admin.shopify.com/store/${STORE_SLUG}/orders`;
+  return query ? `${base}?query=${encodeURIComponent(query)}` : base;
+}

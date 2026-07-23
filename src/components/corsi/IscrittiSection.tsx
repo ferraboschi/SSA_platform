@@ -13,15 +13,20 @@ import {
   removeSeatAction,
   lookupSeatEmailAction,
 } from "@/lib/corsi/seat-actions";
+import { cancelEnrollmentAction, type CancelEnrollmentResult } from "@/lib/corsi/enrollment-actions";
 
 export function IscrittiSection({
   courseId,
   students,
   whatsappLink,
+  capacity,
 }: {
   courseId: string;
   students: Student[];
   whatsappLink: string;
+  /** Shopify seat capacity — used to show "posti rimasti" (visibility only;
+   *  Shopify remains authoritative on capacity). */
+  capacity?: number;
 }) {
   const tr = useT();
   const t = tr.corsi.iscritti;
@@ -97,6 +102,17 @@ export function IscrittiSection({
           <Badge tone="warning" size="lg">
             {format(t.seatToComplete, { n: pending })}
           </Badge>
+        )}
+        {capacity != null && capacity > 0 && (
+          <span
+            title="Posti totali su Shopify meno gli iscritti attivi. Shopify resta l'autorità sulla capienza."
+            style={{ fontSize: 12.5, color: "var(--text-3)" }}
+          >
+            {Math.max(0, capacity - students.length) === 0
+              ? "Al completo"
+              : `${Math.max(0, capacity - students.length)} posti rimasti`}{" "}
+            <span style={{ color: "var(--text-4)" }}>· {students.length}/{capacity}</span>
+          </span>
         )}
         <span style={{ fontSize: 13, color: "var(--text-2)" }}>{money(revenue)}</span>
         {whatsappLink && (
@@ -215,20 +231,25 @@ export function IscrittiSection({
                       "—"
                     )}
                   </td>
-                  {/* Ordine + biglietto */}
+                  {/* Ordine + biglietto + rimozione */}
                   <td>
-                    <div style={{ fontWeight: 600 }}>{s.orderNumber || "—"}</div>
-                    {s.ticketCode && (
-                      <div
-                        style={{
-                          fontSize: 10.5,
-                          color: "var(--text-4)",
-                          fontFamily: "monospace",
-                        }}
-                      >
-                        {t.ticketRef} {s.ticketCode}
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{s.orderNumber || "—"}</div>
+                        {s.ticketCode && (
+                          <div
+                            style={{
+                              fontSize: 10.5,
+                              color: "var(--text-4)",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            {t.ticketRef} {s.ticketCode}
+                          </div>
+                        )}
                       </div>
-                    )}
+                      {s.iscrizioneId != null && <RemoveStudent courseId={courseId} student={s} />}
+                    </div>
                   </td>
                 </tr>
               );
@@ -247,6 +268,108 @@ export function IscrittiSection({
 
 // A "+ Aggiungi posto extra (fuori ordine)" course-level action — replaces the
 // old generic per-row "+ aggiungi partecipante". Creates a placeholder seat.
+// Remove a real (paid) student from a LIVE course: refund (money handled in
+// Shopify) or credit (a corsi_crediti row, redeemable same-level). The seat is
+// marked annullata (kept for audit) and leaves the roster on refresh. The modal
+// shows the manual-Shopify reminder + deep-link BEFORE the row disappears.
+function RemoveStudent({ courseId, student }: { courseId: string; student: Student }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<CancelEnrollmentResult | null>(null);
+
+  const run = async (mode: "credito" | "rimborso") => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await cancelEnrollmentAction(Number(courseId), student.iscrizioneId ?? 0, mode).catch(
+      () => ({ ok: false, error: "Operazione non riuscita." }) as CancelEnrollmentResult,
+    );
+    setBusy(false);
+    if (res.ok) setDone(res); // show the reminder; refresh only on close
+    else setError(res.error || "Operazione non riuscita.");
+  };
+
+  const close = () => {
+    const wasDone = Boolean(done);
+    setOpen(false);
+    setDone(null);
+    setError(null);
+    if (wasDone) router.refresh(); // now drop the annullata row from the roster
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Rimuovi dal corso"
+        className="btn btn-icon btn-sm btn-ghost"
+        style={{ color: "var(--text-4)", flexShrink: 0 }}
+      >
+        <Icon name="trash" size={12} />
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}
+          onClick={close}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--surface, #fff)", borderRadius: 12, padding: "20px 22px", maxWidth: 440, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.25)" }}
+          >
+            {done ? (
+              <>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>
+                  {done.credited ? "Credito registrato ✓" : "Studente rimosso ✓"}
+                </div>
+                {done.reminder && (
+                  <>
+                    <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5, margin: "0 0 12px" }}>
+                      ⚠️ {done.reminder.text}
+                    </p>
+                    <a href={done.reminder.url} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary" style={{ textDecoration: "none" }}>
+                      <Icon name="external" size={12} /> {done.reminder.label}
+                    </a>
+                  </>
+                )}
+                <div style={{ marginTop: 16, textAlign: "right" }}>
+                  <button type="button" className="btn btn-sm" onClick={close}>Chiudi</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
+                  Rimuovi {student.name} dal corso
+                </div>
+                <p style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.5, margin: "0 0 14px" }}>
+                  Lo studente esce dal corso. Scegli come gestire l&apos;importo pagato: un{" "}
+                  <strong>rimborso</strong> (denaro reso su Shopify) o un <strong>credito</strong>{" "}
+                  riassegnabile a un corso dello stesso livello.
+                </p>
+                {error && <p style={{ fontSize: 12.5, color: "var(--danger-fg, #b91c1c)", margin: "0 0 10px" }}>{error}</p>}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => run("credito")}>
+                    {busy ? "…" : "Crea credito"}
+                  </button>
+                  <button type="button" className="btn btn-sm" disabled={busy} onClick={() => run("rimborso")}>
+                    {busy ? "…" : "Rimborso"}
+                  </button>
+                  <span style={{ flex: 1 }} />
+                  <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={close}>Annulla</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ExtraSeatButton({
   onClick,
   busy,

@@ -31,6 +31,68 @@ import {
 } from "@/lib/integrations/shopify/admin-client";
 import { generateCreditCode } from "./code";
 
+type Svc = ReturnType<typeof getSupabaseServiceClient>;
+
+/** Create ONE transfer credit for a SINGLE enrollment removed from a live course
+ *  (the per-student "Rimuovi dal corso → credito" flow, distinct from the whole-
+ *  course cancellation generator below). Mirrors its per-credit logic: a one-time
+ *  code + a best-effort live Shopify discount, upserted on the unique origin
+ *  enrolment so a re-run never duplicates. `importoCents` is decided by the caller
+ *  (intro = the course list price / "un posto"; higher levels = net paid). */
+export async function createCreditForEnrollment(
+  svc: Svc,
+  input: {
+    corsistaId: number;
+    corsoOrigineId: number;
+    iscrizioneOrigineId: number;
+    importoCents: number;
+    /** Course level ("introduttivo"…) — recorded in the note for the ledger. */
+    tipoOrigine?: string | null;
+  },
+): Promise<{ ok: boolean; created: boolean; error?: string }> {
+  try {
+    const codice = generateCreditCode();
+    let shopify_discount_id: string | null = null;
+    const canCreate = (await getGrantedScopes().catch(() => [] as string[])).includes(
+      "write_discounts",
+    );
+    if (canCreate && input.importoCents > 0) {
+      try {
+        const d = await createBasicCodeDiscount({
+          code: codice,
+          amountEuros: input.importoCents / 100,
+          title: "Credito SSA — rimozione dal corso",
+          usageLimit: 1,
+        });
+        shopify_discount_id = d.id;
+      } catch {
+        // Keep the local code; leave shopify_discount_id null. NEVER throw.
+      }
+    }
+    const { error, count } = await svc
+      .from("corsi_crediti")
+      .upsert(
+        [
+          {
+            corsista_id: input.corsistaId,
+            importo_cents: input.importoCents,
+            corso_origine_id: input.corsoOrigineId,
+            iscrizione_origine_id: input.iscrizioneOrigineId,
+            stato: "aperto",
+            codice,
+            shopify_discount_id,
+            ...(input.tipoOrigine ? { nota: `Livello: ${input.tipoOrigine}` } : {}),
+          },
+        ],
+        { onConflict: "iscrizione_origine_id", ignoreDuplicates: true, count: "exact" },
+      );
+    if (error) return { ok: false, created: false, error: error.message };
+    return { ok: true, created: (count ?? 0) > 0 };
+  } catch (e) {
+    return { ok: false, created: false, error: e instanceof Error ? e.message : "Errore credito." };
+  }
+}
+
 export async function generateTransferCredits(): Promise<{ created: number }> {
   try {
     const svc = getSupabaseServiceClient();
@@ -48,7 +110,7 @@ export async function generateTransferCredits(): Promise<{ created: number }> {
     // Paid, non-historical enrolments on those courses, with their net paid.
     // Select financial_status defensively: fall back to the base columns if the
     // enrichment migration hasn't been applied (then every seat counts as paid).
-    const RICH = "id,corso_id,corsista_id,amount_cents,discount_cents,historical,financial_status";
+    const RICH = "id,corso_id,corsista_id,amount_cents,discount_cents,historical,financial_status,annullata_at";
     const BASE = "id,corso_id,corsista_id,amount_cents,discount_cents,historical";
     let select = RICH;
     let { data: iscr, error: iscrErr } = await svc
@@ -72,12 +134,14 @@ export async function generateTransferCredits(): Promise<{ created: number }> {
       discount_cents: number | null;
       historical?: boolean | null;
       financial_status?: string | null;
+      annullata_at?: string | null;
     };
 
     // ── Candidate paid, non-historical enrolments (net > 0) on cancelled courses.
     const candidates: Array<{ corsista_id: number; net: number; corso_id: number; id: number }> = [];
     for (const r of (iscr ?? []) as unknown as IscrRow[]) {
       if (r.historical) continue; // historical seats are already delivered/settled
+      if (r.annullata_at) continue; // already individually cancelled → its credit exists
       if (!isPaidRevenue(r.financial_status)) continue; // only money actually collected
       const net = netPaidCents(r);
       if (net <= 0) continue; // free/transferred seats carry no credit
@@ -178,16 +242,17 @@ export async function matchTransferCreditsByCode(): Promise<{ matched: number }>
   try {
     const svc = getSupabaseServiceClient();
 
-    // Open credits that carry a redemption code.
+    // Open credits that carry a redemption code (+ their origin course, for the
+    // same-level guard below).
     const { data: credits, error: cErr } = await svc
       .from("corsi_crediti")
-      .select("id, codice")
+      .select("id, codice, corso_origine_id")
       .eq("stato", "aperto")
       .not("codice", "is", null);
     if (cErr) return { matched: 0 }; // pre-migration (no codice column) → no-op
-    const byCode = new Map<string, number>();
-    for (const c of (credits ?? []) as { id: number; codice: string | null }[]) {
-      if (c.codice) byCode.set(c.codice, c.id);
+    const byCode = new Map<string, { id: number; origineId: number | null }>();
+    for (const c of (credits ?? []) as { id: number; codice: string | null; corso_origine_id: number | null }[]) {
+      if (c.codice) byCode.set(c.codice, { id: c.id, origineId: c.corso_origine_id });
     }
     if (byCode.size === 0) return { matched: 0 };
 
@@ -198,10 +263,27 @@ export async function matchTransferCreditsByCode(): Promise<{ matched: number }>
       .in("discount_code", [...byCode.keys()]);
     if (eErr) return { matched: 0 }; // discount_code column missing → no-op
 
+    // Course levels for the same-level guard: only close a credit if the course
+    // where the code was spent is the SAME `type` as the credit's origin. A code
+    // spent on a different level is left OPEN (never wrongly consumed).
+    const involved = new Set<number>();
+    for (const v of byCode.values()) if (v.origineId != null) involved.add(v.origineId);
+    for (const e of (enr ?? []) as { corso_id: number }[]) involved.add(e.corso_id);
+    const typeById = new Map<number, string | null>();
+    if (involved.size > 0) {
+      const { data: courses } = await svc.from("corsi").select("id,type").in("id", [...involved]);
+      for (const c of (courses ?? []) as { id: number; type: string | null }[]) typeById.set(c.id, c.type);
+    }
+
     let matched = 0;
     for (const e of (enr ?? []) as { id: number; corso_id: number; discount_code: string | null }[]) {
-      const creditId = e.discount_code ? byCode.get(e.discount_code) : undefined;
+      const hit = e.discount_code ? byCode.get(e.discount_code) : undefined;
+      const creditId = hit?.id;
       if (creditId == null) continue;
+      // Same-level guard: skip if origin and destination levels are both known and differ.
+      const tOrig = hit?.origineId != null ? typeById.get(hit.origineId) : undefined;
+      const tDest = typeById.get(e.corso_id);
+      if (tOrig && tDest && tOrig !== tDest) continue;
       const { error } = await svc
         .from("corsi_crediti")
         .update({

@@ -310,6 +310,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         courseId={course.id}
         courseTitle={course.shortTitle}
         enrolled={course.enrolled}
+        capacity={course.capacity}
         programSakeCount={programSakeCount}
         students={course.students}
         whatsappLink={course.whatsappLink}

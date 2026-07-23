@@ -43,7 +43,7 @@ export function makeCoursesRepo(
     // the base columns if the enrichment migration hasn't been applied yet, so
     // the iscritti list never disappears.
     const RICH_ISCR =
-      "id,corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,seat_index,buyer_name,enrolled_email,corsista:corsisti(full_name,email,phone,has_whatsapp,placeholder)";
+      "id,corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,seat_index,annullata_at,buyer_name,enrolled_email,corsista:corsisti(full_name,email,phone,has_whatsapp,placeholder)";
     const BASE_ISCR =
       "id,corsista_id,amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)";
     const iscr = (
@@ -259,12 +259,13 @@ export function makeCoursesRepo(
         discount_cents: number | null;
         financial_status?: string | null;
         exam_result?: "passed" | "retrial" | "failed" | null;
+        annullata_at?: string | null;
       };
       const ENR_PAGE = 1000;
       // `financial_status` may not exist pre-enrichment migration → fall back to
       // the base columns (revenue then treats every enrollment as paid, as it
       // did before the paid-only rule was introduced).
-      const AGG_RICH = "corso_id,amount_cents,discount_cents,exam_result,financial_status";
+      const AGG_RICH = "corso_id,amount_cents,discount_cents,exam_result,financial_status,annullata_at";
       const AGG_BASE = "corso_id,amount_cents,discount_cents,exam_result";
       let aggSelect = AGG_RICH;
       const enrollAggRows = await paginateAll<EnrollAggRow>(
@@ -294,6 +295,7 @@ export function makeCoursesRepo(
       // always saw examResults = null — only the single-course path filled it.
       const examAgg = new Map<number, { passed: number; retrial: number; failed: number }>();
       for (const r of enrollAggRows) {
+        if (r.annullata_at) continue; // removed-from-course seat: not part of the tally
         if (!r.exam_result) continue;
         const e =
           examAgg.get(r.corso_id) ??
