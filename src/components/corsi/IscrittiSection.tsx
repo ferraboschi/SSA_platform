@@ -304,6 +304,7 @@ function PlaceholderRow({
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [okNote, setOkNote] = useState<string | null>(null);
 
   const iscrId = student.iscrizioneId;
 
@@ -319,13 +320,21 @@ function PlaceholderRow({
     if (!ready || busy || iscrId == null) return;
     setBusy(true);
     setError(null);
+    setOkNote(null);
     const res = await completeSeatAction(Number(courseId), iscrId, {
       name: `${firstName.trim().replace(/\s+/g, " ")} ${lastName.trim().replace(/\s+/g, " ")}`,
       email: email.trim(),
       phone: `${dialCode} ${phone.trim()}`.trim(),
     }).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatAction>>);
     setBusy(false);
-    if (res.ok) {
+    if (res.ok && res.linked) {
+      // Repeat attendee: linked to the existing profile — confirm briefly, then refresh.
+      setOkNote("Presenza aggiunta a un profilo già esistente.");
+      setTimeout(() => {
+        setOpen(false);
+        router.refresh();
+      }, 1500);
+    } else if (res.ok) {
       setOpen(false);
       router.refresh();
     } else {
@@ -477,6 +486,7 @@ function PlaceholderRow({
               </div>
             )}
             {error && <div style={{ fontSize: 12, fontWeight: 500, color: "var(--danger, #dc2626)", marginTop: 5 }}>{error}</div>}
+            {okNote && <div style={{ fontSize: 12, fontWeight: 500, color: "var(--success-fg, #15803d)", marginTop: 5 }}>✓ {okNote}</div>}
           </div>
         </div>
       </td>

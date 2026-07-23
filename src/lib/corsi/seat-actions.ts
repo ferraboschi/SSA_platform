@@ -23,11 +23,15 @@ import { revalidatePath } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { hasRole } from "@/lib/auth/guard";
 import { placeholderName } from "@/lib/sync/seats";
+import { sortedNameKey } from "@/lib/anomalie/rules";
 
 export interface SeatActionResult {
   ok: boolean;
   error?: string;
   schema?: boolean;
+  /** completeSeatAction: the seat was LINKED to an existing corsista (a repeat
+   *  attendee) rather than promoting the placeholder to a new person. */
+  linked?: boolean;
 }
 
 function isMissingSchema(err: { message?: string } | null | undefined): boolean {
@@ -85,22 +89,56 @@ export async function completeSeatAction(
     if (!cor?.placeholder) return { ok: false, error: "Questo posto è già assegnato a una persona." };
     const placeholderId = Number(enr.corsista_id);
 
-    // A well-formed email that ALREADY belongs to someone else isn't "invalid" —
-    // it's a duplicate. Say so clearly ("Mail già presente") instead of a vague
-    // rejection, so staff know to check the address rather than re-type it.
-    {
-      const { data: existing } = await svc
-        .from("corsisti")
-        .select("id")
-        .eq("email", email)
-        .neq("id", placeholderId)
-        .maybeSingle();
-      if (existing?.id) {
+    // Does this email already belong to (other) corsisti? Duplicates can exist,
+    // so fetch the set — not a single row.
+    const { data: existingRows } = await svc
+      .from("corsisti")
+      .select("id, full_name")
+      .eq("email", email)
+      .neq("id", placeholderId)
+      .limit(20);
+    const existing = (existingRows ?? []) as { id: number; full_name: string | null }[];
+
+    if (existing.length > 0) {
+      // Owner's rule: an already-present email is NOT a problem when it's the SAME
+      // person attending again — we add this course as a new participation on their
+      // existing profile, never a duplicate. It IS a conflict only when the name
+      // genuinely differs (likely a mistyped address). "Same person" uses the app's
+      // own duplicate rule: order-insensitive, accent/case-insensitive name key.
+      const nameKey = sortedNameKey(name);
+      const samePerson = existing.find(
+        (c) => nameKey.length > 0 && sortedNameKey(c.full_name ?? "") === nameKey,
+      );
+      if (!samePerson) {
         return { ok: false, error: "Mail già presente: è associata a un altro nominativo." };
       }
+      // Repeat attendee across courses is fine; twice in THIS course is not.
+      const { data: dupRows } = await svc
+        .from("corsi_iscrizioni")
+        .select("id")
+        .eq("corso_id", corso)
+        .eq("corsista_id", samePerson.id)
+        .neq("id", iscrId)
+        .limit(1);
+      if (dupRows && dupRows.length > 0) {
+        return { ok: false, error: "Questa persona è già presente in questo corso." };
+      }
+      // Link THIS seat to the existing profile (new participation) + drop the
+      // now-unused placeholder corsista.
+      const { error: linkErr } = await svc
+        .from("corsi_iscrizioni")
+        .update({ corsista_id: samePerson.id, enrolled_email: email })
+        .eq("id", iscrId);
+      if (linkErr) return { ok: false, error: linkErr.message };
+      await svc.from("corsisti").delete().eq("id", placeholderId).then(
+        () => {},
+        () => {},
+      );
+      revalidatePath(`/corsi/${corso}`);
+      return { ok: true, linked: true };
     }
 
-    // Promote the placeholder corsista in place to a real person.
+    // New person → promote the placeholder corsista in place.
     const { error: updErr } = await svc
       .from("corsisti")
       .update({ full_name: name, email, phone, placeholder: false })
