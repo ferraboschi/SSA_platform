@@ -10,6 +10,7 @@ import {
   OUTCOME_LABEL_BY_LANG,
   LANG_LABEL,
   EXAM_EMAIL_VARS,
+  DEFAULTS_BY_LANG,
   type ExamEmailLang,
   type ExamEmailTemplates,
   type ExamOutcome,
@@ -53,6 +54,13 @@ export function ExamEmailTemplatesEditor({
       ...prev,
       [lang]: { ...prev[lang], [active]: { ...prev[lang][active], ...patch } },
     }));
+
+  // Built-in default for the current language + outcome. "Ripristina predefinito"
+  // discards a saved customization and restores the faithful default (e.g. an
+  // Italian body edited drier than the English original). Reversible until Save.
+  const def = DEFAULTS_BY_LANG[lang][active];
+  const isDefault = cur.subject === def.subject && cur.body === def.body;
+  const resetToDefault = () => setCur({ subject: def.subject, body: def.body });
 
   const insertVar = (v: string) => {
     const field = lastFocused.current;
@@ -175,7 +183,23 @@ export function ExamEmailTemplatesEditor({
             />
           </div>
           <div className="field">
-            <div className="field-label">Testo dell&apos;email</div>
+            <div className="field-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <span>Testo dell&apos;email</span>
+              <button
+                type="button"
+                className="btn btn-xs btn-ghost"
+                onClick={resetToDefault}
+                disabled={isDefault}
+                title={
+                  isDefault
+                    ? "Questo testo è già quello predefinito"
+                    : `Ripristina il testo predefinito (fedele) per "${OUTCOME_LABEL_IT[active]}" · ${LANG_LABEL[lang]}`
+                }
+                style={{ fontSize: 11.5, fontWeight: 500 }}
+              >
+                <Icon name="refresh" size={11} /> Ripristina predefinito
+              </button>
+            </div>
             <textarea
               ref={bodyRef}
               className="input"
