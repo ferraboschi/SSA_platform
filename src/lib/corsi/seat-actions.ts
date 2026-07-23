@@ -246,3 +246,36 @@ export async function removeSeatAction(
     return { ok: false, error: e instanceof Error ? e.message : "Eliminazione non riuscita." };
   }
 }
+
+/** Read-only lookup for the "posto extra" form: is this email already in the
+ *  system? Returns the existing person's name + how many participations they
+ *  have, so the educator gets an info hint as they type (never blocks — the
+ *  save-time rules decide link vs conflict). Synthetic placeholder rows are
+ *  ignored. Admin/manager only. */
+export async function lookupSeatEmailAction(
+  email: string,
+): Promise<{ ok: boolean; exists: boolean; name?: string; courses?: number }> {
+  if (!(await hasRole(["admin", "manager"]))) return { ok: false, exists: false };
+  const e = String(email ?? "").trim().toLowerCase();
+  if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return { ok: true, exists: false };
+  try {
+    const svc = getSupabaseServiceClient();
+    const { data } = await svc
+      .from("corsisti")
+      .select("id, full_name, placeholder")
+      .eq("email", e)
+      .limit(5);
+    const real = ((data ?? []) as { id: number; full_name: string | null; placeholder?: boolean }[]).filter(
+      (r) => !r.placeholder,
+    );
+    if (real.length === 0) return { ok: true, exists: false };
+    const first = real[0];
+    const { count } = await svc
+      .from("corsi_iscrizioni")
+      .select("id", { count: "exact", head: true })
+      .eq("corsista_id", first.id);
+    return { ok: true, exists: true, name: (first.full_name ?? "").trim(), courses: count ?? 0 };
+  } catch {
+    return { ok: true, exists: false };
+  }
+}

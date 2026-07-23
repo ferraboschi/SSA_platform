@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
@@ -11,6 +11,7 @@ import {
   completeSeatAction,
   addExtraSeatAction,
   removeSeatAction,
+  lookupSeatEmailAction,
 } from "@/lib/corsi/seat-actions";
 
 export function IscrittiSection({
@@ -305,10 +306,35 @@ function PlaceholderRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okNote, setOkNote] = useState<string | null>(null);
+  // Info hint: is the typed email already in the system? (Debounced; never blocks.)
+  const [emailInfo, setEmailInfo] = useState<{ name: string; courses: number } | null>(null);
 
   const iscrId = student.iscrizioneId;
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  // As the educator types a valid email, check (debounced) whether it already
+  // belongs to someone, and surface an ℹ️ with their name + participations.
+  useEffect(() => {
+    if (!open || !emailValid) {
+      setEmailInfo(null);
+      return;
+    }
+    let alive = true;
+    const id = setTimeout(() => {
+      lookupSeatEmailAction(email.trim())
+        .then((r) => {
+          if (!alive) return;
+          setEmailInfo(r.ok && r.exists ? { name: r.name ?? "", courses: r.courses ?? 0 } : null);
+        })
+        .catch(() => {});
+    }, 450);
+    return () => {
+      alive = false;
+      clearTimeout(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, open, emailValid]);
   const missing: string[] = [];
   if (!firstName.trim()) missing.push("nome");
   if (!lastName.trim()) missing.push("cognome");
@@ -399,21 +425,48 @@ function PlaceholderRow({
                   />
                 </SeatField>
                 <SeatField label={t.seatEmailPh} style={{ flex: "2 1 280px" }}>
-                  <input
-                    type="email"
-                    inputMode="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    maxLength={200}
-                    disabled={busy}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") save();
-                      if (e.key === "Escape") setOpen(false);
-                    }}
-                    style={seatInput}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type="email"
+                      inputMode="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      maxLength={200}
+                      disabled={busy}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") save();
+                        if (e.key === "Escape") setOpen(false);
+                      }}
+                      style={{ ...seatInput, paddingRight: emailInfo ? 26 : undefined }}
+                    />
+                    {emailInfo && (
+                      <span
+                        title={
+                          `Email già a sistema` +
+                          (emailInfo.name ? ` — ${emailInfo.name}` : "") +
+                          (emailInfo.courses
+                            ? ` · ${emailInfo.courses} cors${emailInfo.courses === 1 ? "o" : "i"}`
+                            : "")
+                        }
+                        aria-label="Email già presente a sistema"
+                        style={{
+                          position: "absolute",
+                          right: 7,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          cursor: "help",
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "var(--indigo-600, #635BFF)",
+                          lineHeight: 1,
+                        }}
+                      >
+                        ⓘ
+                      </span>
+                    )}
+                  </div>
                 </SeatField>
-                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 210px" }}>
+                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 270px" }}>
                   {/* No min-width:0 here — the field's min-content (prefix 92 +
                       input 92) is what forces this whole field to WRAP to its own
                       line on a narrow row instead of squeezing the number away. */}
@@ -424,11 +477,11 @@ function PlaceholderRow({
                       disabled={busy}
                       aria-label="Prefisso internazionale"
                       // Flag + code only (compact), fixed width.
-                      style={{ ...seatInput, flex: "0 0 auto", width: 92 }}
+                      style={{ ...seatInput, flex: "0 0 auto", width: 190 }}
                     >
                       {COUNTRY_CODES.map((cc) => (
                         <option key={cc.c} value={cc.c}>
-                          {cc.f} {cc.c}
+                          {cc.f} {cc.n} {cc.c}
                         </option>
                       ))}
                     </select>
