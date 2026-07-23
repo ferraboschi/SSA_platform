@@ -215,8 +215,11 @@ export function QuestionDetail({
     const correct = correctNums.filter((c) => c !== i).map((c) => (c > i ? c - 1 : c));
     onChange({ options, correct });
   };
+  // MULTI always allows several correct; a SINGLE with "più risposte corrette"
+  // also marks several in the key (the student still picks one — see grading).
+  const multiMark = q.type === "multi" || (q.type === "single" && !!q.multiCorrect);
   const toggleCorrect = (i: number) => {
-    if (q.type === "multi") {
+    if (multiMark) {
       const next = correctSet.has(i) ? correctNums.filter((c) => c !== i) : [...correctNums, i];
       onChange({ correct: next.sort((a, b) => a - b) });
     } else {
@@ -332,6 +335,34 @@ export function QuestionDetail({
           )}
         </div>
 
+        {/* SINGLE only: keep the single-choice look for the student but let the
+            key accept more than one correct option (owner). */}
+        {q.type === "single" && (
+          <div style={{ margin: "2px 0 12px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--text-2)", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={!!q.multiCorrect}
+                onChange={(e) =>
+                  onChange(
+                    e.target.checked
+                      ? { multiCorrect: true }
+                      : // Turning it OFF: collapse a multi-mark key back to a single
+                        // correct so the question stays a valid single choice.
+                        { multiCorrect: false, correct: correctNums.length > 1 ? [correctNums[0]] : q.correct },
+                  )
+                }
+              />
+              {te.multiCorrectToggle}
+            </label>
+            {q.multiCorrect && (
+              <div style={{ fontSize: 11, color: "var(--text-4)", marginTop: 4, marginLeft: 24, lineHeight: 1.45 }}>
+                {te.multiCorrectHint}
+              </div>
+            )}
+          </div>
+        )}
+
         {(q.type === "single" || q.type === "multi" || q.type === "truefalse" || q.type === "image") && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {q.type === "image" && (
@@ -359,7 +390,7 @@ export function QuestionDetail({
                     style={{
                       width: 18,
                       height: 18,
-                      borderRadius: q.type === "multi" ? 3 : "50%",
+                      borderRadius: multiMark ? 3 : "50%",
                       border: "1.5px solid " + (isC ? "var(--success)" : "var(--border-strong)"),
                       display: "grid",
                       placeItems: "center",

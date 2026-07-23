@@ -743,6 +743,8 @@ export const en: Dictionary = {
       deleteQuestion: "Delete question",
       duplicateQuestion: "Duplicate question",
       markCorrectHint: "Tap the circle to mark the correct answer",
+      multiCorrectToggle: "Allow more than one correct answer",
+      multiCorrectHint: "The student still picks ONE (single click); picking any of the correct options scores 100%.",
       emptySection: "No questions yet. Add one below.",
       addQuestionShort: "Add",
       preview: "Preview",

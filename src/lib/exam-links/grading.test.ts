@@ -168,6 +168,21 @@ describe("gradeAnswers — manual-review types", () => {
     expect(r.manual).toBe(1);
     expect(r.detail[0].ok).toBeNull();
   });
+  it("SINGLE with more than one correct option: picking ANY correct earns 100%", () => {
+    // "Abilita più risposte corrette": the student still picks ONE, but the key
+    // lists several acceptable options — any of them is full marks.
+    const s = q({ id: "s", type: "single", options: ["A", "B", "C", "D"], correct: [0, 2], points: 2 });
+    expect(gradeAnswers([s], { s: "A" }).autoScore).toBe(100);
+    expect(gradeAnswers([s], { s: "C" }).autoScore).toBe(100);
+    const wrong = gradeAnswers([s], { s: "B" });
+    expect(wrong.autoScore).toBe(0);
+    expect(wrong.detail[0].ok).toBe(false);
+  });
+  it("a normal SINGLE (one correct) is unchanged by the membership rule", () => {
+    const one = q({ id: "s1", type: "single", options: ["A", "B"], correct: [1] });
+    expect(gradeAnswers([one], { s1: "B" }).autoScore).toBe(100);
+    expect(gradeAnswers([one], { s1: "A" }).autoScore).toBe(0);
+  });
   it("a 'chapter' communication slide is excluded from grading entirely", () => {
     const qs = [
       q({ id: "a", type: "single", options: ["X", "Y"], correct: [0] }),

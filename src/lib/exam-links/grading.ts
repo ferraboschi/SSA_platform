@@ -370,6 +370,11 @@ export function gradeAnswers(
     // "select-all" question isn't satisfied by one pick).
     const ok =
       gradeObjective(given, localized) ||
+      // SINGLE with more than one correct option (owner "Abilita più risposte
+      // corrette"): the student picks exactly one, and any correct pick earns
+      // full marks → membership, not exact-set. Harmless for a normal single
+      // (one correct): membership ≡ exact when the key has a single option.
+      (q.type === "single" && isCorrectSubset(given, localized)) ||
       (q.type === "multi" && (q.correct?.length ?? 0) === 2 && isCorrectSubset(given, localized));
     const fraction = ok ? 1 : q.type === "multi" ? multiFraction(given, localized) : 0;
     correctPts += fraction * (q.points ?? 1);

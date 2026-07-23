@@ -745,6 +745,8 @@ export const it = {
       deleteQuestion: "Elimina domanda",
       duplicateQuestion: "Duplica domanda",
       markCorrectHint: "Tocca il cerchio per segnare la risposta corretta",
+      multiCorrectToggle: "Abilita più risposte corrette",
+      multiCorrectHint: "Lo studente ne sceglie comunque UNA sola (clic singolo); sceglierne una qualsiasi tra quelle corrette vale il 100%.",
       emptySection: "Nessuna domanda. Aggiungine una qui sotto.",
       addQuestionShort: "Aggiungi",
       preview: "Anteprima",

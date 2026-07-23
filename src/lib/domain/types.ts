@@ -268,6 +268,11 @@ export interface ExamQuestion {
   points: number;
   options?: string[];
   correct?: number[] | string[];
+  /** SINGLE choice only: the answer key may list MORE THAN ONE correct option,
+   *  yet the student still picks exactly one (radio). Picking ANY correct option
+   *  earns full marks. A builder-only flag; grading treats single as membership
+   *  regardless, so this just drives the multi-mark editor UI. */
+  multiCorrect?: boolean;
   explanation?: string;
   pairs?: { l: string; r: string }[];
   items?: string[];
