@@ -111,17 +111,20 @@ export default async function Page() {
   }
 
   const courseTitle = new Map<number, string>();
+  const courseType = new Map<number, string | null>();
   if (courseIds.size > 0) {
     const { data } = await svc
       .from("corsi")
-      .select("id,short_title,full_title")
+      .select("id,short_title,full_title,type")
       .in("id", [...courseIds]);
     for (const r of (data ?? []) as {
       id: number;
       short_title: string | null;
       full_title: string | null;
+      type: string | null;
     }[]) {
       courseTitle.set(r.id, r.short_title || r.full_title || `Corso ${r.id}`);
+      courseType.set(r.id, r.type);
     }
   }
 
@@ -135,6 +138,8 @@ export default async function Page() {
       c.corso_origine_id != null
         ? courseTitle.get(c.corso_origine_id) ?? `Corso ${c.corso_origine_id}`
         : null,
+    // Level of the origin course — the destination picker offers only same-level.
+    origineType: c.corso_origine_id != null ? courseType.get(c.corso_origine_id) ?? null : null,
     corsoDestinazioneId: c.corso_destinazione_id,
     corsoDestinazioneTitle:
       c.corso_destinazione_id != null
@@ -156,7 +161,7 @@ export default async function Page() {
   if (hasOpen) {
     const { data: corsi } = await svc
       .from("corsi")
-      .select("id,short_title,full_title,month,year,lifecycle")
+      .select("id,short_title,full_title,month,year,lifecycle,type")
       .neq("lifecycle", "cancelled")
       .order("year", { ascending: false });
     courseOptions = ((corsi ?? []) as {
@@ -165,19 +170,31 @@ export default async function Page() {
       full_title: string | null;
       month: string | null;
       year: number | null;
+      type: string | null;
     }[]).map((c) => ({
       id: c.id,
       title: c.short_title || c.full_title || `Corso ${c.id}`,
       when: [c.month, c.year].filter(Boolean).join(" "),
+      type: c.type,
     }));
 
     // Enrollments per candidate course (name + net paid), for the second picker.
     const optIds = courseOptions.map((c) => c.id);
     if (optIds.length > 0) {
-      const { data: iscr } = await svc
+      // Prefer the column that lets us drop removed-from-course seats (they must
+      // never be a link target); fall back to the base select pre-migration.
+      const rich = await svc
         .from("corsi_iscrizioni")
-        .select("id,corso_id,corsista_id,amount_cents,discount_cents")
+        .select("id,corso_id,corsista_id,amount_cents,discount_cents,annullata_at")
         .in("corso_id", optIds);
+      const iscr = rich.error
+        ? (
+            await svc
+              .from("corsi_iscrizioni")
+              .select("id,corso_id,corsista_id,amount_cents,discount_cents")
+              .in("corso_id", optIds)
+          ).data
+        : (rich.data ?? []).filter((r) => !(r as { annullata_at?: string | null }).annullata_at);
       // Names for the enrolled corsisti (may differ from the credit's corsisti).
       const enrCorsistaIds = new Set<number>(
         ((iscr ?? []) as { corsista_id: number }[]).map((r) => r.corsista_id),

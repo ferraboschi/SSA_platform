@@ -16,6 +16,9 @@ export interface CreditoView {
   amount: number;
   corsoOrigineId: number | null;
   corsoOrigineTitle: string | null;
+  /** Level (`corsi.type`) of the origin course — the destination picker offers
+   *  only courses of the SAME level (null = unknown → no filter). */
+  origineType: string | null;
   corsoDestinazioneId: number | null;
   corsoDestinazioneTitle: string | null;
   stato: CreditoStato;
@@ -31,6 +34,8 @@ export interface CourseOption {
   id: number;
   title: string;
   when: string;
+  /** Course level (`corsi.type`) — matched against a credit's origin level. */
+  type: string | null;
 }
 
 export interface EnrollmentOption {
@@ -433,6 +438,17 @@ function OpenCard({
     [courseId, enrollmentsByCourse],
   );
 
+  // A credit is redeemable only on a SAME-LEVEL course (owner). Offer just those
+  // in the picker; when the origin level is unknown (pre-migration / legacy) fall
+  // back to every candidate so nothing becomes un-linkable.
+  const sameLevelOptions = useMemo(
+    () =>
+      credito.origineType
+        ? courseOptions.filter((c) => c.type === credito.origineType)
+        : courseOptions,
+    [courseOptions, credito.origineType],
+  );
+
   const submit = () => {
     if (courseId === "" || iscrId === "") return;
     const title = courseOptions.find((c) => c.id === courseId)?.title ?? `Corso ${courseId}`;
@@ -496,7 +512,7 @@ function OpenCard({
             style={{ minWidth: 200, height: 26, fontSize: 12 }}
           >
             <option value="">{t.pickCourse}</option>
-            {courseOptions.map((c) => (
+            {sameLevelOptions.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title}
                 {c.when ? ` · ${c.when}` : ""}
