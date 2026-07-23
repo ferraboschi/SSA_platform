@@ -149,6 +149,7 @@ const TYPE_TIPS: Record<string, string> = {
   match: "Abbinamento: lo studente abbina gli elementi di sinistra a quelli di destra. ⚠ Non ancora disponibile nel test studente.",
   order: "Ordina: lo studente mette gli elementi nell'ordine corretto. ⚠ Non ancora disponibile nel test studente.",
   rating: "Valutazione 1–5 stelle (usata nel modulo di feedback di fine corso, non nell'esame).",
+  chapter: "Cambio capitolo: una slide di sola comunicazione (titolo + messaggio) con il solo pulsante «Avanti». Non è una domanda e non influisce sulla valutazione. Titolo e messaggio vengono tradotti come le domande.",
 };
 
 export function AddQuestionRow({ onAdd }: { onAdd: (type: ExamQuestionType) => void }) {
@@ -281,11 +282,11 @@ export function QuestionDetail({
       )}
 
       <div className="field">
-        <div className="field-label">{t.qText}</div>
+        <div className="field-label">{q.type === "chapter" ? t.chapterTitleLabel : t.qText}</div>
         <textarea
           className="textarea"
           value={q.text}
-          rows={3}
+          rows={q.type === "chapter" ? 1 : 3}
           onChange={(e) => onChange({ text: e.target.value })}
         />
       </div>
@@ -304,6 +305,21 @@ export function QuestionDetail({
         <span style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{t.translations}</span>
       </div>
 
+      {q.type === "chapter" && (
+        <div className="field" style={{ marginTop: 16 }}>
+          <div className="field-label">{t.chapterMsgLabel}</div>
+          <textarea
+            className="textarea"
+            rows={4}
+            value={q.options?.[0] ?? ""}
+            placeholder={t.chapterMsgPlaceholder}
+            onChange={(e) => onChange({ options: [e.target.value] })}
+          />
+        </div>
+      )}
+
+      {q.type !== "chapter" && (
+       <>
       <div className="divider" style={{ margin: "20px 0" }} />
 
       <div className="field">
@@ -500,6 +516,8 @@ export function QuestionDetail({
           </label>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

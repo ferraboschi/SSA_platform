@@ -168,6 +168,19 @@ describe("gradeAnswers — manual-review types", () => {
     expect(r.manual).toBe(1);
     expect(r.detail[0].ok).toBeNull();
   });
+  it("a 'chapter' communication slide is excluded from grading entirely", () => {
+    const qs = [
+      q({ id: "a", type: "single", options: ["X", "Y"], correct: [0] }),
+      q({ id: "ch", type: "chapter", text: "Cambio capitolo", options: ["Qui parte il blind tasting"], points: 0 }),
+      q({ id: "b", type: "single", options: ["X", "Y"], correct: [1] }),
+    ];
+    // Answer the two real questions correctly; the chapter is never answered.
+    const r = gradeAnswers(qs, { a: "X", b: "Y" });
+    expect(r.gradable).toBe(2); // only the two real questions count
+    expect(r.manual).toBe(0);
+    expect(r.autoScore).toBe(100); // the unanswered slide does NOT tank the score
+    expect(r.detail.map((d) => d.qid)).toEqual(["a", "b"]); // slide absent from the answer list
+  });
 });
 
 describe("gradeAnswers — whole submission scoring", () => {

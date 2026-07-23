@@ -55,6 +55,9 @@ export const EXAM_QUESTION_TYPES = [
   "order",
   "image",
   "rating",
+  // Not a question: a communication/interstitial slide ("Cambio capitolo") with
+  // only a title + message + "Avanti". Excluded from grading entirely.
+  "chapter",
 ] as const;
 export type ExamQuestionType = (typeof EXAM_QUESTION_TYPES)[number];
 

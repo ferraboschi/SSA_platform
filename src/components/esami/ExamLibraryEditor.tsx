@@ -65,6 +65,13 @@ function newQuestion(type: ExamQuestionType): ExamQuestion {
   if (type === "fill") base.correct = ["risposta"];
   if (type === "match") base.pairs = [{ l: "A", r: "1" }, { l: "B", r: "2" }];
   if (type === "order") base.items = ["Primo", "Secondo", "Terzo"];
+  if (type === "chapter") {
+    // Communication slide: title in `text`, message in `options[0]` (so the AI
+    // translator carries both for free). Never graded → 0 points, no answer key.
+    base.text = "Nuovo capitolo";
+    base.options = [""];
+    base.points = 0;
+  }
   return base;
 }
 
@@ -295,6 +302,11 @@ export function ExamLibraryEditor({
     if (type === "fill") q.correct = [];
     if (type === "match") q.pairs = prev.pairs ?? [{ l: "A", r: "1" }, { l: "B", r: "2" }];
     if (type === "order") q.items = prev.items ?? ["Primo", "Secondo", "Terzo"];
+    if (type === "chapter") {
+      // Message reuses options[0]; drop any answer key / points from the old type.
+      q.options = [prev.options?.[0] ?? ""];
+      q.points = 0;
+    }
     setQuestions(questions.map((x, xi) => (xi === i ? q : x)));
   };
 

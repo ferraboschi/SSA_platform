@@ -69,7 +69,10 @@ const REG_ORDER: RegField[] = ["name", "gender", "nationality", "email", "phone"
 
 type Step =
   | { kind: "reg"; field: RegField }
-  | { kind: "q"; q: RunnerQuestion };
+  | { kind: "q"; q: RunnerQuestion }
+  // Communication slide ("Cambio capitolo"): title + message + only "Avanti".
+  // Not counted as a question, not graded, no answer captured.
+  | { kind: "chapter"; q: RunnerQuestion };
 
 function fmtClock(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -173,10 +176,14 @@ export function ExamRunner({
   // effects below (it equals the number of reg steps built in `steps`).
   const regCount = (registrationFields ?? (collectRegistration ? REG_ORDER : [])).length;
   // Arm the exam timer only once the FIRST REAL question has been reached (owner
-  // call-debug batch: the countdown must not start during the anagraphics).
-  // maxIdx is monotonic, so stepping BACK to a reg field can never pause/exploit
-  // the clock; day tests (regCount 0) arm immediately at idx 0.
-  const timerStarted = maxIdx >= regCount;
+  // call-debug batch: the countdown must not start during the anagraphics — nor
+  // on a "Cambio capitolo" slide that precedes the first question, e.g. the
+  // "the next question starts the test" interstitial). maxIdx is monotonic, so
+  // stepping BACK can never pause/exploit the clock; day tests arm at the first
+  // real question too.
+  const firstRealQOffset = questions.findIndex((q) => q.type !== "chapter");
+  const firstQIdx = regCount + (firstRealQOffset < 0 ? 0 : firstRealQOffset);
+  const timerStarted = maxIdx >= firstQIdx;
   const [answers, setAnswers] = useState<Record<string, string[] | string>>(
     resumeState?.answers ?? {},
   );
@@ -410,20 +417,29 @@ export function ExamRunner({
     // bound students) wins; otherwise the legacy full set when enabled.
     const fields = registrationFields ?? (collectRegistration ? REG_ORDER : []);
     const reg: Step[] = fields.map((field) => ({ kind: "reg", field }) as Step);
-    return [...reg, ...questions.map((q) => ({ kind: "q", q }) as Step)];
+    return [
+      ...reg,
+      ...questions.map((q) => ({ kind: q.type === "chapter" ? "chapter" : "q", q }) as Step),
+    ];
   }, [collectRegistration, registrationFields, questions]);
 
   const total = steps.length;
   // `qNumber` maps a step index → its 1-based question number (owner batch 15:
-  // the counter starts at 1 from the first real question). `regCount` is defined
-  // above (with the timer gate) — the number of preliminary reg steps.
-  const numQuestions = total - regCount;
-  const qNumber = (stepIdx: number) => Math.max(1, stepIdx - regCount + 1);
+  // the counter starts at 1 from the first real question). Count only real "q"
+  // steps so "Cambio capitolo" slides interspersed among the questions don't
+  // shift the numbering ("Domanda 3 di 20", not 4-because-of-a-slide).
+  const numQuestions = steps.filter((s) => s.kind === "q").length;
+  const qNumber = (stepIdx: number) => {
+    let n = 0;
+    for (let i = 0; i <= stepIdx && i < steps.length; i++) if (steps[i].kind === "q") n++;
+    return Math.max(1, n);
+  };
   // Clamp a resumed/stale idx into range (defensive: the question set could have
   // shrunk between sessions). `step` falls back so the render never reads undefined.
   const safeIdx = total > 0 ? Math.min(Math.max(0, idx), total - 1) : 0;
   const step = steps[safeIdx];
   const onReg = step?.kind === "reg";
+  const onChapter = step?.kind === "chapter";
   useEffect(() => {
     if (total > 0 && idx > total - 1) setIdx(total - 1);
   }, [total, idx]);
@@ -802,6 +818,8 @@ export function ExamRunner({
         <div className="exam-public-counter">
           {onReg
             ? t.regInfoStep
+            : onChapter
+            ? " "
             : `${t.question} ${qNumber(idx)} ${t.of} ${numQuestions} · ${qNumber(idx)}/${numQuestions}`}
         </div>
 
@@ -906,6 +924,31 @@ export function ExamRunner({
                   : undefined
               }
             />
+          ) : step.kind === "chapter" ? (
+            (() => {
+              // Communication slide: localized title + message, no answer input.
+              const lq = localizeQ(step.q, lang);
+              const message = lq.options?.[0] ?? "";
+              return (
+                <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
+                  <p className="exam-public-q-text" style={{ fontSize: 22, fontWeight: 800 }}>{lq.text}</p>
+                  {message && (
+                    <p
+                      style={{
+                        fontSize: 15,
+                        lineHeight: 1.6,
+                        color: "var(--text-2, #374151)",
+                        maxWidth: 520,
+                        margin: "12px auto 0",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {message}
+                    </p>
+                  )}
+                </div>
+              );
+            })()
           ) : (
             (() => {
               const lq = localizeQ(step.q, lang);

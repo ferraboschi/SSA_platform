@@ -212,7 +212,10 @@ export function gradeAnswers(
   let gradablePts = 0;
   let correctPts = 0;
 
-  const detail: GradedAnswer[] = questions.map((q) => {
+  // "chapter" is a communication slide, not a question: drop it before grading
+  // so it never counts toward gradable/total/score, sections, or any answer list
+  // (this is the single choke point every consumer reads through).
+  const detail: GradedAnswer[] = questions.filter((q) => q.type !== "chapter").map((q) => {
     const given = ans[q.id];
     // Grade against the version the student SAW (their language), so an answer
     // stored as translated option text matches the (translated) correct option.

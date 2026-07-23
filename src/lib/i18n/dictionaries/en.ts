@@ -756,6 +756,9 @@ export const en: Dictionary = {
       stima: "est. {s}s",
       importante: "Important",
       qText: "Question text",
+      chapterTitleLabel: "Title",
+      chapterMsgLabel: "Message",
+      chapterMsgPlaceholder: "E.g. The next question starts the test.",
       translations: "translations: 1/3",
       labelOpen: "Answer model + AI criteria",
       labelMatch: "Pairs to match",
@@ -869,6 +872,7 @@ export const en: Dictionary = {
       order: "Ordering",
       image: "Identify image",
       rating: "Rating 1-5",
+      chapter: "Chapter change",
     },
     reportView: {
       unavailable: "Report unavailable",

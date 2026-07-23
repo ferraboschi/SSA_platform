@@ -758,6 +758,9 @@ export const it = {
       stima: "stima {s}s",
       importante: "Importante",
       qText: "Testo domanda",
+      chapterTitleLabel: "Titolo",
+      chapterMsgLabel: "Comunicazione",
+      chapterMsgPlaceholder: "Es. La prossima domanda darà il via al test.",
       translations: "traduzioni: 1/3",
       labelOpen: "Modello risposta + criteri AI",
       labelMatch: "Coppie da abbinare",
@@ -871,6 +874,7 @@ export const it = {
       order: "Ordina",
       image: "Identifica immagine",
       rating: "Valutazione 1-5",
+      chapter: "Cambio capitolo",
     },
     reportView: {
       unavailable: "Report non disponibile",
