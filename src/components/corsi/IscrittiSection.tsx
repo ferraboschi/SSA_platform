@@ -308,6 +308,8 @@ function PlaceholderRow({
   const [okNote, setOkNote] = useState<string | null>(null);
   // Info hint: is the typed email already in the system? (Debounced; never blocks.)
   const [emailInfo, setEmailInfo] = useState<{ name: string; courses: number } | null>(null);
+  // Save-time conflict: the email belongs to a DIFFERENTLY-named person.
+  const [conflict, setConflict] = useState<{ corsistaId: number; name: string; phone: string } | null>(null);
 
   const iscrId = student.iscrizioneId;
 
@@ -342,16 +344,22 @@ function PlaceholderRow({
   if (!phone.trim()) missing.push("telefono");
   const ready = missing.length === 0;
 
-  async function save() {
+  async function save(linkTo?: number) {
     if (!ready || busy || iscrId == null) return;
     setBusy(true);
     setError(null);
     setOkNote(null);
-    const res = await completeSeatAction(Number(courseId), iscrId, {
-      name: `${firstName.trim().replace(/\s+/g, " ")} ${lastName.trim().replace(/\s+/g, " ")}`,
-      email: email.trim(),
-      phone: `${dialCode} ${phone.trim()}`.trim(),
-    }).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatAction>>);
+    setConflict(null);
+    const res = await completeSeatAction(
+      Number(courseId),
+      iscrId,
+      {
+        name: `${firstName.trim().replace(/\s+/g, " ")} ${lastName.trim().replace(/\s+/g, " ")}`,
+        email: email.trim(),
+        phone: `${dialCode} ${phone.trim()}`.trim(),
+      },
+      linkTo,
+    ).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatAction>>);
     setBusy(false);
     if (res.ok && res.linked) {
       // Repeat attendee: linked to the existing profile — confirm briefly, then refresh.
@@ -363,6 +371,9 @@ function PlaceholderRow({
     } else if (res.ok) {
       setOpen(false);
       router.refresh();
+    } else if (res.conflict) {
+      // Email belongs to a differently-named person → inline "same person?" card.
+      setConflict(res.conflict);
     } else {
       setError(res.error || t.seatCompleteError);
     }
@@ -443,7 +454,10 @@ function PlaceholderRow({
                       type="email"
                       inputMode="email"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setConflict(null);
+                      }}
                       maxLength={200}
                       disabled={busy}
                       onKeyDown={(e) => {
@@ -522,7 +536,7 @@ function PlaceholderRow({
                 <button
                   type="button"
                   className="btn btn-sm btn-primary"
-                  onClick={save}
+                  onClick={() => save()}
                   disabled={busy || !ready}
                   title={!ready ? `Compila: ${missing.join(", ")}` : undefined}
                 >
@@ -539,6 +553,53 @@ function PlaceholderRow({
                   <span style={{ fontSize: 12, color: "var(--warning-fg)" }}>Manca: {missing.join(", ")}</span>
                 ) : null}
               </div>
+              {conflict && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: "10px 12px",
+                    border: "1px solid #fcd34d",
+                    background: "#fffbeb",
+                    borderRadius: 8,
+                    fontSize: 12.5,
+                    color: "#92400e",
+                    display: "grid",
+                    gap: 8,
+                    maxWidth: 520,
+                  }}
+                >
+                  <div>
+                    ⚠️ Questa email è già di{" "}
+                    <strong>{conflict.name || "un altro nominativo"}</strong>
+                    {conflict.phone ? ` · 📞 ${conflict.phone}` : ""}.
+                  </div>
+                  <div style={{ fontWeight: 600 }}>È la stessa persona?</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      disabled={busy}
+                      onClick={() => save(conflict.corsistaId)}
+                    >
+                      Sì, è lui/lei → collega
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={busy}
+                      onClick={() => {
+                        setConflict(null);
+                        setEmail("");
+                      }}
+                    >
+                      No, altra persona → correggi email
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#a16207" }}>
+                    Ogni persona ha un&apos;email unica: se è un&apos;altra persona, inserisci la sua email corretta.
+                  </div>
+                </div>
+              )}
               </>
             ) : (
               <>

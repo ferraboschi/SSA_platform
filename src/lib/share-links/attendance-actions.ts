@@ -34,6 +34,7 @@
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
+import { finalizeSeatCompletion, phoneLooksValid } from "@/lib/corsi/seat-completion";
 import {
   TABLE,
   PART_TABLE,
@@ -482,7 +483,14 @@ export async function completeSeatFromLinkAction(
   fullName: string,
   email: string,
   phone: string,
-): Promise<{ ok: boolean; person?: { id: number; name: string; email: string }; error?: string }> {
+  linkTo?: number,
+): Promise<{
+  ok: boolean;
+  person?: { id: number; name: string; email: string };
+  linked?: boolean;
+  conflict?: { corsistaId: number; name: string; phone: string };
+  error?: string;
+}> {
   const corsoId = courseIdFromToken(token);
   if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
   if (limiter.isLimited("add", token, RATE_LIMIT_ADD)) {
@@ -500,6 +508,7 @@ export async function completeSeatFromLinkAction(
   const tel = String(phone ?? "").trim();
   if (!tel) return { ok: false, error: "Inserisci il numero di telefono." };
   if (tel.length > 40) return { ok: false, error: "Numero di telefono troppo lungo." };
+  if (!phoneLooksValid(tel)) return { ok: false, error: "Inserisci un numero di telefono valido." };
 
   const svc = getSupabaseServiceClient();
   // Enrollment must belong to the token's course AND be a placeholder seat.
@@ -516,21 +525,10 @@ export async function completeSeatFromLinkAction(
   if (!cor?.placeholder) return { ok: false, error: "Questo posto è già assegnato a una persona." };
   const placeholderId = Number(enr.corsista_id);
 
-  // A well-formed email already used by someone else is a DUPLICATE, not invalid.
-  const { data: existing } = await svc
-    .from("corsisti")
-    .select("id")
-    .eq("email", cleanEmail)
-    .neq("id", placeholderId)
-    .maybeSingle();
-  if (existing?.id) return { ok: false, error: "Mail già presente: è associata a un altro nominativo." };
-
-  const { error: updErr } = await svc
-    .from("corsisti")
-    .update({ full_name: name, email: cleanEmail, phone: tel, placeholder: false })
-    .eq("id", placeholderId);
-  if (updErr) return { ok: false, error: updErr.message };
-  await svc.from("corsi_iscrizioni").update({ enrolled_email: cleanEmail }).eq("id", iscrId);
-
-  return { ok: true, person: { id: placeholderId, name, email: cleanEmail } };
+  // Shared identity resolution (same rules as the admin roster): same-person →
+  // link, different-name → conflict (UI resolves), else promote. `linkTo` =
+  // confirmed "same person".
+  const r = await finalizeSeatCompletion(svc, corsoId, iscrId, placeholderId, { name, email: cleanEmail, phone: tel }, linkTo);
+  if (!r.ok) return { ok: false, error: r.error, conflict: r.conflict };
+  return { ok: true, linked: r.linked, person: { id: placeholderId, name, email: cleanEmail } };
 }

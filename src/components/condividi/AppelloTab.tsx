@@ -19,6 +19,7 @@ import {
   type AttendanceSubject,
 } from "@/lib/share-links/attendance-actions";
 import { resetAppelloAction } from "@/lib/share-links/verification-actions";
+import { COUNTRY_CODES } from "@/lib/phone/dial-codes";
 import { deriveVerificationState, chipLabel } from "@/lib/share-links/verification-state";
 import VerifyActions from "./VerifyActions";
 import { CHIP_CLASS, subjKey, type Student } from "./shared";
@@ -396,29 +397,36 @@ function SeatFillIn({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [dialCode, setDialCode] = useState("+39");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
+  const [conflict, setConflict] = useState<{ corsistaId: number; name: string; phone: string } | null>(null);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const phoneValid = /^\d{6,}$/.test(`${dialCode} ${phone}`.replace(/[\s\-().+]/g, ""));
   const missing: string[] = [];
   if (!firstName.trim()) missing.push("nome");
   if (!lastName.trim()) missing.push("cognome");
   if (!emailValid) missing.push("email");
   if (!phone.trim()) missing.push("telefono");
+  else if (!phoneValid) missing.push("telefono valido");
   const ready = missing.length === 0;
 
-  async function submit() {
+  async function submit(linkTo?: number) {
     if (!ready || busy || !iscrizioneId) return;
     setBusy(true);
+    setConflict(null);
     const res = await completeSeatFromLinkAction(
       token,
       iscrizioneId,
       `${firstName.trim().replace(/\s+/g, " ")} ${lastName.trim().replace(/\s+/g, " ")}`,
       email.trim(),
-      phone.trim(),
+      `${dialCode} ${phone.trim()}`.trim(),
+      linkTo,
     ).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatFromLinkAction>>);
     setBusy(false);
     if (res.ok && res.person) onCompleted(res.person);
+    else if (res.conflict) setConflict(res.conflict);
     else onError(res.error || "Salvataggio non riuscito, riprova.");
   }
 
@@ -459,21 +467,41 @@ function SeatFillIn({
         inputMode="email"
         className="edu-input"
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={(e) => {
+          setEmail(e.target.value);
+          setConflict(null);
+        }}
         placeholder="Email"
         maxLength={200}
         disabled={busy}
       />
-      <input
-        type="tel"
-        inputMode="numeric"
-        className="edu-input"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        placeholder="Telefono"
-        maxLength={40}
-        disabled={busy}
-      />
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <select
+          className="edu-input"
+          aria-label="Prefisso internazionale"
+          value={dialCode}
+          onChange={(e) => setDialCode(e.target.value)}
+          disabled={busy}
+          style={{ flex: "0 0 auto", width: 190 }}
+        >
+          {COUNTRY_CODES.map((cc) => (
+            <option key={cc.c} value={cc.c}>
+              {cc.f} {cc.n} {cc.c}
+            </option>
+          ))}
+        </select>
+        <input
+          type="tel"
+          inputMode="numeric"
+          className="edu-input"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Telefono"
+          maxLength={40}
+          disabled={busy}
+          style={{ flex: "1 1 120px", minWidth: 120 }}
+        />
+      </div>
       {!ready && (firstName || lastName || email || phone) && (
         <div style={{ fontSize: 11.5, color: "#b45309" }}>
           Manca: {missing.join(", ")}
@@ -483,7 +511,7 @@ function SeatFillIn({
         <button
           type="button"
           className="edu-btn primary"
-          onClick={submit}
+          onClick={() => submit()}
           disabled={busy || !ready}
           title={!ready ? `Compila: ${missing.join(", ")}` : undefined}
         >
@@ -493,6 +521,50 @@ function SeatFillIn({
           Annulla
         </button>
       </div>
+      {conflict && (
+        <div
+          style={{
+            padding: "8px 10px",
+            border: "1px solid #fcd34d",
+            background: "#fffbeb",
+            borderRadius: 8,
+            fontSize: 12,
+            color: "#92400e",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div>
+            ⚠️ Questa email è già di <strong>{conflict.name || "un altro nominativo"}</strong>
+            {conflict.phone ? ` · 📞 ${conflict.phone}` : ""}.
+          </div>
+          <div style={{ fontWeight: 600 }}>È la stessa persona?</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="edu-btn primary"
+              disabled={busy}
+              onClick={() => submit(conflict.corsistaId)}
+            >
+              Sì → collega
+            </button>
+            <button
+              type="button"
+              className="edu-btn"
+              disabled={busy}
+              onClick={() => {
+                setConflict(null);
+                setEmail("");
+              }}
+            >
+              No → correggi email
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: "#a16207" }}>
+            Ogni persona ha un&apos;email unica: se è un&apos;altra persona, inserisci la sua corretta.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

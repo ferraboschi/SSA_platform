@@ -23,7 +23,7 @@ import { revalidatePath } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { hasRole } from "@/lib/auth/guard";
 import { placeholderName } from "@/lib/sync/seats";
-import { sortedNameKey } from "@/lib/anomalie/rules";
+import { finalizeSeatCompletion, phoneLooksValid } from "@/lib/corsi/seat-completion";
 
 export interface SeatActionResult {
   ok: boolean;
@@ -32,6 +32,9 @@ export interface SeatActionResult {
   /** completeSeatAction: the seat was LINKED to an existing corsista (a repeat
    *  attendee) rather than promoting the placeholder to a new person. */
   linked?: boolean;
+  /** completeSeatAction: the email belongs to a DIFFERENTLY-named person — the UI
+   *  shows an inline "is it the same person?" card (link vs fix the email). */
+  conflict?: { corsistaId: number; name: string; phone: string };
 }
 
 function isMissingSchema(err: { message?: string } | null | undefined): boolean {
@@ -50,6 +53,7 @@ export async function completeSeatAction(
   corsoId: number,
   iscrizioneId: number,
   person: { name: string; email?: string; phone?: string },
+  linkTo?: number,
 ): Promise<SeatActionResult> {
   if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
 
@@ -70,6 +74,7 @@ export async function completeSeatAction(
   const phone = String(person?.phone ?? "").trim();
   if (!phone) return { ok: false, error: "Inserisci il numero di telefono." };
   if (phone.length > 40) return { ok: false, error: "Telefono troppo lungo." };
+  if (!phoneLooksValid(phone)) return { ok: false, error: "Inserisci un numero di telefono valido." };
 
   try {
     const svc = getSupabaseServiceClient();
@@ -89,65 +94,11 @@ export async function completeSeatAction(
     if (!cor?.placeholder) return { ok: false, error: "Questo posto è già assegnato a una persona." };
     const placeholderId = Number(enr.corsista_id);
 
-    // Does this email already belong to (other) corsisti? Duplicates can exist,
-    // so fetch the set — not a single row.
-    const { data: existingRows } = await svc
-      .from("corsisti")
-      .select("id, full_name")
-      .eq("email", email)
-      .neq("id", placeholderId)
-      .limit(20);
-    const existing = (existingRows ?? []) as { id: number; full_name: string | null }[];
-
-    if (existing.length > 0) {
-      // Owner's rule: an already-present email is NOT a problem when it's the SAME
-      // person attending again — we add this course as a new participation on their
-      // existing profile, never a duplicate. It IS a conflict only when the name
-      // genuinely differs (likely a mistyped address). "Same person" uses the app's
-      // own duplicate rule: order-insensitive, accent/case-insensitive name key.
-      const nameKey = sortedNameKey(name);
-      const samePerson = existing.find(
-        (c) => nameKey.length > 0 && sortedNameKey(c.full_name ?? "") === nameKey,
-      );
-      if (!samePerson) {
-        return { ok: false, error: "Mail già presente: è associata a un altro nominativo." };
-      }
-      // Repeat attendee across courses is fine; twice in THIS course is not.
-      const { data: dupRows } = await svc
-        .from("corsi_iscrizioni")
-        .select("id")
-        .eq("corso_id", corso)
-        .eq("corsista_id", samePerson.id)
-        .neq("id", iscrId)
-        .limit(1);
-      if (dupRows && dupRows.length > 0) {
-        return { ok: false, error: "Questa persona è già presente in questo corso." };
-      }
-      // Link THIS seat to the existing profile (new participation) + drop the
-      // now-unused placeholder corsista.
-      const { error: linkErr } = await svc
-        .from("corsi_iscrizioni")
-        .update({ corsista_id: samePerson.id, enrolled_email: email })
-        .eq("id", iscrId);
-      if (linkErr) return { ok: false, error: linkErr.message };
-      await svc.from("corsisti").delete().eq("id", placeholderId).then(
-        () => {},
-        () => {},
-      );
-      revalidatePath(`/corsi/${corso}`);
-      return { ok: true, linked: true };
-    }
-
-    // New person → promote the placeholder corsista in place.
-    const { error: updErr } = await svc
-      .from("corsisti")
-      .update({ full_name: name, email, phone, placeholder: false })
-      .eq("id", placeholderId);
-    if (updErr) return { ok: false, error: updErr.message };
-    await svc.from("corsi_iscrizioni").update({ enrolled_email: email }).eq("id", iscrId);
-
-    revalidatePath(`/corsi/${corso}`);
-    return { ok: true };
+    // Shared identity resolution: same-person → link, different-name → conflict
+    // (the UI resolves it), else promote. `linkTo` = confirmed "same person".
+    const r = await finalizeSeatCompletion(svc, corso, iscrId, placeholderId, { name, email, phone }, linkTo);
+    if (r.ok) revalidatePath(`/corsi/${corso}`);
+    return r;
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Salvataggio non riuscito." };
   }
