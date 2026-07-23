@@ -530,5 +530,10 @@ export async function completeSeatFromLinkAction(
   // confirmed "same person".
   const r = await finalizeSeatCompletion(svc, corsoId, iscrId, placeholderId, { name, email: cleanEmail, phone: tel }, linkTo);
   if (!r.ok) return { ok: false, error: r.error, conflict: r.conflict };
-  return { ok: true, linked: r.linked, person: { id: placeholderId, name, email: cleanEmail } };
+  // On a LINK the placeholder is deleted and the seat now points to the existing
+  // corsista — return THAT id so the client re-keys the row on it (marking the
+  // student present later validates corsista_id, which would reject the stale
+  // placeholder id). On a promote, the placeholder id is kept (updated in place).
+  const personId = r.linked && r.linkedId ? r.linkedId : placeholderId;
+  return { ok: true, linked: r.linked, person: { id: personId, name, email: cleanEmail } };
 }

@@ -288,7 +288,11 @@ export default function AppelloTab({
                       setStudents((prev) =>
                         prev.map((x) =>
                           x.kind === "corsista" && x.id === s.id
-                            ? { ...x, name: person.name, email: person.email, placeholder: false }
+                            ? // Re-key on person.id: a LINK (repeat attendee) deletes the
+                              // placeholder and points the seat at the EXISTING corsista, so
+                              // the row must adopt that id or marking presence hits a deleted
+                              // one. On a promote person.id === the (kept) placeholder id.
+                              { ...x, id: person.id, name: person.name, email: person.email, placeholder: false }
                             : x,
                         ),
                       );

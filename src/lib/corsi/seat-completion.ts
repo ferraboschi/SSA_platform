@@ -27,6 +27,11 @@ export interface SeatCompletionResult {
   error?: string;
   /** Linked to an existing profile (repeat attendee) instead of a new person. */
   linked?: boolean;
+  /** When `linked`, the id of the EXISTING corsista the seat now points to (the
+   *  placeholder is deleted). Callers that keep a local roster must re-key the
+   *  row on THIS id, not the stale placeholder id, or later per-corsista writes
+   *  (e.g. attendance) hit a deleted id. */
+  linkedId?: number;
   /** Email belongs to a DIFFERENTLY-named person — the UI resolves it. */
   conflict?: { corsistaId: number; name: string; phone: string };
 }
@@ -60,7 +65,7 @@ export async function finalizeSeatCompletion(
       () => {},
       () => {},
     );
-    return { ok: true, linked: true };
+    return { ok: true, linked: true, linkedId: id };
   };
 
   // Explicit "same person" confirmation from the UI: link, but only if the target
