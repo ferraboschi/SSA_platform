@@ -367,6 +367,7 @@ function PlaceholderRow({
               <Badge tone="warning">{t.seatPending}</Badge>
             </div>
             {open ? (
+              <>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8, alignItems: "flex-end" }}>
                 <SeatField label="Nome" style={{ flex: "1 1 130px" }}>
                   <input
@@ -448,27 +449,33 @@ function PlaceholderRow({
                     />
                   </div>
                 </SeatField>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "0 0 auto" }}>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-primary"
-                      onClick={save}
-                      disabled={busy || !ready}
-                      title={!ready ? `Compila: ${missing.join(", ")}` : undefined}
-                    >
-                      {t.seatSave}
-                    </button>
-                    <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
-                      {t.seatCancel}
-                    </button>
-                  </div>
-                  {!ready && (firstName || lastName || email || phone) && (
-                    <span style={{ fontSize: 11, color: "var(--warning-fg)" }}>Manca: {missing.join(", ")}</span>
-                  )}
-                </div>
               </div>
+              {/* Actions on their OWN line; the missing/error/success note sits
+                  BESIDE the buttons, so the buttons NEVER shift (owner: no jumping). */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={save}
+                  disabled={busy || !ready}
+                  title={!ready ? `Compila: ${missing.join(", ")}` : undefined}
+                >
+                  {t.seatSave}
+                </button>
+                <button type="button" className="btn btn-sm" onClick={() => setOpen(false)} disabled={busy}>
+                  {t.seatCancel}
+                </button>
+                {error ? (
+                  <span style={{ fontSize: 12, fontWeight: 500, color: "var(--danger, #dc2626)" }}>{error}</span>
+                ) : okNote ? (
+                  <span style={{ fontSize: 12, fontWeight: 500, color: "var(--success-fg, #15803d)" }}>✓ {okNote}</span>
+                ) : !ready && (firstName || lastName || email || phone) ? (
+                  <span style={{ fontSize: 12, color: "var(--warning-fg)" }}>Manca: {missing.join(", ")}</span>
+                ) : null}
+              </div>
+              </>
             ) : (
+              <>
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 4 }}>
                 <button
                   type="button"
@@ -488,9 +495,9 @@ function PlaceholderRow({
                   {t.seatRemove}
                 </button>
               </div>
+              {error && <div style={{ fontSize: 12, fontWeight: 500, color: "var(--danger, #dc2626)", marginTop: 5 }}>{error}</div>}
+              </>
             )}
-            {error && <div style={{ fontSize: 12, fontWeight: 500, color: "var(--danger, #dc2626)", marginTop: 5 }}>{error}</div>}
-            {okNote && <div style={{ fontSize: 12, fontWeight: 500, color: "var(--success-fg, #15803d)", marginTop: 5 }}>✓ {okNote}</div>}
           </div>
         </div>
       </td>
