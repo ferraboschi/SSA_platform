@@ -291,18 +291,20 @@ export default function ExamSendPanel({
         )}
       </div>
 
-      {/* General class link (email-gated) + send-to-all */}
+      {/* General (email-gated) link — for the class CHAT: copy + paste once. It's
+          NOT emailed to anyone; the send-to-all below uses the PERSONAL links. */}
       <div
         style={{
           display: "flex",
           gap: 8,
           alignItems: "center",
           flexWrap: "wrap",
-          marginBottom: 8,
+          marginBottom: 10,
         }}
       >
         <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-3)", flexShrink: 0 }}>
-          Link generale
+          Link generale{" "}
+          <span style={{ fontWeight: 400, color: "var(--text-4)" }}>· per la chat di classe</span>
         </span>
         <input
           readOnly
@@ -319,16 +321,27 @@ export default function ExamSendPanel({
             background: "var(--surface-2)",
           }}
         />
-        <button
-          type="button"
-          onClick={copyGeneral}
-          style={miniBtn(false)}
-        >
+        <button type="button" onClick={copyGeneral} style={miniBtn(false)}>
           {copied ? "Copiato ✓" : "Copia"}
         </button>
+      </div>
+
+      {/* Dedicated: email EACH student their own PERSONAL link (confirmed email). */}
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+          flexWrap: "wrap",
+          marginBottom: allNote ? 4 : 12,
+        }}
+      >
         <button type="button" onClick={sendAll} disabled={allBusy} style={miniBtn(true)}>
-          {allBusy ? "Invio…" : "Invia a tutti"}
+          {allBusy ? "Invio…" : "Invia a tutti il link personale"}
         </button>
+        <span style={{ fontSize: 11.5, color: "var(--text-4)", flex: "1 1 auto", minWidth: 0 }}>
+          A ogni studente il suo link personale, all&apos;email confermata all&apos;appello.
+        </span>
       </div>
       {allNote && (
         <p style={{ fontSize: 11.5, color: "var(--text-3)", margin: "0 0 12px" }}>{allNote}</p>
