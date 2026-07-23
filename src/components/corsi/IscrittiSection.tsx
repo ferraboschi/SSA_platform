@@ -412,15 +412,17 @@ function PlaceholderRow({
                     style={seatInput}
                   />
                 </SeatField>
-                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 200px" }}>
-                  <div style={{ display: "flex", gap: 6, minWidth: 0 }}>
+                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 210px" }}>
+                  {/* No min-width:0 here — the field's min-content (prefix 92 +
+                      input 92) is what forces this whole field to WRAP to its own
+                      line on a narrow row instead of squeezing the number away. */}
+                  <div style={{ display: "flex", gap: 6 }}>
                     <select
                       value={dialCode}
                       onChange={(e) => setDialCode(e.target.value)}
                       disabled={busy}
                       aria-label="Prefisso internazionale"
-                      // Flag + code only (compact) so the number input beside it is
-                      // never squeezed off-screen when the row narrows.
+                      // Flag + code only (compact), fixed width.
                       style={{ ...seatInput, flex: "0 0 auto", width: 92 }}
                     >
                       {COUNTRY_CODES.map((cc) => (
@@ -440,7 +442,9 @@ function PlaceholderRow({
                         if (e.key === "Enter") save();
                         if (e.key === "Escape") setOpen(false);
                       }}
-                      style={{ ...seatInput, flex: "1 1 60px", minWidth: 0 }}
+                      // Positive min-width (NOT 0): the number input can never
+                      // collapse to invisible; the field wraps instead.
+                      style={{ ...seatInput, flex: "1 1 92px", minWidth: 92 }}
                     />
                   </div>
                 </SeatField>
