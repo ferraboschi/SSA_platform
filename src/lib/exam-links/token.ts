@@ -35,6 +35,13 @@ export interface ExamTokenPayload {
   ia?: number;
   /** Expiry, epoch seconds. */
   e: number;
+  /** EMERGENCY link flag (1). Set only by the SSA admin's emergency "room" link
+   *  when the educator can't run the roll-call (dead phone): it BYPASSES the
+   *  appello/presence gate. The confirmed-email match (still required by the
+   *  email gate) stays the safety net — only known, data-confirmed students get
+   *  in. Propagated onto the personal link minted from it, so the /esame page
+   *  and submit skip presence too. */
+  emg?: number;
 }
 
 function secret(): string {

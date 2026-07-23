@@ -96,7 +96,9 @@ export async function resolveExamAccessByEmailAction(
   // Same canonical rule as the educator's send gate (day test ↔ that appello
   // day; feedback/final ↔ any attended day). Fails open only when attendance
   // is UNKNOWN (DB error / pre-migration) — the /esame page re-checks anyway.
-  {
+  // BYPASSED for an emergency link (emg): the educator can't run the roll-call,
+  // so presence can't be known — the confirmed-email match above is the gate.
+  if (!res.payload.emg) {
     const present = await loadPresentForTest(svc, corsoId, t);
     const subjectKey = subjectKeyOf({
       corsistaId: row ? row.corsista_id : null,
@@ -118,6 +120,9 @@ export async function resolveExamAccessByEmailAction(
     ia: Math.floor(Date.now() / 1000),
     l,
     e: exp,
+    // Carry the emergency flag onto the personal link so the /esame page and
+    // submit also skip presence (otherwise they'd re-block the student).
+    ...(res.payload.emg ? { emg: res.payload.emg } : {}),
   });
   return {
     ok: true,

@@ -115,7 +115,9 @@ export async function createEmergencyExamLink(
   }
   const now = Math.floor(Date.now() / 1000);
   const exp = now + EXAM_LINK_TTL_HOURS.exam * 3600;
-  const token = signExamToken({ c: courseId, t: "final", m: "exam", ia: now, e: exp });
+  // `emg: 1` → the email gate + page + submit bypass the appello/presence check
+  // (the educator can't run the roll-call). The confirmed-email match stays.
+  const token = signExamToken({ c: courseId, t: "final", m: "exam", ia: now, e: exp, emg: 1 });
   const base = appConfig.baseUrl.replace(/\/$/, "");
   return { ok: true, url: `${base}/esame/${token}`, expiresAt: new Date(exp * 1000).toISOString() };
 }
@@ -169,12 +171,15 @@ export async function submitExam(
   // Owner's rule re-checked at HAND-IN: the page gate runs at render time, so
   // a student flipped to absent while the runner was already open (or someone
   // replaying the action with a still-valid token) must be refused here too.
-  // Fail-open on unknown attendance, like every other gate.
+  // Fail-open on unknown attendance, like every other gate. BYPASSED for an
+  // emergency link (emg) — presence can't be known when the educator is down.
   if (corsoId != null) {
-    const present = await loadPresentForTest(svc, corsoId, t).catch(() => null);
-    const subjKey = subjectKeyOf({ corsistaId, partecipanteId })!;
-    if (isBlockedByAbsence(present, subjKey)) {
-      return { ok: false, error: absentAccessError(t) };
+    if (!res.payload.emg) {
+      const present = await loadPresentForTest(svc, corsoId, t).catch(() => null);
+      const subjKey = subjectKeyOf({ corsistaId, partecipanteId })!;
+      if (isBlockedByAbsence(present, subjKey)) {
+        return { ok: false, error: absentAccessError(t) };
+      }
     }
     // Closure / sandbox-reset epoch re-checked at HAND-IN too: a page still
     // open from before must not write fresh state back.

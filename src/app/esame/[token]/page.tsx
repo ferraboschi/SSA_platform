@@ -197,12 +197,16 @@ export default async function Page({
     //    present to sit the test). Same canonical presence rule as the send
     //    gate (day test ↔ that day; feedback/final ↔ any attended day); fails
     //    open only when attendance is UNKNOWN (DB error / pre-migration).
-    const present = await loadPresentForTest(sb, corsoId, res.payload.t);
-    const subjectKey = subjectKeyOf({ corsistaId: subjS, partecipanteId: subjP })!;
-    if (isBlockedByAbsence(present, subjectKey)) {
-      return (
-        <Blocked icon="!" title="Accesso non disponibile" body={absentAccessError(res.payload.t)} />
-      );
+    //    BYPASSED for an emergency link (emg) — the educator couldn't run the
+    //    roll-call; the confirmed-email match at mint time is the safety net.
+    if (!res.payload.emg) {
+      const present = await loadPresentForTest(sb, corsoId, res.payload.t);
+      const subjectKey = subjectKeyOf({ corsistaId: subjS, partecipanteId: subjP })!;
+      if (isBlockedByAbsence(present, subjectKey)) {
+        return (
+          <Blocked icon="!" title="Accesso non disponibile" body={absentAccessError(res.payload.t)} />
+        );
+      }
     }
 
     // 3) CROSS-DEVICE RESUME (owner, batch 8): the live-progress heartbeats

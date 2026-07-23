@@ -385,7 +385,20 @@ function PlaceholderRow({
     // (especially the email) has room instead of being crushed into one column.
     <tr style={{ background: "var(--surface-2, #f8f8fb)" }}>
       <td colSpan={7} style={{ padding: "10px 14px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        {/* The table has min-width:640 + horizontal scroll on small screens, so
+            this colSpan cell is wider than the viewport. Pin the edit form to the
+            left of the scroll area and cap it at viewport width, so its fields
+            WRAP and nothing (esp. the phone) is pushed off-screen. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            position: "sticky",
+            left: 0,
+            width: "min(100%, calc(100vw - 72px))",
+          }}
+        >
           <Avatar name={String(student.seatIndex ?? 1)} size="md" />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -466,11 +479,11 @@ function PlaceholderRow({
                     )}
                   </div>
                 </SeatField>
-                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 270px" }}>
-                  {/* No min-width:0 here — the field's min-content (prefix 92 +
-                      input 92) is what forces this whole field to WRAP to its own
-                      line on a narrow row instead of squeezing the number away. */}
-                  <div style={{ display: "flex", gap: 6 }}>
+                <SeatField label={t.seatPhonePh} style={{ flex: "1 1 320px" }}>
+                  {/* flex-wrap so on a very narrow field the number drops BELOW the
+                      (wide, country-named) prefix instead of being pushed off — the
+                      number is always visible at any viewport. */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <select
                       value={dialCode}
                       onChange={(e) => setDialCode(e.target.value)}
@@ -496,9 +509,9 @@ function PlaceholderRow({
                         if (e.key === "Enter") save();
                         if (e.key === "Escape") setOpen(false);
                       }}
-                      // Positive min-width (NOT 0): the number input can never
-                      // collapse to invisible; the field wraps instead.
-                      style={{ ...seatInput, flex: "1 1 92px", minWidth: 92 }}
+                      // Min-width 120 (never 0): the number can't collapse; when the
+                      // field is too narrow it wraps below the prefix (full width).
+                      style={{ ...seatInput, flex: "1 1 120px", minWidth: 120 }}
                     />
                   </div>
                 </SeatField>
