@@ -5,7 +5,7 @@ import { Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { formatNumberIt } from "@/lib/format";
 import type { ProgrammaData, TemplateData } from "@/lib/corsi";
-import { LOW_STOCK, type ScCatalogItem } from "@/components/sake/SakeProductPicker";
+import { LOW_STOCK, SakeProductPicker, type ScCatalogItem } from "@/components/sake/SakeProductPicker";
 import { bottlesForStudents, bottleCost, parseVolumeMl } from "@/lib/economics/bottles";
 import { fetchSakeCatalog } from "@/lib/integrations/sakecompany/actions";
 import { deleteTemplateAction } from "@/lib/data/template-actions";
@@ -133,22 +133,53 @@ export function ProgrammaEconomiaSection({
       arr.map((d) => (d.id === dayId ? { ...d, sakes: d.sakes.filter((s) => s.id !== sakeId) } : d)),
     );
 
-  const newSake = (): SakeState => {
-    const k = Math.floor(Math.random() * 900) + 100;
+  // A catalog item → a program row. Identity + cost come from the picked product;
+  // the bottle size is parsed from its name (fallback 720ml), qty starts at 1.
+  const sakeFromCatalog = (item: ScCatalogItem): SakeState => {
+    const ml = Number(/(\d{3,4})\s*ml/i.exec(item.name)?.[1]);
     return {
       id: `sake-new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      code: `SAK${k}`,
-      name: t.newSakeName,
-      type: "Junmai",
-      sakagura: "—",
-      size: 720,
-      cost: 35,
+      code: item.sku ?? `SAK${Math.floor(Math.random() * 900) + 100}`,
+      name: item.name,
+      type: item.productType ?? "—",
+      sakagura: item.vendor ?? "—",
+      size: Number.isFinite(ml) && ml > 0 ? ml : 720,
+      cost: item.cost || item.price || 0,
       qty: 1,
       note: "",
     };
   };
-  const addSakeToDay = (dayId: string) =>
-    setDays((arr) => arr.map((d) => (d.id === dayId ? { ...d, sakes: [...d.sakes, newSake()] } : d)));
+  // Add a REAL sake picked from the catalog to a day (owner/educator: pick from
+  // the catalog, not a placeholder — the old dummy path is gone).
+  const addSakeFromCatalog = (dayId: string, item: ScCatalogItem) =>
+    setDays((arr) =>
+      arr.map((d) => (d.id === dayId ? { ...d, sakes: [...d.sakes, sakeFromCatalog(item)] } : d)),
+    );
+  // Replace a SINGLE program row (by id) with a catalog item — size/qty/note kept,
+  // identity + cost swapped. Distinct from replaceSakeEverywhere (by SKU).
+  const replaceSake = (dayId: string, sakeId: string, item: ScCatalogItem) =>
+    setDays((arr) =>
+      arr.map((d) =>
+        d.id === dayId
+          ? {
+              ...d,
+              sakes: d.sakes.map((s) =>
+                s.id === sakeId
+                  ? {
+                      ...s,
+                      code: item.sku ?? s.code,
+                      name: item.name,
+                      sakagura: item.vendor ?? s.sakagura,
+                      type: item.productType ?? s.type,
+                      cost: item.cost || item.price || s.cost,
+                    }
+                  : s,
+              ),
+            }
+          : d,
+      ),
+    );
+
   const addDay = () =>
     setDays((arr) => {
       if (arr.length >= MAX_COURSE_DAYS) return arr; // hard cap 1..9
@@ -160,6 +191,8 @@ export function ProgrammaEconomiaSection({
   const renameDay = (dayId: string, name: string) =>
     setDays((arr) => arr.map((d) => (d.id === dayId ? { ...d, name } : d)));
 
+  // Which day is showing the "aggiungi dal catalogo" picker.
+  const [addingSakeDay, setAddingSakeDay] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
   const handleDayDrop = (targetDayId: string) => {
     setDragOverDay(null);
@@ -582,6 +615,7 @@ export function ProgrammaEconomiaSection({
                       onToggleNote={() => setOpenNote(openNote === s.id ? null : s.id)}
                       onUpdate={(p) => updateSake(sec.id, s.id, p)}
                       onRemove={() => removeSake(sec.id, s.id)}
+                      onReplace={(item) => replaceSake(sec.id, s.id, item)}
                       onDragStart={() => handleDragStart(sec.id, s.id)}
                       onDragOver={(e) => handleDragOver(e, s.id)}
                       onDragLeave={() => setDragOverSake((cur) => (cur === s.id ? null : cur))}
@@ -595,10 +629,21 @@ export function ProgrammaEconomiaSection({
                   )}
                 </div>
                 <div style={{ padding: "8px 16px", borderTop: "1px solid var(--border-2)", background: "var(--surface-2)" }}>
-                  <button className="btn btn-sm" style={{ width: "100%" }} onClick={() => addSakeToDay(sec.id)}>
-                    <Icon name="plus" size={12} />
-                    {t.addSake}
-                  </button>
+                  {addingSakeDay === sec.id ? (
+                    <SakeProductPicker
+                      placeholder="Cerca un sake dal catalogo…"
+                      excludeSkus={sec.sakes.map((s) => s.code).filter(Boolean) as string[]}
+                      onPick={(item) => {
+                        addSakeFromCatalog(sec.id, item);
+                        setAddingSakeDay(null);
+                      }}
+                    />
+                  ) : (
+                    <button className="btn btn-sm" style={{ width: "100%" }} onClick={() => setAddingSakeDay(sec.id)}>
+                      <Icon name="plus" size={12} />
+                      {t.addSake}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

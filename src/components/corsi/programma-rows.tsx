@@ -6,6 +6,7 @@ import { useT, format } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
 import {
   StockBadge,
+  SakeProductPicker,
   LOW_STOCK,
   type ScCatalogItem,
 } from "@/components/sake/SakeProductPicker";
@@ -22,6 +23,7 @@ export function SakeRow({
   onToggleNote,
   onUpdate,
   onRemove,
+  onReplace,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -38,6 +40,8 @@ export function SakeRow({
   onToggleNote: () => void;
   onUpdate: (patch: Partial<SakeState>) => void;
   onRemove: () => void;
+  /** Swap THIS row for a catalog product (e.g. the sake is out of stock). */
+  onReplace?: (item: ScCatalogItem) => void;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave?: (e: React.DragEvent) => void;
@@ -46,6 +50,7 @@ export function SakeRow({
   const tr = useT();
   const t = tr.corsi.programma;
   const [dragging, setDragging] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const schedaUrl = `https://www.sakecompany.com/sake/${s.code.toLowerCase()}`;
   const hasNote = !!s.note && s.note.trim().length > 0;
   // `||` (not `??`): a null/0 catalog cost must fall back to the stored cost.
@@ -196,11 +201,34 @@ export function SakeRow({
               />
             )}
           </button>
+          {onReplace && (
+            <button
+              className="btn btn-icon btn-sm btn-ghost"
+              onClick={() => setReplacing((r) => !r)}
+              title="Sostituisci con un altro sake (es. esaurito)"
+              style={{ color: replacing ? "var(--indigo)" : undefined, background: replacing ? "var(--indigo-50)" : undefined }}
+            >
+              <Icon name="refresh" size={12} />
+            </button>
+          )}
           <button className="btn btn-icon btn-sm btn-ghost" onClick={onRemove} title={t.removeSakeTip}>
             <Icon name="trash" size={12} />
           </button>
         </div>
       </div>
+
+      {replacing && onReplace && (
+        <div style={{ padding: "0 16px 14px 60px" }}>
+          <SakeProductPicker
+            placeholder="Sostituisci con…"
+            excludeSkus={s.code ? [s.code] : []}
+            onPick={(item) => {
+              onReplace(item);
+              setReplacing(false);
+            }}
+          />
+        </div>
+      )}
 
       {noteOpen && (
         <div style={{ padding: "0 16px 14px 60px" }}>
