@@ -199,7 +199,10 @@ export default async function Page({
     //    open only when attendance is UNKNOWN (DB error / pre-migration).
     //    BYPASSED for an emergency link (emg) — the educator couldn't run the
     //    roll-call; the confirmed-email match at mint time is the safety net.
-    if (!res.payload.emg) {
+    //    The FEEDBACK questionnaire is NOT gated by attendance (owner/educator:
+    //    "senza appello") — it's an anonymous-ish satisfaction survey, not a graded
+    //    test, so a student who missed the roll-call can still fill it.
+    if (!res.payload.emg && res.payload.t !== "feedback") {
       const present = await loadPresentForTest(sb, corsoId, res.payload.t);
       const subjectKey = subjectKeyOf({ corsistaId: subjS, partecipanteId: subjP })!;
       if (isBlockedByAbsence(present, subjectKey)) {

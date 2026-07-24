@@ -73,3 +73,27 @@ describe("aggregateFeedback — overall", () => {
     expect(res.questions[0].ratingAvg).toBeNull();
   });
 });
+
+describe("aggregateFeedback — per thematic area", () => {
+  const storiaA: FeedbackQuestion = { id: "s1", type: "rating", text: "Storia?", options: [], cat: "Storia" };
+  const storiaB: FeedbackQuestion = { id: "s2", type: "rating", text: "Storia 2?", options: [], cat: "Storia" };
+  const servizio: FeedbackQuestion = { id: "v1", type: "rating", text: "Servizio?", options: [], cat: "Servizio" };
+
+  it("rolls up rating answers per area (mean over ALL the area's ratings)", () => {
+    const res = aggregateFeedback(
+      [storiaA, storiaB, servizio],
+      rows({ s1: "5", s2: "3", v1: "2" }, { s1: "4", s2: "4", v1: "2" }),
+    );
+    const byArea = Object.fromEntries(res.areas.map((a) => [a.name, a]));
+    // Storia = mean(5,3,4,4) = 4.0 over 4 answers; Servizio = mean(2,2) = 2.0.
+    expect(byArea.Storia.ratingAvg).toBe(4);
+    expect(byArea.Storia.answered).toBe(4);
+    expect(byArea.Servizio.ratingAvg).toBe(2);
+    expect(byArea.Servizio.answered).toBe(2);
+  });
+
+  it("questions without an area fall under 'Generale'", () => {
+    const res = aggregateFeedback([ratingQ], rows({ r: "5" }));
+    expect(res.areas.map((a) => a.name)).toEqual(["Generale"]);
+  });
+});

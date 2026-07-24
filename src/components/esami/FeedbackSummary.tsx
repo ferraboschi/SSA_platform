@@ -34,6 +34,36 @@ export function FeedbackSummary({ data }: { data: FeedbackAggregateResult }) {
         </div>
       ) : (
         <div>
+          {/* Satisfaction per THEMATIC AREA (educator): one bar per area, height
+              ∝ the mean rating. Shown only when the feedback spans ≥2 areas —
+              a single area would just duplicate the overall. */}
+          {data.areas.filter((a) => a.ratingAvg != null).length >= 2 && (
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-2)" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 12 }}>
+                Soddisfazione per area
+              </div>
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-end", height: 130, overflowX: "auto" }}>
+                {data.areas.map((a) => {
+                  const pct = a.ratingAvg != null ? a.ratingAvg / 5 : 0;
+                  const color = a.ratingAvg == null ? "var(--border)" : a.ratingAvg >= 4 ? "var(--success, #15803d)" : a.ratingAvg >= 3 ? "var(--oro)" : "var(--danger-fg, #b42318)";
+                  return (
+                    <div key={a.name} style={{ flex: "1 0 64px", minWidth: 64, maxWidth: 120, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <span className="num" style={{ fontSize: 13, fontWeight: 700, color }}>
+                        {a.ratingAvg != null ? a.ratingAvg.toFixed(1) : "—"}
+                      </span>
+                      <div style={{ width: "70%", display: "flex", alignItems: "flex-end", height: 80 }}>
+                        <div style={{ width: "100%", height: `${Math.max(4, pct * 80)}px`, background: color, borderRadius: "3px 3px 0 0" }} />
+                      </div>
+                      <span style={{ fontSize: 10.5, color: "var(--text-3)", textAlign: "center", lineHeight: 1.2, wordBreak: "break-word" }}>
+                        {a.name}
+                      </span>
+                      <span style={{ fontSize: 9.5, color: "var(--text-4)" }}>{a.answered} ris.</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {data.questions.map((q, qi) => (
             <div
               key={q.qid}

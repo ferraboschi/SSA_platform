@@ -12,6 +12,18 @@ export interface FeedbackQuestion {
   type: string;
   text: string;
   options: string[];
+  /** Thematic area ("Storia", "Servizio", …) — groups rating questions into the
+   *  per-area satisfaction histogram. Blank → "Generale". */
+  cat?: string;
+}
+
+/** Satisfaction rolled up per THEMATIC AREA (owner/educator): the mean of every
+ *  rating answer to the area's questions, plus its 1–5 distribution. */
+export interface FeedbackAreaAgg {
+  name: string;
+  ratingAvg: number | null;
+  answered: number;
+  ratingBuckets: number[]; // 0..4 → 1..5
 }
 
 export interface FeedbackQuestionAgg {
@@ -32,6 +44,9 @@ export interface FeedbackQuestionAgg {
 export interface FeedbackAggregateResult {
   responses: number;
   questions: FeedbackQuestionAgg[];
+  /** Per-area satisfaction (rating questions only) — the histogram source. Empty
+   *  when the feedback carries no rating questions. */
+  areas: FeedbackAreaAgg[];
 }
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -40,10 +55,19 @@ export function aggregateFeedback(
   questions: FeedbackQuestion[],
   rows: Array<{ answers: Record<string, string | string[]> | null }>,
 ): FeedbackAggregateResult {
+  // Per-area accumulators (rating answers only), keyed by the question's area.
+  const areaAcc = new Map<string, { sum: number; n: number; buckets: number[] }>();
+  const areaOrder: string[] = [];
+
   const out: FeedbackQuestionAgg[] = questions.map((q) => {
     const isChoice = q.options.length > 0 && q.type !== "rating";
     const isRating = q.type === "rating";
     const kind: FeedbackQuestionKind = isRating ? "rating" : isChoice ? "choice" : "open";
+    const area = (q.cat ?? "").trim() || "Generale";
+    if (isRating && !areaAcc.has(area)) {
+      areaAcc.set(area, { sum: 0, n: 0, buckets: [0, 0, 0, 0, 0] });
+      areaOrder.push(area);
+    }
 
     const buckets = [0, 0, 0, 0, 0];
     const optionCounts = q.options.map(() => 0);
@@ -65,6 +89,10 @@ export function aggregateFeedback(
           buckets[Math.round(n) - 1]++;
           ratingSum += n;
           ratingN++;
+          const a = areaAcc.get(area)!;
+          a.sum += n;
+          a.n++;
+          a.buckets[Math.round(n) - 1]++;
         }
       } else if (isChoice) {
         answered++;
@@ -94,5 +122,15 @@ export function aggregateFeedback(
     };
   });
 
-  return { responses: rows.length, questions: out };
+  const areas: FeedbackAreaAgg[] = areaOrder.map((name) => {
+    const a = areaAcc.get(name)!;
+    return {
+      name,
+      ratingAvg: a.n ? Math.round((a.sum / a.n) * 10) / 10 : null,
+      answered: a.n,
+      ratingBuckets: a.buckets,
+    };
+  });
+
+  return { responses: rows.length, questions: out, areas };
 }

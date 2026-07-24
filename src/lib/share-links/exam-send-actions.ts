@@ -174,8 +174,12 @@ async function resolveSendTarget(
       ? { corsistaId: cid, partecipanteId: null }
       : { corsistaId: null, partecipanteId: cid },
   )!;
-  const present = await loadPresentForTest(svc, corsoId, testKey);
-  if (isBlockedByAbsence(present, subjKey)) return { ok: false, error: absentSendError(testKey) };
+  // Feedback is NOT gated by attendance (owner/educator: "senza appello") — send
+  // it regardless of roll-call. Every graded test still requires presence.
+  if (testKey !== "feedback") {
+    const present = await loadPresentForTest(svc, corsoId, testKey);
+    if (isBlockedByAbsence(present, subjKey)) return { ok: false, error: absentSendError(testKey) };
+  }
 
   const target =
     k === "corsista"
