@@ -242,14 +242,17 @@ export async function transferEnrollmentAction(
     }
 
     // Create the destination seat carrying the net paid (revenue follows, counted
-    // once — the origin seat is excluded as annullata below).
+    // once — the origin seat is excluded as annullata below). CARRY the origin's
+    // financial_status: forcing "paid" would count a still-pending/partially-paid
+    // enrollment as collected revenue on the destination (phantom money) — the
+    // collected-revenue rule gates on financial_status, and netPaidCents ignores it.
     const net = netPaidCents({ amount_cents: enr.amount_cents, discount_cents: enr.discount_cents });
     const { error: insErr } = await svc.from("corsi_iscrizioni").insert({
       corso_id: dest,
       corsista_id: Number(enr.corsista_id),
       amount_cents: net,
       discount_cents: 0,
-      financial_status: "paid",
+      financial_status: enr.financial_status ?? null,
       historical: false,
       seat_index: 1,
     });
