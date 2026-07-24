@@ -34,7 +34,12 @@
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
-import { finalizeSeatCompletion, phoneLooksValid } from "@/lib/corsi/seat-completion";
+import {
+  finalizeSeatCompletion,
+  phoneLooksValid,
+  type SeatCompletionResolve,
+  type SeatCompletionResult,
+} from "@/lib/corsi/seat-completion";
 import {
   TABLE,
   PART_TABLE,
@@ -484,11 +489,13 @@ export async function completeSeatFromLinkAction(
   email: string,
   phone: string,
   linkTo?: number,
+  resolve?: SeatCompletionResolve,
 ): Promise<{
   ok: boolean;
   person?: { id: number; name: string; email: string };
   linked?: boolean;
   conflict?: { corsistaId: number; name: string; phone: string };
+  mismatch?: SeatCompletionResult["mismatch"];
   error?: string;
 }> {
   const corsoId = courseIdFromToken(token);
@@ -528,8 +535,8 @@ export async function completeSeatFromLinkAction(
   // Shared identity resolution (same rules as the admin roster): same-person →
   // link, different-name → conflict (UI resolves), else promote. `linkTo` =
   // confirmed "same person".
-  const r = await finalizeSeatCompletion(svc, corsoId, iscrId, placeholderId, { name, email: cleanEmail, phone: tel }, linkTo);
-  if (!r.ok) return { ok: false, error: r.error, conflict: r.conflict };
+  const r = await finalizeSeatCompletion(svc, corsoId, iscrId, placeholderId, { name, email: cleanEmail, phone: tel }, linkTo, resolve);
+  if (!r.ok) return { ok: false, error: r.error, conflict: r.conflict, mismatch: r.mismatch };
   // On a LINK the placeholder is deleted and the seat now points to the existing
   // corsista — return THAT id so the client re-keys the row on it (marking the
   // student present later validates corsista_id, which would reject the stale

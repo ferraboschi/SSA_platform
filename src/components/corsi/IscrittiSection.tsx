@@ -13,7 +13,13 @@ import {
   removeSeatAction,
   lookupSeatEmailAction,
 } from "@/lib/corsi/seat-actions";
-import { cancelEnrollmentAction, type CancelEnrollmentResult } from "@/lib/corsi/enrollment-actions";
+import {
+  cancelEnrollmentAction,
+  transferEnrollmentAction,
+  listTransferTargetsAction,
+  type CancelEnrollmentResult,
+  type TransferTarget,
+} from "@/lib/corsi/enrollment-actions";
 
 export function IscrittiSection({
   courseId,
@@ -278,6 +284,10 @@ function RemoveStudent({ courseId, student }: { courseId: string; student: Stude
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<CancelEnrollmentResult | null>(null);
+  // Transfer sub-step: pick a same-level destination course.
+  const [phase, setPhase] = useState<"choose" | "transfer">("choose");
+  const [targets, setTargets] = useState<TransferTarget[] | null>(null);
+  const [destId, setDestId] = useState<number | "">("");
 
   const run = async (mode: "credito" | "rimborso") => {
     if (busy) return;
@@ -291,11 +301,36 @@ function RemoveStudent({ courseId, student }: { courseId: string; student: Stude
     else setError(res.error || "Operazione non riuscita.");
   };
 
+  const openTransfer = async () => {
+    setError(null);
+    setPhase("transfer");
+    if (targets == null) {
+      setBusy(true);
+      const res = await listTransferTargetsAction(Number(courseId)).catch(() => ({ ok: false, targets: [] as TransferTarget[] }));
+      setBusy(false);
+      setTargets(res.ok ? res.targets : []);
+    }
+  };
+
+  const runTransfer = async () => {
+    if (busy || destId === "") return;
+    setBusy(true);
+    setError(null);
+    const res = await transferEnrollmentAction(Number(courseId), student.iscrizioneId ?? 0, destId).catch(
+      () => ({ ok: false, error: "Trasferimento non riuscito." }) as CancelEnrollmentResult,
+    );
+    setBusy(false);
+    if (res.ok) setDone(res);
+    else setError(res.error || "Trasferimento non riuscito.");
+  };
+
   const close = () => {
     const wasDone = Boolean(done);
     setOpen(false);
     setDone(null);
     setError(null);
+    setPhase("choose");
+    setDestId("");
     if (wasDone) router.refresh(); // now drop the annullata row from the roster
   };
 
@@ -340,20 +375,60 @@ function RemoveStudent({ courseId, student }: { courseId: string; student: Stude
                   <button type="button" className="btn btn-sm" onClick={close}>Chiudi</button>
                 </div>
               </>
+            ) : phase === "transfer" ? (
+              <>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
+                  Trasferisci {student.name}
+                </div>
+                <p style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.5, margin: "0 0 12px" }}>
+                  Scegli il corso di destinazione (stesso livello). L&apos;importo pagato segue lo studente.
+                </p>
+                {error && <p style={{ fontSize: 12.5, color: "var(--danger-fg, #b91c1c)", margin: "0 0 10px" }}>{error}</p>}
+                {targets == null ? (
+                  <p style={{ fontSize: 12.5, color: "var(--text-3)" }}>Carico i corsi…</p>
+                ) : targets.length === 0 ? (
+                  <p style={{ fontSize: 12.5, color: "var(--text-3)" }}>Nessun altro corso dello stesso livello disponibile.</p>
+                ) : (
+                  <select
+                    className="select"
+                    value={destId}
+                    onChange={(e) => setDestId(e.target.value === "" ? "" : Number(e.target.value))}
+                    style={{ width: "100%", height: 30, fontSize: 12.5 }}
+                  >
+                    <option value="">Scegli un corso…</option>
+                    {targets.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}{c.when ? ` · ${c.when}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
+                  <button type="button" className="btn btn-sm btn-primary" disabled={busy || destId === ""} onClick={runTransfer}>
+                    {busy ? "…" : "Trasferisci"}
+                  </button>
+                  <span style={{ flex: 1 }} />
+                  <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => { setPhase("choose"); setError(null); }}>Indietro</button>
+                </div>
+              </>
             ) : (
               <>
                 <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
                   Rimuovi {student.name} dal corso
                 </div>
                 <p style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.5, margin: "0 0 14px" }}>
-                  Lo studente esce dal corso. Scegli come gestire l&apos;importo pagato: un{" "}
-                  <strong>rimborso</strong> (denaro reso su Shopify) o un <strong>credito</strong>{" "}
-                  riassegnabile a un corso dello stesso livello.
+                  Lo studente esce dal corso. Scegli cosa fare: mettere l&apos;importo a{" "}
+                  <strong>credito</strong> (riassegnabile a un corso di pari livello),{" "}
+                  <strong>trasferirlo</strong> direttamente a un altro corso, o un{" "}
+                  <strong>rimborso</strong> (denaro reso su Shopify).
                 </p>
                 {error && <p style={{ fontSize: 12.5, color: "var(--danger-fg, #b91c1c)", margin: "0 0 10px" }}>{error}</p>}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => run("credito")}>
                     {busy ? "…" : "Crea credito"}
+                  </button>
+                  <button type="button" className="btn btn-sm" disabled={busy} onClick={openTransfer}>
+                    Trasferisci
                   </button>
                   <button type="button" className="btn btn-sm" disabled={busy} onClick={() => run("rimborso")}>
                     {busy ? "…" : "Rimborso"}
@@ -433,6 +508,13 @@ function PlaceholderRow({
   const [emailInfo, setEmailInfo] = useState<{ name: string; courses: number } | null>(null);
   // Save-time conflict: the email belongs to a DIFFERENTLY-named person.
   const [conflict, setConflict] = useState<{ corsistaId: number; name: string; phone: string } | null>(null);
+  // Link-time data mismatch: existing profile's name/phone differ from the typed
+  // ones — the operator picks which to keep (no silent overwrite).
+  const [mismatch, setMismatch] = useState<
+    Awaited<ReturnType<typeof completeSeatAction>>["mismatch"] | null
+  >(null);
+  const [keepNewName, setKeepNewName] = useState(true);
+  const [keepNewPhone, setKeepNewPhone] = useState(true);
 
   const iscrId = student.iscrizioneId;
 
@@ -467,12 +549,13 @@ function PlaceholderRow({
   if (!phone.trim()) missing.push("telefono");
   const ready = missing.length === 0;
 
-  async function save(linkTo?: number) {
+  async function save(linkTo?: number, resolve?: { applyName?: boolean; applyPhone?: boolean }) {
     if (!ready || busy || iscrId == null) return;
     setBusy(true);
     setError(null);
     setOkNote(null);
     setConflict(null);
+    if (!resolve) setMismatch(null);
     const res = await completeSeatAction(
       Number(courseId),
       iscrId,
@@ -482,10 +565,12 @@ function PlaceholderRow({
         phone: `${dialCode} ${phone.trim()}`.trim(),
       },
       linkTo,
+      resolve,
     ).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatAction>>);
     setBusy(false);
     if (res.ok && res.linked) {
       // Repeat attendee: linked to the existing profile — confirm briefly, then refresh.
+      setMismatch(null);
       setOkNote("Presenza aggiunta a un profilo già esistente.");
       setTimeout(() => {
         setOpen(false);
@@ -497,6 +582,11 @@ function PlaceholderRow({
     } else if (res.conflict) {
       // Email belongs to a differently-named person → inline "same person?" card.
       setConflict(res.conflict);
+    } else if (res.mismatch) {
+      // Existing profile's data differs from the typed data → let the operator choose.
+      setKeepNewName(true);
+      setKeepNewPhone(true);
+      setMismatch(res.mismatch);
     } else {
       setError(res.error || t.seatCompleteError);
     }
@@ -720,6 +810,70 @@ function PlaceholderRow({
                   </div>
                   <div style={{ fontSize: 11, color: "#a16207" }}>
                     Ogni persona ha un&apos;email unica: se è un&apos;altra persona, inserisci la sua email corretta.
+                  </div>
+                </div>
+              )}
+              {mismatch && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: "10px 12px",
+                    border: "1px solid #93c5fd",
+                    background: "#eff6ff",
+                    borderRadius: 8,
+                    fontSize: 12.5,
+                    color: "#1e3a8a",
+                    display: "grid",
+                    gap: 8,
+                    maxWidth: 560,
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>
+                    Collego a un profilo esistente: alcuni dati non coincidono. Quali tengo?
+                  </div>
+                  {mismatch.nameDiffers && (
+                    <div style={{ display: "grid", gap: 3 }}>
+                      <span style={{ fontWeight: 600 }}>Nome</span>
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input type="radio" checked={keepNewName} onChange={() => setKeepNewName(true)} />
+                        Nuovo: <strong>{mismatch.entered.name}</strong>
+                      </label>
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input type="radio" checked={!keepNewName} onChange={() => setKeepNewName(false)} />
+                        Esistente: <strong>{mismatch.existing.name}</strong>
+                      </label>
+                    </div>
+                  )}
+                  {mismatch.phoneDiffers && (
+                    <div style={{ display: "grid", gap: 3 }}>
+                      <span style={{ fontWeight: 600 }}>Telefono</span>
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input type="radio" checked={keepNewPhone} onChange={() => setKeepNewPhone(true)} />
+                        Nuovo: <strong>{mismatch.entered.phone}</strong>
+                      </label>
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input type="radio" checked={!keepNewPhone} onChange={() => setKeepNewPhone(false)} />
+                        Esistente: <strong>{mismatch.existing.phone}</strong>
+                      </label>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      disabled={busy}
+                      onClick={() =>
+                        save(mismatch.corsistaId, {
+                          applyName: mismatch.nameDiffers ? keepNewName : undefined,
+                          applyPhone: mismatch.phoneDiffers ? keepNewPhone : undefined,
+                        })
+                      }
+                    >
+                      Collega con questi dati
+                    </button>
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={() => setMismatch(null)}>
+                      Annulla
+                    </button>
                   </div>
                 </div>
               )}

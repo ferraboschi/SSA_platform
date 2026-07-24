@@ -23,7 +23,12 @@ import { revalidatePath } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { hasRole } from "@/lib/auth/guard";
 import { placeholderName } from "@/lib/sync/seats";
-import { finalizeSeatCompletion, phoneLooksValid } from "@/lib/corsi/seat-completion";
+import {
+  finalizeSeatCompletion,
+  phoneLooksValid,
+  type SeatCompletionResolve,
+  type SeatCompletionResult,
+} from "@/lib/corsi/seat-completion";
 
 export interface SeatActionResult {
   ok: boolean;
@@ -35,6 +40,9 @@ export interface SeatActionResult {
   /** completeSeatAction: the email belongs to a DIFFERENTLY-named person — the UI
    *  shows an inline "is it the same person?" card (link vs fix the email). */
   conflict?: { corsistaId: number; name: string; phone: string };
+  /** completeSeatAction: linking to an existing profile whose name/phone differ
+   *  from what was typed — the UI asks which to keep before overwriting. */
+  mismatch?: SeatCompletionResult["mismatch"];
 }
 
 function isMissingSchema(err: { message?: string } | null | undefined): boolean {
@@ -54,6 +62,7 @@ export async function completeSeatAction(
   iscrizioneId: number,
   person: { name: string; email?: string; phone?: string },
   linkTo?: number,
+  resolve?: SeatCompletionResolve,
 ): Promise<SeatActionResult> {
   if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
 
@@ -96,7 +105,7 @@ export async function completeSeatAction(
 
     // Shared identity resolution: same-person → link, different-name → conflict
     // (the UI resolves it), else promote. `linkTo` = confirmed "same person".
-    const r = await finalizeSeatCompletion(svc, corso, iscrId, placeholderId, { name, email, phone }, linkTo);
+    const r = await finalizeSeatCompletion(svc, corso, iscrId, placeholderId, { name, email, phone }, linkTo, resolve);
     if (r.ok) revalidatePath(`/corsi/${corso}`);
     return r;
   } catch (e) {

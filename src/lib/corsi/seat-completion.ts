@@ -34,7 +34,26 @@ export interface SeatCompletionResult {
   linkedId?: number;
   /** Email belongs to a DIFFERENTLY-named person — the UI resolves it. */
   conflict?: { corsistaId: number; name: string; phone: string };
+  /** Linking to an existing profile whose name/phone DIFFER from what was just
+   *  typed: the UI shows both and the operator picks which to keep (no silent
+   *  overwrite). Re-call with `resolve` to apply the choice. */
+  mismatch?: {
+    corsistaId: number;
+    existing: { name: string; phone: string };
+    entered: { name: string; phone: string };
+    nameDiffers: boolean;
+    phoneDiffers: boolean;
+  };
 }
+
+/** Which fields to overwrite on the existing profile when linking (operator's
+ *  choice from the mismatch card). Omitted / false = keep the existing value. */
+export interface SeatCompletionResolve {
+  applyName?: boolean;
+  applyPhone?: boolean;
+}
+
+const cleanPhoneDigits = (p: string): string => String(p ?? "").replace(/[\s\-().+]/g, "");
 
 export async function finalizeSeatCompletion(
   svc: Svc,
@@ -43,6 +62,7 @@ export async function finalizeSeatCompletion(
   placeholderId: number,
   person: { name: string; email: string; phone: string },
   linkTo?: number,
+  resolve?: SeatCompletionResolve,
 ): Promise<SeatCompletionResult> {
   const { name, email, phone } = person;
 
@@ -56,6 +76,44 @@ export async function finalizeSeatCompletion(
       .neq("id", iscrId)
       .limit(1);
     if (dup && dup.length > 0) return { ok: false, error: "Questa persona è già presente in questo corso." };
+
+    // Data bonifica (owner/educator): linking must NEVER silently discard what was
+    // just typed. Compare the entered name/phone with the existing profile's.
+    const { data: prof } = await svc
+      .from("corsisti")
+      .select("full_name, phone")
+      .eq("id", id)
+      .maybeSingle();
+    const exName = ((prof as { full_name?: string | null } | null)?.full_name ?? "").trim();
+    const exPhone = ((prof as { phone?: string | null } | null)?.phone ?? "").trim();
+    const enName = name.trim();
+    const enPhone = phone.trim();
+    // A "difference" only matters when BOTH sides have a value: an empty existing
+    // field is simply filled from what was typed (nothing is lost, no prompt).
+    const nameDiffers = enName !== "" && exName !== "" && sortedNameKey(enName) !== sortedNameKey(exName);
+    const phoneDiffers = enPhone !== "" && exPhone !== "" && cleanPhoneDigits(enPhone) !== cleanPhoneDigits(exPhone);
+    if ((nameDiffers || phoneDiffers) && !resolve) {
+      return {
+        ok: false,
+        mismatch: {
+          corsistaId: id,
+          existing: { name: exName, phone: exPhone },
+          entered: { name: enName, phone: enPhone },
+          nameDiffers,
+          phoneDiffers,
+        },
+      };
+    }
+    // Resolve to the final values: apply the entered value when the operator chose
+    // it (or when the existing field is empty → fill it); otherwise keep existing.
+    const finalName = resolve?.applyName ? enName : exName || enName;
+    const finalPhone = resolve?.applyPhone ? enPhone : exPhone || enPhone;
+    await svc
+      .from("corsisti")
+      .update({ full_name: finalName || exName, phone: finalPhone })
+      .eq("id", id)
+      .then(() => {}, () => {});
+
     const { error: linkErr } = await svc
       .from("corsi_iscrizioni")
       .update({ corsista_id: id, enrolled_email: email })

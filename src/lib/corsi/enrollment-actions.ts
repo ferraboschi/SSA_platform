@@ -83,9 +83,10 @@ export async function cancelEnrollmentAction(
       const isIntro = (course?.type ?? "") === "introduttivo";
       const net = netPaidCents({ amount_cents: enr.amount_cents, discount_cents: enr.discount_cents });
       const importoCents = isIntro ? Math.max(net, course?.price_cents ?? 0) : net;
-      // A non-intro seat that collected nothing has no value to credit.
+      // A non-intro seat that collected nothing has no value to credit — guide the
+      // operator to the other two outcomes (the free-course case the educator hit).
       if (!isIntro && (importoCents <= 0 || !isPaidRevenue(enr.financial_status))) {
-        return { ok: false, error: "Nessun importo incassato da convertire in credito. Usa il rimborso o verifica il pagamento." };
+        return { ok: false, error: "Corso gratuito o nulla incassato: niente da mettere a credito. Usa «Trasferisci» o «Rimborso»." };
       }
       const cr = await createCreditForEnrollment(svc, {
         corsistaId: Number(enr.corsista_id),
@@ -132,5 +133,154 @@ export async function cancelEnrollmentAction(
     return { ok: true, credited, reminder };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Operazione non riuscita." };
+  }
+}
+
+export interface TransferTarget {
+  id: number;
+  title: string;
+  when: string;
+}
+
+/** Candidate destination courses for a direct transfer: SAME level as the origin,
+ *  not cancelled, not the origin itself. Used to fill the transfer picker. */
+export async function listTransferTargetsAction(
+  corsoId: number,
+): Promise<{ ok: boolean; targets: TransferTarget[]; error?: string }> {
+  if (!(await hasRole(["admin", "manager"]))) return { ok: false, targets: [], error: "Non autorizzato." };
+  try {
+    const svc = getSupabaseServiceClient();
+    const { data: origin } = await svc.from("corsi").select("type").eq("id", Number(corsoId)).maybeSingle();
+    const type = (origin as { type: string | null } | null)?.type ?? null;
+    if (!type) return { ok: true, targets: [] };
+    const { data, error } = await svc
+      .from("corsi")
+      .select("id,short_title,full_title,month,year,type,lifecycle")
+      .eq("type", type)
+      .neq("lifecycle", "cancelled")
+      .neq("id", Number(corsoId))
+      .order("year", { ascending: false });
+    if (error) return { ok: false, targets: [], error: error.message };
+    const targets = ((data ?? []) as {
+      id: number;
+      short_title: string | null;
+      full_title: string | null;
+      month: string | null;
+      year: number | null;
+    }[]).map((c) => ({
+      id: c.id,
+      title: c.short_title || c.full_title || `Corso ${c.id}`,
+      when: [c.month, c.year].filter(Boolean).join(" "),
+    }));
+    return { ok: true, targets };
+  } catch (e) {
+    return { ok: false, targets: [], error: e instanceof Error ? e.message : "Errore." };
+  }
+}
+
+/** TRANSFER a student straight to another SAME-LEVEL course (owner's 3rd option):
+ *  the origin seat is marked annullata ('trasferito') and a new seat is created on
+ *  the destination carrying the net paid (revenue follows the person, counted once).
+ *  Shopify capacity is NOT auto-adjusted — the platform never trusts its own seat
+ *  count over Shopify — so the reminder points staff at the destination product to
+ *  manage capacity. */
+export async function transferEnrollmentAction(
+  corsoId: number,
+  iscrizioneId: number,
+  destinazioneCorsoId: number,
+): Promise<CancelEnrollmentResult> {
+  if (!(await hasRole(["admin", "manager"]))) return { ok: false, error: "Non autorizzato." };
+  const corso = Number(corsoId);
+  const iscrId = Number(iscrizioneId);
+  const dest = Number(destinazioneCorsoId);
+  if (!Number.isInteger(corso) || corso <= 0) return { ok: false, error: "Corso non valido." };
+  if (!Number.isInteger(iscrId) || iscrId <= 0) return { ok: false, error: "Iscrizione non valida." };
+  if (!Number.isInteger(dest) || dest <= 0) return { ok: false, error: "Corso di destinazione non valido." };
+  if (dest === corso) return { ok: false, error: "Il corso di destinazione coincide con quello attuale." };
+
+  try {
+    const svc = getSupabaseServiceClient();
+    const { data: enr, error: enrErr } = await svc
+      .from("corsi_iscrizioni")
+      .select("id, corso_id, corsista_id, amount_cents, discount_cents, financial_status, annullata_at, corsista:corsisti(placeholder), corso:corsi(type)")
+      .eq("id", iscrId)
+      .maybeSingle();
+    if (enrErr) {
+      if (isMissingSchema(enrErr)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+      return { ok: false, error: enrErr.message };
+    }
+    if (!enr || Number(enr.corso_id) !== corso) return { ok: false, error: "Iscrizione non valida per questo corso." };
+    if (enr.annullata_at) return { ok: false, error: "Questa iscrizione è già stata annullata." };
+    const cor = Array.isArray(enr.corsista) ? enr.corsista[0] : enr.corsista;
+    if (cor?.placeholder) return { ok: false, error: "Un posto da completare non si trasferisce da qui." };
+    const originType = (Array.isArray(enr.corso) ? enr.corso[0] : enr.corso)?.type ?? null;
+
+    // Destination must exist, be the SAME level, and not be cancelled.
+    const { data: dCourse } = await svc
+      .from("corsi")
+      .select("id, type, lifecycle, full_title")
+      .eq("id", dest)
+      .maybeSingle();
+    const d = dCourse as { id: number; type: string | null; lifecycle: string | null; full_title: string | null } | null;
+    if (!d) return { ok: false, error: "Corso di destinazione inesistente." };
+    if (d.lifecycle === "cancelled") return { ok: false, error: "Il corso di destinazione è annullato." };
+    if (originType && d.type && originType !== d.type) {
+      return { ok: false, error: "Puoi trasferire solo a un corso dello stesso livello." };
+    }
+
+    // Not already enrolled (active) on the destination.
+    const { data: existing } = await svc
+      .from("corsi_iscrizioni")
+      .select("id, annullata_at")
+      .eq("corso_id", dest)
+      .eq("corsista_id", Number(enr.corsista_id))
+      .limit(1);
+    if ((existing ?? []).some((r) => !(r as { annullata_at?: string | null }).annullata_at)) {
+      return { ok: false, error: "Lo studente è già iscritto al corso di destinazione." };
+    }
+
+    // Create the destination seat carrying the net paid (revenue follows, counted
+    // once — the origin seat is excluded as annullata below).
+    const net = netPaidCents({ amount_cents: enr.amount_cents, discount_cents: enr.discount_cents });
+    const { error: insErr } = await svc.from("corsi_iscrizioni").insert({
+      corso_id: dest,
+      corsista_id: Number(enr.corsista_id),
+      amount_cents: net,
+      discount_cents: 0,
+      financial_status: "paid",
+      historical: false,
+      seat_index: 1,
+    });
+    if (insErr) {
+      if (isMissingSchema(insErr)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+      return { ok: false, error: insErr.message };
+    }
+
+    // Mark the origin seat annullata ('trasferito').
+    const { error: updErr } = await svc
+      .from("corsi_iscrizioni")
+      .update({ annullata_at: new Date().toISOString(), annullata_tipo: "trasferito" })
+      .eq("id", iscrId);
+    if (updErr) {
+      // Roll back the destination seat we just created (best-effort) so a failed
+      // transfer never leaves the student in BOTH courses.
+      await svc.from("corsi_iscrizioni").delete().eq("corso_id", dest).eq("corsista_id", Number(enr.corsista_id)).is("annullata_at", null).then(() => {}, () => {});
+      if (isMissingSchema(updErr)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
+      return { ok: false, error: updErr.message };
+    }
+
+    revalidatePath(`/corsi/${corso}`);
+    revalidatePath(`/corsi/${dest}`);
+
+    return {
+      ok: true,
+      reminder: {
+        text: "Iscrizione trasferita. La capienza su Shopify NON si aggiorna da sola: libera un posto sul corso d'origine e verifica la disponibilità su quello di destinazione.",
+        url: shopifyAdminProductsUrl(d.full_title ?? undefined),
+        label: "Apri il corso di destinazione su Shopify",
+      },
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Trasferimento non riuscito." };
   }
 }

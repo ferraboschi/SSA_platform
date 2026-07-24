@@ -181,11 +181,24 @@ export default function AppelloTab({
 
   return (
     <div>
-      <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 10px", lineHeight: 1.5 }}>
-        {readOnly
-          ? "Appello non ancora disponibile."
-          : `Chiama l'appello${isExamDay ? " del giorno esame" : ""} e tocca chi è presente — si salva da solo. Presenti: ${presentCount}/${students.length}. Chi è presente può ricevere subito l'email di conferma dati. Verde = dati confermati.`}
-      </p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+        <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 10px", lineHeight: 1.5 }}>
+          {readOnly
+            ? "Appello non ancora disponibile."
+            : `Chiama l'appello${isExamDay ? " del giorno esame" : ""} e tocca chi è presente — si salva da solo. Presenti: ${presentCount}/${students.length}. Chi è presente può ricevere subito l'email di conferma dati. Verde = dati confermati.`}
+        </p>
+        {/* Manual refresh (educator feedback): the confirmed-data state doesn't
+            update live on this screen — a reload pulls the latest roster. */}
+        <button
+          type="button"
+          className="edu-btn"
+          onClick={() => window.location.reload()}
+          title="Aggiorna lo stato (conferme dati)"
+          style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+        >
+          ↻ Aggiorna
+        </button>
+      </div>
       {error && (
         <p style={{ color: "var(--danger-fg)", fontSize: 12.5, margin: "0 0 10px" }} role="alert">
           {error}
@@ -405,6 +418,11 @@ function SeatFillIn({
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState<{ corsistaId: number; name: string; phone: string } | null>(null);
+  const [mismatch, setMismatch] = useState<
+    Awaited<ReturnType<typeof completeSeatFromLinkAction>>["mismatch"] | null
+  >(null);
+  const [keepNewName, setKeepNewName] = useState(true);
+  const [keepNewPhone, setKeepNewPhone] = useState(true);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const phoneValid = /^\d{6,}$/.test(`${dialCode} ${phone}`.replace(/[\s\-().+]/g, ""));
@@ -416,10 +434,11 @@ function SeatFillIn({
   else if (!phoneValid) missing.push("telefono valido");
   const ready = missing.length === 0;
 
-  async function submit(linkTo?: number) {
+  async function submit(linkTo?: number, resolve?: { applyName?: boolean; applyPhone?: boolean }) {
     if (!ready || busy || !iscrizioneId) return;
     setBusy(true);
     setConflict(null);
+    if (!resolve) setMismatch(null);
     const res = await completeSeatFromLinkAction(
       token,
       iscrizioneId,
@@ -427,11 +446,16 @@ function SeatFillIn({
       email.trim(),
       `${dialCode} ${phone.trim()}`.trim(),
       linkTo,
+      resolve,
     ).catch(() => ({ ok: false }) as Awaited<ReturnType<typeof completeSeatFromLinkAction>>);
     setBusy(false);
     if (res.ok && res.person) onCompleted(res.person);
     else if (res.conflict) setConflict(res.conflict);
-    else onError(res.error || "Salvataggio non riuscito, riprova.");
+    else if (res.mismatch) {
+      setKeepNewName(true);
+      setKeepNewPhone(true);
+      setMismatch(res.mismatch);
+    } else onError(res.error || "Salvataggio non riuscito, riprova.");
   }
 
   if (!open) {
@@ -566,6 +590,62 @@ function SeatFillIn({
           </div>
           <div style={{ fontSize: 11, color: "#a16207" }}>
             Ogni persona ha un&apos;email unica: se è un&apos;altra persona, inserisci la sua corretta.
+          </div>
+        </div>
+      )}
+      {mismatch && (
+        <div
+          style={{
+            padding: "8px 10px",
+            border: "1px solid #93c5fd",
+            background: "#eff6ff",
+            borderRadius: 8,
+            fontSize: 12,
+            color: "#1e3a8a",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div style={{ fontWeight: 600 }}>Profilo esistente: alcuni dati non coincidono. Quali tengo?</div>
+          {mismatch.nameDiffers && (
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ fontWeight: 600 }}>Nome</span>
+              <label style={{ display: "flex", gap: 5 }}>
+                <input type="radio" checked={keepNewName} onChange={() => setKeepNewName(true)} /> Nuovo: <strong>{mismatch.entered.name}</strong>
+              </label>
+              <label style={{ display: "flex", gap: 5 }}>
+                <input type="radio" checked={!keepNewName} onChange={() => setKeepNewName(false)} /> Esistente: <strong>{mismatch.existing.name}</strong>
+              </label>
+            </div>
+          )}
+          {mismatch.phoneDiffers && (
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ fontWeight: 600 }}>Telefono</span>
+              <label style={{ display: "flex", gap: 5 }}>
+                <input type="radio" checked={keepNewPhone} onChange={() => setKeepNewPhone(true)} /> Nuovo: <strong>{mismatch.entered.phone}</strong>
+              </label>
+              <label style={{ display: "flex", gap: 5 }}>
+                <input type="radio" checked={!keepNewPhone} onChange={() => setKeepNewPhone(false)} /> Esistente: <strong>{mismatch.existing.phone}</strong>
+              </label>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="edu-btn primary"
+              disabled={busy}
+              onClick={() =>
+                submit(mismatch.corsistaId, {
+                  applyName: mismatch.nameDiffers ? keepNewName : undefined,
+                  applyPhone: mismatch.phoneDiffers ? keepNewPhone : undefined,
+                })
+              }
+            >
+              Collega con questi dati
+            </button>
+            <button type="button" className="edu-btn" disabled={busy} onClick={() => setMismatch(null)}>
+              Annulla
+            </button>
           </div>
         </div>
       )}
