@@ -83,9 +83,11 @@ export async function cancelEnrollmentAction(
       const isIntro = (course?.type ?? "") === "introduttivo";
       const net = netPaidCents({ amount_cents: enr.amount_cents, discount_cents: enr.discount_cents });
       const importoCents = isIntro ? Math.max(net, course?.price_cents ?? 0) : net;
-      // A non-intro seat that collected nothing has no value to credit — guide the
-      // operator to the other two outcomes (the free-course case the educator hit).
-      if (!isIntro && (importoCents <= 0 || !isPaidRevenue(enr.financial_status))) {
+      // Nothing to credit → no €0 ledger row: a FREE course (intro with list
+      // price 0, or any non-intro with net 0) or a non-intro not actually paid.
+      // Guide the operator to the other two outcomes (the free-course case the
+      // educator hit). A free INTRO used to slip through the !isIntro guard.
+      if (importoCents <= 0 || (!isIntro && !isPaidRevenue(enr.financial_status))) {
         return { ok: false, error: "Corso gratuito o nulla incassato: niente da mettere a credito. Usa «Trasferisci» o «Rimborso»." };
       }
       const cr = await createCreditForEnrollment(svc, {

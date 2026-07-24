@@ -110,7 +110,7 @@ export async function computeReconciliation(): Promise<ReconciliationCounts> {
   let enr = await loadAll<EnrRow>(
     sb,
     "corsi_iscrizioni",
-    "id,corsista_id,corso_id,amount_cents,discount_cents,financial_status",
+    "id,corsista_id,corso_id,amount_cents,discount_cents,financial_status,annullata_at",
   );
   if (enr.length === 0) {
     enr = await loadAll<EnrRow>(
@@ -119,6 +119,10 @@ export async function computeReconciliation(): Promise<ReconciliationCounts> {
       "id,corsista_id,corso_id,amount_cents,discount_cents",
     );
   }
+  // Removed-from-course seats must not fuel anomalie (a transfer would else read
+  // as "paid twice"; a cancelled+transferred seat as "cash on cancelled course").
+  // Filter in JS so a pre-migration DB (no column) degrades to no-op.
+  enr = enr.filter((r) => !(r as { annullata_at?: string | null }).annullata_at);
   const ruleEnr = enr as RuleEnrRow[];
 
   // ── Rule 1: doppio-no-2nd ──────────────────────────────────────────────

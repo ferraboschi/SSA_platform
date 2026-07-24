@@ -16,6 +16,8 @@ import { recordExamSend } from "@/lib/exam-links/send-log";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
 import { finalizeInProgressOnClose, undoCloseFinalized } from "@/lib/exam-links/close-finalize";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
+import { loadFeedbackForCourse } from "@/lib/esami/feedback-templates-actions";
+import type { CourseTypeKey } from "@/lib/domain";
 import type { ExamTestKey } from "@/lib/exam-links/token";
 // NOTE: no `export type { … }` re-exports here — this is a "use server"
 // module, and Next's action transform registers every export CLAUSE name as a
@@ -69,7 +71,17 @@ async function unconfiguredError(
   corsoId: number,
   testKey: string,
 ): Promise<string | null> {
-  const { data } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
+  const { data } = await svc.from("corsi").select("type, delivery_mode").eq("id", corsoId).maybeSingle();
+  // Feedback lives in the current editor (feedback-templates store, per
+  // type × delivery), not in the legacy family template — resolve it from the
+  // SAME source the runner serves, or a configured feedback is wrongly refused.
+  if (testKey === "feedback") {
+    const fb = await loadFeedbackForCourse(
+      (data?.type as CourseTypeKey) ?? "certificato",
+      (data?.delivery_mode as string | null) ?? null,
+    ).catch(() => ({ questions: [] as unknown[] }));
+    return (fb.questions?.length ?? 0) > 0 ? null : "Feedback non ancora configurato (nessuna domanda).";
+  }
   const family = (data?.type as string) === "shochu" ? "shochu" : "nihonshu";
   const tests = await loadTemplateTests(family);
   const t = tests.find((x) => x.key === testKey);
@@ -174,12 +186,10 @@ async function resolveSendTarget(
       ? { corsistaId: cid, partecipanteId: null }
       : { corsistaId: null, partecipanteId: cid },
   )!;
-  // Feedback is NOT gated by attendance (owner/educator: "senza appello") — send
-  // it regardless of roll-call. Every graded test still requires presence.
-  if (testKey !== "feedback") {
-    const present = await loadPresentForTest(svc, corsoId, testKey);
-    if (isBlockedByAbsence(present, subjKey)) return { ok: false, error: absentSendError(testKey) };
-  }
+  // Presence gate — for feedback this is the LAST program day's roll-call
+  // (resolved inside loadPresentForTest), consistent with the open/submit gates.
+  const present = await loadPresentForTest(svc, corsoId, testKey);
+  if (isBlockedByAbsence(present, subjKey)) return { ok: false, error: absentSendError(testKey) };
 
   const target =
     k === "corsista"

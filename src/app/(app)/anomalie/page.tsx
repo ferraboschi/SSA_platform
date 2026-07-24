@@ -77,6 +77,7 @@ export default async function Page() {
     const { data: page, error } = await sb
       .from("corsi_iscrizioni")
       .select("id,corsista_id,corso_id,amount_cents,discount_cents")
+      .is("annullata_at", null) // removed-from-course seats aren't duplicates/cash-on-cancelled
       .range(from, from + 999);
     if (error || !page) break;
     enr.push(...(page as EnrRow[]));

@@ -51,8 +51,9 @@ async function fetchShellData(): Promise<ShellData> {
       // Light search rows only (no enrollment join) — fast + smaller payload.
       svc.from("corsisti").select("email,full_name,city").limit(5000),
       svc.from("educators").select("id,external_id,full_name,city,bio").eq("active", true),
-      // Enrollment counts per course (light: just the FK column).
-      svc.from("corsi_iscrizioni").select("corso_id").limit(20000),
+      // Enrollment counts per course (light: just the FK column) — active seats
+      // only, so the sidebar count matches the course-detail roster.
+      svc.from("corsi_iscrizioni").select("corso_id").is("annullata_at", null).limit(20000),
       Promise.all([
         svc.from("corsisti").select("*", { count: "exact", head: true }),
         svc.from("educators").select("*", { count: "exact", head: true }).eq("active", true),

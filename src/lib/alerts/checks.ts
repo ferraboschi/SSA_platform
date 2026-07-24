@@ -101,7 +101,8 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
       const { data: iscr } = await svc
         .from("corsi_iscrizioni")
         .select("amount_cents, discount_cents")
-        .eq("corso_id", c.id);
+        .eq("corso_id", c.id)
+        .is("annullata_at", null); // count only active seats in the invoice notice
       const enrolled = (iscr ?? []).length;
       const revenue = Math.round(
         (iscr ?? []).reduce(

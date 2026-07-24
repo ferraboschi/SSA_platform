@@ -20,6 +20,7 @@ import {
 } from "@/lib/exam-links/token";
 import { getCourseClosures } from "@/lib/exam-links/lifecycle";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
+import { loadFeedbackForCourse } from "@/lib/esami/feedback-templates-actions";
 
 export interface SharedSake {
   code: string;
@@ -563,6 +564,18 @@ export async function loadSharedCourse(
       url: t.configured ? link(t.key) : "",
       closedAt: closures[t.key] ?? null,
     }));
+    // The FEEDBACK questionnaire is authored in the current editor (settings_kv
+    // "feedback-templates", per course-type × delivery), NOT in the legacy
+    // exam_templates.data.feedback that loadTemplateTests reads. Resolve its real
+    // configured/url from the assignment the runner actually serves — otherwise
+    // the educator's feedback send panel stays hidden even when it's ready.
+    const fb = await loadFeedbackForCourse(type, corso.delivery_mode).catch(() => ({ questions: [] }));
+    const fbConfigured = (fb.questions?.length ?? 0) > 0;
+    exam = exam.map((t) =>
+      t.key === "feedback"
+        ? { ...t, configured: fbConfigured, url: fbConfigured ? link("feedback") : "" }
+        : t,
+    );
   }
 
   const totalSakes = days.reduce((n, d) => n + d.sakes.length, 0);

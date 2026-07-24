@@ -19,7 +19,7 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
     )`;
   // `exam_score_pct`/`financial_status` may not exist pre-migration → fall
   // back without them (every row then counts as paid, the legacy rule).
-  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, discount_cents, financial_status, exam_result, exam_score_pct, historical, ${enrollmentCorso}`;
+  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, discount_cents, financial_status, exam_result, exam_score_pct, historical, annullata_at, ${enrollmentCorso}`;
   const enrollmentSelectBase = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, historical, ${enrollmentCorso}`;
 
   // Official certificate PDFs (Supabase Storage), keyed "<corsistaId>-<corsoId>".
@@ -82,6 +82,10 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
         { pageSize: ISCR_PAGE },
       );
       for (const i of iscrRows) {
+        // Removed-from-course seats leave the person's spend/history/returning
+        // rollup — same rule as the course-detail readers (and a transfer would
+        // otherwise double-count: origin annullata + new dest both 'paid').
+        if ((i as { annullata_at?: string | null }).annullata_at) continue;
         const e = iscrizioneToEnrollment(i);
         if (!e) continue;
         e.certificateUrl = certMap.get(`${i.corsista_id}-${i.corso_id}`) ?? null;
@@ -125,6 +129,7 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
       const iscr = res.data;
       const certMap = await loadCertMap();
       const enrolls = ((iscr ?? []) as IscrizioneRow[])
+        .filter((i) => !(i as { annullata_at?: string | null }).annullata_at)
         .map((i) => {
           const e = iscrizioneToEnrollment(i);
           if (e) e.certificateUrl = certMap.get(`${i.corsista_id}-${i.corso_id}`) ?? null;

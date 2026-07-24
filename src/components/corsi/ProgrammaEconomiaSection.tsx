@@ -123,6 +123,7 @@ export function ProgrammaEconomiaSection({
                 sakagura: item.vendor ?? s.sakagura,
                 type: item.productType ?? s.type,
                 cost: item.cost || item.price || s.cost,
+                size: parseVolumeMl(item.name, item.sku ?? undefined) || s.size,
               }
             : s,
         ),
@@ -135,20 +136,19 @@ export function ProgrammaEconomiaSection({
 
   // A catalog item → a program row. Identity + cost come from the picked product;
   // the bottle size is parsed from its name (fallback 720ml), qty starts at 1.
-  const sakeFromCatalog = (item: ScCatalogItem): SakeState => {
-    const ml = Number(/(\d{3,4})\s*ml/i.exec(item.name)?.[1]);
-    return {
-      id: `sake-new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      code: item.sku ?? `SAK${Math.floor(Math.random() * 900) + 100}`,
-      name: item.name,
-      type: item.productType ?? "—",
-      sakagura: item.vendor ?? "—",
-      size: Number.isFinite(ml) && ml > 0 ? ml : 720,
-      cost: item.cost || item.price || 0,
-      qty: 1,
-      note: "",
-    };
-  };
+  const sakeFromCatalog = (item: ScCatalogItem): SakeState => ({
+    id: `sake-new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    code: item.sku ?? `SAK${Math.floor(Math.random() * 900) + 100}`,
+    name: item.name,
+    type: item.productType ?? "—",
+    sakagura: item.vendor ?? "—",
+    // Same SKU-suffix-aware parser used for the bottle count, so the label and
+    // the "×N bottiglie" never disagree (names are unreliable — see bottles.ts).
+    size: parseVolumeMl(item.name, item.sku ?? undefined) || 720,
+    cost: item.cost || item.price || 0,
+    qty: 1,
+    note: "",
+  });
   // Add a REAL sake picked from the catalog to a day (owner/educator: pick from
   // the catalog, not a placeholder — the old dummy path is gone).
   const addSakeFromCatalog = (dayId: string, item: ScCatalogItem) =>
@@ -172,6 +172,7 @@ export function ProgrammaEconomiaSection({
                       sakagura: item.vendor ?? s.sakagura,
                       type: item.productType ?? s.type,
                       cost: item.cost || item.price || s.cost,
+                      size: parseVolumeMl(item.name, item.sku ?? undefined) || s.size,
                     }
                   : s,
               ),

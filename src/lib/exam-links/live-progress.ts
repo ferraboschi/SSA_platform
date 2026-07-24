@@ -45,6 +45,16 @@ export async function loadPresentForTest(svc: Svc, corsoId: number, testKey: str
       day = null;
     }
   }
+  if (day == null && testKey === "feedback") {
+    // Feedback runs at the END of the LAST program day, so its presence = that
+    // day's roll call (owner: "la presenza al feedback deve essere la stessa del
+    // giorno 3"). Not "any attended day". Fall back to any-day if undrivable.
+    try {
+      day = (await courseDayInfo(corsoId)).dayCount;
+    } catch {
+      day = null;
+    }
+  }
   let q = svc
     .from("corsi_presenze")
     .select("corsista_id, partecipante_id")
@@ -74,6 +84,8 @@ export function absentSendError(testKey: string): string {
     return `Assente all'appello del giorno ${day}: non può ricevere questo test finché non risulta presente.`;
   if (testKey === "final")
     return "Assente all'appello del giorno d'esame: non può ricevere l'esame finché non risulta presente.";
+  if (testKey === "feedback")
+    return "Assente all'appello dell'ultimo giorno: non può ricevere il feedback finché non risulta presente.";
   return "Mai presente all'appello: non può ricevere questo invio.";
 }
 
@@ -86,6 +98,8 @@ export function absentAccessError(testKey: string): string {
     return `Non risulti presente all'appello del giorno ${day}. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.`;
   if (testKey === "final")
     return "Non risulti presente all'appello del giorno d'esame. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.";
+  if (testKey === "feedback")
+    return "Non risulti presente all'appello dell'ultimo giorno del corso. Per compilare il feedback devi risultare presente — rivolgiti al tuo educator.";
   return "Non risulti presente all'appello del corso. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.";
 }
 

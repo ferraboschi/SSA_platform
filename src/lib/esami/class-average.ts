@@ -49,7 +49,8 @@ async function computeFamilyAverage(family: ExamFamily): Promise<{ avg: number; 
       .from("corsi_iscrizioni")
       .select("exam_score_pct")
       .in("corso_id", ids)
-      .not("exam_score_pct", "is", null),
+      .not("exam_score_pct", "is", null)
+      .is("annullata_at", null), // exclude removed-from-course seats from the cohort mean
     // Companion outcomes may predate the exam_score_pct column — tolerate the
     // error (the enrolled corsisti alone still give a sound average).
     svc

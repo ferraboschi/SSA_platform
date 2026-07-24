@@ -199,10 +199,10 @@ export default async function Page({
     //    open only when attendance is UNKNOWN (DB error / pre-migration).
     //    BYPASSED for an emergency link (emg) — the educator couldn't run the
     //    roll-call; the confirmed-email match at mint time is the safety net.
-    //    The FEEDBACK questionnaire is NOT gated by attendance (owner/educator:
-    //    "senza appello") — it's an anonymous-ish satisfaction survey, not a graded
-    //    test, so a student who missed the roll-call can still fill it.
-    if (!res.payload.emg && res.payload.t !== "feedback") {
+    //    FEEDBACK is gated on the LAST program day's presence (owner: it runs at
+    //    the end of day 3, so its presence = that day's roll-call — handled inside
+    //    loadPresentForTest). The gate is consistent across open / send / submit.
+    if (!res.payload.emg) {
       const present = await loadPresentForTest(sb, corsoId, res.payload.t);
       const subjectKey = subjectKeyOf({ corsistaId: subjS, partecipanteId: subjP })!;
       if (isBlockedByAbsence(present, subjectKey)) {

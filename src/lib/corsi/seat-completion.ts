@@ -108,11 +108,14 @@ export async function finalizeSeatCompletion(
     // it (or when the existing field is empty → fill it); otherwise keep existing.
     const finalName = resolve?.applyName ? enName : exName || enName;
     const finalPhone = resolve?.applyPhone ? enPhone : exPhone || enPhone;
-    await svc
+    // Propagate a failure here (don't swallow): the mismatch card PROMISED to
+    // apply the operator's choice — a silent failure would keep the stale data
+    // while the UI shows success, the exact data-loss this flow prevents.
+    const { error: profErr } = await svc
       .from("corsisti")
       .update({ full_name: finalName || exName, phone: finalPhone })
-      .eq("id", id)
-      .then(() => {}, () => {});
+      .eq("id", id);
+    if (profErr) return { ok: false, error: profErr.message };
 
     const { error: linkErr } = await svc
       .from("corsi_iscrizioni")
