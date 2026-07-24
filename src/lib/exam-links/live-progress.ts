@@ -78,6 +78,44 @@ export function isBlockedByAbsence(present: Set<string> | null, subjectKey: stri
   return !present.has(subjectKey);
 }
 
+/** Is this subject's data CONFIRMED (sanitized)? — email_confirmed_at IS NOT NULL
+ *  on their enrollment (corsista) / companion row (partecipante). The send/mint
+ *  gate checks this once, but confirmation can be REVOKED afterwards (e.g. "Azzera
+ *  appello"), so open + submit must re-verify it, symmetric with presence.
+ *  Returns null when it can't be known (DB error / pre-migration) → fail OPEN,
+ *  never lock out over a hiccup (the mint-time check already gated it once). */
+export async function isSubjectConfirmed(
+  svc: Svc,
+  corsoId: number,
+  subject: { corsistaId: number | null; partecipanteId: number | null },
+): Promise<boolean | null> {
+  try {
+    if (subject.corsistaId != null) {
+      const { data, error } = await svc
+        .from("corsi_iscrizioni")
+        .select("email_confirmed_at")
+        .eq("corso_id", corsoId)
+        .eq("corsista_id", subject.corsistaId)
+        .limit(1);
+      if (error) return null;
+      return ((data ?? []) as { email_confirmed_at: string | null }[]).some((r) => r.email_confirmed_at != null);
+    }
+    if (subject.partecipanteId != null) {
+      const { data, error } = await svc
+        .from("corsi_partecipanti")
+        .select("email_confirmed_at")
+        .eq("corso_id", corsoId)
+        .eq("id", subject.partecipanteId)
+        .limit(1);
+      if (error) return null;
+      return ((data ?? []) as { email_confirmed_at: string | null }[]).some((r) => r.email_confirmed_at != null);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function absentSendError(testKey: string): string {
   const day = testDayNo(testKey);
   if (day != null)

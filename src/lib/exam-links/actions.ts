@@ -10,7 +10,7 @@ import {
   type ExamTestKey,
   type ExamLinkMode,
 } from "./token";
-import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
+import { loadPresentForTest, isBlockedByAbsence, isSubjectConfirmed, absentAccessError } from "./live-progress";
 import { getClosure, isBlockedByClosure } from "./lifecycle";
 import { resolveSubjectIds, subjectKeyOf, subjectColId } from "./access";
 import { buildDayEsito, type DayEsito } from "./esito";
@@ -179,6 +179,13 @@ export async function submitExam(
       const subjKey = subjectKeyOf({ corsistaId, partecipanteId })!;
       if (isBlockedByAbsence(present, subjKey)) {
         return { ok: false, error: absentAccessError(t) };
+      }
+      // Owner's rule re-checked at HAND-IN, symmetric with presence: confirmation
+      // can be REVOKED after the link was minted (e.g. "Azzera appello"), so a
+      // no-longer-confirmed student must not hand in. Fail-open on unknown.
+      const confirmed = await isSubjectConfirmed(svc, corsoId, { corsistaId, partecipanteId }).catch(() => null);
+      if (confirmed === false) {
+        return { ok: false, error: "I tuoi dati non risultano più confermati: chiedi all'educator di ripetere la conferma." };
       }
     }
     // Closure / sandbox-reset epoch re-checked at HAND-IN too: a page still

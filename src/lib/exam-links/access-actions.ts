@@ -64,6 +64,7 @@ export async function resolveExamAccessByEmailAction(
     .eq("corso_id", corsoId)
     .eq("enrolled_email", clean)
     .not("email_confirmed_at", "is", null)
+    .is("annullata_at", null) // a student removed from the course can't access
     .limit(1);
   const row = !error && data && data.length ? (data[0] as { corsista_id: number }) : null;
 
@@ -94,8 +95,9 @@ export async function resolveExamAccessByEmailAction(
 
   // PRESENCE gate (owner's rule): an absent student must not sit the test.
   // Same canonical rule as the educator's send gate (day test ↔ that appello
-  // day; feedback/final ↔ any attended day). Fails open only when attendance
-  // is UNKNOWN (DB error / pre-migration) — the /esame page re-checks anyway.
+  // day; FEEDBACK ↔ the LAST program day's roll-call; final ↔ the exam day).
+  // Fails open only when attendance is UNKNOWN (DB error / pre-migration) — the
+  // /esame page re-checks anyway.
   // BYPASSED for an emergency link (emg): the educator can't run the roll-call,
   // so presence can't be known — the confirmed-email match above is the gate.
   if (!res.payload.emg) {

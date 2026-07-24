@@ -13,6 +13,7 @@ import { loadPublicExam } from "@/lib/exam-links/load";
 import {
   loadPresentForTest,
   isBlockedByAbsence,
+  isSubjectConfirmed,
   absentAccessError,
 } from "@/lib/exam-links/live-progress";
 import { ExamGate } from "@/components/esame-pubblico/ExamGate";
@@ -208,6 +209,20 @@ export default async function Page({
       if (isBlockedByAbsence(present, subjectKey)) {
         return (
           <Blocked icon="!" title="Accesso non disponibile" body={absentAccessError(res.payload.t)} />
+        );
+      }
+      // 2b) DATA CONFIRMED — re-checked at OPEN, symmetric with presence: the
+      //     confirmation can be revoked after the link was minted (e.g. "Azzera
+      //     appello"). A no-longer-confirmed student must not access. Fail-open
+      //     on unknown (mint-time check already gated it once).
+      const confirmed = await isSubjectConfirmed(sb, corsoId, { corsistaId: subjS, partecipanteId: subjP });
+      if (confirmed === false) {
+        return (
+          <Blocked
+            icon="!"
+            title="Accesso non disponibile"
+            body="I tuoi dati non risultano più confermati. Rivolgiti al tuo educator per ripetere la conferma."
+          />
         );
       }
     }

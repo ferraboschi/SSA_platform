@@ -330,7 +330,8 @@ export async function sendPersonalExamLinksToAllAction(
   const { data } = await svc
     .from("corsi_iscrizioni")
     .select("corsista_id, email_confirmed_at, corsista:corsisti(full_name, email)")
-    .eq("corso_id", corsoId);
+    .eq("corso_id", corsoId)
+    .is("annullata_at", null); // a student removed from the course must not be sent
   const rows = (data ?? []) as unknown as {
     corsista_id: number;
     email_confirmed_at: string | null;
