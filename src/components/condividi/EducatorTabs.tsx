@@ -99,9 +99,14 @@ export default function EducatorTabs({
   }, [token]);
 
   const examDayId = "examday";
+  const feedbackId = "feedback";
+  // The Feedback questionnaire is its OWN tab, BETWEEN the last program day and
+  // the exam day (owner): it runs at the end of day N, has NO appello of its own
+  // (presence = that day's roll-call, enforced by the send/access gate), so it
+  // gets a plain send panel — not buried under the day-N test.
   const tabs: { id: string; label: string }[] = [
     ...dayTabIds.map((id, i) => ({ id, label: `Giorno ${i + 1}` })),
-    ...(tests ? [{ id: examDayId, label: "Giorno esame" }] : []),
+    ...(tests ? [{ id: feedbackId, label: "Feedback" }, { id: examDayId, label: "Giorno esame" }] : []),
   ];
   const activeDayNum = tab.startsWith("day") ? Number(tab.slice(3)) : null;
   const testByKey = (key: string) => tests?.find((t) => t.key === key);
@@ -147,28 +152,36 @@ export default function EducatorTabs({
               />
             </>
           )}
-          {activeDayNum === dayCount && testByKey("feedback") && (
-            // The feedback panel sits right under the day-N test panel and the
-            // owner mis-sent one for the other TWICE (batches 9 and 12): a
-            // heading alone doesn't separate them — the whole block gets its
-            // own tinted surface so it reads as a DIFFERENT thing at a glance.
-            <div
-              style={{
-                marginTop: 18,
-                padding: "14px 16px 16px",
-                background: "var(--warning-bg)",
-                border: "1.5px solid var(--warning)",
-                borderRadius: 12,
-              }}
-            >
-              <SectionHeading>
-                <span style={{ color: "var(--warning-fg)" }}>
-                  📋 Feedback — questionario di gradimento (non è un test)
-                </span>
-              </SectionHeading>
+        </div>
+      )}
+
+      {tab === feedbackId && tests && (
+        <div>
+          <div
+            style={{
+              padding: "14px 16px 16px",
+              background: "var(--warning-bg)",
+              border: "1.5px solid var(--warning)",
+              borderRadius: 12,
+            }}
+          >
+            <SectionHeading>
+              <span style={{ color: "var(--warning-fg)" }}>
+                📋 Feedback — questionario di gradimento (non è un test)
+              </span>
+            </SectionHeading>
+            <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: "0 0 12px", lineHeight: 1.5 }}>
+              Da inviare alla fine dell&apos;ultimo giorno di programma. Nessun appello:
+              può compilarlo chi risultava presente all&apos;appello del <strong>Giorno {dayCount}</strong>.
+            </p>
+            {testByKey("feedback") ? (
               <ExamSendPanel key="feedback" token={token} test={testByKey("feedback")!} students={students} />
-            </div>
-          )}
+            ) : (
+              <p style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+                Feedback non disponibile per questo corso.
+              </p>
+            )}
+          </div>
         </div>
       )}
 
