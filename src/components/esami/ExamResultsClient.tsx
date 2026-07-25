@@ -315,7 +315,7 @@ export function ExamResultsClient({
 
           {activeTab === "feedback" ? (
             feedback ? (
-              <FeedbackSummary data={feedback} />
+              <FeedbackSummary data={feedback} courseId={courseId} family={family} />
             ) : (
               <div className="card card-pad" style={{ marginTop: 16 }}>
                 <p className="text-3">Nessun feedback raccolto.</p>

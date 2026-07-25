@@ -4,10 +4,62 @@
 // from the feedback submissions: rating average + 1–5 distribution, choice
 // distributions, and collected open responses.
 
+import { useEffect, useState, useTransition } from "react";
 import { Icon } from "@/components/ui";
 import type { FeedbackAggregateResult } from "@/lib/exam-links/feedback-results";
+import {
+  loadFeedbackSynthesisAction,
+  generateFeedbackSynthesisAction,
+} from "@/lib/esami/feedback-synthesis-actions";
+import type { FeedbackSynthesis } from "@/lib/esami/feedback-synthesis";
 
-export function FeedbackSummary({ data }: { data: FeedbackAggregateResult }) {
+/** Free-text → safe HTML: escape, then render **bold** and line breaks so the
+ *  AI report's markdown headings read cleanly without a markdown dependency. */
+function synthesisHtml(text: string): string {
+  const esc = text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+  return esc
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br/>");
+}
+
+export function FeedbackSummary({
+  data,
+  courseId,
+  family,
+}: {
+  data: FeedbackAggregateResult;
+  courseId?: string;
+  family?: "nihonshu" | "shochu" | null;
+}) {
+  const [synth, setSynth] = useState<FeedbackSynthesis | null>(null);
+  const [busy, startGen] = useTransition();
+  const [synthError, setSynthError] = useState<string | null>(null);
+
+  // Load the cached report (if any) once — a generation persists it server-side.
+  useEffect(() => {
+    if (!courseId) return;
+    let alive = true;
+    loadFeedbackSynthesisAction(Number(courseId))
+      .then((s) => alive && setSynth(s))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [courseId]);
+
+  const generate = () => {
+    if (!courseId || !family) return;
+    setSynthError(null);
+    startGen(async () => {
+      const r = await generateFeedbackSynthesisAction(Number(courseId), family).catch(
+        () => ({ ok: false, error: "Sintesi non riuscita." }) as Awaited<ReturnType<typeof generateFeedbackSynthesisAction>>,
+      );
+      if (r.ok && r.synthesis) setSynth(r.synthesis);
+      else setSynthError(r.error || "Sintesi non riuscita.");
+    });
+  };
+  // Offer "Rigenera" once new responses arrived since the cached report.
+  const stale = synth != null && synth.responses !== data.responses;
   // Overall course rating = mean of every rating question's average.
   const ratingAvgs = data.questions
     .filter((q) => q.kind === "rating" && q.ratingAvg != null)
@@ -34,6 +86,46 @@ export function FeedbackSummary({ data }: { data: FeedbackAggregateResult }) {
         </div>
       ) : (
         <div>
+          {/* AI SYNTHESIS (owner): one report for SSA organizers — what worked,
+              what didn't, which sections to deepen, plus the free-text comments
+              analysed semantically. A test's grading this is NOT. On-demand. */}
+          {courseId && family && (
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-2)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: synth ? 10 : 0, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text-3)" }}>
+                  ✦ Sintesi per gli organizzatori
+                </div>
+                <button className="btn btn-sm" disabled={busy} onClick={generate}>
+                  {busy ? "Genero…" : synth ? "Rigenera" : "Genera sintesi AI"}
+                </button>
+              </div>
+              {stale && !busy && (
+                <div style={{ fontSize: 11.5, color: "var(--warning-fg)", marginBottom: 8 }}>
+                  Sono arrivate nuove risposte dopo questa sintesi ({synth!.responses} → {data.responses}). Rigenera per aggiornarla.
+                </div>
+              )}
+              {synthError && (
+                <div style={{ fontSize: 12.5, color: "var(--danger-fg)", marginBottom: 8 }}>{synthError}</div>
+              )}
+              {synth ? (
+                <>
+                  <div
+                    style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-2)" }}
+                    dangerouslySetInnerHTML={{ __html: synthesisHtml(synth.text) }}
+                  />
+                  <div style={{ fontSize: 10.5, color: "var(--text-4)", marginTop: 10 }}>
+                    Analisi semantica su {synth.responses} risposte · {new Date(synth.at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </>
+              ) : (
+                !busy && (
+                  <div style={{ fontSize: 12.5, color: "var(--text-4)" }}>
+                    Genera un report unico (cosa ha funzionato, cosa no, sezioni da approfondire, temi dai commenti liberi) — è una sintesi, non una correzione.
+                  </div>
+                )
+              )}
+            </div>
+          )}
           {/* Satisfaction per THEMATIC AREA (educator): one bar per area, height
               ∝ the mean rating. Shown only when the feedback spans ≥2 areas —
               a single area would just duplicate the overall. */}

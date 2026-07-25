@@ -110,6 +110,7 @@ export function ExamRunner({
   collectRegistration,
   registrationFields,
   reveal,
+  isFeedback,
   header,
   questions,
   token,
@@ -130,6 +131,9 @@ export function ExamRunner({
   reveal?: boolean;
   /** True only for the FINAL exam — day tests end with a plain "Grazie". */
   isFinal?: boolean;
+  /** True for the end-of-course FEEDBACK questionnaire — NOT a test: no score,
+   *  no correction, and a dedicated "Grazie per le tue opinioni" completion. */
+  isFeedback?: boolean;
   header: RunnerHeader;
   questions: RunnerQuestion[];
   /** Signed exam token — required to persist a real ("exam") submission. */
@@ -717,12 +721,29 @@ export function ExamRunner({
           {headerBar}
           <div className="exam-public-thanks">
             <div className="exam-public-thanks-check">✓</div>
-            {/* Only the FINAL exam is "certified". A day test (timed but not
-                final) ends with a plain "Grazie" and no certified/result line. */}
-            <h2>{timed ? (isFinal ? t.certDoneTitle : t.dayDoneTitle) : t.thanksTitle}</h2>
+            {/* Feedback is NOT a test (no score/correction) → its own thank-you.
+                Only the FINAL exam is "certified"; a day test ends with a plain
+                "Grazie" and no certified/result line. */}
+            <h2>
+              {isFeedback
+                ? t.feedbackDoneTitle
+                : timed
+                  ? isFinal
+                    ? t.certDoneTitle
+                    : t.dayDoneTitle
+                  : t.thanksTitle}
+            </h2>
             {(() => {
               const body =
-                total === 0 ? t.empty : timed ? (isFinal ? t.certDoneBody : "") : t.thanksBody;
+                total === 0
+                  ? t.empty
+                  : isFeedback
+                    ? t.feedbackDoneBody
+                    : timed
+                      ? isFinal
+                        ? t.certDoneBody
+                        : ""
+                      : t.thanksBody;
               return body ? <p>{body}</p> : null;
             })()}
           </div>

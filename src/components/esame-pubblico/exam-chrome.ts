@@ -74,6 +74,9 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     certDoneBody: "L'esame è certificato. Nei prossimi giorni riceverai l'esito.",
     // Day tests (giorno 1..N) are NOT the exam → no "certified / result" claim.
     dayDoneTitle: "Grazie",
+    // Feedback is NOT a test: no score, no correction — just a thank-you.
+    feedbackDoneTitle: "Grazie per le tue opinioni",
+    feedbackDoneBody: "Il tuo feedback ci aiuta a migliorare i corsi SSA.",
     gateMoment: "Un attimo…",
     submittedTitle: "Esame già consegnato",
     submittedBody: "Hai già completato e inviato questo esame.",
@@ -165,6 +168,8 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     certDoneTitle: "Thank you for taking the exam",
     certDoneBody: "This exam is certified. You will receive your result in the next few days.",
     dayDoneTitle: "Thank you",
+    feedbackDoneTitle: "Thank you for your feedback",
+    feedbackDoneBody: "Your feedback helps us improve SSA courses.",
     gateMoment: "One moment…",
     submittedTitle: "Exam already submitted",
     submittedBody: "You have already completed and submitted this exam.",
@@ -256,6 +261,8 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     certDoneTitle: "受験ありがとうございました",
     certDoneBody: "この試験は認定されています。数日以内に結果をお知らせします。",
     dayDoneTitle: "ありがとうございました",
+    feedbackDoneTitle: "ご意見ありがとうございました",
+    feedbackDoneBody: "いただいたフィードバックはSSAのコース改善に役立てます。",
     gateMoment: "少々お待ちください…",
     submittedTitle: "試験は提出済みです",
     submittedBody: "この試験はすでに完了して提出されています。",

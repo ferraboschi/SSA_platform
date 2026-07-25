@@ -48,6 +48,7 @@ export interface ExamGateProps {
   /** True only for the FINAL exam — drives the certified thank-you screen (day
    *  tests end with a plain "Grazie"). */
   isFinal?: boolean;
+  isFeedback?: boolean;
   header: RunnerHeader;
   questions: RunnerQuestion[];
 }

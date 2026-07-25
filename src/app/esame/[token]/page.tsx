@@ -306,6 +306,7 @@ export default async function Page({
       // Only the FINAL exam is "certified"; day tests (giorno 1..N) end with a
       // plain "Grazie" — no certified/result claim on the thank-you screen.
       isFinal={res.payload.t === "final"}
+      isFeedback={res.payload.t === "feedback"}
       header={{
         courseName: data.header.courseName,
         testLabel,
