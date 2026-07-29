@@ -90,6 +90,10 @@ function baseUrl(): string {
 const MIN_GAP_MS = 550;
 const MAX_RETRIES_429 = 5;
 const MAX_RETRIES_5XX = 2;
+// A single request must NEVER hang forever: without a timeout a stalled Shopify
+// call froze the whole sync (the "running" marker never cleared, data stuck on
+// old values). Abort at 30s and retry it like a transient 5xx.
+const REQUEST_TIMEOUT_MS = 30_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -110,7 +114,21 @@ async function shopifyFetch(url: string, init?: RequestInit): Promise<Response> 
   let attempt429 = 0;
   let attempt5xx = 0;
   for (;;) {
-    const res = await fetch(url, { ...init, cache: "no-store" });
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch (e) {
+      // Timeout (AbortError) or network error: a hung request must never stall
+      // the whole sync. Retry a couple of times, then throw so the run ENDS with
+      // a clear error (the "running" marker gets cleared) instead of hanging.
+      if (attempt5xx < MAX_RETRIES_5XX) {
+        attempt5xx++;
+        await sleep(1000 * attempt5xx);
+        lastCallAt = Date.now();
+        continue;
+      }
+      throw e instanceof Error ? e : new Error("Shopify: richiesta non riuscita (timeout/rete).");
+    }
     if (res.status === 429 && attempt429 < MAX_RETRIES_429) {
       attempt429++;
       const retryAfter = Number(res.headers.get("Retry-After"));

@@ -35,6 +35,30 @@ export interface SyncJobOptions {
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
 
+// Hard cap on a single run — kept BELOW SYNC_RUN_STALE_MS (10') so the "running"
+// marker is always finished before it's judged stale, and two runs never overlap.
+// The per-request timeout already bounds any single hung call; this is the final
+// backstop so the sync can NEVER stay "running" forever (data stuck on old data).
+const RUN_TIMEOUT_MS = 9 * 60_000;
+
+/** Reject after `ms` if `p` hasn't settled. The orphaned work keeps running but
+ *  the run is recorded as finished (error) so the "running" marker clears. */
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 /**
  * The run itself: sync + bookkeeping + side jobs. Never throws — every
  * outcome lands in sync_run_status. Shared by the request-triggered path
@@ -46,7 +70,11 @@ export async function executeSyncRun(
   opts?: SyncJobOptions,
 ): Promise<void> {
   try {
-    const summary = await runShopifySync({ fullBackfill: opts?.fullBackfill });
+    const summary = await withTimeout(
+      runShopifySync({ fullBackfill: opts?.fullBackfill }),
+      RUN_TIMEOUT_MS,
+      "Sincronizzazione oltre il tempo massimo — interrotta per non restare bloccata.",
+    );
     await markSyncFinished(svc, startedAt, { ok: true, summary });
     if (opts?.afterSync) {
       try {
