@@ -49,7 +49,9 @@ async function fetchShellData(): Promise<ShellData> {
         .order("start_date", { ascending: true, nullsFirst: false })
         .limit(2000),
       // Light search rows only (no enrollment join) — fast + smaller payload.
-      svc.from("corsisti").select("email,full_name,city").limit(5000),
+      // merged_into: a folded duplicate must never appear as a separate profile
+      // in search (its data lives on the survivor).
+      svc.from("corsisti").select("email,full_name,city,merged_into").limit(5000),
       svc.from("educators").select("id,external_id,full_name,city,bio").eq("active", true),
       // Enrollment counts per course (light: just the FK column) — active seats
       // only, so the sidebar count matches the course-detail roster.
@@ -107,6 +109,7 @@ async function fetchShellData(): Promise<ShellData> {
     email: string;
     full_name: string;
     city: string | null;
+    merged_into: number | null;
   }[];
   const educators = (educatorsRes.data ?? []) as EduRow[];
   const eduName = new Map(educators.map((e) => [e.id, e.full_name]));
@@ -126,7 +129,7 @@ async function fetchShellData(): Promise<ShellData> {
         .toLowerCase(),
     })),
     corsisti: corsisti
-      .filter((s) => !s.email.endsWith("@ssa.placeholder"))
+      .filter((s) => !s.email.endsWith("@ssa.placeholder") && s.merged_into == null)
       .map((s) => ({
       id: s.email,
       title: s.full_name,

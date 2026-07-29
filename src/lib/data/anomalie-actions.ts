@@ -1,7 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { SHELL_DATA_TAG } from "@/lib/shell-data";
 import { assertRole } from "@/lib/auth/guard";
 import { paginateAll } from "@/lib/data/supabase/query-helpers";
 import {
@@ -68,6 +69,7 @@ export async function bonificaResolvedNotesAction(): Promise<{ cleared: number }
   if (error) throw error;
   revalidatePath("/anomalie");
   revalidatePath("/corsisti", "layout");
+  revalidateTag(SHELL_DATA_TAG, "max"); // refresh the global-search index (folded dups drop out)
   return { cleared: ids.length };
 }
 
@@ -321,6 +323,7 @@ export async function mergeCorsistiAction(
   await mergeCorsistiCore(getSupabaseServiceClient(), survivorId, duplicateIds);
   revalidatePath("/anomalie");
   revalidatePath("/corsisti", "layout");
+  revalidateTag(SHELL_DATA_TAG, "max"); // refresh the global-search index (folded dups drop out)
 }
 
 /**
@@ -386,6 +389,7 @@ export async function mergeAllHighConfidenceAction(): Promise<{
 
   revalidatePath("/anomalie");
   revalidatePath("/corsisti", "layout");
+  revalidateTag(SHELL_DATA_TAG, "max"); // refresh the global-search index (folded dups drop out)
   return { clusters: mergedKeys.length, peopleMerged, mergedKeys };
 }
 
