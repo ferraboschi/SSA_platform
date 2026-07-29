@@ -9,6 +9,8 @@ import { getDataSource } from "@/lib/data";
 import { isSandboxCourse } from "@/lib/corsi/sandbox";
 import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { buildDashboard, capitalize, isoWeek, monthIndexIt, monthLabel } from "@/lib/dashboard";
+import { duplicatePeople, type CorsistaLite } from "@/lib/anomalie/rules";
+import { ANOMALIE_COUNTS_KEY } from "@/lib/anomalie/reconcile";
 import { loadCourseEconomics } from "@/lib/economics";
 import { isLegacyInvoiced } from "@/lib/economics/types";
 import {
@@ -78,6 +80,41 @@ export default async function DashboardPage() {
   } catch {
     /* sync_state unavailable — keep the neutral fallback */
   }
+
+  // "Cose strane / duplicati" counter (owner): live duplicate clusters + the
+  // stored financial-anomaly total. One prominent card links to /anomalie.
+  // Best-effort — any failure just hides the card, never breaks the dashboard.
+  let dupClusters = 0;
+  let financialAnomalies = 0;
+  try {
+    const sbA = await getSupabaseServerClient();
+    const allLite: CorsistaLite[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error } = await sbA
+        .from("corsisti")
+        .select("id,full_name,email,phone,merged_into")
+        .range(from, from + 999);
+      if (error || !page) break;
+      allLite.push(...(page as CorsistaLite[]));
+      if (page.length < 1000) break;
+    }
+    const { data: rv } = await sbA
+      .from("settings_kv")
+      .select("value")
+      .eq("key", "reviewed_email_clusters")
+      .maybeSingle();
+    const reviewed = new Set<string>(((rv?.value as { names?: string[] } | null)?.names) ?? []);
+    dupClusters = duplicatePeople(allLite, new Map(), reviewed).length;
+    const { data: ac } = await sbA
+      .from("settings_kv")
+      .select("value")
+      .eq("key", ANOMALIE_COUNTS_KEY)
+      .maybeSingle();
+    financialAnomalies = ((ac?.value as { total?: number } | null)?.total) ?? 0;
+  } catch {
+    /* best-effort — card hides */
+  }
+  const weirdTotal = dupClusters + financialAnomalies;
 
   const d = buildDashboard(realCourses, corsisti, educators, thresholds);
   const dt = t.dashboard;
@@ -211,6 +248,40 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {/* "Cose strane e duplicati": prominent, first thing after the hero, so
+          discrepancies surface up front (owner). Links straight to /anomalie. */}
+      {weirdTotal > 0 && kpiHref("anomalie", "/anomalie") && (
+        <Link
+          href="/anomalie"
+          className="card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            padding: "16px 20px",
+            marginBottom: 28,
+            borderLeft: "3px solid var(--warning)",
+            textDecoration: "none",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Icon name="warn" size={18} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Cose strane e duplicati da rivedere</div>
+              <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+                {dupClusters > 0 && `${dupClusters} possibili duplicati`}
+                {dupClusters > 0 && financialAnomalies > 0 && " · "}
+                {financialAnomalies > 0 && `${financialAnomalies} anomalie contabili`}
+              </div>
+            </div>
+          </div>
+          <span className="num" style={{ fontSize: 28, fontWeight: 700, color: "var(--warning-fg)" }}>
+            {weirdTotal}
+          </span>
+        </Link>
+      )}
 
       {/* KPI row — every card links to the view that lists its members. */}
       <section className="kpi-grid cols-4" style={{ marginBottom: 28 }}>
