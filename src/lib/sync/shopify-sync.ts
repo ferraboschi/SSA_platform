@@ -1007,16 +1007,31 @@ export async function runShopifySync(opts?: {
       `${cust?.first_name || ""} ${cust?.last_name || ""}`.trim() ||
       (o.billing_address?.name || "").trim() ||
       null;
-    // Order-level discount (first code), PRORATED across the lines by gross
-    // value so multi-line orders don't double-subtract it (the total of the
-    // per-line shares equals the order discount exactly).
-    const disc = o.discount_codes?.[0];
-    const discountCode = disc?.code ?? null;
-    const discountCents = disc ? Math.round(parseFloat(disc.amount || "0") * 100) : 0;
+    // REAL money off, so net = what was actually collected (owner: "devi trovare
+    // sempre l'incassato reale"). Priority:
+    //  1) Shopify's per-line `discount_allocations` (covers ALL codes AND
+    //     automatic discounts, already per-line — no proration needed);
+    //  2) else the order-level `total_discounts` (also all codes + automatic),
+    //     prorated across lines by gross;
+    //  3) else (older orders / missing fields) the first discount code, prorated
+    //     — the legacy behaviour, so nothing regresses.
+    const discountCode = o.discount_codes?.[0]?.code ?? null;
     const lineGross = o.line_items.map(
       (li) => Math.round(parseFloat(li.price || "0") * (li.quantity ?? 1) * 100) || 0,
     );
-    const lineDiscounts = prorateDiscount(lineGross, discountCents);
+    const lineAlloc = o.line_items.map((li) =>
+      Math.round(
+        (li.discount_allocations ?? []).reduce((s, a) => s + parseFloat(a.amount || "0"), 0) * 100,
+      ),
+    );
+    const orderDiscountCents =
+      o.total_discounts != null
+        ? Math.round(parseFloat(o.total_discounts || "0") * 100)
+        : (o.discount_codes ?? []).reduce((s, c) => s + Math.round(parseFloat(c.amount || "0") * 100), 0);
+    const lineDiscounts =
+      lineAlloc.some((a) => a > 0)
+        ? lineAlloc
+        : prorateDiscount(lineGross, orderDiscountCents);
 
     // Per-order idempotency: clear this order's prior purchase rows, re-insert.
     await sb

@@ -75,19 +75,16 @@ export async function cancelEnrollmentAction(
       | null;
 
     // ── CREDITO: create the credit FIRST (so we never remove the seat without its
-    // compensation), then mark the seat annullata. Intro = the course LIST price
-    // ("un posto introduttivo", regardless of what was paid — even €0); higher
-    // levels = the net actually paid.
+    // compensation), then mark the seat annullata. The credit is worth EXACTLY
+    // what the person actually paid (net collected) — never the course list price
+    // (owner: "assolutamente valore incassato"). The spent value leaves the origin
+    // course and is recognized on the destination when the credit is redeemed.
     let credited = false;
     if (mode === "credito") {
-      const isIntro = (course?.type ?? "") === "introduttivo";
-      const net = netPaidCents({ amount_cents: enr.amount_cents, discount_cents: enr.discount_cents });
-      const importoCents = isIntro ? Math.max(net, course?.price_cents ?? 0) : net;
-      // Nothing to credit → no €0 ledger row: a FREE course (intro with list
-      // price 0, or any non-intro with net 0) or a non-intro not actually paid.
-      // Guide the operator to the other two outcomes (the free-course case the
-      // educator hit). A free INTRO used to slip through the !isIntro guard.
-      if (importoCents <= 0 || (!isIntro && !isPaidRevenue(enr.financial_status))) {
+      const importoCents = netPaidCents({ amount_cents: enr.amount_cents, discount_cents: enr.discount_cents });
+      // Nothing actually collected → no €0 ledger row (a free/100%-off seat, or a
+      // seat not in a paid state). Guide the operator to Trasferisci / Rimborso.
+      if (!isPaidRevenue(enr.financial_status) || importoCents <= 0) {
         return { ok: false, error: "Corso gratuito o nulla incassato: niente da mettere a credito. Usa «Trasferisci» o «Rimborso»." };
       }
       const cr = await createCreditForEnrollment(svc, {

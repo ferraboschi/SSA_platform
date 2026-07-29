@@ -30,6 +30,10 @@ export interface AdminLineItem {
   title: string;
   price: string | null;
   quantity: number | null;
+  /** Shopify's per-line discount breakdown — the REAL money off this line,
+   *  covering BOTH discount codes AND automatic discounts. Summed for the true
+   *  net; absent on older orders → the order-level fallback is used. */
+  discount_allocations?: { amount: string }[] | null;
 }
 export interface AdminDiscountCode {
   code: string;
@@ -65,6 +69,9 @@ export interface AdminOrder {
   financial_status: string | null;
   cancelled_at: string | null;
   discount_codes: AdminDiscountCode[] | null;
+  /** Order-level total discount (all codes + automatic), as a money string.
+   *  The authoritative "real amount off" when per-line allocations are absent. */
+  total_discounts?: string | null;
   customer: AdminCustomer | null;
   billing_address?: AdminBillingAddress | null;
   line_items: AdminLineItem[];
@@ -332,7 +339,7 @@ export async function listOrdersUpdatedSince(
 ): Promise<AdminOrder[]> {
   const out: AdminOrder[] = [];
   const fields =
-    "id,name,email,created_at,updated_at,customer,billing_address,line_items,financial_status,cancelled_at,discount_codes";
+    "id,name,email,created_at,updated_at,customer,billing_address,line_items,financial_status,cancelled_at,discount_codes,total_discounts";
   const since = sinceIso ? `&updated_at_min=${encodeURIComponent(sinceIso)}` : "";
   let path: string | null = `orders.json?status=any&limit=250&fields=${fields}${since}`;
   while (path) {
