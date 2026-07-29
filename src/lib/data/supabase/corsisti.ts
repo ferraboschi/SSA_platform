@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { CorsistaEnrollment } from "@/lib/domain";
+import type { CorsistaEnrollment, PossibleDuplicate } from "@/lib/domain";
 import type { CorsistaRepository } from "../repository";
 import {
   corsistaRowToDomain,
@@ -159,9 +159,105 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
         .order("ordered_at", { ascending: false });
       const purchases = ((purch ?? []) as PurchaseRow[]).map(purchaseRowToDomain);
 
-      return corsistaRowToDomain(row, enrolls, purchases);
+      const domain = corsistaRowToDomain(row, enrolls, purchases);
+      domain.possibleDuplicates = await findLookAlikes(sb, row, enrolls.length);
+      return domain;
     },
   };
 
   return corsistiRepo;
+}
+
+type Sb = RepoContext["sb"];
+type CandRow = { id: number; email: string; full_name: string | null; phone: string | null };
+
+/**
+ * Live look-alikes of a corsista: other NON-merged records sharing the exact
+ * phone or (case-insensitive) full name. Surfaced ON the profile so the operator
+ * can merge (or dismiss) at the point of encounter — never auto-merged. Pairs
+ * the operator marked "non è duplicato" (settings_kv reviewed_email_clusters,
+ * same key format duplicatePeople uses) are skipped. Best-effort: any failure
+ * yields no banner rather than breaking the profile.
+ */
+async function findLookAlikes(
+  sb: Sb,
+  row: CorsistaRow,
+  selfEnrollments: number,
+): Promise<PossibleDuplicate[]> {
+  try {
+    const phone = (row.phone ?? "").trim();
+    const name = (row.full_name ?? "").trim();
+    if (!phone && !name) return [];
+    // Two targeted lookups (avoids .or() escaping issues with names/phones).
+    const found = new Map<number, CandRow>();
+    const collect = (rows: CandRow[] | null) => {
+      for (const c of rows ?? []) if (c.id !== row.id) found.set(c.id, c);
+    };
+    if (phone) {
+      const { data } = await sb
+        .from("corsisti")
+        .select("id,email,full_name,phone")
+        .is("merged_into", null)
+        .eq("phone", phone)
+        .limit(20);
+      collect(data as CandRow[] | null);
+    }
+    if (name) {
+      const { data } = await sb
+        .from("corsisti")
+        .select("id,email,full_name,phone")
+        .is("merged_into", null)
+        .ilike("full_name", name)
+        .limit(20);
+      collect(data as CandRow[] | null);
+    }
+    if (found.size === 0) return [];
+
+    // Pairs already dismissed as "not a duplicate".
+    const { data: rv } = await sb
+      .from("settings_kv")
+      .select("value")
+      .eq("key", "reviewed_email_clusters")
+      .maybeSingle();
+    const dismissed = new Set<string>(((rv?.value as { names?: string[] } | null)?.names) ?? []);
+
+    // Active-seat counts for self + candidates → suggested survivor (the richer).
+    const ids = [row.id, ...found.keys()];
+    const { data: enrRows } = await sb
+      .from("corsi_iscrizioni")
+      .select("corsista_id")
+      .is("annullata_at", null)
+      .in("corsista_id", ids);
+    const cnt = new Map<number, number>();
+    for (const r of (enrRows ?? []) as { corsista_id: number }[])
+      cnt.set(r.corsista_id, (cnt.get(r.corsista_id) ?? 0) + 1);
+    const selfCnt = cnt.get(row.id) ?? selfEnrollments;
+
+    const normPhone = (s: string | null) => (s ?? "").replace(/[^\d+]/g, "");
+    const normName = (s: string | null) => (s ?? "").toLowerCase().trim();
+    const out: PossibleDuplicate[] = [];
+    for (const c of found.values()) {
+      const key = "dup-" + [row.id, c.id].sort((a, b) => a - b).join("-");
+      if (dismissed.has(key)) continue;
+      const samePhone = !!phone && normPhone(c.phone) === normPhone(row.phone);
+      const sameName = !!name && normName(c.full_name) === normName(row.full_name);
+      if (!samePhone && !sameName) continue;
+      const cCnt = cnt.get(c.id) ?? 0;
+      const survivor = selfCnt >= cCnt ? { id: row.id, email: row.email } : { id: c.id, email: c.email };
+      out.push({
+        candidateId: c.id,
+        name: c.full_name ?? c.email,
+        email: c.email,
+        reason:
+          samePhone && sameName ? "stesso nome e telefono" : samePhone ? "stesso telefono" : "stesso nome",
+        survivorId: survivor.id,
+        dupId: survivor.id === row.id ? c.id : row.id,
+        survivorEmail: survivor.email,
+        dismissKey: key,
+      });
+    }
+    return out.slice(0, 5);
+  } catch {
+    return [];
+  }
 }

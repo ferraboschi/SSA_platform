@@ -1,11 +1,16 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  mergeCorsistiAction,
+  dismissEmailClusterAction,
+} from "@/lib/data/anomalie-actions";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format, type Dictionary } from "@/lib/i18n";
 import { formatEuro, formatNumberIt } from "@/lib/format";
 import { toCsv, downloadCsv } from "@/lib/csv";
-import { COURSE_TYPES, type Corsista, type CorsistaEnrollment, type Purchase } from "@/lib/domain";
+import { COURSE_TYPES, type Corsista, type CorsistaEnrollment, type Purchase, type PossibleDuplicate } from "@/lib/domain";
 import { monthIndexIt } from "@/lib/dates/italian-months";
 
 type ProfileT = Dictionary["corsisti"]["profile"];
@@ -106,6 +111,44 @@ function JourneyTimeline({ courses, passedLabel }: { courses: CorsistaEnrollment
 export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
   const t: ProfileT = useT().corsisti.profile;
   const router = useRouter();
+  const [pending, startAction] = useTransition();
+  const [handled, setHandled] = useState<Set<number>>(() => new Set());
+  const dups = (s.possibleDuplicates ?? []).filter((d) => !handled.has(d.candidateId));
+
+  // Merge this look-alike into the suggested survivor, then land on the
+  // consolidated profile. Optimistic: hide the row immediately, roll back on error.
+  const mergeDup = (d: PossibleDuplicate) => {
+    setHandled((prev) => new Set(prev).add(d.candidateId));
+    startAction(async () => {
+      try {
+        await mergeCorsistiAction(d.survivorId, [d.dupId]);
+        router.push(`/corsisti/${encodeURIComponent(d.survivorEmail.toLowerCase())}`);
+        router.refresh();
+      } catch {
+        setHandled((prev) => {
+          const n = new Set(prev);
+          n.delete(d.candidateId);
+          return n;
+        });
+      }
+    });
+  };
+  // "Not a duplicate": persist the dismissal (same key Anomalie uses) so the pair
+  // never re-surfaces here or there.
+  const dismissDup = (d: PossibleDuplicate) => {
+    setHandled((prev) => new Set(prev).add(d.candidateId));
+    startAction(async () => {
+      try {
+        await dismissEmailClusterAction(d.dismissKey);
+      } catch {
+        setHandled((prev) => {
+          const n = new Set(prev);
+          n.delete(d.candidateId);
+          return n;
+        });
+      }
+    });
+  };
 
   const certificate = s.courses.some((c) => c.examResult === "passed");
   const sorted = [...s.courses].sort(
@@ -118,7 +161,45 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
 
   return (
     <div className="page">
-      {s.reviewNote && (
+      {/* Live look-alikes: offer to merge (or dismiss) right where you meet them.
+          Supersedes the static "Possibile duplicato" review note below. */}
+      {dups.map((d) => (
+        <div
+          key={d.candidateId}
+          style={{
+            marginBottom: 12,
+            padding: "12px 16px",
+            background: "var(--warning-bg)",
+            color: "var(--warning-fg)",
+            border: "1px solid var(--warning)",
+            borderRadius: 10,
+            fontSize: 12.5,
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+            <Icon name="warn" size={14} />
+            <span>
+              Ho trovato un profilo simile: <strong>{d.name}</strong> ({d.email}) — {d.reason}. È la stessa persona?
+            </span>
+          </span>
+          <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button className="btn btn-sm btn-primary" disabled={pending} onClick={() => mergeDup(d)}>
+              <Icon name="users" size={12} /> Unisci
+            </button>
+            <button className="btn btn-sm" disabled={pending} onClick={() => dismissDup(d)}>
+              No, sono diversi
+            </button>
+          </span>
+        </div>
+      ))}
+      {/* Non-duplicate review notes (e.g. B2B buyer-name mismatch) stay as a plain
+          flag; the "Possibile duplicato" ones are handled by the banner above. */}
+      {s.reviewNote && !s.reviewNote.startsWith("Possibile duplicato") && (
         <div
           style={{
             marginBottom: 16,

@@ -163,7 +163,22 @@ export interface CourseCompanion {
   phone: string;
 }
 
+/** A live look-alike of a corsista (same phone / email / name, not yet merged),
+ *  surfaced ON the profile with a Unisci / "not a duplicate" choice. */
+export interface PossibleDuplicate {
+  candidateId: number;
+  name: string;
+  email: string;
+  reason: string; // "stesso telefono" | "stesso nome" | "stessa email"
+  survivorId: number; // suggested survivor (the record with more enrollments)
+  dupId: number; // the record folded into the survivor
+  survivorEmail: string; // canonical URL to land on after the merge
+  dismissKey: string; // settings_kv key so "non è duplicato" persists
+}
+
 export interface Corsista {
+  /** corsisti.id — needed to act (merge) on the record from the profile. */
+  id?: number;
   email: string;
   name: string;
   phone: string;
@@ -182,6 +197,8 @@ export interface Corsista {
   diplomaNumbers?: string[];
   /** Off-platform cluster marker, e.g. "sake_experience" (event-only contacts). */
   cluster?: string | null;
+  /** Live look-alikes not yet merged — the profile offers to merge them. */
+  possibleDuplicates?: PossibleDuplicate[];
 }
 
 /** A single Shopify purchase line, clustered. */

@@ -140,6 +140,7 @@ export function corsistaRowToDomain(
   const enrollSpent = enrollments.reduce((s, e) => s + e.amount, 0);
   const purchSpent = purchases.reduce((s, p) => s + p.amount, 0);
   return {
+    id: row.id,
     email: row.email,
     name: row.full_name,
     phone: row.phone ?? "",
