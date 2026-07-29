@@ -232,6 +232,49 @@ export function duplicatePeople(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Bonifica — STALE "possibile duplicato" review notes (the dup was merged).
+// ════════════════════════════════════════════════════════════════════════════
+
+/** A corsista row carrying its advisory review_note, for note-bonification. */
+export interface ReviewNoteRow {
+  id: number;
+  email: string | null;
+  merged_into: number | null;
+  review_note: string | null;
+}
+
+/**
+ * IDs whose "possibile duplicato" review_note is now STALE — the duplicate it
+ * warned about has since been merged, so the note is a phantom that clutters
+ * Anomalie and keeps a resolved banner on the profile forever. A note is stale
+ * when EITHER the record is itself merged into another (its note is moot), OR
+ * the email the note references now belongs to a record merged INTO this one.
+ * Deliberately precise (checks the SPECIFIC referenced dup), never a blanket
+ * "this record absorbed some dup" — a note may point at a still-open duplicate.
+ */
+export function resolvedReviewNoteIds(rows: ReviewNoteRow[]): number[] {
+  const byEmail = new Map<string, ReviewNoteRow>();
+  for (const r of rows) {
+    const e = normEmail(r.email);
+    if (e) byEmail.set(e, r);
+  }
+  const out: number[] = [];
+  for (const r of rows) {
+    if (!r.review_note) continue;
+    if (r.merged_into != null) {
+      out.push(r.id);
+      continue;
+    }
+    const m = r.review_note.match(/\(([^()\s]+@[^()\s]+)\)/);
+    if (m) {
+      const ref = byEmail.get(normEmail(m[1]));
+      if (ref && ref.merged_into === r.id) out.push(r.id);
+    }
+  }
+  return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Rule B — Re-participation that was PAID (should be free).
 // ════════════════════════════════════════════════════════════════════════════
 

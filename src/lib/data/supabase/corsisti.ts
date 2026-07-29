@@ -111,7 +111,22 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
         .maybeSingle();
       if (error) throw error;
       if (!c) return null;
-      const row = c as CorsistaRow;
+      let row = c as CorsistaRow;
+      // Follow a merge: a merged record is an empty shell (its enrollments,
+      // purchases and history moved to the survivor). Opening it must show the
+      // consolidated profile, never a misleading "0 corsi". Walk the chain with
+      // a hop guard so a bad cycle can never loop forever.
+      const seen = new Set<number>([row.id]);
+      while (row.merged_into != null && !seen.has(row.merged_into)) {
+        seen.add(row.merged_into);
+        const { data: surv } = await sb
+          .from("corsisti")
+          .select("*")
+          .eq("id", row.merged_into)
+          .maybeSingle();
+        if (!surv) break;
+        row = surv as CorsistaRow;
+      }
       // pre-migration: retry without exam_score_pct if the rich select errors.
       const res = await selectWithFallback<IscrizioneRow>(
         (columns) =>

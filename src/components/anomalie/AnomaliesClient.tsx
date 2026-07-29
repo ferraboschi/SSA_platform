@@ -12,6 +12,7 @@ import {
   dismissEmailClusterAction,
   mergeCorsistiAction,
   mergeAllHighConfidenceAction,
+  bonificaResolvedNotesAction,
 } from "@/lib/data/anomalie-actions";
 
 interface AnomalyItem {
@@ -63,6 +64,7 @@ export interface OpenCredit {
 
 export function AnomaliesClient({
   items,
+  staleNoteCount = 0,
   emailClusters = [],
   repaidClusters = [],
   dupCourses = [],
@@ -72,6 +74,9 @@ export function AnomaliesClient({
   openCredits = [],
 }: {
   items: AnomalyItem[];
+  /** Phantom notes already resolved (dup merged) — hidden from the list above,
+   *  cleared from the DB by the "Bonifica" button so profile banners clear too. */
+  staleNoteCount?: number;
   emailClusters?: EmailCluster[];
   repaidClusters?: RepaidCluster[];
   dupCourses?: DupCourseGroup[];
@@ -89,6 +94,8 @@ export function AnomaliesClient({
     null,
   );
   const [pending, startTransition] = useTransition();
+  const [staleLeft, setStaleLeft] = useState(staleNoteCount);
+  const [bonificaDone, setBonificaDone] = useState<number | null>(null);
 
   const visible = items.filter((it) => !resolved.has(it.id));
   const clusters = emailClusters.filter(
@@ -140,6 +147,19 @@ export function AnomaliesClient({
     });
   };
 
+  const bonifica = () => {
+    startTransition(async () => {
+      try {
+        const res = await bonificaResolvedNotesAction();
+        setBonificaDone(res.cleared);
+        setStaleLeft(0);
+        router.refresh();
+      } catch {
+        // leave the bar so the operator can retry
+      }
+    });
+  };
+
   const resolve = (id: number) => {
     setResolved((prev) => new Set(prev).add(id));
     startTransition(async () => {
@@ -185,6 +205,40 @@ export function AnomaliesClient({
       </div>
 
       {/* ── Section 1: flagged review notes (e.g. phone duplicates) ── */}
+      {/* Bonifica bar: phantom notes whose duplicate was ALREADY merged are
+          hidden from the list below and cleared from the DB here (so the stale
+          "possibile duplicato" banner also disappears from those profiles). */}
+      {(staleLeft > 0 || bonificaDone != null) && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: "10px 14px",
+            background: "var(--surface-2)",
+            border: "1px solid var(--border-2)",
+            borderRadius: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            fontSize: 12.5,
+          }}
+        >
+          {bonificaDone != null ? (
+            <span style={{ color: "var(--success-fg)" }}>
+              <Icon name="check" size={12} /> {bonificaDone} note già risolte rimosse (duplicati già uniti).
+            </span>
+          ) : (
+            <>
+              <span className="text-2">
+                {staleLeft} {staleLeft === 1 ? "nota è" : "note sono"} di duplicati <strong>già uniti</strong> — nascoste qui sotto perché risolte.
+              </span>
+              <button className="btn btn-sm" disabled={pending} onClick={bonifica}>
+                <Icon name="check" size={12} /> Bonifica ({staleLeft})
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <div style={{ margin: "16px 0", fontSize: 13, color: "var(--text-2)" }}>
         {format(t.count, { n: visible.length })}
       </div>

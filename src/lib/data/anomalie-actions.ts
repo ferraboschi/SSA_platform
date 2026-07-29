@@ -7,7 +7,9 @@ import { paginateAll } from "@/lib/data/supabase/query-helpers";
 import {
   duplicatePeople,
   isAutoMergeableCluster,
+  resolvedReviewNoteIds,
   type CorsistaLite,
+  type ReviewNoteRow,
 } from "@/lib/anomalie/rules";
 
 /** Mark an anomaly as reviewed/OK by clearing the corsista's review_note. */
@@ -20,6 +22,53 @@ export async function resolveAnomalyAction(corsistaId: number): Promise<void> {
     .eq("id", corsistaId);
   if (error) throw error;
   revalidatePath("/anomalie");
+}
+
+/**
+ * Bonifica: clear every STALE "possibile duplicato" review_note — a note whose
+ * duplicate was already merged (see resolvedReviewNoteIds). These are phantoms
+ * left by past merges (the merge didn't used to clear the note); they bury the
+ * REAL discrepancies under resolved ones. Returns how many were cleared.
+ */
+export async function bonificaResolvedNotesAction(): Promise<{ cleared: number }> {
+  await assertRole(["admin", "manager"]);
+  const svc = getSupabaseServiceClient();
+  const rows = await paginateAll<ReviewNoteRow>(
+    async (from, to) => {
+      const { data, error } = await svc
+        .from("corsisti")
+        .select("id,email,merged_into,review_note")
+        .not("review_note", "is", null)
+        .range(from, to);
+      return { data: data as ReviewNoteRow[] | null, error };
+    },
+    { onError: "throw" },
+  );
+  // resolvedReviewNoteIds needs the referenced dup rows too (which may already
+  // be merged and thus have no note) — load those by the emails the notes cite.
+  const citedEmails = new Set<string>();
+  for (const r of rows) {
+    const m = r.review_note?.match(/\(([^()\s]+@[^()\s]+)\)/);
+    if (m) citedEmails.add(m[1].toLowerCase());
+  }
+  const cited: ReviewNoteRow[] = [];
+  if (citedEmails.size > 0) {
+    const { data } = await svc
+      .from("corsisti")
+      .select("id,email,merged_into,review_note")
+      .in("email", [...citedEmails]);
+    cited.push(...((data ?? []) as ReviewNoteRow[]));
+  }
+  const ids = resolvedReviewNoteIds([...rows, ...cited]);
+  if (ids.length === 0) return { cleared: 0 };
+  const { error } = await svc
+    .from("corsisti")
+    .update({ review_note: null })
+    .in("id", ids);
+  if (error) throw error;
+  revalidatePath("/anomalie");
+  revalidatePath("/corsisti", "layout");
+  return { cleared: ids.length };
 }
 
 const EMAIL_CLUSTER_KEY = "reviewed_email_clusters";
@@ -234,6 +283,15 @@ async function mergeCorsistiCore(
     .update({ merged_into: survivorId })
     .in("id", dups);
   if (error) throw error;
+
+  // A merge RESOLVES the duplicate: clear any "possibile duplicato" review_note
+  // on the survivor and the folded records, otherwise the survivor keeps
+  // flagging itself forever (stale banner on the profile + phantom row in
+  // Anomalie). Best-effort — never fail a completed merge over an advisory note.
+  await svc
+    .from("corsisti")
+    .update({ review_note: null })
+    .in("id", [survivorId, ...dups]);
 
   // Audit trail — read-modify-write settings_kv "merge_log", capped at the
   // most recent entries. Best-effort: an audit failure must never fail the merge.

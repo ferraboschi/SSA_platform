@@ -12,7 +12,9 @@ import {
   fullDiscountCancelled,
   cashOnCancelled,
   openCredits,
+  resolvedReviewNoteIds,
   type CorsistaLite,
+  type ReviewNoteRow,
   type EnrRow,
   type CorsoLite,
   type PurchaseCorsoRow,
@@ -67,6 +69,21 @@ export default async function Page() {
     if (page.length < 1000) break;
   }
   const reviewed = new Set(await getReviewedEmailClusters());
+
+  // Bonifica: a "possibile duplicato" note whose duplicate was ALREADY merged is
+  // a phantom — it buries the REAL discrepancies. Detect them (reusing the rows
+  // already loaded: `all` carries merged_into, `items` carries the note) and hide
+  // them here; the "Bonifica" button clears them from the DB (and the profiles).
+  const noteById = new Map(items.map((i) => [i.id, i.note]));
+  const reviewRows: ReviewNoteRow[] = all.map((c) => ({
+    id: c.id,
+    email: c.email,
+    merged_into: c.merged_into,
+    review_note: noteById.get(c.id) ?? null,
+  }));
+  const staleNoteIds = new Set(resolvedReviewNoteIds(reviewRows));
+  const visibleItems = items.filter((i) => !staleNoteIds.has(i.id));
+  const staleNoteCount = items.length - visibleItems.length;
 
   // ── Enrollments + courses (for the next two clusters) ──
   const corsistaName = new Map<number, string>(
@@ -220,7 +237,8 @@ export default async function Page() {
 
   return (
     <AnomaliesClient
-      items={items}
+      items={visibleItems}
+      staleNoteCount={staleNoteCount}
       emailClusters={emailClusters}
       repaidClusters={repaid}
       dupCourses={dupCourses}

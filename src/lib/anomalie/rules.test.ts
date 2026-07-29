@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   duplicatePeople,
   isAutoMergeableCluster,
+  resolvedReviewNoteIds,
   repaidClusters,
   duplicateCourses,
   missingCompanions,
@@ -9,6 +10,7 @@ import {
   cashOnCancelled,
   openCredits,
   type CorsistaLite,
+  type ReviewNoteRow,
   type EnrRow,
   type CorsoLite,
   type PurchaseCorsoRow,
@@ -50,6 +52,42 @@ function enrollment(e: Partial<EnrRow> & { id: number; corso_id: number }): EnrR
     ...e,
   };
 }
+
+// ── Bonifica — resolvedReviewNoteIds (stale notes of merged dups) ────────────
+
+describe("resolvedReviewNoteIds", () => {
+  const row = (p: Partial<ReviewNoteRow> & { id: number }): ReviewNoteRow => ({
+    email: null,
+    merged_into: null,
+    review_note: null,
+    ...p,
+  });
+
+  it("flags a survivor whose referenced duplicate was merged INTO it", () => {
+    const rows = [
+      row({ id: 2121, email: "nini87@gmail.com", review_note: "Possibile duplicato di Nini (purple87@hotmail.it) — stesso telefono" }),
+      row({ id: 2512, email: "purple87@hotmail.it", merged_into: 2121 }),
+    ];
+    expect(resolvedReviewNoteIds(rows)).toEqual([2121]);
+  });
+
+  it("flags a record that is itself merged (its note is moot)", () => {
+    const rows = [row({ id: 5, email: "a@x.it", merged_into: 9, review_note: "Possibile duplicato di X (b@x.it) — stesso telefono" })];
+    expect(resolvedReviewNoteIds(rows)).toEqual([5]);
+  });
+
+  it("does NOT flag a note whose referenced duplicate is still OPEN (not merged)", () => {
+    const rows = [
+      row({ id: 1, email: "a@x.it", review_note: "Possibile duplicato di Y (b@x.it) — stesso telefono" }),
+      row({ id: 2, email: "b@x.it", merged_into: null }),
+    ];
+    expect(resolvedReviewNoteIds(rows)).toEqual([]);
+  });
+
+  it("ignores rows without a note", () => {
+    expect(resolvedReviewNoteIds([row({ id: 1, email: "a@x.it" })])).toEqual([]);
+  });
+});
 
 // ── Rule A — duplicatePeople (union-find) ───────────────────────────────────
 
