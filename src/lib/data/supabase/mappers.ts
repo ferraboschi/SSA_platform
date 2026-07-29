@@ -139,6 +139,11 @@ export function corsistaRowToDomain(
   row: CorsistaRow,
   enrollments: CorsistaEnrollment[],
   purchases: Purchase[] = [],
+  /** Net-paid spend on NON-course purchases (books/merch/events), precomputed by
+   *  bulk readers that don't load full Purchase[] per person (the corsisti list).
+   *  When omitted, it's derived from `purchases` — so the single-profile read and
+   *  the list produce the SAME totalSpent instead of disagreeing by the book/merch. */
+  otherSpentOverride?: number,
 ): Corsista {
   // Total actually paid, counted ONCE and NET. Course spend comes from the
   // enrollments (already net + collected-only); a course also appears as a
@@ -147,9 +152,15 @@ export function corsistaRowToDomain(
   // got a 100%-off seat, etc. showed a wildly inflated total. Fix: courses from
   // enrollments; only NON-course purchases (books/merch/events, net-paid) add on.
   const enrollSpent = enrollments.reduce((s, e) => s + e.amount, 0);
-  const otherSpent = purchases
-    .filter((p) => p.cluster !== "corso")
-    .reduce((s, p) => s + p.amount, 0);
+  // Only KNOWN non-course clusters (libro/merch/evento…) add to spend. "corso"
+  // is already counted via enrollments; "altro" (an unclassified/null-cluster
+  // row) is EXCLUDED — it could be a mis-tagged course line, and counting it
+  // would double-count. Same set the list aggregates, so the two totals agree.
+  const otherSpent =
+    otherSpentOverride ??
+    purchases
+      .filter((p) => p.cluster !== "corso" && p.cluster !== "altro")
+      .reduce((s, p) => s + p.amount, 0);
   return {
     id: row.id,
     email: row.email,

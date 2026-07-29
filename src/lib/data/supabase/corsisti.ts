@@ -8,6 +8,7 @@ import {
   purchaseRowToDomain,
 } from "./mappers";
 import { paginateAll, selectWithFallback } from "./query-helpers";
+import { isPaidRevenue, netPaidCents } from "@/lib/economics/revenue";
 import type { CorsistaRow, IscrizioneRow, PurchaseRow } from "./rows";
 import type { RepoContext } from "./context";
 
@@ -94,13 +95,46 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
         enrollByCorsista.set(i.corsista_id, list);
       }
 
+      // NON-course purchase spend (books/merch/events), net-paid, per corsista.
+      // The single-profile read derives this from the full Purchase[]; the list
+      // can't load that per person, so aggregate it here → the "Speso" column,
+      // CSV, analisi ranking and dashboard averages match the profile total
+      // instead of understating it by the book/merch spend.
+      const otherSpentByCorsista = new Map<number, number>();
+      const purchRows = await paginateAll<{
+        corsista_id: number;
+        cluster: string | null;
+        amount_cents: number;
+        discount_cents: number | null;
+        financial_status: string | null;
+      }>(
+        async (from, to) => {
+          const { data, error } = await sb
+            .from("purchases")
+            .select("corsista_id,cluster,amount_cents,discount_cents,financial_status")
+            .neq("cluster", "corso")
+            .range(from, to);
+          return { data: (data ?? []) as never, error };
+        },
+        { pageSize: 1000 },
+      );
+      for (const p of purchRows) {
+        if (!isPaidRevenue(p.financial_status)) continue;
+        otherSpentByCorsista.set(
+          p.corsista_id,
+          (otherSpentByCorsista.get(p.corsista_id) ?? 0) + netPaidCents(p) / 100,
+        );
+      }
+
       return (corsistiData as CorsistaRow[])
         .filter((c) => !c.merged_into) // hide records folded into another
         // Hide multi-ticket PLACEHOLDER attendees ("Posto N — da completare"):
         // real enrollment seats, not real people until completed, so they must
         // not inflate the corsisti list/count. (Field absent pre-migration → kept.)
         .filter((c) => !(c as { placeholder?: boolean }).placeholder)
-        .map((c) => corsistaRowToDomain(c, enrollByCorsista.get(c.id) ?? []));
+        .map((c) =>
+          corsistaRowToDomain(c, enrollByCorsista.get(c.id) ?? [], [], otherSpentByCorsista.get(c.id) ?? 0),
+        );
     },
 
     async getByEmail(email) {
