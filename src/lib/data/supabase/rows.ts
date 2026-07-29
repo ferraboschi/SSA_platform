@@ -68,6 +68,11 @@ export interface PurchaseRow {
   delivery: string | null;
   product_title: string | null;
   amount_cents: number;
+  // Discount value + payment status → the amount ACTUALLY paid (net, collected),
+  // so per-person spend never counts gross or uncollected money. Optional: a
+  // caller that doesn't select them yields net = gross (legacy, safe fallback).
+  discount_cents?: number | null;
+  financial_status?: string | null;
   buyer_name: string | null;
   ordered_at: string | null;
 }

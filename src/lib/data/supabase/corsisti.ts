@@ -154,7 +154,7 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
 
       const { data: purch } = await sb
         .from("purchases")
-        .select("cluster,subtype,delivery,product_title,amount_cents,buyer_name,ordered_at")
+        .select("cluster,subtype,delivery,product_title,amount_cents,discount_cents,financial_status,buyer_name,ordered_at")
         .eq("corsista_id", row.id)
         .order("ordered_at", { ascending: false });
       const purchases = ((purch ?? []) as PurchaseRow[]).map(purchaseRowToDomain);

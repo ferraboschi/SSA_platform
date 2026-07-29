@@ -126,7 +126,10 @@ export function purchaseRowToDomain(row: PurchaseRow): Purchase {
     subtype: row.subtype,
     delivery: row.delivery,
     productTitle: row.product_title ?? "",
-    amount: row.amount_cents / 100,
+    // Money ACTUALLY paid: net of discount, and 0 when not collected — same rule
+    // as an enrollment. A caller that didn't select discount/status gets net =
+    // gross (legacy fallback). Fixes gross/100%-off lines inflating spend.
+    amount: isPaidRevenue(row.financial_status) ? netPaidEuros(row) : 0,
     buyerName: row.buyer_name,
     orderedAt: row.ordered_at,
   };
@@ -137,8 +140,16 @@ export function corsistaRowToDomain(
   enrollments: CorsistaEnrollment[],
   purchases: Purchase[] = [],
 ): Corsista {
+  // Total actually paid, counted ONCE and NET. Course spend comes from the
+  // enrollments (already net + collected-only); a course also appears as a
+  // purchase row (cluster='corso'), so adding ALL purchases double-counted it
+  // AND used the gross price — a person who bought, cancelled, re-participated,
+  // got a 100%-off seat, etc. showed a wildly inflated total. Fix: courses from
+  // enrollments; only NON-course purchases (books/merch/events, net-paid) add on.
   const enrollSpent = enrollments.reduce((s, e) => s + e.amount, 0);
-  const purchSpent = purchases.reduce((s, p) => s + p.amount, 0);
+  const otherSpent = purchases
+    .filter((p) => p.cluster !== "corso")
+    .reduce((s, p) => s + p.amount, 0);
   return {
     id: row.id,
     email: row.email,
@@ -148,7 +159,7 @@ export function corsistaRowToDomain(
     city: row.city ?? "",
     firstSeen: row.first_seen_at ?? "",
     courses: enrollments,
-    totalSpent: enrollSpent + purchSpent,
+    totalSpent: enrollSpent + otherSpent,
     isReturning: enrollments.length > 1,
     historical: row.historical || undefined,
     purchases,
