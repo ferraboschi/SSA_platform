@@ -2,12 +2,10 @@ import { getTranslations } from "@/lib/i18n/server";
 import { requireNavAccess } from "@/lib/auth/guard";
 import { supabaseConfig } from "@/lib/integrations/config";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
-import { netPaidEuros } from "@/lib/economics/revenue";
 import {
   CreditiClient,
   type CreditoView,
   type CourseOption,
-  type EnrollmentOption,
 } from "@/components/crediti/CreditiClient";
 
 export const dynamic = "force-dynamic";
@@ -153,87 +151,54 @@ export default async function Page() {
     shopifyDiscountId: c.shopify_discount_id ?? null,
   }));
 
-  // ── Destination picker: candidate courses (not cancelled) + their enrollments.
-  // Only needed when there is at least one open credit to link.
+  // ── Destination picker: candidate courses (not cancelled) with their live
+  // occupancy (enrolled / capacity) so the credit-spend can show a counter and
+  // block when full. Only needed when there is at least one open credit to link.
   let courseOptions: CourseOption[] = [];
-  const enrollmentsByCourse: Record<number, EnrollmentOption[]> = {};
   const hasOpen = views.some((v) => v.stato === "aperto");
   if (hasOpen) {
     const { data: corsi } = await svc
       .from("corsi")
-      .select("id,short_title,full_title,month,year,lifecycle,type")
+      .select("id,short_title,full_title,month,year,lifecycle,type,capacity")
       .neq("lifecycle", "cancelled")
       .order("year", { ascending: false });
-    courseOptions = ((corsi ?? []) as {
+    const rows = ((corsi ?? []) as {
       id: number;
       short_title: string | null;
       full_title: string | null;
       month: string | null;
       year: number | null;
       type: string | null;
-    }[]).map((c) => ({
+      capacity: number | null;
+    }[]);
+
+    // Active-seat counts per candidate course (removed/annullata excluded).
+    const enrolledByCourse = new Map<number, number>();
+    const optIds = rows.map((c) => c.id);
+    if (optIds.length > 0) {
+      const rich = await svc
+        .from("corsi_iscrizioni")
+        .select("corso_id,annullata_at")
+        .in("corso_id", optIds);
+      const iscr = rich.error
+        ? ((
+            await svc.from("corsi_iscrizioni").select("corso_id").in("corso_id", optIds)
+          ).data ?? [])
+        : (rich.data ?? []).filter((r) => !(r as { annullata_at?: string | null }).annullata_at);
+      for (const r of iscr as { corso_id: number }[]) {
+        enrolledByCourse.set(r.corso_id, (enrolledByCourse.get(r.corso_id) ?? 0) + 1);
+      }
+    }
+
+    courseOptions = rows.map((c) => ({
       id: c.id,
       title: c.short_title || c.full_title || `Corso ${c.id}`,
       when: [c.month, c.year].filter(Boolean).join(" "),
       type: c.type,
+      enrolled: enrolledByCourse.get(c.id) ?? 0,
+      capacity: c.capacity ?? 0,
     }));
-
-    // Enrollments per candidate course (name + net paid), for the second picker.
-    const optIds = courseOptions.map((c) => c.id);
-    if (optIds.length > 0) {
-      // Prefer the column that lets us drop removed-from-course seats (they must
-      // never be a link target); fall back to the base select pre-migration.
-      const rich = await svc
-        .from("corsi_iscrizioni")
-        .select("id,corso_id,corsista_id,amount_cents,discount_cents,annullata_at")
-        .in("corso_id", optIds);
-      const iscr = rich.error
-        ? (
-            await svc
-              .from("corsi_iscrizioni")
-              .select("id,corso_id,corsista_id,amount_cents,discount_cents")
-              .in("corso_id", optIds)
-          ).data
-        : (rich.data ?? []).filter((r) => !(r as { annullata_at?: string | null }).annullata_at);
-      // Names for the enrolled corsisti (may differ from the credit's corsisti).
-      const enrCorsistaIds = new Set<number>(
-        ((iscr ?? []) as { corsista_id: number }[]).map((r) => r.corsista_id),
-      );
-      const enrName = new Map<number, string>();
-      if (enrCorsistaIds.size > 0) {
-        const { data: names } = await svc
-          .from("corsisti")
-          .select("id,full_name")
-          .in("id", [...enrCorsistaIds]);
-        for (const r of (names ?? []) as { id: number; full_name: string | null }[]) {
-          enrName.set(r.id, r.full_name ?? `#${r.id}`);
-        }
-      }
-      for (const r of (iscr ?? []) as {
-        id: number;
-        corso_id: number;
-        corsista_id: number;
-        amount_cents: number | null;
-        discount_cents: number | null;
-      }[]) {
-        (enrollmentsByCourse[r.corso_id] ??= []).push({
-          id: r.id,
-          corsistaId: r.corsista_id,
-          name: enrName.get(r.corsista_id) ?? `#${r.corsista_id}`,
-          net: netPaidEuros(r),
-        });
-      }
-      for (const list of Object.values(enrollmentsByCourse)) {
-        list.sort((a, b) => a.name.localeCompare(b.name));
-      }
-    }
   }
 
-  return (
-    <CreditiClient
-      credits={views}
-      courseOptions={courseOptions}
-      enrollmentsByCourse={enrollmentsByCourse}
-    />
-  );
+  return <CreditiClient credits={views} courseOptions={courseOptions} />;
 }

@@ -1531,9 +1531,9 @@ export const it = {
       annullato: "Annullato",
     },
     // Azioni
-    link: "Collega a iscrizione",
-    linkCta: "Collega",
-    pickCourse: "Scegli il corso di destinazione",
+    link: "Usa il credito",
+    linkCta: "Aggiungi al corso",
+    pickCourse: "Scegli il corso dove spende il credito (stesso livello)",
     pickEnrollment: "Scegli l'iscrizione",
     markRefunded: "Segna rimborsato",
     markVoided: "Segna annullato",

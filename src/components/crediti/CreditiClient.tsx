@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Icon } from "@/components/ui";
 import { format, useT } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
-import { linkCreditoAction, setCreditoStatoAction } from "@/lib/crediti/actions";
+import { spendCreditOnCourseAction, setCreditoStatoAction } from "@/lib/crediti/actions";
 
 export type CreditoStato = "aperto" | "applicato" | "rimborsato" | "annullato";
 
@@ -36,13 +36,10 @@ export interface CourseOption {
   when: string;
   /** Course level (`corsi.type`) — matched against a credit's origin level. */
   type: string | null;
-}
-
-export interface EnrollmentOption {
-  id: number;
-  corsistaId: number;
-  name: string;
-  net: number;
+  /** Live occupancy for the capacity counter/block at credit-spend time. */
+  enrolled: number;
+  /** Shopify-seeded max seats (0 = unknown → no block). */
+  capacity: number;
 }
 
 const STATE_TONE: Record<CreditoStato, { fg: string; bg: string }> = {
@@ -59,14 +56,16 @@ function euro(n: number): string {
 export function CreditiClient({
   credits,
   courseOptions,
-  enrollmentsByCourse,
 }: {
   credits: CreditoView[];
   courseOptions: CourseOption[];
-  enrollmentsByCourse: Record<number, EnrollmentOption[]>;
 }) {
   const t = useT().crediti;
   const [pending, startTransition] = useTransition();
+  // After a successful spend that occupied a new seat: the "close a seat on
+  // Shopify" reminder to show (dismissable). Also carries link-time errors.
+  const [reminder, setReminder] = useState<{ text: string; url: string; label: string } | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
   // Optimistic overrides keyed by credit id (so a linked/closed credit re-buckets
   // without a full round-trip). null value = revert-on-error handled inside.
   const [override, setOverride] = useState<Map<number, Partial<CreditoView>>>(
@@ -95,23 +94,24 @@ export function CreditiClient({
       return next;
     });
 
-  const link = (
-    credito: CreditoView,
-    corsoId: number,
-    iscrId: number,
-    corsoTitle: string,
-  ) => {
+  const link = (credito: CreditoView, corsoId: number, corsoTitle: string) => {
+    setLinkError(null);
+    setReminder(null);
     setOv(credito.id, {
       stato: "applicato",
       corsoDestinazioneId: corsoId,
       corsoDestinazioneTitle: corsoTitle,
     });
     startTransition(async () => {
-      try {
-        await linkCreditoAction(credito.id, corsoId, iscrId);
-      } catch {
-        clearOv(credito.id);
+      const res = await spendCreditOnCourseAction(credito.id, corsoId).catch(
+        () => ({ ok: false, error: "Operazione non riuscita." }) as Awaited<ReturnType<typeof spendCreditOnCourseAction>>,
+      );
+      if (!res.ok) {
+        clearOv(credito.id); // revert the optimistic move
+        setLinkError(res.error || "Operazione non riuscita.");
+        return;
       }
+      if (res.reminder) setReminder(res.reminder);
     });
   };
 
@@ -139,6 +139,53 @@ export function CreditiClient({
         </p>
       </div>
 
+      {linkError && (
+        <div
+          style={{
+            margin: "12px 0",
+            padding: "10px 14px",
+            background: "var(--danger-bg)",
+            color: "var(--danger-fg)",
+            border: "1px solid var(--danger)",
+            borderRadius: 10,
+            fontSize: 12.5,
+          }}
+          role="alert"
+        >
+          {linkError}
+        </div>
+      )}
+      {reminder && (
+        <div
+          style={{
+            margin: "12px 0",
+            padding: "12px 14px",
+            background: "var(--warning-bg)",
+            color: "var(--warning-fg)",
+            border: "1px solid var(--warning)",
+            borderRadius: 10,
+            fontSize: 12.5,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="warn" size={14} /> {reminder.text}
+          </span>
+          <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <Link className="btn btn-sm" href={reminder.url} target="_blank" rel="noreferrer">
+              {reminder.label}
+            </Link>
+            <button className="btn btn-sm" onClick={() => setReminder(null)}>
+              OK
+            </button>
+          </span>
+        </div>
+      )}
+
       {all.length === 0 ? (
         <div
           className="card card-pad"
@@ -163,7 +210,6 @@ export function CreditiClient({
                 t={t}
                 pending={pending}
                 courseOptions={courseOptions}
-                enrollmentsByCourse={enrollmentsByCourse}
                 onLink={link}
                 onStato={setStato}
               />
@@ -417,7 +463,6 @@ function OpenCard({
   t,
   pending,
   courseOptions,
-  enrollmentsByCourse,
   onLink,
   onStato,
 }: {
@@ -425,22 +470,15 @@ function OpenCard({
   t: TDict;
   pending: boolean;
   courseOptions: CourseOption[];
-  enrollmentsByCourse: Record<number, EnrollmentOption[]>;
-  onLink: (c: CreditoView, corsoId: number, iscrId: number, title: string) => void;
+  onLink: (c: CreditoView, corsoId: number, title: string) => void;
   onStato: (c: CreditoView, stato: "rimborsato" | "annullato" | "aperto") => void;
 }) {
   const [picking, setPicking] = useState(false);
   const [courseId, setCourseId] = useState<number | "">("");
-  const [iscrId, setIscrId] = useState<number | "">("");
 
-  const enrollments = useMemo(
-    () => (courseId === "" ? [] : enrollmentsByCourse[courseId] ?? []),
-    [courseId, enrollmentsByCourse],
-  );
-
-  // A credit is redeemable only on a SAME-LEVEL course (owner). Offer just those
-  // in the picker; when the origin level is unknown (pre-migration / legacy) fall
-  // back to every candidate so nothing becomes un-linkable.
+  // A credit is redeemable only on a SAME-LEVEL course (owner). Offer just those;
+  // when the origin level is unknown (pre-migration / legacy) fall back to every
+  // candidate so nothing becomes un-linkable.
   const sameLevelOptions = useMemo(
     () =>
       credito.origineType
@@ -449,11 +487,18 @@ function OpenCard({
     [courseOptions, credito.origineType],
   );
 
+  const chosen = courseId === "" ? null : courseOptions.find((c) => c.id === courseId) ?? null;
+  // Full only when the max is known (capacity > 0) and reached. The person may
+  // already occupy a seat there → the server reuses it (no capacity change), so
+  // "full" is a soft warning, not a hard client block on that case.
+  const isFull = !!chosen && chosen.capacity > 0 && chosen.enrolled >= chosen.capacity;
+
   const submit = () => {
-    if (courseId === "" || iscrId === "") return;
+    if (courseId === "") return;
     const title = courseOptions.find((c) => c.id === courseId)?.title ?? `Corso ${courseId}`;
-    onLink(credito, courseId, iscrId, title);
+    onLink(credito, courseId, title);
     setPicking(false);
+    setCourseId("");
   };
 
   return (
@@ -502,43 +547,45 @@ function OpenCard({
             alignItems: "center",
           }}
         >
+          {/* Pick ONLY the course — the credit follows its own person: the server
+              reuses/revives/creates that person's seat. */}
           <select
             className="select"
             value={courseId}
-            onChange={(e) => {
-              setCourseId(e.target.value === "" ? "" : Number(e.target.value));
-              setIscrId("");
-            }}
-            style={{ minWidth: 200, height: 26, fontSize: 12 }}
+            onChange={(e) => setCourseId(e.target.value === "" ? "" : Number(e.target.value))}
+            style={{ minWidth: 260, height: 26, fontSize: 12 }}
           >
             <option value="">{t.pickCourse}</option>
-            {sameLevelOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-                {c.when ? ` · ${c.when}` : ""}
-              </option>
-            ))}
+            {sameLevelOptions.map((c) => {
+              const full = c.capacity > 0 && c.enrolled >= c.capacity;
+              const occ = c.capacity > 0 ? ` · ${c.enrolled}/${c.capacity}${full ? " pieno" : ""}` : "";
+              return (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                  {c.when ? ` · ${c.when}` : ""}
+                  {occ}
+                </option>
+              );
+            })}
           </select>
 
-          <select
-            className="select"
-            value={iscrId}
-            onChange={(e) => setIscrId(e.target.value === "" ? "" : Number(e.target.value))}
-            disabled={courseId === "" || enrollments.length === 0}
-            style={{ minWidth: 200, height: 26, fontSize: 12 }}
-          >
-            <option value="">{t.pickEnrollment}</option>
-            {enrollments.map((en) => (
-              <option key={en.id} value={en.id}>
-                {en.name} · {euro(en.net)}
-              </option>
-            ))}
-          </select>
+          {chosen && chosen.capacity > 0 && (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: isFull ? "var(--danger-fg)" : "var(--text-3)",
+              }}
+            >
+              {chosen.enrolled}/{chosen.capacity} posti{isFull ? " · pieno" : ""}
+            </span>
+          )}
 
           <button
             className="btn btn-sm btn-primary"
-            disabled={pending || courseId === "" || iscrId === ""}
+            disabled={pending || courseId === "" || isFull}
             onClick={submit}
+            title={isFull ? "Corso pieno: libera un posto o aumenta la capienza su Shopify." : undefined}
           >
             <Icon name="check" size={12} /> {t.linkCta}
           </button>
