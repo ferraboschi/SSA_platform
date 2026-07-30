@@ -111,6 +111,25 @@ export async function cancelEnrollmentAction(
       return { ok: false, error: updErr.message };
     }
 
+    // If this seat was the DESTINATION of an applied credit, that credit was
+    // "spent" here — removing the seat un-spends it, so return the credit to the
+    // pool ('aperto', reassignable) instead of leaving it recognising revenue on
+    // a seat that no longer exists (owner: "può tornare in Crediti"). Best-effort.
+    try {
+      await svc
+        .from("corsi_crediti")
+        .update({
+          stato: "aperto",
+          corso_destinazione_id: null,
+          iscrizione_destinazione_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("iscrizione_destinazione_id", iscrId)
+        .eq("stato", "applicato");
+    } catch {
+      /* corsi_crediti missing (pre-migration) → nothing to unlink */
+    }
+
     revalidatePath(`/corsi/${corso}`);
     revalidatePath("/crediti");
 

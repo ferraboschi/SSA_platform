@@ -11,6 +11,7 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { assertRole } from "@/lib/auth/guard";
+import { isPaidRevenue, netPaidCents } from "@/lib/economics/revenue";
 
 type CreditoStato = "aperto" | "applicato" | "rimborsato" | "annullato";
 
@@ -31,12 +32,31 @@ export async function linkCreditoAction(
   // course — reject a mismatched/forged pair before writing anything.
   const { data: iscr, error: iscrErr } = await svc
     .from("corsi_iscrizioni")
-    .select("id,corso_id")
+    .select("id,corso_id,amount_cents,discount_cents,financial_status")
     .eq("id", iscrizioneDestinazioneId)
     .maybeSingle();
   if (iscrErr) throw iscrErr;
-  if (!iscr || (iscr as { corso_id: number }).corso_id !== corsoDestinazioneId) {
+  const dest = iscr as
+    | { corso_id: number; amount_cents: number | null; discount_cents: number | null; financial_status: string | null }
+    | null;
+  if (!dest || dest.corso_id !== corsoDestinazioneId) {
     throw new Error("Iscrizione di destinazione non valida.");
+  }
+
+  // The credit is RECOGNISED as revenue on the destination course. That is only
+  // correct when the credit was actually SPENT there (applied as a discount so
+  // the seat's own net is reduced). Linking it to a seat paid in FULL with NO
+  // discount would recognise the credit ON TOP of the full price → double count.
+  // Block that unambiguous case; partial redemptions (a discount is present) and
+  // full redemptions (net 0) are allowed.
+  if (
+    isPaidRevenue(dest.financial_status) &&
+    netPaidCents({ amount_cents: dest.amount_cents, discount_cents: dest.discount_cents }) > 0 &&
+    (dest.discount_cents ?? 0) <= 0
+  ) {
+    throw new Error(
+      "Questo posto è stato pagato per intero senza sconto: il credito non risulta speso qui. Applica prima il codice credito su Shopify (o scegli il posto giusto), così non si conta due volte.",
+    );
   }
 
   // SAME-LEVEL only (owner): a credit is redeemable on a course of the same
