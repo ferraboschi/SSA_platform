@@ -42,68 +42,132 @@ function ProfStat({
   );
 }
 
+type JourneyKind = "introduttivo" | "certificato" | "shochu" | "other";
+const JOURNEY_TYPE_LABEL: Record<JourneyKind, string> = {
+  introduttivo: "Introduttivo",
+  certificato: "Certificato",
+  shochu: "Shochu",
+  other: "Altro",
+};
+function journeyKind(t: string | null | undefined): JourneyKind {
+  return t === "certificato" || t === "introduttivo" || t === "shochu" ? t : "other";
+}
+
 function JourneyTimeline({ courses, passedLabel }: { courses: CorsistaEnrollment[]; passedLabel: string }) {
+  const [filter, setFilter] = useState<JourneyKind | "all">("all");
   if (!courses.length) return null;
-  const firstYear = courses[0].year;
-  const lastYear = Math.max(courses[courses.length - 1].year, 2026);
-  const years: number[] = [];
-  for (let y = firstYear; y <= lastYear; y++) years.push(y);
+
+  // Offer a type filter only for the levels this person actually attended.
+  const presentTypes = Array.from(new Set(courses.map((c) => journeyKind(c.courseType))));
+  const shown = filter === "all" ? courses : courses.filter((c) => journeyKind(c.courseType) === filter);
+  // Only years with a matching course — no empty columns.
+  const years = Array.from(new Set(shown.map((c) => c.year))).sort((a, b) => a - b);
+
+  const chip = (key: JourneyKind | "all", label: string) => {
+    const active = filter === key;
+    return (
+      <button
+        key={key}
+        onClick={() => setFilter(key)}
+        style={{
+          fontSize: 11.5,
+          fontWeight: 600,
+          padding: "3px 11px",
+          borderRadius: 999,
+          cursor: "pointer",
+          background: active ? "var(--indigo)" : "var(--surface-2)",
+          color: active ? "#fff" : "var(--text-2)",
+          border: `1px solid ${active ? "var(--indigo)" : "var(--border)"}`,
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
 
   return (
-    <div className="card" style={{ padding: "24px 20px" }}>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${years.length}, 1fr)`, gap: 0 }}>
-        {years.map((y, i) => (
-          <div
-            key={y}
-            style={{
-              borderLeft: i === 0 ? "none" : "1px dashed var(--border)",
-              paddingLeft: 12,
-              paddingRight: 12,
-              minHeight: 120,
-            }}
-          >
-            <div className="eyebrow" style={{ marginBottom: 10 }}>
-              {y}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {courses
-                .filter((c) => c.year === y)
-                .map((c, ci) => {
-                  const palette =
-                    c.courseType === "certificato"
-                      ? { bg: "var(--azzurro-bg)", fg: "var(--azzurro)" }
-                      : c.courseType === "introduttivo"
-                        ? { bg: "var(--oro-bg)", fg: "#8A6E1A" }
-                        : { bg: "var(--surface-2)", fg: "var(--text-2)" };
-                  return (
-                    <div key={ci} style={{ padding: 8, borderRadius: 4, background: palette.bg, color: palette.fg, fontSize: 11 }}>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          fontSize: 9.5,
-                          letterSpacing: "var(--ls-caps)",
-                          textTransform: "uppercase",
-                          marginBottom: 2,
-                        }}
-                      >
-                        {c.month.slice(0, 3)}
-                      </div>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: "var(--text)" }}>
-                        {c.courseTitle.split(" ").slice(0, 3).join(" ")}
-                      </div>
-                      <div style={{ marginTop: 2, color: "var(--text-3)", fontSize: 10.5 }}>{c.city}</div>
-                      {c.examResult === "passed" && (
-                        <div style={{ marginTop: 4, fontSize: 10, color: "var(--success-fg)", fontWeight: 600 }}>
-                          ✓ {passedLabel}
+    <div className="card" style={{ padding: "18px 0", overflow: "hidden" }}>
+      {presentTypes.length > 1 && (
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            flexWrap: "wrap",
+            padding: "0 20px 14px",
+            borderBottom: "1px solid var(--border-2)",
+            marginBottom: 14,
+          }}
+        >
+          {chip("all", "Tutti")}
+          {presentTypes.map((k) => chip(k, JOURNEY_TYPE_LABEL[k]))}
+        </div>
+      )}
+
+      {years.length === 0 ? (
+        <div style={{ padding: "6px 20px", fontSize: 12.5, color: "var(--text-4)" }}>
+          Nessun corso di questo tipo.
+        </div>
+      ) : (
+        // Horizontal scroll: each year is a FIXED-WIDTH column, never squeezed —
+        // scroll left/right to read them all, on any screen size.
+        <div style={{ overflowX: "auto", padding: "0 20px" }}>
+          <div style={{ display: "flex", width: "max-content" }}>
+            {years.map((y, i) => (
+              <div
+                key={y}
+                style={{
+                  flex: "0 0 190px",
+                  width: 190,
+                  borderLeft: i === 0 ? "none" : "1px dashed var(--border)",
+                  paddingLeft: i === 0 ? 0 : 14,
+                  paddingRight: 14,
+                  minHeight: 120,
+                }}
+              >
+                <div className="eyebrow" style={{ marginBottom: 10 }}>
+                  {y}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {shown
+                    .filter((c) => c.year === y)
+                    .map((c, ci) => {
+                      const palette =
+                        c.courseType === "certificato"
+                          ? { bg: "var(--azzurro-bg)", fg: "var(--azzurro)" }
+                          : c.courseType === "introduttivo"
+                            ? { bg: "var(--oro-bg)", fg: "#8A6E1A" }
+                            : { bg: "var(--surface-2)", fg: "var(--text-2)" };
+                      return (
+                        <div key={ci} style={{ padding: 8, borderRadius: 4, background: palette.bg, color: palette.fg, fontSize: 11 }}>
+                          <div
+                            style={{
+                              fontWeight: 600,
+                              fontSize: 9.5,
+                              letterSpacing: "var(--ls-caps)",
+                              textTransform: "uppercase",
+                              marginBottom: 2,
+                            }}
+                          >
+                            {c.month.slice(0, 3)}
+                          </div>
+                          <div style={{ fontWeight: 600, fontSize: 12, color: "var(--text)", lineHeight: 1.25 }}>
+                            {c.courseTitle}
+                          </div>
+                          <div style={{ marginTop: 2, color: "var(--text-3)", fontSize: 10.5 }}>{c.city}</div>
+                          {c.examResult === "passed" && (
+                            <div style={{ marginTop: 4, fontSize: 10, color: "var(--success-fg)", fontWeight: 600 }}>
+                              ✓ {passedLabel}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
+                      );
+                    })}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
