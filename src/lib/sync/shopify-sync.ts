@@ -30,7 +30,8 @@ import {
 import { syncEducatorActivation } from "@/lib/educators/sync-active";
 import { generateTransferCredits, matchTransferCreditsByCode } from "@/lib/crediti/generate";
 import { logReconciliation } from "@/lib/anomalie/reconcile";
-import { MONTH_TO_NUM, MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
+import { MONTH_NAMES_IT, parseItDate } from "@/lib/dates/italian-months";
+import { parseCourseTitle, parseCourseFromMetafields } from "@/lib/sync/course-title";
 import { planSeats, placeholderEmail, placeholderName, orderPlaceholderEmail } from "./seats";
 import { DEAD_FINANCIAL, deadOrderStatus, prorateDiscount } from "./order-rules";
 import { isPaidRevenue } from "@/lib/economics/revenue";
@@ -262,19 +263,6 @@ const TYPE_LABEL: Record<string, string> = {
   mixology: "Mixology",
 };
 
-/** Detect a course type from free text (title or the tipologia metafield).
- *  Whitespace/punctuation-insensitive so "Master Class" / "Master-Class" match. */
-function detectType(text: string): string | null {
-  const t = (text || "").toLowerCase();
-  const compact = t.replace(/[^a-z0-9]+/g, "");
-  if (t.includes("shochu")) return "shochu";
-  if (t.includes("certificat") || t.includes("certified")) return "certificato";
-  if (t.includes("introdutt") || t.includes("introduct")) return "introduttivo";
-  if (compact.includes("masterclass")) return "masterclass";
-  if (t.includes("mixolog")) return "mixology";
-  return null;
-}
-
 function slug(s: string): string {
   return s
     .normalize("NFKD")
@@ -283,68 +271,6 @@ function slug(s: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-}
-
-interface ParsedCourse {
-  month: number;
-  year: number;
-  day: number | null;
-  type: string;
-  delivery: "online" | "in-person";
-  city: string;
-}
-/** Parse a course-ticket title like "Corso ... - Giugno 2026, Vercelli". */
-function parseCourseTitle(title: string): ParsedCourse | null {
-  const t = title.toLowerCase();
-  const month = Object.keys(MONTH_TO_NUM).find((m) => t.includes(m));
-  const yearMatch = t.match(/20(2[6-9]|3\d)/);
-  const type = detectType(t);
-  if (!month || !yearMatch || !type) return null;
-  // Masterclasses are always run online; otherwise infer from the title.
-  const delivery =
-    type === "masterclass" || t.includes("online") ? "online" : "in-person";
-  let city = title.includes(",") ? title.split(",").pop()!.trim() : "—";
-  if (city.toLowerCase() === "online") city = "Online";
-  return { month: MONTH_TO_NUM[month], year: Number(yearMatch[0]), day: null, type, delivery, city };
-}
-
-/**
- * Fallback parser for products whose TITLE has no month/year (e.g. masterclasses):
- * derive the course from the `custom.*` metafields — `tipologia_di_corso` (type),
- * `luogo_e_orari` (event day/month), `termine_iscrizioni` (deadline → year),
- * `luogo` (venue / Online). Returns null if no type or no month can be found.
- */
-function parseCourseFromMetafields(
-  title: string,
-  tags: string,
-  mf: Record<string, string>,
-): ParsedCourse | null {
-  const type = detectType(mf.tipologia_di_corso || "") || detectType(title);
-  if (!type) return null;
-
-  const event = parseItDate(mf.luogo_e_orari || "");
-  const deadline = parseItDate(mf.termine_iscrizioni || "");
-  const month = event.month ?? deadline.month;
-  if (!month) return null; // can't place on the calendar without a month
-  const day = event.day;
-  // Year: event date → deadline → infer (this/next year from the month).
-  let year = event.year ?? deadline.year;
-  if (!year) {
-    const now = new Date();
-    const cur0 = now.getMonth(); // 0-based
-    year = month - 1 >= cur0 ? now.getFullYear() : now.getFullYear() + 1;
-  }
-
-  const luogo = (mf.luogo || "").trim();
-  const tagsL = (tags || "").toLowerCase();
-  const online =
-    type === "masterclass" ||
-    /online/.test(luogo.toLowerCase()) ||
-    /online/.test(tagsL) ||
-    /online/.test(title.toLowerCase());
-  const city = online ? "Online" : luogo || "—";
-
-  return { month, year, day, type, delivery: online ? "online" : "in-person", city };
 }
 
 interface Classification {
