@@ -9,7 +9,9 @@ import {
 } from "@/lib/corsi";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { isSandboxCourse } from "@/lib/corsi/sandbox";
+import { loadSkippedCourses } from "@/lib/sync/skipped-courses";
 import { CorsiCatalog } from "@/components/corsi/CorsiCatalog";
+import { SkippedCoursesPanel } from "@/components/corsi/SkippedCoursesPanel";
 import { SandboxCard } from "@/components/corsi/SandboxCard";
 
 export default async function Page({
@@ -19,10 +21,11 @@ export default async function Page({
 }) {
   const { type, from } = await searchParams;
   const ds = await getDataSource();
-  const [courses, educators, programMap] = await Promise.all([
+  const [courses, educators, programMap, skipped] = await Promise.all([
     ds.courses.list(),
     ds.educators.list(),
     loadCourseProgram(),
+    loadSkippedCourses(),
   ]);
   // A course has its sake program "assigned" when its saved overlay holds at
   // least one sake — that's the green-dot signal in the catalog.
@@ -61,7 +64,12 @@ export default async function Page({
       filterOptions={filterOptions}
       initialType={initialType}
       backHref={backHref}
-      topSlot={<SandboxCard />}
+      topSlot={
+        <>
+          <SkippedCoursesPanel skipped={skipped} />
+          <SandboxCard />
+        </>
+      }
     />
   );
 }

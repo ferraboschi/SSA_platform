@@ -10,6 +10,12 @@ export function shopifyAdminProductsUrl(query?: string): string {
   return query ? `${base}?query=${encodeURIComponent(query)}` : base;
 }
 
+/** Admin page for ONE product by id — used to open a not-imported product so
+ *  staff can fix its title/metafields at the source. */
+export function shopifyAdminProductUrl(productId: string | number): string {
+  return `https://admin.shopify.com/store/${STORE_SLUG}/products/${productId}`;
+}
+
 /** Admin "Orders" page, optionally pre-filtered (e.g. by an order name/number)
  *  so staff can open the exact order to issue a refund. */
 export function shopifyAdminOrdersUrl(query?: string): string {
