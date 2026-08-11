@@ -61,7 +61,12 @@ export function parseCourseFromMetafields(
   tags: string,
   mf: Record<string, string>,
 ): ParsedCourse | null {
-  const type = detectType(mf.tipologia_di_corso || "") || detectType(title);
+  // Type detection chain: tipologia metafield → title → TAGS. Tags are staff-
+  // curated on Shopify ("Masterclass, ONLINE", "Mixology", …) and are the only
+  // type signal on products whose title/tipologia use free wording (e.g.
+  // "Pillole di sake - Doburoku", tipologia "Approfondimento", tag Masterclass
+  // — an ACTIVE course that was silently skipped without this).
+  const type = detectType(mf.tipologia_di_corso || "") || detectType(title) || detectType(tags);
   if (!type) return null;
 
   const event = parseItDate(mf.luogo_e_orari || "");
@@ -76,6 +81,10 @@ export function parseCourseFromMetafields(
     const cur0 = now.getMonth(); // 0-based
     year = month - 1 >= cur0 ? now.getFullYear() : now.getFullYear() + 1;
   }
+
+  // Same 2024+ floor as the title path: pre-2024 belongs to the historical
+  // import — ingesting it from Shopify would duplicate those courses.
+  if (year < 2024) return null;
 
   const luogo = (mf.luogo || "").trim();
   const tagsL = (tags || "").toLowerCase();
