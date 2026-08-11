@@ -11,6 +11,7 @@ import { getSupabaseServerClient } from "@/lib/integrations/supabase/server";
 import { buildDashboard, capitalize, isoWeek, monthIndexIt, monthLabel } from "@/lib/dashboard";
 import { duplicatePeople, type CorsistaLite } from "@/lib/anomalie/rules";
 import { ANOMALIE_COUNTS_KEY } from "@/lib/anomalie/reconcile";
+import { loadSkippedCourses } from "@/lib/sync/skipped-courses";
 import { loadCourseEconomics } from "@/lib/economics";
 import { isLegacyInvoiced } from "@/lib/economics/types";
 import {
@@ -55,6 +56,7 @@ export default async function DashboardPage() {
   // Real "last synced" timestamp — the refresh button re-runs the sync and
   // router.refresh()es, so this re-renders with the fresh time on every sync.
   let syncLabel = t.dashboard.updatedNever;
+  let syncMins: number | null = null;
   try {
     const sbSync = await getSupabaseServerClient();
     const { data: syncRow } = await sbSync
@@ -65,6 +67,7 @@ export default async function DashboardPage() {
     const iso = (syncRow as { last_synced_at?: string } | null)?.last_synced_at;
     if (iso) {
       const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+      syncMins = mins;
       syncLabel =
         mins < 1
           ? t.dashboard.updatedNow
@@ -114,7 +117,11 @@ export default async function DashboardPage() {
   } catch {
     /* best-effort — card hides */
   }
-  const weirdTotal = dupClusters + financialAnomalies;
+  // Shopify products published but not yet a course (parser couldn't read them).
+  const skippedCount = (await loadSkippedCourses().catch(() => [])).length;
+  // Sync is "stale" if the last successful run is older than ~2 scheduler ticks
+  // (30'). null = never synced → also stale.
+  const syncStale = syncMins == null || syncMins > 30;
 
   const d = buildDashboard(realCourses, corsisti, educators, thresholds);
   const dt = t.dashboard;
@@ -249,39 +256,50 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* "Cose strane e duplicati": prominent, first thing after the hero, so
-          discrepancies surface up front (owner). Links straight to /anomalie. */}
-      {weirdTotal > 0 && kpiHref("anomalie", "/anomalie") && (
-        <Link
-          href="/anomalie"
-          className="card"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-            padding: "16px 20px",
-            marginBottom: 28,
-            borderLeft: "3px solid var(--warning)",
-            textDecoration: "none",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <Icon name="warn" size={18} />
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>Cose strane e duplicati da rivedere</div>
-              <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-                {dupClusters > 0 && `${dupClusters} possibili duplicati`}
-                {dupClusters > 0 && financialAnomalies > 0 && " · "}
-                {financialAnomalies > 0 && `${financialAnomalies} anomalie contabili`}
-              </div>
-            </div>
+      {/* Salute sistema (owner): one hub for "is everything OK?" — sync
+          freshness, Shopify products not yet imported as courses, and data
+          discrepancies (duplicates + accounting anomalies). Each warning links
+          to where to act; a green ✓ means nothing to do. */}
+      <section className="card" style={{ marginBottom: 28, padding: "14px 18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", justifyContent: "space-between" }}>
+          <div className="eyebrow" style={{ whiteSpace: "nowrap" }}>Salute sistema</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {[
+              { label: "Sync", ok: !syncStale, value: syncStale ? "da aggiornare" : syncLabel, href: undefined as string | undefined },
+              { label: "Corsi non importati", ok: skippedCount === 0, value: String(skippedCount), href: kpiHref("corsi", "/corsi") },
+              { label: "Duplicati", ok: dupClusters === 0, value: String(dupClusters), href: kpiHref("anomalie", "/anomalie") },
+              { label: "Anomalie contabili", ok: financialAnomalies === 0, value: String(financialAnomalies), href: kpiHref("anomalie", "/anomalie") },
+            ].map((it) => {
+              const chip = (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "6px 12px",
+                    borderRadius: 999,
+                    fontSize: 12.5,
+                    background: it.ok ? "var(--success-bg)" : "var(--warning-bg)",
+                    color: it.ok ? "var(--success-fg)" : "var(--warning-fg)",
+                    border: `1px solid ${it.ok ? "var(--border-2)" : "var(--warning)"}`,
+                  }}
+                >
+                  <span aria-hidden>{it.ok ? "✓" : "⚠"}</span>
+                  <span style={{ color: "var(--text-2)" }}>{it.label}</span>
+                  <strong className="num">{it.value}</strong>
+                </span>
+              );
+              return it.href && !it.ok ? (
+                <Link key={it.label} href={it.href} style={{ textDecoration: "none" }}>
+                  {chip}
+                </Link>
+              ) : (
+                <span key={it.label}>{chip}</span>
+              );
+            })}
           </div>
-          <span className="num" style={{ fontSize: 28, fontWeight: 700, color: "var(--warning-fg)" }}>
-            {weirdTotal}
-          </span>
-        </Link>
-      )}
+        </div>
+      </section>
 
       {/* KPI row — every card links to the view that lists its members. */}
       <section className="kpi-grid cols-4" style={{ marginBottom: 28 }}>
