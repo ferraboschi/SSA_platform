@@ -726,12 +726,44 @@ async function backfillMissedEnrollments(
   healEnded: boolean,
 ): Promise<number> {
   let written = 0;
+  type CorsoRow = {
+    id: number;
+    external_id: string;
+    price_cents: number | null;
+    lifecycle: string | null;
+    start_date: string | null;
+  };
+  const cols = "id, external_id, price_cents, lifecycle, start_date";
   const { data: corsi, error } = await sb
     .from("corsi")
-    .select("id, external_id, price_cents, lifecycle, start_date")
+    .select(cols)
     .in("lifecycle", healEnded ? ["pubblicato", "passato", "bozza"] : ["pubblicato"])
     .not("external_id", "is", null);
   if (error) return 0;
+  const list = [...((corsi ?? []) as CorsoRow[])];
+  // SELF-HEAL (no full backfill needed): on an INCREMENTAL run, also mend ended
+  // courses whose roster is EXACTLY ZERO — the tell-tale of a course only just
+  // imported (e.g. after a parser fix) whose enrollments were never materialized.
+  // Self-limiting: once mended they have a roster → excluded next run. Add-only +
+  // DEAD_FINANCIAL-filtered below, so the stale-refund risk that gates the general
+  // `healEnded` scope stays negligible (a full-roster course is never touched).
+  if (!healEnded) {
+    const seen = new Set(list.map((c) => c.id));
+    const { data: ended } = await sb
+      .from("corsi")
+      .select(cols)
+      .in("lifecycle", ["passato", "bozza"])
+      .not("external_id", "is", null);
+    const endedRows = (ended ?? []) as CorsoRow[];
+    if (endedRows.length > 0) {
+      const { data: enr } = await sb
+        .from("corsi_iscrizioni")
+        .select("corso_id")
+        .in("corso_id", endedRows.map((c) => c.id));
+      const hasRoster = new Set(((enr ?? []) as { corso_id: number }[]).map((e) => e.corso_id));
+      for (const c of endedRows) if (!hasRoster.has(c.id) && !seen.has(c.id)) list.push(c);
+    }
+  }
   type PurRow = {
     corsista_id: number | null;
     external_id: string | null;
@@ -746,13 +778,7 @@ async function backfillMissedEnrollments(
     buyer_name: string | null;
   };
   const today = new Date().toISOString().slice(0, 10);
-  for (const c of (corsi ?? []) as {
-    id: number;
-    external_id: string;
-    price_cents: number | null;
-    lifecycle: string | null;
-    start_date: string | null;
-  }[]) {
+  for (const c of list) {
     if (ignored.has(String(c.external_id))) continue;
     // passato/bozza heal only once the course date is past (a future draft is
     // not a held course; published courses heal regardless).
