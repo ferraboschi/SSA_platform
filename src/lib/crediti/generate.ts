@@ -236,7 +236,10 @@ export async function generateTransferCredits(): Promise<{ created: number }> {
  * enrolment and move it to "Utilizzati" (stato 'applicato'). Idempotent (only
  * touches still-open credits); never throws into the sync. Matching is by CODE
  * ALONE (the code identifies the credit even if a gifted/ceded access means the
- * redeemer differs from the original owner).
+ * redeemer differs from the original owner). Only a LIVE seat can consume the
+ * credit: a seat removed from the course (annullata — the removal un-spent the
+ * credit) or one whose order is not collected (refunded/voided/pending) is
+ * skipped, otherwise every 15' run would re-apply the credit onto it.
  */
 export async function matchTransferCreditsByCode(): Promise<{ matched: number }> {
   try {
@@ -257,18 +260,43 @@ export async function matchTransferCreditsByCode(): Promise<{ matched: number }>
     if (byCode.size === 0) return { matched: 0 };
 
     // Enrolments whose Shopify discount code IS one of those redemption codes.
-    const { data: enr, error: eErr } = await svc
+    // annullata_at / financial_status are selected defensively (pre-migration
+    // DB → base columns, then every seat counts as live).
+    const codes = [...byCode.keys()];
+    const RICH = "id, corso_id, discount_code, annullata_at, financial_status";
+    const BASE = "id, corso_id, discount_code";
+    let select = RICH;
+    let { data: enr, error: eErr } = await svc
       .from("corsi_iscrizioni")
-      .select("id, corso_id, discount_code")
-      .in("discount_code", [...byCode.keys()]);
+      .select(select)
+      .in("discount_code", codes);
+    if (eErr && select === RICH) {
+      select = BASE;
+      ({ data: enr, error: eErr } = await svc
+        .from("corsi_iscrizioni")
+        .select(select)
+        .in("discount_code", codes));
+    }
     if (eErr) return { matched: 0 }; // discount_code column missing → no-op
+
+    type EnrRow = {
+      id: number;
+      corso_id: number;
+      discount_code: string | null;
+      annullata_at?: string | null;
+      financial_status?: string | null;
+    };
+    // Only LIVE seats redeem: not removed, and actually collected.
+    const redeemed = ((enr ?? []) as unknown as EnrRow[]).filter(
+      (e) => !e.annullata_at && isPaidRevenue(e.financial_status),
+    );
 
     // Course levels for the same-level guard: only close a credit if the course
     // where the code was spent is the SAME `type` as the credit's origin. A code
     // spent on a different level is left OPEN (never wrongly consumed).
     const involved = new Set<number>();
     for (const v of byCode.values()) if (v.origineId != null) involved.add(v.origineId);
-    for (const e of (enr ?? []) as { corso_id: number }[]) involved.add(e.corso_id);
+    for (const e of redeemed) involved.add(e.corso_id);
     const typeById = new Map<number, string | null>();
     if (involved.size > 0) {
       const { data: courses } = await svc.from("corsi").select("id,type").in("id", [...involved]);
@@ -276,7 +304,7 @@ export async function matchTransferCreditsByCode(): Promise<{ matched: number }>
     }
 
     let matched = 0;
-    for (const e of (enr ?? []) as { id: number; corso_id: number; discount_code: string | null }[]) {
+    for (const e of redeemed) {
       const hit = e.discount_code ? byCode.get(e.discount_code) : undefined;
       const creditId = hit?.id;
       if (creditId == null) continue;

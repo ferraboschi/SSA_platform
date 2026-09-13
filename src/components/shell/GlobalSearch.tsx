@@ -12,7 +12,8 @@ import { useRouter } from "next/navigation";
 import { Badge, Icon } from "@/components/ui";
 import type { IconName } from "@/components/ui";
 import { NAV_ITEMS, type NavGroup } from "@/lib/auth";
-import { useT } from "@/lib/i18n";
+import { useT, format } from "@/lib/i18n";
+import { foldMatchRange, foldSearch } from "@/lib/search/fold";
 import type { SearchEntry, SearchIndex } from "@/lib/shell";
 
 interface ResultItem {
@@ -29,6 +30,18 @@ interface ResultGroup {
   key: string;
   label: string;
   items: ResultItem[];
+  /** All matches, of which only the first MAX_PER_GROUP are shown. */
+  total: number;
+}
+
+const MAX_PER_GROUP = 6;
+
+/** People whose name (or a word of it) starts with the query come before
+ *  matches on email/city or inside a word. Stable, so the index's alphabetical
+ *  order is kept within each tier. */
+function rankPeople(matches: SearchEntry[], fq: string): SearchEntry[] {
+  const tier = (e: SearchEntry) => (` ${foldSearch(e.title)}`.includes(` ${fq}`) ? 0 : 1);
+  return matches.map((e) => [tier(e), e] as const).sort((a, b) => a[0] - b[0]).map(([, e]) => e);
 }
 
 export function GlobalSearch({
@@ -74,9 +87,11 @@ export function GlobalSearch({
   );
 
   const groups = useMemo<ResultGroup[]>(() => {
-    const lq = q.toLowerCase().trim();
-    if (!lq) return [];
-    const match = (e: SearchEntry) => e.haystack.includes(lq);
+    // Haystacks are folded at index build time (shell-data) with the same
+    // normalizer: «forli» finds «Forlì», «nicolo» finds «Nicolò».
+    const fq = foldSearch(q);
+    if (!fq) return [];
+    const match = (e: SearchEntry) => e.haystack.includes(fq);
     const toItem = (e: SearchEntry): ResultItem => ({
       id: e.id,
       title: e.title,
@@ -85,6 +100,12 @@ export function GlobalSearch({
       href: e.href,
       badge: e.badge,
       badgeTone: e.badgeTone,
+    });
+    const group = (key: string, label: string, ranked: SearchEntry[]): ResultGroup => ({
+      key,
+      label,
+      items: ranked.slice(0, MAX_PER_GROUP).map(toItem),
+      total: ranked.length,
     });
 
     const pages: ResultItem[] = NAV_ITEMS.filter(
@@ -96,13 +117,20 @@ export function GlobalSearch({
         icon: it.icon,
         href: it.href,
       }))
-      .filter((p) => p.title.toLowerCase().includes(lq));
+      .filter((p) => foldSearch(p.title).includes(fq));
 
     return [
-      { key: "corsi", label: itemLabel(t, "corsi"), items: index.corsi.filter(match).slice(0, 6).map(toItem) },
-      { key: "corsisti", label: itemLabel(t, "corsisti"), items: index.corsisti.filter(match).slice(0, 6).map(toItem) },
-      { key: "educator", label: itemLabel(t, "educator"), items: index.educator.filter(match).slice(0, 6).map(toItem) },
-      { key: "pages", label: t.topbar.pages, items: pages.slice(0, 6) },
+      // Courses arrive ranked from the index (live/upcoming first, then most
+      // recent), so filtering keeps the order and the slice shows the newest.
+      group("corsi", itemLabel(t, "corsi"), index.corsi.filter(match)),
+      group("corsisti", itemLabel(t, "corsisti"), rankPeople(index.corsisti.filter(match), fq)),
+      group("educator", itemLabel(t, "educator"), rankPeople(index.educator.filter(match), fq)),
+      {
+        key: "pages",
+        label: t.topbar.pages,
+        items: pages.slice(0, MAX_PER_GROUP),
+        total: pages.length,
+      },
     ].filter((g) => g.items.length > 0);
   }, [q, index, t, visiblePageIds]);
 
@@ -215,6 +243,12 @@ function Dropdown({
     );
   }
 
+  // «6 di N» whenever a group (or the whole list) is cut — the bare count
+  // used to be the SLICED length, passing off 6 results as the full set.
+  const shownOf = (shown: number, total: number) =>
+    total > shown ? format(t.pagamenti.showingOf, { shown, n: total }) : String(total);
+  const total = groups.reduce((s, g) => s + g.total, 0);
+
   let counter = 0;
   return (
     <div className="topbar-search-pop">
@@ -223,7 +257,7 @@ function Dropdown({
           <div className="search-section-label">
             <span>{g.label}</span>
             <span className="num" style={{ color: "var(--text-4)", fontWeight: 500 }}>
-              {g.items.length}
+              {shownOf(g.items.length, g.total)}
             </span>
           </div>
           {g.items.map((r) => {
@@ -264,7 +298,7 @@ function Dropdown({
         </span>
         <span style={{ flex: 1 }}></span>
         <span className="num">
-          {flat.length} {t.topbar.resultsCount}
+          {shownOf(flat.length, total)} {t.topbar.resultsCount}
         </span>
       </div>
     </div>
@@ -272,13 +306,14 @@ function Dropdown({
 }
 
 function highlight(text: string, q: string): ReactNode {
-  const lower = text.toLowerCase();
-  const ql = q.toLowerCase();
-  const idx = lower.indexOf(ql);
-  if (idx < 0) return text;
+  // Accent-insensitive hit, mapped back onto the ORIGINAL text («Forlì» stays
+  // «Forlì» when found by «forli»).
+  const range = foldMatchRange(text, q);
+  if (!range) return text;
+  const [start, end] = range;
   return (
     <>
-      {text.slice(0, idx)}
+      {text.slice(0, start)}
       <mark
         style={{
           background: "var(--indigo-50)",
@@ -288,9 +323,9 @@ function highlight(text: string, q: string): ReactNode {
           fontWeight: 600,
         }}
       >
-        {text.slice(idx, idx + q.length)}
+        {text.slice(start, end)}
       </mark>
-      {text.slice(idx + q.length)}
+      {text.slice(end)}
     </>
   );
 }

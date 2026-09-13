@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getDataSource } from "@/lib/data";
+import { requireNavAccess } from "@/lib/auth/guard";
 import { getTranslations } from "@/lib/i18n/server";
 import { CorsistaProfile } from "@/components/corsisti/CorsistaProfile";
 
 export default async function Page({ params }: { params: Promise<{ email: string }> }) {
+  // Same ACL as the /corsisti list: a role that cannot see the people section
+  // must not open a profile (personal data, spend, exam history) by URL either.
+  await requireNavAccess("corsisti");
   const { email } = await params;
   const requestedEmail = decodeURIComponent(email).toLowerCase();
   const ds = await getDataSource();

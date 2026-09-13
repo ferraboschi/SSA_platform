@@ -37,6 +37,12 @@ function isMissingSchema(err: { message?: string } | null | undefined): boolean 
   return !!err && /annullata|does not exist|schema cache|column|find the table/i.test(err.message || "");
 }
 
+/** Append a ledger note to a credit's existing `nota` (never clobber it). */
+function appendNota(existing: string | null | undefined, note: string): string {
+  const prev = (existing ?? "").trim();
+  return prev ? `${prev} — ${note}` : note;
+}
+
 export async function cancelEnrollmentAction(
   corsoId: number,
   iscrizioneId: number,
@@ -128,6 +134,37 @@ export async function cancelEnrollmentAction(
         .eq("stato", "applicato");
     } catch {
       /* corsi_crediti missing (pre-migration) → nothing to unlink */
+    }
+
+    // RIMBORSO: the money goes back to the person on Shopify, so a credit that
+    // was generated FOR this seat (whole-course cancellation) is no longer owed
+    // and must leave the spendable pool → 'rimborsato', reason on the note.
+    // Only a still-OPEN credit: an applied one already placed the person
+    // elsewhere (a staff decision, not ours). Best-effort — never fails the
+    // removal; the amount is untouched.
+    if (mode === "rimborso") {
+      try {
+        const { data: cr } = await svc
+          .from("corsi_crediti")
+          .select("id, nota")
+          .eq("iscrizione_origine_id", iscrId)
+          .eq("stato", "aperto")
+          .maybeSingle();
+        const open = cr as { id: number; nota: string | null } | null;
+        if (open?.id) {
+          await svc
+            .from("corsi_crediti")
+            .update({
+              stato: "rimborsato",
+              nota: appendNota(open.nota, "Rimborso registrato dalla rimozione iscritto"),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", open.id)
+            .eq("stato", "aperto");
+        }
+      } catch {
+        /* corsi_crediti missing (pre-migration) → nothing to close */
+      }
     }
 
     revalidatePath(`/corsi/${corso}`);
@@ -263,19 +300,24 @@ export async function transferEnrollmentAction(
     // enrollment as collected revenue on the destination (phantom money) — the
     // collected-revenue rule gates on financial_status, and netPaidCents ignores it.
     const net = netPaidCents({ amount_cents: enr.amount_cents, discount_cents: enr.discount_cents });
-    const { error: insErr } = await svc.from("corsi_iscrizioni").insert({
-      corso_id: dest,
-      corsista_id: Number(enr.corsista_id),
-      amount_cents: net,
-      discount_cents: 0,
-      financial_status: enr.financial_status ?? null,
-      historical: false,
-      seat_index: 1,
-    });
+    const { data: ins, error: insErr } = await svc
+      .from("corsi_iscrizioni")
+      .insert({
+        corso_id: dest,
+        corsista_id: Number(enr.corsista_id),
+        amount_cents: net,
+        discount_cents: 0,
+        financial_status: enr.financial_status ?? null,
+        historical: false,
+        seat_index: 1,
+      })
+      .select("id")
+      .maybeSingle();
     if (insErr) {
       if (isMissingSchema(insErr)) return { ok: false, schema: true, error: "Funzione non disponibile (migrazione mancante)." };
       return { ok: false, error: insErr.message };
     }
+    const newSeatId = ins?.id != null ? Number(ins.id) : null;
 
     // Mark the origin seat annullata ('trasferito').
     const { error: updErr } = await svc
@@ -290,8 +332,28 @@ export async function transferEnrollmentAction(
       return { ok: false, error: updErr.message };
     }
 
+    // A credit APPLIED on the origin seat follows the person: re-point it at the
+    // destination seat, or it would keep recognising revenue on a dead seat of
+    // the old course. Best-effort, like the un-spend in cancelEnrollmentAction.
+    if (newSeatId != null) {
+      try {
+        await svc
+          .from("corsi_crediti")
+          .update({
+            corso_destinazione_id: dest,
+            iscrizione_destinazione_id: newSeatId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("iscrizione_destinazione_id", iscrId)
+          .eq("stato", "applicato");
+      } catch {
+        /* corsi_crediti missing (pre-migration) → nothing to move */
+      }
+    }
+
     revalidatePath(`/corsi/${corso}`);
     revalidatePath(`/corsi/${dest}`);
+    revalidatePath("/crediti");
 
     return {
       ok: true,

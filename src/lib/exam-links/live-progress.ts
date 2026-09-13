@@ -283,7 +283,11 @@ export async function loadExamProgress(
     let correct: number | null = null;
     let wrong: number | null = null;
     if (r.answers && questions.length > 0) {
-      const { detail } = gradeAnswers(questions, r.answers);
+      // The heartbeat snapshot carries the sitting language as `__lang` (ExamGate
+      // persist): strip it and grade against the options the student actually
+      // SAW — an EN/JA sitting graded against the Italian texts read 0 corrette.
+      const { __lang, ...answers } = r.answers as Record<string, string[] | string> & { __lang?: string };
+      const { detail } = gradeAnswers(questions, answers, typeof __lang === "string" ? __lang : undefined);
       correct = detail.filter((a) => a.ok === true).length;
       wrong = detail.filter((a) => a.ok === false).length;
     }

@@ -17,10 +17,10 @@ const linkBtn: CSSProperties = {
   textAlign: "center",
 };
 
-export function LoginForm({ next }: { next: string }) {
+export function LoginForm({ next, notice }: { next: string; notice?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(notice ?? null);
   const [mode, setMode] = useState<"login" | "forgot" | "sent">("login");
   const [pending, startTransition] = useTransition();
 

@@ -45,6 +45,36 @@ describe("aggregateFeedback — choice", () => {
   });
 });
 
+describe("aggregateFeedback — choice on an EN/JA sitting", () => {
+  // The runner stores the TRANSLATED option text the student saw, index-aligned
+  // with the Italian options (the labels the staff view shows).
+  const trQ: FeedbackQuestion = {
+    ...choiceQ,
+    i18n: { en: { text: "Favourite?", options: ["Pure rice", "Ginjo", "Honjozo"] } },
+  };
+  it("counts a translated pick on the same bar as its Italian twin", () => {
+    const q = aggregateFeedback(
+      [trQ],
+      [
+        { answers: { c: "Junmai" }, lang: "it" },
+        { answers: { c: "Pure rice" }, lang: "en" },
+        { answers: { c: ["Ginjo", "Honjozo"] }, lang: "en" },
+      ],
+    ).questions[0];
+    expect(q.optionLabels).toEqual(["Junmai", "Ginjo", "Honjozo"]); // labels stay Italian
+    expect(q.optionCounts).toEqual([2, 1, 1]); // "Pure rice" = "Junmai" (index 0)
+    expect(q.answered).toBe(3);
+  });
+  it("still resolves an Italian pick on an EN sitting (translation missing → the runner showed Italian)", () => {
+    const q = aggregateFeedback([choiceQ], [{ answers: { c: "Ginjo" }, lang: "en" }]).questions[0];
+    expect(q.optionCounts).toEqual([0, 1, 0]);
+  });
+  it("a row without lang is Italian (legacy rows)", () => {
+    const q = aggregateFeedback([trQ], [{ answers: { c: "Honjozo" } }, { answers: { c: "Junmai" }, lang: null }]).questions[0];
+    expect(q.optionCounts).toEqual([1, 0, 1]);
+  });
+});
+
 describe("aggregateFeedback — open", () => {
   it("collects non-empty open responses", () => {
     const q = aggregateFeedback([openQ], rows({ o: "Ottimo corso" }, { o: "" }, { o: "Bravo educator" })).questions[0];

@@ -1536,6 +1536,8 @@ export const en: Dictionary = {
     markRefunded: "Mark refunded",
     markVoided: "Mark voided",
     unlink: "Unlink (reopen)",
+    reopenClosedConfirm: "This credit is already refunded or voided: reopening makes it spendable again. Confirm?",
+    stateChangeFailed: "State change failed.",
     cancel: "Cancel",
     // Counts
     openCount: "{n} open credits",

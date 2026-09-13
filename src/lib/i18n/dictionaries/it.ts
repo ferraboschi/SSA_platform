@@ -1538,6 +1538,8 @@ export const it = {
     markRefunded: "Segna rimborsato",
     markVoided: "Segna annullato",
     unlink: "Scollega (riapri)",
+    reopenClosedConfirm: "Questo credito risulta già rimborsato o annullato: riaprirlo lo rende di nuovo spendibile. Confermi?",
+    stateChangeFailed: "Cambio di stato non riuscito.",
     cancel: "Annulla",
     // Conteggi
     openCount: "{n} crediti aperti",

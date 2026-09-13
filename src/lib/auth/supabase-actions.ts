@@ -12,6 +12,7 @@ import {
 } from "@/lib/integrations/supabase/server";
 import { appConfig } from "@/lib/integrations/config";
 import { assertRole } from "./guard";
+import { getSession } from "./session";
 import { getEmailService } from "@/lib/integrations/email";
 import { safeNext } from "./safe-next";
 
@@ -30,6 +31,18 @@ export async function signInAction(
   const sb = await getSupabaseServerClient();
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) return { ok: false, error: error.message };
+  // Least privilege: an auth user whose profile is not an enabled staff role
+  // (a self-registered account, or one the trigger created as 'guest') must not
+  // get a session on this device — staff accounts exist only through invites.
+  const session = await getSession();
+  if (session.user.roleKey === "guest") {
+    try {
+      await sb.auth.signOut({ scope: "local" });
+    } catch {
+      /* the guard below still refuses the session */
+    }
+    return { ok: false, error: "Account non abilitato: chiedi all'amministratore un invito." };
+  }
   revalidatePath("/", "layout");
   redirect(safeNext(next));
 }

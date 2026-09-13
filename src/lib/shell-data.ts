@@ -8,13 +8,16 @@ import "server-only";
 // app slow (building a search index over thousands of contacts on every load).
 
 import { unstable_cache } from "next/cache";
-import { COURSE_TYPE_SHORT_LABEL } from "@/lib/domain";
-import type { CourseTypeKey } from "@/lib/domain";
+import { COURSE_TYPE_SHORT_LABEL, expectedDays } from "@/lib/domain";
+import type { CourseLifecycle, CourseTypeKey } from "@/lib/domain";
 import { isSupabaseConfigured } from "@/lib/integrations/supabase";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { deriveLifecycle } from "@/lib/data/supabase/mappers";
+import { paginateAll } from "@/lib/data/supabase/query-helpers";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { MONTH_TO_NUM } from "@/lib/dates/italian-months";
 import { ANOMALIE_COUNTS_KEY } from "@/lib/anomalie/reconcile";
+import { foldFields } from "@/lib/search/fold";
 import type { SearchIndex, SidebarCourse } from "@/lib/shell";
 import { isSandboxCourse, SANDBOX_COURSE_HANDLES } from "@/lib/corsi/sandbox";
 
@@ -30,6 +33,17 @@ const EMPTY: ShellData = {
   sidebarCourses: [],
 };
 
+type CorsistaSearchRow = {
+  email: string;
+  full_name: string;
+  city: string | null;
+  merged_into: number | null;
+  placeholder: boolean | null;
+};
+
+// Alphabetical people order for the search index (accent/case-insensitive).
+const byName = new Intl.Collator("it", { sensitivity: "base" });
+
 async function fetchShellData(): Promise<ShellData> {
   if (!isSupabaseConfigured()) return EMPTY;
   const svc = getSupabaseServiceClient();
@@ -39,19 +53,31 @@ async function fetchShellData(): Promise<ShellData> {
   // flagged "pubblicato" that the read-time date flip would otherwise miss.
   const today = new Date().toISOString().slice(0, 10);
 
-  const [coursesRes, corsistiRes, educatorsRes, iscrizioniRes, countsRes, anomalieRes, programMap] =
+  const [coursesRes, corsisti, educatorsRes, iscrizioniRes, countsRes, anomalieRes, programMap] =
     await Promise.all([
       svc
         .from("corsi")
         .select(
-          "id,handle,short_title,full_title,type,city,month,year,day:start_date,lifecycle,educator_id",
+          "id,handle,short_title,full_title,type,city,month,year,day:start_date,lifecycle,educator_id,delivery_mode",
         )
         .order("start_date", { ascending: true, nullsFirst: false })
         .limit(2000),
-      // Light search rows only (no enrollment join) — fast + smaller payload.
-      // merged_into: a folded duplicate must never appear as a separate profile
-      // in search (its data lives on the survivor).
-      svc.from("corsisti").select("email,full_name,city,merged_into").limit(5000),
+      // EVERY corsista, paged: PostgREST caps a request at 1000 rows, so a flat
+      // .limit(5000) on a 6700-row table silently dropped ~1600 people — the
+      // newest, the ones staff look up most. Light rows only (no enrollment
+      // join). A failed page logs and stops rather than failing every render.
+      paginateAll<CorsistaSearchRow>(
+        async (from, to) => {
+          const { data, error } = await svc
+            .from("corsisti")
+            .select("email,full_name,city,merged_into,placeholder")
+            .order("id")
+            .range(from, to);
+          if (error) console.warn(`[shell-data] corsisti page ${from}-${to} failed: ${error.message}`);
+          return { data: (data ?? []) as CorsistaSearchRow[], error };
+        },
+        { pageSize: 1000, onError: "break" },
+      ),
       svc.from("educators").select("id,external_id,full_name,city,bio").eq("active", true),
       // Enrollment counts per course (light: just the FK column) — active seats
       // only, so the sidebar count matches the course-detail roster.
@@ -86,8 +112,9 @@ async function fetchShellData(): Promise<ShellData> {
     month: string;
     year: number;
     day: string | null;
-    lifecycle: string;
+    lifecycle: CourseLifecycle;
     educator_id: number | null;
+    delivery_mode: string | null;
   };
 
   // corso_id → enrolled count
@@ -105,18 +132,47 @@ async function fetchShellData(): Promise<ShellData> {
 
   // The "Test esame" sandbox stays out of search, sidebar and counts.
   const courses = ((coursesRes.data ?? []) as CourseRow[]).filter((c) => !isSandboxCourse(c));
-  const corsisti = (corsistiRes.data ?? []) as {
-    email: string;
-    full_name: string;
-    city: string | null;
-    merged_into: number | null;
-  }[];
   const educators = (educatorsRes.data ?? []) as EduRow[];
   const eduName = new Map(educators.map((e) => [e.id, e.full_name]));
   const eduId = (e: EduRow) => e.external_id ?? `db-${e.id}`;
 
+  // Search rank for courses: the ones still live/upcoming first — by the same
+  // date-derived lifecycle every course reader uses, so a stale "pubblicato"
+  // past its last day ranks as held — then most recent start first, undated
+  // last. GlobalSearch keeps index order when it slices the first matches, so
+  // this order IS the ranking (no extra field in the serialized payload).
+  const courseDays = (c: CourseRow) =>
+    programMap.get(String(c.id))?.days?.length ||
+    expectedDays(c.type, c.delivery_mode === "online" ? "online" : "presenza");
+  const liveCourses = new Set(
+    courses
+      .filter(
+        (c) =>
+          deriveLifecycle(c.lifecycle, c.day, courseDays(c), enrolledByCourse.get(c.id) ?? 0) ===
+          "pubblicato",
+      )
+      .map((c) => c.id),
+  );
+  const rankedCourses = [...courses].sort((a, b) => {
+    const live = Number(liveCourses.has(b.id)) - Number(liveCourses.has(a.id));
+    if (live) return live;
+    if (a.day && b.day) return a.day < b.day ? 1 : a.day > b.day ? -1 : 0;
+    return Number(!a.day) - Number(!b.day);
+  });
+
+  // Synthetic rows never belong in search: the placeholder buyer of an
+  // email-less Shopify order (@ssa.placeholder), an unfilled multi-ticket seat
+  // (placeholder flag, @placeholder.ssa) and a duplicate folded into a survivor
+  // (merged_into — its data lives on the survivor's profile).
+  const isSearchablePerson = (s: CorsistaSearchRow) =>
+    !s.placeholder &&
+    !s.email.endsWith("@ssa.placeholder") &&
+    !s.email.endsWith("@placeholder.ssa") &&
+    s.merged_into == null;
+
+  // Haystacks are accent-folded (see search/fold) — the query side folds too.
   const searchIndex: SearchIndex = {
-    corsi: courses.map((c) => ({
+    corsi: rankedCourses.map((c) => ({
       id: String(c.id),
       title: c.short_title,
       sub: `${c.month} ${c.year} · ${c.city}${c.educator_id ? ` · ${eduName.get(c.educator_id) ?? ""}` : ""}`,
@@ -124,27 +180,26 @@ async function fetchShellData(): Promise<ShellData> {
       href: `/corsi/${c.handle}`,
       badge: COURSE_TYPE_SHORT_LABEL[c.type] ?? "",
       badgeTone: (c.type === "introduttivo" ? "oro" : "azzurro") as "oro" | "azzurro",
-      haystack: [c.short_title, c.full_title, c.city, `${c.month} ${c.year}`]
-        .join(" ")
-        .toLowerCase(),
+      haystack: foldFields([c.short_title, c.full_title, c.city, `${c.month} ${c.year}`]),
     })),
     corsisti: corsisti
-      .filter((s) => !s.email.endsWith("@ssa.placeholder") && s.merged_into == null)
+      .filter(isSearchablePerson)
       .map((s) => ({
-      id: s.email,
-      title: s.full_name,
-      sub: `${s.email} · ${s.city ?? ""}`,
-      icon: "user",
-      href: `/corsisti/${encodeURIComponent(s.email)}`,
-      haystack: [s.full_name, s.email, s.city ?? ""].join(" ").toLowerCase(),
-    })),
+        id: s.email,
+        title: s.full_name,
+        sub: `${s.email} · ${s.city ?? ""}`,
+        icon: "user",
+        href: `/corsisti/${encodeURIComponent(s.email)}`,
+        haystack: foldFields([s.full_name, s.email, s.city]),
+      }))
+      .sort((a, b) => byName.compare(a.title, b.title)),
     educator: educators.map((e) => ({
       id: eduId(e),
       title: e.full_name,
       sub: `Educator · ${e.city ?? ""}`,
       icon: "graduation",
       href: `/educator/${eduId(e)}`,
-      haystack: [e.full_name, e.city ?? "", e.bio ?? ""].join(" ").toLowerCase(),
+      haystack: foldFields([e.full_name, e.city, e.bio]),
     })),
   };
 
@@ -207,9 +262,10 @@ async function fetchShellData(): Promise<ShellData> {
 export const SHELL_DATA_TAG = "shell-data";
 
 /** Cached for 60s — shared across users; refreshes in the background.
- *  Key bumped to v2 when sidebar courses gained the program/status-dot fields,
- *  so the new shape is recomputed instead of serving the stale cached objects. */
-export const getShellData = unstable_cache(fetchShellData, ["shell-data-v2"], {
+ *  Key bumped whenever the cached shape changes (v2: sidebar program/status-dot
+ *  fields; v3: full paged corsisti index, folded haystacks, ranked order), so
+ *  the new shape is recomputed instead of serving the stale cached objects. */
+export const getShellData = unstable_cache(fetchShellData, ["shell-data-v3"], {
   revalidate: 60,
   tags: [SHELL_DATA_TAG],
 });

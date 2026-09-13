@@ -28,7 +28,8 @@ export interface SeatCompletionResult {
   /** Linked to an existing profile (repeat attendee) instead of a new person. */
   linked?: boolean;
   /** When `linked`, the id of the EXISTING corsista the seat now points to (the
-   *  placeholder is deleted). Callers that keep a local roster must re-key the
+   *  placeholder is deleted once its attendance / exam-progress rows have been
+   *  moved onto that corsista). Callers that keep a local roster must re-key the
    *  row on THIS id, not the stale placeholder id, or later per-corsista writes
    *  (e.g. attendance) hit a deleted id. */
   linkedId?: number;
@@ -55,6 +56,112 @@ export interface SeatCompletionResolve {
 
 const cleanPhoneDigits = (p: string): string => String(p ?? "").replace(/[\s\-().+]/g, "");
 
+/** One row of a corsista-keyed table, read back for re-keying (see planRekey). */
+export interface RekeyRow {
+  id: number;
+  /** The row's unique key WITHIN the course (day_no, test_key…), stringified. */
+  key: string;
+  /** corsi_presenze only: the attendance fact. */
+  present?: boolean;
+}
+
+/** Pure plan for moving a placeholder's per-course rows onto the target corsista
+ *  (same policy as the merge core in data/anomalie-actions.ts): a row whose key
+ *  the target does not hold MOVES; on a key conflict the placeholder's row stays
+ *  put (it dies with the placeholder) but a `present: true` is folded onto the
+ *  target's row — attendance was real, whichever identity the educator ticked. */
+export function planRekey(
+  placeholderRows: RekeyRow[],
+  targetRows: RekeyRow[],
+): { move: number[]; markPresent: number[] } {
+  const targetByKey = new Map(targetRows.map((r) => [r.key, r]));
+  const presentNow = new Set(targetRows.filter((r) => r.present === true).map((r) => r.key));
+  const move: number[] = [];
+  const markPresent: number[] = [];
+  for (const r of placeholderRows) {
+    const t = targetByKey.get(r.key);
+    if (!t) {
+      move.push(r.id);
+      targetByKey.set(r.key, r);
+      if (r.present === true) presentNow.add(r.key);
+      continue;
+    }
+    if (r.present === true && !presentNow.has(r.key)) {
+      markPresent.push(t.id);
+      presentNow.add(r.key);
+    }
+  }
+  return { move, markPresent };
+}
+
+// Tables keyed by corsista_id whose rows are CASCADE-deleted with the corsista
+// (migrations 20260701170000 / 20260703120000). keyCol = the remaining column of
+// the table's unique key within ONE course.
+const REKEY_TABLES: { table: string; keyCol: string; hasPresent: boolean }[] = [
+  { table: "corsi_presenze", keyCol: "day_no", hasPresent: true }, // unique(corso_id, corsista_id, day_no)
+  { table: "exam_progress", keyCol: "test_key", hasPresent: false }, // partial unique(corso_id, test_key, corsista_id)
+];
+
+/** A pre-migration environment legitimately lacks a table/column. */
+function isMissingSchema(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  if (["42P01", "42703", "PGRST204", "PGRST205"].includes(err.code ?? "")) return true;
+  return /does not exist|schema cache/i.test(err.message ?? "");
+}
+
+/** Move the placeholder's per-course rows (attendance, live exam progress) onto
+ *  the existing corsista BEFORE the placeholder is deleted: those tables cascade
+ *  on corsisti, so a presence ticked on the «Posto da completare» seat would
+ *  otherwise vanish (the PROMOTE path keeps the id and never had this problem).
+ *  Returns false when something could not be moved — the caller must then KEEP
+ *  the placeholder so no row is destroyed. */
+async function rekeyPlaceholderRows(
+  svc: Svc,
+  corsoId: number,
+  placeholderId: number,
+  targetId: number,
+): Promise<boolean> {
+  let ok = true;
+  for (const { table, keyCol, hasPresent } of REKEY_TABLES) {
+    const cols = ["id", keyCol, ...(hasPresent ? ["present"] : [])].join(",");
+    const read = (corsistaId: number) =>
+      svc.from(table).select(cols).eq("corso_id", corsoId).eq("corsista_id", corsistaId);
+    const { data: phRows, error: phErr } = await read(placeholderId);
+    if (phErr) {
+      if (!isMissingSchema(phErr)) ok = false;
+      continue;
+    }
+    if (!phRows || phRows.length === 0) continue;
+    const { data: tRows, error: tErr } = await read(targetId);
+    if (tErr) {
+      ok = false;
+      continue;
+    }
+    // Dynamic select string → supabase-js can't infer the row type; go via unknown.
+    const toRow = (r: Record<string, unknown>): RekeyRow => ({
+      id: Number(r.id),
+      key: String(r[keyCol] ?? ""),
+      ...(hasPresent ? { present: r.present === true } : {}),
+    });
+    const plan = planRekey(
+      (phRows as unknown as Record<string, unknown>[]).map(toRow),
+      ((tRows ?? []) as unknown as Record<string, unknown>[]).map(toRow),
+    );
+    if (plan.move.length > 0) {
+      const { error } = await svc.from(table).update({ corsista_id: targetId }).in("id", plan.move);
+      if (error) ok = false;
+    }
+    if (plan.markPresent.length > 0) {
+      const { error } = await svc
+        .from(table)
+        .update({ present: true, updated_at: new Date().toISOString() })
+        .in("id", plan.markPresent);
+      if (error) ok = false;
+    }
+  }
+  return ok;
+}
+
 export async function finalizeSeatCompletion(
   svc: Svc,
   corsoId: number,
@@ -67,13 +174,15 @@ export async function finalizeSeatCompletion(
   const { name, email, phone } = person;
 
   const linkToTarget = async (id: number): Promise<SeatCompletionResult> => {
-    // A repeat attendee is fine across courses, but not twice in THIS one.
+    // A repeat attendee is fine across courses, but not twice in THIS one (a
+    // removed seat of theirs — annullata — does not count as "already here").
     const { data: dup } = await svc
       .from("corsi_iscrizioni")
       .select("id")
       .eq("corso_id", corsoId)
       .eq("corsista_id", id)
       .neq("id", iscrId)
+      .is("annullata_at", null)
       .limit(1);
     if (dup && dup.length > 0) return { ok: false, error: "Questa persona è già presente in questo corso." };
 
@@ -122,10 +231,19 @@ export async function finalizeSeatCompletion(
       .update({ corsista_id: id, enrolled_email: email })
       .eq("id", iscrId);
     if (linkErr) return { ok: false, error: linkErr.message };
-    await svc.from("corsisti").delete().eq("id", placeholderId).then(
-      () => {},
-      () => {},
-    );
+    // Deleting the placeholder cascades onto its attendance / exam-progress
+    // rows: move them to the existing corsista first, and if that fails keep the
+    // (now orphan) placeholder rather than destroy what was ticked.
+    if (await rekeyPlaceholderRows(svc, corsoId, placeholderId, id)) {
+      await svc.from("corsisti").delete().eq("id", placeholderId).then(
+        () => {},
+        () => {},
+      );
+    } else {
+      console.warn(
+        `[seat-completion] placeholder ${placeholderId} kept: its rows could not be re-keyed to corsista ${id} (corso ${corsoId})`,
+      );
+    }
     return { ok: true, linked: true, linkedId: id };
   };
 

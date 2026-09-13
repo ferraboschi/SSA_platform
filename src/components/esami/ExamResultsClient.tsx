@@ -8,6 +8,7 @@ import { gradeEnrollmentAction, gradePartecipanteAction } from "@/lib/exam-links
 import { certifiedScore } from "@/lib/exam-links/grading";
 import { gradeOpenAnswerAction, type GradeOpenResult } from "@/lib/esami/ai-actions";
 import { setManualOpenGradeAction } from "@/lib/esami/manual-grade-actions";
+import { runSubmissionCorrectionAction } from "@/lib/esami/single-correction-actions";
 import {
   runCourseCorrectionAction,
   getCourseCorrectionAction,
@@ -107,14 +108,15 @@ export function ExamResultsClient({
   // and collide on the React key). Results are newest-first, so the first wins —
   // except that a CORSISTA row beats a companion sharing the same email, matching
   // findConfirmedResultByEmail's tie-break (the send/report surfaces route to the
-  // corsista, so the label here must name the same person).
+  // corsista, so the label here must name the same person). A removed seat
+  // (annullata) never reaches the send list, whatever its stored outcome.
   const sorted = [...results].sort(
     (a, b) => Number(b.enrollmentId != null) - Number(a.enrollmentId != null),
   );
   const confirmed: ConfirmedResultRow[] = [];
   const seenConfirmed = new Set<string>();
   for (const r of sorted) {
-    if (!r.currentResult) continue;
+    if (!r.currentResult || r.annullata) continue;
     const key = (r.studentEmail || r.studentName).toLowerCase().trim();
     if (seenConfirmed.has(key)) continue;
     seenConfirmed.add(key);
@@ -154,6 +156,9 @@ export function ExamResultsClient({
   // Loaded lazily on mount; refreshed after a run. Advisory only — staff still
   // confirms the official verdict with the buttons on each row.
   const [drafts, setDrafts] = useState<Record<number, CorrectionDraft>>({});
+  // False until the first draft read settles: a row with open answers and no
+  // draft is only branded "non ancora valutate" once we know there is none.
+  const [draftsReady, setDraftsReady] = useState(false);
   const [templateUpdatedAt, setTemplateUpdatedAt] = useState<string | null>(null);
   // Attendance for the ACTIVE test (subject key → present) — flags submissions
   // whose student was (or was later marked) absent at the relevant roll call.
@@ -172,7 +177,10 @@ export function ExamResultsClient({
         if (r.drafts) setDrafts(r.drafts as Record<number, CorrectionDraft>);
         setTemplateUpdatedAt(r.templateUpdatedAt ?? null);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setDraftsReady(true);
+      });
     getExamProgressForStaffAction(courseId, correctionTest)
       .then((r) => {
         if (!alive || !r.ok) return;
@@ -357,6 +365,7 @@ export function ExamResultsClient({
                       courseId={courseId}
                       family={family}
                       draft={drafts[r.id]}
+                      draftsReady={draftsReady}
                       onDraftChanged={reloadDrafts}
                       templateUpdatedAt={templateUpdatedAt}
                       absent={
@@ -544,11 +553,58 @@ function ManualVoteRow({
   );
 }
 
+// AI-correct ONE hand-in: unblocks a sitting whose draft never arrived (lost
+// background correction) without re-running the whole class. The result is a
+// draft like any other — the outcome is still confirmed by hand.
+function SingleCorrectionButton({
+  courseId,
+  family,
+  testKey,
+  submissionId,
+  onDone,
+}: {
+  courseId: string;
+  family: "nihonshu" | "shochu";
+  testKey: string;
+  submissionId: number;
+  onDone: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <div style={{ marginTop: 4, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <button
+        type="button"
+        className="btn btn-xs"
+        disabled={pending}
+        title="Valuta con AI le risposte aperte di questa sola consegna (bozza, voto 1-5 basato sulle nozioni SSA) — l'esito ufficiale lo confermi tu."
+        onClick={() => {
+          setMsg(null);
+          start(async () => {
+            const res = await runSubmissionCorrectionAction({ courseId, family, testKey, submissionId });
+            if (res.ok) {
+              setMsg({ ok: true, text: "Bozza pronta." });
+              onDone();
+            } else setMsg({ ok: false, text: res.error ?? "Correzione non riuscita." });
+          });
+        }}
+      >
+        <Icon name="sparkle" size={11} />
+        {pending ? "Correggo…" : "Correggi questa consegna"}
+      </button>
+      {msg && (
+        <span style={{ fontSize: 11, color: msg.ok ? "var(--text-3)" : "var(--danger-fg)" }}>{msg.text}</span>
+      )}
+    </div>
+  );
+}
+
 function ResultRow({
   r,
   courseId,
   family,
   draft,
+  draftsReady,
   onDraftChanged,
   templateUpdatedAt,
   absent,
@@ -563,6 +619,8 @@ function ResultRow({
   family: "nihonshu" | "shochu" | null;
   /** The "Correggi" run's draft for this submission, when one exists. */
   draft?: CorrectionDraft;
+  /** The drafts have been read at least once (a missing draft is real). */
+  draftsReady: boolean;
   /** Re-read the drafts after a manual vote rewrote this one server-side. */
   onDraftChanged: () => void;
   /** Latest template edit — a draft older than this is stale. */
@@ -583,8 +641,9 @@ function ResultRow({
   const [err, setErr] = useState<string | null>(null);
 
   // A row is confirmable when it belongs to an enrolled corsista OR a "doppio"
-  // companion (each persists its outcome on its own table).
-  const canGrade = r.enrollmentId != null || r.partecipanteId != null;
+  // companion (each persists its outcome on its own table) — and the seat is
+  // still in the course: a removed seat (annullata) is listed for audit only.
+  const canGrade = !r.annullata && (r.enrollmentId != null || r.partecipanteId != null);
 
   // Template edited after the run → the draft graded different questions.
   const draftStale = Boolean(
@@ -615,16 +674,27 @@ function ResultRow({
   // expanded answers) first, then the outcome buttons unlock.
   const openFailed = draft?.totals.openFailed ?? 0;
   const blockedByFailed = openFailed > 0;
+  // No draft at all for a sitting WITH open answers (manualCount counts exactly
+  // the answered, objectively-ungradeable ones): the open lane was never
+  // evaluated — the objective % alone must not certify the outcome. The server
+  // re-checks both gates on confirm (grading-actions.ts).
+  const blockedByMissingDraft = draftsReady && r.manualCount > 0 && !draft;
+  const blocked = blockedByFailed || blockedByMissingDraft;
+  const blockedMsg = blockedByFailed
+    ? `${openFailed} da rivedere — assegna un voto educator (1-5) nelle risposte prima di pubblicare`
+    : "Risposte aperte non ancora valutate: esegui Correggi (o assegna un voto educator)";
 
   const grade = (outcome: ExamOutcome) => {
+    if (r.annullata) {
+      setErr("Posto rimosso dal corso: l'esito non si registra su un'iscrizione annullata.");
+      return;
+    }
     if (!canGrade) {
       setErr("Studente non trovato tra gli iscritti — impossibile registrare l'esito.");
       return;
     }
-    if (blockedByFailed) {
-      setErr(
-        `${openFailed} ${openFailed === 1 ? "domanda non è stata valutata" : "domande non sono state valutate"} (valutazione non riuscita): assegna un voto educator (1-5) nelle risposte prima di pubblicare l'esito.`,
-      );
+    if (blocked) {
+      setErr(`${blockedMsg}.`);
       return;
     }
     setErr(null);
@@ -635,8 +705,8 @@ function ResultRow({
       const score = certifiedScore(r.gradable, r.autoScore, outcome);
       const res =
         r.enrollmentId != null
-          ? await gradeEnrollmentAction(r.enrollmentId, outcome, score, courseId)
-          : await gradePartecipanteAction(r.partecipanteId!, outcome, score, courseId);
+          ? await gradeEnrollmentAction(r.enrollmentId, outcome, score, courseId, r.id)
+          : await gradePartecipanteAction(r.partecipanteId!, outcome, score, courseId, r.id);
       if (res.ok) {
         // Embedded in a tab, the client-loaded data needs an explicit re-fetch;
         // on the standalone page, router.refresh() re-runs the server load.
@@ -654,6 +724,14 @@ function ResultRow({
           {r.partecipanteId != null && (
             <span className="text-3" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 400, fontStyle: "italic" }}>
               (ospite)
+            </span>
+          )}
+          {r.annullata && (
+            <span
+              style={{ marginLeft: 6, display: "inline-block" }}
+              title="L'iscrizione di questo studente è stata annullata (rimborso, credito o trasferimento) dopo la consegna. La riga resta visibile per audit, ma l'esito non si conferma, non si invia e non entra nell'XLS."
+            >
+              <Badge tone="warning">Posto rimosso</Badge>
             </span>
           )}
           {absent && (
@@ -722,18 +800,20 @@ function ResultRow({
                     <button
                       key={o}
                       className="btn btn-xs"
-                      disabled={pending || !canGrade || blockedByFailed}
+                      disabled={pending || !canGrade || blocked}
                       onClick={() => grade(o)}
                       title={
-                        !canGrade
-                          ? "Studente non iscritto"
-                          : blockedByFailed
-                            ? `${openFailed} da rivedere — assegna un voto educator (1-5) nelle risposte prima di pubblicare`
-                            : confirmed
-                              ? `Esito confermato: ${OUTCOME_LABEL[o]}`
-                              : r.gradable === 0
-                                ? "Valutazione manuale — nessuna domanda a correzione automatica"
-                                : `Suggerito: ${OUTCOME_LABEL[r.suggested]}`
+                        r.annullata
+                          ? "Posto rimosso dal corso — esito non registrabile"
+                          : !canGrade
+                            ? "Studente non iscritto"
+                            : blocked
+                              ? blockedMsg
+                              : confirmed
+                                ? `Esito confermato: ${OUTCOME_LABEL[o]}`
+                                : r.gradable === 0
+                                  ? "Valutazione manuale — nessuna domanda a correzione automatica"
+                                  : `Suggerito: ${OUTCOME_LABEL[r.suggested]}`
                       }
                       style={{
                         // Confirmed = filled (the saved outcome); suggested = outline hint.
@@ -748,9 +828,18 @@ function ResultRow({
                   );
                 })}
               </div>
-              {blockedByFailed && (
+              {family && canGrade && r.manualCount > 0 && (
+                <SingleCorrectionButton
+                  courseId={courseId}
+                  family={family}
+                  testKey={r.testKey}
+                  submissionId={r.id}
+                  onDone={onDraftChanged}
+                />
+              )}
+              {blocked && canGrade && (
                 <div style={{ color: "var(--warning-fg)", fontSize: 11, marginTop: 4, fontWeight: 600 }}>
-                  ⚠ {openFailed} da rivedere — non pubblicabile finché non risolvi
+                  ⚠ {blockedByFailed ? `${openFailed} da rivedere — non pubblicabile finché non risolvi` : blockedMsg}
                 </div>
               )}
               {err && <div style={{ color: "var(--danger-fg)", fontSize: 11, marginTop: 4 }}>{err}</div>}

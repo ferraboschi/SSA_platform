@@ -115,6 +115,7 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     expiredBody: "Questo link non è più attivo. Se ti serve un nuovo accesso, chiedi all'educator.",
     blockedTitle: "Consegna non possibile",
     accessUnavailableTitle: "Accesso non disponibile",
+    feedbackEmptyBody: "Il tempo è terminato senza nessuna risposta: il feedback non è stato inviato. Riapri il link per compilarlo, oppure rivolgiti al tuo educator.",
   },
   en: {
     test: "TEST MODE",
@@ -213,6 +214,7 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     expiredBody: "This link is no longer active. Ask the educator if you need new access.",
     blockedTitle: "Hand-in not possible",
     accessUnavailableTitle: "Access not available",
+    feedbackEmptyBody: "Time ran out without any answer: the feedback was not sent. Reopen the link to fill it in, or contact your educator.",
   },
   ja: {
     test: "テストモード",
@@ -311,6 +313,7 @@ export const CHROME: Record<Lang, Record<string, string>> = {
     expiredBody: "このリンクは無効です。新しいアクセスが必要な場合は講師にお問い合わせください。",
     blockedTitle: "提出できません",
     accessUnavailableTitle: "アクセスできません",
+    feedbackEmptyBody: "回答がないまま時間が終了したため、フィードバックは送信されませんでした。リンクを開き直して回答するか、講師にお問い合わせください。",
   },
 };
 

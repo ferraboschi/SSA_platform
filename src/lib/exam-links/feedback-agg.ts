@@ -1,8 +1,9 @@
 // Pure feedback aggregation — no DB, no `server-only`, fully unit-testable.
 // loadCourseFeedbackResults reads the submissions then hands them here to compute
 // per-question: rating mean + 1–5 distribution, choice option distribution, and
-// collected open responses. The public runner stores choice answers as option
-// TEXT and ratings as a numeric string, so we match by text / parse numbers.
+// collected open responses. The public runner stores choice answers as the
+// option TEXT the student SAW (translated on an EN/JA sitting) and ratings as
+// a numeric string, so we resolve texts to option indices / parse numbers.
 
 export type FeedbackQuestionKind = "rating" | "choice" | "open";
 
@@ -15,6 +16,26 @@ export interface FeedbackQuestion {
   /** Thematic area ("Storia", "Servizio", …) — groups rating questions into the
    *  per-area satisfaction histogram. Blank → "Generale". */
   cat?: string;
+  /** Stored EN/JA translations, index-aligned with `options` — what the runner
+   *  showed (and stored) on a sitting in that language. */
+  i18n?: Partial<Record<"en" | "ja", { text: string; options: string[] }>>;
+}
+
+/** One feedback submission: its answers + the language it was filled in. */
+export interface FeedbackRow {
+  answers: Record<string, string | string[]> | null;
+  /** "it" | "en" | "ja"; null/absent = Italian. */
+  lang?: string | null;
+}
+
+/** The options the student actually SAW — the sitting language's translation
+ *  when present, else the Italian original (the runner's localizeQ fallback). */
+function seenOptions(q: FeedbackQuestion, lang: string | null | undefined): string[] {
+  if (lang === "en" || lang === "ja") {
+    const tr = q.i18n?.[lang]?.options;
+    if (tr?.length) return tr;
+  }
+  return q.options;
 }
 
 /** Satisfaction rolled up per THEMATIC AREA (owner/educator): the mean of every
@@ -53,7 +74,7 @@ const norm = (s: string) => s.trim().toLowerCase();
 
 export function aggregateFeedback(
   questions: FeedbackQuestion[],
-  rows: Array<{ answers: Record<string, string | string[]> | null }>,
+  rows: FeedbackRow[],
 ): FeedbackAggregateResult {
   // Per-area accumulators (rating answers only), keyed by the question's area.
   const areaAcc = new Map<string, { sum: number; n: number; buckets: number[] }>();
@@ -96,10 +117,16 @@ export function aggregateFeedback(
         }
       } else if (isChoice) {
         answered++;
-        const vals = (Array.isArray(given) ? given : [given]).map((v) => norm(String(v)));
-        q.options.forEach((opt, i) => {
-          if (vals.includes(norm(opt))) optionCounts[i]++;
-        });
+        // Resolve each pick to an option INDEX (the translation the student saw
+        // first, then the Italian original) and count by index — an EN/JA pick
+        // lands on the same bar as its Italian twin instead of vanishing.
+        const seen = seenOptions(q, s.lang);
+        const vals = new Set((Array.isArray(given) ? given : [given]).map((v) => norm(String(v))));
+        for (const v of vals) {
+          let i = seen.findIndex((opt) => norm(opt) === v);
+          if (i < 0) i = q.options.findIndex((opt) => norm(opt) === v);
+          if (i >= 0) optionCounts[i]++;
+        }
       } else {
         const text = String(Array.isArray(given) ? given.join(", ") : given).trim();
         if (text) {

@@ -5,6 +5,7 @@ import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
 import { ensureRagWired, ragGroundingStatus } from "@/lib/rag";
 import { getVectorStore } from "@/lib/rag/store";
 import { getAiGradingHealth } from "@/lib/rag/health";
+import { getAuthHealth } from "@/lib/auth/health";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { getGrantedScopes } from "@/lib/integrations/shopify/admin-client";
@@ -55,6 +56,7 @@ export async function GET() {
   // is the Anthropic key set? Cached 10' — mirrors the dashboard "Correzione AI"
   // chip. Reasons only, never the key. null = the probe itself failed.
   const aiGrading = await getAiGradingHealth().catch(() => null);
+  const authHealth = await getAuthHealth().catch(() => null);
 
   // Personal-exam-links migration diagnostic: confirms the exam_student_links
   // table + exam_submissions.corsista_id column exist (so links persist and
@@ -225,6 +227,7 @@ export async function GET() {
     sake: { priceCodes, catalogTotal, catalogWithCost },
     rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
     aiGrading,
+    authHealth,
     examLinks: { studentLinksTable, studentLinksRows, submissionsCorsistaCol },
     examProgress: { table: examProgressTable, answersCol: progressAnswersCol },
     courseStatus,

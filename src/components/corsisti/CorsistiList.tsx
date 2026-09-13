@@ -6,6 +6,7 @@ import { Avatar, Badge, Icon, KPI } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
 import { toCsv, downloadCsv } from "@/lib/csv";
+import { foldFields, foldSearch } from "@/lib/search/fold";
 import type { Corsista, ExamResultStatus } from "@/lib/domain";
 
 type Source = "tutti" | "attuali" | "storici" | "ripartecipanti";
@@ -53,10 +54,10 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
     if (source === "attuali") l = l.filter((s) => !s.historical);
     if (source === "storici") l = l.filter((s) => s.historical);
     if (source === "ripartecipanti") l = l.filter((s) => s.isReturning);
-    if (search) {
-      const q = search.toLowerCase();
-      l = l.filter((s) => (s.name + s.email + s.city).toLowerCase().includes(q));
-    }
+    // Accent-insensitive («forli» finds «Forlì»), fields kept apart so a query
+    // can't match across the end of one and the start of the next.
+    const fq = foldSearch(search);
+    if (fq) l = l.filter((s) => foldFields([s.name, s.email, s.city]).includes(fq));
     if (examFilter) l = l.filter((s) => s.courses.some((c) => c.examResult === examFilter));
     return l.sort((a, b) => b.totalSpent - a.totalSpent);
   }, [base, search, source, examFilter]);

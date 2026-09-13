@@ -13,10 +13,11 @@
 //     client) — a tampered/expired token is rejected.
 //   • Derive courseId FROM THE TOKEN payload (`c`). The client NEVER passes a
 //     courseId; it cannot write to a course it wasn't granted.
-//   • ENROLLMENT / OWNERSHIP GUARD: a corsista subject must be enrolled in THIS
-//     course; a companion subject must be a corsi_partecipanti row whose
-//     corso_id equals the token's course. The shared token exposes every id, so
-//     we must confirm the target belongs to THIS course.
+//   • ENROLLMENT / OWNERSHIP GUARD: a corsista subject must be ACTIVELY enrolled
+//     in THIS course (a removed seat — annullata_at — is out of the appello, like
+//     everywhere else); a companion subject must be a corsi_partecipanti row
+//     whose corso_id equals the token's course. The shared token exposes every
+//     id, so we must confirm the target belongs to THIS course.
 //   • BOUND day_no to 1..dayCount (dayCount derived from the course type).
 //   • RATE-LIMIT keyed by the token (per-instance fixed-window limiter).
 //   • The corsi_presenze / corsi_partecipanti tables are RLS-locked with NO
@@ -208,14 +209,16 @@ export async function setAttendanceAction(
   const svc = getSupabaseServiceClient();
 
   if (kind === "corsista") {
-    // ENROLLMENT GUARD: the target student must be enrolled in THIS course. The
-    // shared token exposes every corsista_id, so without this a link holder
-    // could stamp presence onto a student from another course.
+    // ENROLLMENT GUARD: the target student must be ACTIVELY enrolled in THIS
+    // course. The shared token exposes every corsista_id, so without this a link
+    // holder could stamp presence onto a student from another course — or onto a
+    // seat already removed (annullata) from this one.
     const { data: enr, error: enrErr } = await svc
       .from("corsi_iscrizioni")
       .select("corsista_id")
       .eq("corso_id", corsoId)
       .eq("corsista_id", id)
+      .is("annullata_at", null)
       .maybeSingle();
     if (enrErr) return { ok: false, error: enrErr.message };
     if (!enr) return { ok: false, error: "Studente non iscritto a questo corso." };
@@ -344,12 +347,14 @@ export async function addPartecipanteFromLinkAction(
   const svc = getSupabaseServiceClient();
 
   // (3) Load the enrollment BY id and REJECT unless it belongs to the token's
-  // course. This is the gate that binds the client-passed iscrizione id to the
-  // course the token actually grants — the id alone is never trusted.
+  // course and is still active (no companion on a removed seat). This is the
+  // gate that binds the client-passed iscrizione id to the course the token
+  // actually grants — the id alone is never trusted.
   const { data: enr, error: enrErr } = await svc
     .from("corsi_iscrizioni")
     .select("id, corso_id, corsista_id")
     .eq("id", iscrId)
+    .is("annullata_at", null)
     .maybeSingle();
   if (enrErr) return { ok: false, error: enrErr.message };
   if (!enr || Number(enr.corso_id) !== corsoId) {
@@ -518,11 +523,12 @@ export async function completeSeatFromLinkAction(
   if (!phoneLooksValid(tel)) return { ok: false, error: "Inserisci un numero di telefono valido." };
 
   const svc = getSupabaseServiceClient();
-  // Enrollment must belong to the token's course AND be a placeholder seat.
+  // Enrollment must belong to the token's course, be active AND be a placeholder seat.
   const { data: enr, error: enrErr } = await svc
     .from("corsi_iscrizioni")
     .select("id, corso_id, corsista_id, corsista:corsisti(id, placeholder)")
     .eq("id", iscrId)
+    .is("annullata_at", null)
     .maybeSingle();
   if (enrErr) return { ok: false, error: enrErr.message };
   if (!enr || Number(enr.corso_id) !== corsoId) {

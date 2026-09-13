@@ -16,6 +16,7 @@ import {
   isSubjectConfirmed,
   absentAccessError,
   unconfirmedAccessError,
+  type AccessLang,
 } from "./live-progress";
 import { getClosure, isBlockedByClosure } from "./lifecycle";
 import { resolveSubjectIds, subjectKeyOf, subjectColId } from "./access";
@@ -134,6 +135,49 @@ export interface SubmitExamInput {
   elapsed?: number;
 }
 
+/** A feedback hand-in with NO answer at all (the 15' hard stop on a parked
+ *  questionnaire, or "Termina comunque" on a blank one) is refused, never
+ *  stored: an empty row would count as a response in the aggregation AND lock
+ *  the student out as "già consegnato" — while finalize-on-close deliberately
+ *  skips the very same empty sittings. */
+const FEEDBACK_EMPTY: Record<AccessLang, string> = {
+  it: "Nessuna risposta registrata: il feedback non è stato inviato. Riapri il link per compilarlo, oppure rivolgiti al tuo educator.",
+  en: "No answer recorded: the feedback was not sent. Reopen the link to fill it in, or contact your educator.",
+  ja: "回答が記録されていないため、フィードバックは送信されませんでした。リンクを開き直して回答するか、講師にお問い合わせください。",
+};
+const isBlankAnswer = (v: string[] | string): boolean =>
+  (Array.isArray(v) ? v : [v]).every((x) => String(x ?? "").trim() === "");
+
+type Svc = ReturnType<typeof getSupabaseServiceClient>;
+type SubjectCol = NonNullable<ReturnType<typeof subjectColId>>;
+interface PriorSubmission {
+  id: number;
+  answers?: Record<string, string | string[]> | null;
+  lang?: string | null;
+}
+/** This subject's hand-in for (course, test) — the FIRST one when legacy
+ *  duplicates exist (same rule as the /esame prior-submission branch). Null when
+ *  there is none or the lookup failed: every caller treats both as "no hand-in"
+ *  (fail CLOSED — nothing that depends on a hand-in is served on a DB blip). */
+async function findFirstSubmission(
+  svc: Svc,
+  corsoId: number,
+  testKey: string,
+  subj: SubjectCol,
+): Promise<PriorSubmission | null> {
+  const { data, error } = await svc
+    .from("exam_submissions")
+    .select("id, answers, lang")
+    .eq("corso_id", corsoId)
+    .eq("test_key", testKey)
+    .eq("mode", "exam")
+    .eq(subj.col, subj.id)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (error) return null;
+  return (data?.[0] as PriorSubmission | undefined) ?? null;
+}
+
 /**
  * Persist a public exam submission. The course / test / mode are derived from
  * the verified token (never trusted from the client). Only `mode: "exam"` is
@@ -183,6 +227,11 @@ export async function submitExam(
   for (const [k, v] of Object.entries(input.answers ?? {})) {
     if (k.startsWith("reg:")) registration[k.slice(4)] = Array.isArray(v) ? v.join(", ") : v;
     else answers[k] = v;
+  }
+  // Nothing to hand in (feedback only — a blank TEST is a legitimate 0, the
+  // runner's own guard mirrors this): refuse before any write, see FEEDBACK_EMPTY.
+  if (t === "feedback" && Object.values(answers).every(isBlankAnswer)) {
+    return { ok: false, error: FEEDBACK_EMPTY[lang], blocked: true };
   }
 
   const svc = getSupabaseServiceClient();
@@ -412,20 +461,7 @@ export async function getDayEsitoAction(
     if (corsoId == null) return { ok: false, error: "Link non valido." };
     const subj = subjectColId({ corsistaId, partecipanteId });
     if (!subj) return { ok: false, error: "Link non valido." };
-    const { data: prior } = await svc
-      .from("exam_submissions")
-      .select("id, answers, lang")
-      .eq("corso_id", corsoId)
-      .eq("test_key", t)
-      .eq("mode", "exam")
-      .eq(subj.col, subj.id)
-      // Deterministic pick if legacy duplicates exist — the FIRST hand-in
-      // counts (same rule as the /esame prior-submission branch).
-      .order("created_at", { ascending: true })
-      .limit(1);
-    const sub = prior?.[0] as
-      | { id: number; answers?: Record<string, string | string[]> | null; lang?: string | null }
-      | undefined;
+    const sub = await findFirstSubmission(svc, corsoId, t, subj);
     if (!sub) return { ok: false, error: "Nessuna consegna trovata." };
     const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
     const family = corso?.type === "shochu" ? "shochu" : "nihonshu";
@@ -441,11 +477,13 @@ const explainLimiter = createFixedWindowLimiter(10 * 60_000);
 const RATE_LIMIT_EXPLAIN = 30; // per token per 10 minutes
 
 /**
- * KB-grounded formative deep-dive for ONE day-test question (owner, batch 7):
- * available to whoever holds a valid link for that test (any mode — previews
- * too, so staff can demo it). The explanation depends on the question, not the
- * student, so it is cached per (family, test, question, lang) and generated at
- * most once — cost stays flat no matter how many students tap it.
+ * KB-grounded formative deep-dive for ONE day-test question (owner, batch 7).
+ * It is written FROM the correct answer, so in a real sitting it is served only
+ * to a bound student who has already HANDED IN — never to the class link (or a
+ * personal one) opened mid-test. Previews (test/validate) stay open so staff
+ * can demo it. The explanation depends on the question, not the student, so it
+ * is cached per (family, test, question, lang) and generated at most once —
+ * cost stays flat no matter how many students tap it.
  */
 export async function getExamExplanationAction(
   token: string,
@@ -454,7 +492,7 @@ export async function getExamExplanationAction(
 ): Promise<{ ok: boolean; text?: string; error?: string }> {
   const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto." };
-  const { c, t } = res.payload;
+  const { c, t, m } = res.payload;
   if (!/^day[1-9]$/.test(t)) return { ok: false, error: "Approfondimenti disponibili solo per i test giornalieri." };
   if (explainLimiter.isLimited("explain", token, RATE_LIMIT_EXPLAIN)) {
     return { ok: false, error: "Troppe richieste, riprova tra poco." };
@@ -464,8 +502,16 @@ export async function getExamExplanationAction(
 
   try {
     const svc = getSupabaseServiceClient();
-    const { corsoId } = resolveSubjectIds(res.payload);
+    const { corsoId, corsistaId, partecipanteId } = resolveSubjectIds(res.payload);
     if (corsoId == null) return { ok: false, error: "Link non valido." };
+    // Hand-in gate (exam mode): same lookup as the day-esito re-open. Unbound
+    // token or no submission yet → refused before the cache is even read.
+    if (m === "exam") {
+      const subj = subjectColId({ corsistaId, partecipanteId });
+      if (!subj || !(await findFirstSubmission(svc, corsoId, t, subj))) {
+        return { ok: false, error: "Non disponibile." };
+      }
+    }
     const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
     const family = corso?.type === "shochu" ? "shochu" : "nihonshu";
 

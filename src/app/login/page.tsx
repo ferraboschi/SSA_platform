@@ -9,10 +9,13 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; denied?: string }>;
 }) {
-  const { next: rawNext } = await searchParams;
+  const { next: rawNext, denied } = await searchParams;
   const next = safeNext(rawNext); // block open-redirect via ?next=//evil.com
+  // Bounced by the app layout: signed in, but the profile is not an enabled
+  // staff role (least privilege — accounts exist only through invites).
+  const notice = denied ? "Account non abilitato: chiedi all'amministratore un invito." : undefined;
 
   // Not configured → fall back to the dashboard (in-memory stub auth).
   if (!supabaseConfig.isConfigured) {
@@ -29,7 +32,9 @@ export default async function LoginPage({
   } catch {
     signedIn = false;
   }
-  if (signedIn) redirect(next);
+  // A denied bounce arrives signed in (the layout could not sign out): let the
+  // form render so the person reads why and can sign out / switch account.
+  if (signedIn && !denied) redirect(next);
 
   return (
     <div
@@ -41,7 +46,7 @@ export default async function LoginPage({
         background: "var(--surface-2)",
       }}
     >
-      <LoginForm next={next} />
+      <LoginForm next={next} notice={notice} />
     </div>
   );
 }

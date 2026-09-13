@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDataSource } from "@/lib/data";
+import { requireNavAccess } from "@/lib/auth/guard";
 import { getTranslations } from "@/lib/i18n/server";
 import { COURSE_TYPES, type CourseTypeKey } from "@/lib/domain";
 import { isActiveCourse, isArchivedCourse } from "@/lib/corsi";
@@ -10,6 +11,9 @@ import {
 } from "@/components/educator/EducatorDetail";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  // Same ACL as the /educator list: the detail (bio, revenue, exam stats) must
+  // not be reachable by URL for a role whose menu hides the section.
+  await requireNavAccess("educator");
   const { id } = await params;
   const ds = await getDataSource();
   const [{ t }, educator, courses] = await Promise.all([

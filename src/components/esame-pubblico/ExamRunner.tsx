@@ -80,6 +80,15 @@ function fmtClock(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** At least one non-registration answer that isn't blank — the twin of the
+ *  server's all-blank feedback refusal (submitExam). */
+function hasRealAnswer(answers: Record<string, string[] | string>): boolean {
+  return Object.entries(answers).some(
+    ([k, v]) =>
+      !k.startsWith("reg:") && (Array.isArray(v) ? v : [v]).some((x) => String(x ?? "").trim() !== ""),
+  );
+}
+
 /** Real exams are TIMED — the limit comes from the page by test type (owner
  *  batch 9: day tests 10', feedback 15' — batch 12 — final 60') with a "time left" notice near
  *  the end (10' before on long tests, 2' on short ones). `elapsed` is
@@ -439,7 +448,18 @@ export function ExamRunner({
   useEffect(() => {
     if (!timed || !langPicked || done || submitError || !timerStarted) return;
     if (elapsed >= warnAt && elapsed < limit && !warned) setWarned(true);
-    if (elapsed >= limit && !finishingRef.current) void finish();
+    if (elapsed >= limit && !finishingRef.current) {
+      // A feedback nobody touched (its clock arms at the language pick — there
+      // are no registration steps) is NOT handed in: an empty row would count
+      // as a response and lock the student out as "già consegnato". Park on the
+      // terminal screen instead; the server refuses the same hand-in anyway.
+      if (isFeedback && !hasRealAnswer(stateRef.current.answers)) {
+        finishingRef.current = true; // stop autosave, like a refused hand-in
+        setBlockedLive(t.feedbackEmptyBody);
+        return;
+      }
+      void finish();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elapsed, timed, langPicked, done, submitError, warned, timerStarted]);
 

@@ -52,6 +52,13 @@ Airtable (costi) + Resend (email). Operativa: dati e utenti sono REALI.
 7. **Niente riscritture unilaterali della logica finanziaria.** Le policy sul
    denaro (valore crediti, riconoscimento ricavi) le decide l'owner: segnalare
    e chiedere, poi implementare.
+8. **Accessi staff solo su invito, minimo privilegio.** Nessun percorso di
+   registrazione self-service: la registrazione pubblica su Supabase deve
+   restare OFF, il ruolo di default dei nuovi utenti auth è `guest` (nessuna
+   capacità; login rifiutato, layout → /login) e un ruolo si assegna solo
+   dall'invito. I segreti che firmano i link (`EXAM_LINK_SECRET`,
+   `SHARE_LINK_SECRET`) vanno impostati sull'host: il chip "Salute sistema"
+   segnala entrambe le cose.
 
 ## Sync Shopify → piattaforma (una direzione sola)
 

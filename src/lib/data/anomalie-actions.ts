@@ -108,6 +108,12 @@ const KEYED_TABLES: { table: string; keyCols: string[] }[] = [
   { table: "exam_student_links", keyCols: ["corso_id", "test_key", "mode"] }, // unique(corso_id,corsista_id,test_key,mode)
   { table: "exam_sessions", keyCols: ["token"] }, // unique(token,corsista_id)
   { table: "exam_progress", keyCols: ["corso_id", "test_key"] }, // partial unique(corso_id,test_key,corsista_id)
+  // The graded hand-ins themselves — left behind, a merged duplicate's final
+  // exam no longer resolves its enrollment in Esiti (row unconfirmable, its
+  // confirmed outcome invisible). Partial unique(corso_id,corsista_id,test_key)
+  // where mode='exam'; keying on mode too keeps a sandbox hand-in from blocking
+  // the real one, and a conflicting hand-in stays on the merged record.
+  { table: "exam_submissions", keyCols: ["corso_id", "test_key", "mode"] },
 ];
 
 /** A pre-migration environment legitimately lacks some of these tables/columns

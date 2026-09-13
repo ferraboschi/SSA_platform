@@ -45,7 +45,23 @@ Procedura per una nuova migration:
 in `supabase/migrations/` risultano applicate al prod — incluse le più recenti
 (`annullata_at`/`annullata_tipo`, `corsi_crediti` + `codice`,
 `corsi_partecipanti`, `corsi_presenze`, `product_handle`, `seat_index`,
-`exam_score_pct`). Nessuna pendente.
+`exam_score_pct`).
+
+**PENDENTE (13/9/2026) — `20260913160000_profiles_least_privilege.sql`**:
+il ruolo di default dei nuovi utenti auth passa da `manager` a `guest` e il
+trigger lo scrive esplicitamente. Da eseguire SUBITO, insieme al blocco della
+registrazione pubblica (sez. 4-bis). Il codice già tratta `guest` come
+"nessun accesso" (login rifiutato, layout → /login).
+
+### 4-bis. Blocco della registrazione pubblica (AZIONE OWNER, urgente)
+
+La piattaforma non registra mai utenti da sola: gli account staff nascono
+SOLO dagli inviti. Su Supabase però la registrazione self-service era attiva
+(`/auth/v1/settings` → `disable_signup: false`, verificato il 13/9/2026) e,
+prima della migration qui sopra, ogni nuovo utente auth nasceva `manager`.
+Procedura: Supabase dashboard → Authentication → Providers → Email →
+**"Allow new users to sign up" = OFF** (e nessun provider OAuth attivo).
+Il chip "Registrazione pubblica" in dashboard resta ⚠ finché è attiva.
 
 ## 4. Segreti e variabili d'ambiente
 
@@ -66,7 +82,13 @@ Inventario (nomi, mai valori):
 - `RESEND_API_KEY` — email (mittente solo su `mail.sakesommelierassociation.it`).
 - `AIRTABLE_*` — costi sake.
 - `SYNC_SECRET` — protegge `/api/sync/shopify` (endpoint esterno).
-- `SHARE_LINK_SECRET` — firma i token dei link esame/condivisione.
+- `EXAM_LINK_SECRET` — firma i token dei link ESAME (`/esame/[token]`).
+  Se manca, il codice ripiega su `SYNC_SECRET` (che viaggia nelle query
+  string) e poi su una costante di sviluppo pubblica → link falsificabili.
+  DEVE essere impostato su Render, distinto da `SYNC_SECRET`.
+- `SHARE_LINK_SECRET` — firma i token dei link di CONDIVISIONE educator
+  (`/condividi/[token]`, conferme). Stessa catena di fallback: va impostato.
+  Il chip "Segreti link" in dashboard segnala i mancanti.
 - `KB_GITHUB_TOKEN` — sync knowledge base dal repo wiki.
 
 Regole:

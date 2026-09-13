@@ -171,28 +171,67 @@ export async function spendCreditOnCourseAction(
  *   • 'annullato'  — voided (e.g. false positive)
  *   • 'aperto'     — unlink; the credit returns to the pool
  *  Moving AWAY from 'applicato' clears the destination link so the applied
- *  revenue is no longer recognised on that course. */
+ *  revenue is no longer recognised on that course. The off-Shopify €0 seat the
+ *  spend may have created is NOT touched: a walk-in extra seat looks exactly
+ *  the same (no line item, €0) and closing it would silently drop a real
+ *  attendee from the roster — staff get a reminder to remove the seat by hand
+ *  when it no longer belongs.
+ *  Reopening a CLOSED credit ('rimborsato' / 'annullato' → 'aperto') puts money
+ *  back in the spendable pool: it requires the caller's explicit `force` (a
+ *  confirmed click), never a stray tap. */
 export async function setCreditoStatoAction(
   creditoId: number,
   stato: "rimborsato" | "annullato" | "aperto",
-): Promise<void> {
+  opts?: { force?: boolean },
+): Promise<{ reminder?: SpendCreditResult["reminder"] }> {
   await assertRole(["admin", "manager"]);
   if (!["rimborsato", "annullato", "aperto"].includes(stato)) {
     throw new Error("Stato non valido.");
   }
   const svc = getSupabaseServiceClient();
 
-  // Read the current destination (for revalidation) before clearing it.
-  const { data: current } = await svc
+  // Read the current state + destination (transition guard, seat clean-up,
+  // revalidation) before clearing it.
+  const { data: current, error: curErr } = await svc
     .from("corsi_crediti")
-    .select("corso_destinazione_id")
+    .select("stato, corso_destinazione_id, iscrizione_destinazione_id")
     .eq("id", creditoId)
     .maybeSingle();
-  const priorDest = (current as { corso_destinazione_id: number | null } | null)
-    ?.corso_destinazione_id ?? null;
+  if (curErr) throw curErr;
+  const cur = current as
+    | { stato: CreditoStato; corso_destinazione_id: number | null; iscrizione_destinazione_id: number | null }
+    | null;
+  if (!cur) throw new Error("Credito non trovato.");
+  const priorDest = cur.corso_destinazione_id;
 
-  // Leaving 'applicato' → unlink the destination so revenue stops being
-  // recognised there.
+  if (stato === "aperto" && (cur.stato === "rimborsato" || cur.stato === "annullato") && !opts?.force) {
+    throw new Error("Il credito è chiuso (rimborsato/annullato): per riaprirlo serve una conferma esplicita.");
+  }
+
+  // Leaving 'applicato' with an active off-Shopify €0 seat behind: that seat
+  // stays (it may be a real walk-in the credit was merely attached to) — the
+  // caller shows a reminder so staff remove it deliberately if it no longer
+  // belongs. Never a silent roster change.
+  let reminder: SpendCreditResult["reminder"];
+  if (cur.stato === "applicato" && cur.iscrizione_destinazione_id != null && priorDest != null) {
+    const { data: seatRow } = await svc
+      .from("corsi_iscrizioni")
+      .select("id, annullata_at, line_item_id, amount_cents")
+      .eq("id", cur.iscrizione_destinazione_id)
+      .maybeSingle();
+    const seat = seatRow as
+      | { id: number; annullata_at: string | null; line_item_id: number | null; amount_cents: number | null }
+      | null;
+    if (seat && !seat.annullata_at && seat.line_item_id == null && Number(seat.amount_cents ?? 0) === 0) {
+      reminder = {
+        text: "Il posto a €0 collegato a questo credito resta attivo sul corso: se lo studente non partecipa, rimuovilo dagli iscritti.",
+        url: `/corsi/${priorDest}`,
+        label: "Apri il corso",
+      };
+    }
+  }
+
+  // Unlink the destination so revenue stops being recognised there.
   const patch: {
     stato: CreditoStato;
     updated_at: string;
@@ -213,4 +252,5 @@ export async function setCreditoStatoAction(
 
   revalidatePath("/crediti");
   if (priorDest != null) revalidatePath(`/corsi/${priorDest}`);
+  return reminder ? { reminder } : {};
 }

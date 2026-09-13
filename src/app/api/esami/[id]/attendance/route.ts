@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDataSource } from "@/lib/data";
 import { hasRole } from "@/lib/auth/guard";
 import { courseRosterStudents } from "@/lib/esami";
-import { loadCourseExamResults } from "@/lib/exam-links/results";
+import { loadCourseExamResults, type GradedSubmission } from "@/lib/exam-links/results";
 import { buildAttendanceXlsx, type AttendanceRow } from "@/lib/esami/attendance-xlsx";
 import { monthIndexIt } from "@/lib/dates/italian-months";
 
@@ -21,12 +21,15 @@ function passFail(status: string): string {
   return status === "passed" ? "PASS" : status === "failed" ? "FAIL" : status === "retrial" ? "RETRIAL" : "";
 }
 
-// Template dates are English-style ("26 February 2023").
+// Template dates are English-style ("26 February 2023"). `offsetDays` moves the
+// calendar date forward with real month/year rollover (a 3-day course starting
+// 30 Ottobre ends 1 November, never "32 Ottobre").
 const EN_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-function enDate(day: number | null | undefined, monthIt: string, year: number): string {
+function enDate(day: number | null | undefined, monthIt: string, year: number, offsetDays = 0): string {
   const mIdx = monthIndexIt(monthIt);
   if (mIdx < 0 || !year) return "";
-  return `${day || 1} ${EN_MONTHS[mIdx]} ${year}`;
+  const d = new Date(Date.UTC(year, mIdx, (day || 1) + offsetDays));
+  return `${d.getUTCDate()} ${EN_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 /** DOB is now collected via a date picker (ISO YYYY-MM-DD) — render it in the
  *  template's "1 January 1980" form. A legacy free-typed value passes through. */
@@ -72,7 +75,19 @@ export async function GET(
   );
   const family = course.type === "certificato" ? "nihonshu" : course.type === "shochu" ? "shochu" : null;
   const subs = family ? await loadCourseExamResults(course.id, family) : [];
-  const byEmail = new Map(subs.filter((s) => s.currentResult).map((s) => [s.studentEmail.toLowerCase(), s]));
+  // Confirmed hand-ins only, removed seats out (a cancelled enrollment is never
+  // exported). One row per email, newest-first so the first seen wins — FINAL
+  // rows seeded first because only the final exam's registration step carries
+  // gender/nationality/DOB/occupation (a newer day test has none).
+  const confirmedSubs = subs.filter((s) => s.currentResult && !s.annullata);
+  const byEmail = new Map<string, GradedSubmission>();
+  for (const s of [
+    ...confirmedSubs.filter((s) => s.testKey === "final"),
+    ...confirmedSubs.filter((s) => s.testKey !== "final"),
+  ]) {
+    const key = s.studentEmail.toLowerCase();
+    if (!byEmail.has(key)) byEmail.set(key, s);
+  }
 
   // Union: every enrolled student + anyone with a confirmed result not on the roster.
   const emails = new Set<string>();
@@ -100,12 +115,11 @@ export async function GET(
     });
   };
   for (const s of roster) push(s.name, s.email);
-  for (const s of subs) if (s.currentResult) push(s.studentName, s.studentEmail);
+  for (const s of confirmedSubs) push(s.studentName, s.studentEmail);
 
   // Exam day = the course's LAST day (start + days − 1); certification = same,
   // per the template ("same as Exam Date"). English-style dates as required.
-  const examDay = (course.day || 1) + Math.max(0, (course.days || 1) - 1);
-  const examDate = enDate(examDay, course.month, course.year);
+  const examDate = enDate(course.day, course.month, course.year, Math.max(0, (course.days || 1) - 1));
   const buf = await buildAttendanceXlsx({
     course: course.shortTitle || "Corso SSA",
     franchise: FRANCHISE,

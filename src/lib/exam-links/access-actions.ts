@@ -11,12 +11,21 @@ import { appConfig } from "@/lib/integrations/config";
 import { createFixedWindowLimiter } from "@/lib/rate-limit";
 import { verifyExamToken, signExamToken } from "./token";
 import { getClosure, isBlockedByClosure, expiryForChoice } from "./lifecycle";
-import { loadPresentForTest, isBlockedByAbsence, absentAccessError } from "./live-progress";
+import { loadPresentForTest, isBlockedByAbsence, absentAccessError, type AccessLang } from "./live-progress";
 import { subjectKeyOf } from "./access";
 
 // Token-keyed, per-instance limiter — the gate is an email-enumeration surface.
 const limiter = createFixedWindowLimiter(60_000);
 const RATE_LIMIT_RESOLVE = 20;
+
+/** A buyer and their "doppio" companion legitimately share one email (see
+ *  results.ts): the class link cannot tell them apart, so it must not guess —
+ *  the educator's panel mints a personal link per subject, which is the way in. */
+const SHARED_EMAIL: Record<AccessLang, string> = {
+  it: "Questa email è usata da più iscritti: chiedi all'educator il tuo link personale.",
+  en: "This email is used by more than one enrolled student: ask your educator for your personal link.",
+  ja: "このメールアドレスは複数の受講者に使われています。講師に個人用リンクを依頼してください。",
+};
 
 export interface ResolveExamAccessResult {
   ok: boolean;
@@ -64,26 +73,28 @@ export async function resolveExamAccessByEmailAction(
     .eq("corso_id", corsoId)
     .eq("enrolled_email", clean)
     .not("email_confirmed_at", "is", null)
-    .is("annullata_at", null) // a student removed from the course can't access
-    .limit(1);
-  const row = !error && data && data.length ? (data[0] as { corsista_id: number }) : null;
+    .is("annullata_at", null); // a student removed from the course can't access
+  // Distinct SUBJECTS, not rows: a re-purchase can leave two active seats for
+  // the same corsista, which is still one identity.
+  const corsistaIds = new Set(
+    (error ? [] : ((data ?? []) as { corsista_id: number }[])).map((r) => r.corsista_id),
+  );
 
-  // SECONDARY: companions ("doppio", corsi_partecipanti.email) — same
-  // confirmed-only rule, same course binding. Checked only when no corsista
-  // matched, so existing behaviour keeps priority.
-  let partRow: { id: number } | null = null;
-  if (!row) {
-    const { data: pData, error: pErr } = await svc
-      .from("corsi_partecipanti")
-      .select("id")
-      .eq("corso_id", corsoId)
-      .eq("email", clean)
-      .not("email_confirmed_at", "is", null)
-      .limit(1);
-    partRow = !pErr && pData && pData.length ? (pData[0] as { id: number }) : null;
-  }
+  // Companions ("doppio", corsi_partecipanti.email) — same confirmed-only rule,
+  // same course binding. Read ALWAYS, not only when no corsista matched: the
+  // gate must know whether the email belongs to MORE than one subject.
+  const { data: pData, error: pErr } = await svc
+    .from("corsi_partecipanti")
+    .select("id")
+    .eq("corso_id", corsoId)
+    .eq("email", clean)
+    .not("email_confirmed_at", "is", null);
+  const partIds = new Set((pErr ? [] : ((pData ?? []) as { id: number }[])).map((r) => r.id));
 
-  if (!row && !partRow) {
+  // Student-facing refusals follow the link language, like the /esame page.
+  const lang: AccessLang = l === "en" || l === "ja" ? l : "it";
+  const matches = corsistaIds.size + partIds.size;
+  if (matches === 0) {
     // Generic message — do NOT reveal whether the email is enrolled-but-unconfirmed
     // vs unknown (avoids turning the gate into an enrollment oracle).
     return {
@@ -92,6 +103,15 @@ export async function resolveExamAccessByEmailAction(
         "Email non riconosciuta o non ancora confermata. Chiedi il link personale al tuo educator.",
     };
   }
+  if (matches > 1) {
+    // Shared email (buyer + companion): binding it to the first hit identified
+    // the companion as the buyer, who was then refused as "già consegnato".
+    return { ok: false, error: SHARED_EMAIL[lang] };
+  }
+  const subject =
+    corsistaIds.size > 0
+      ? { corsistaId: [...corsistaIds][0], partecipanteId: null }
+      : { corsistaId: null, partecipanteId: [...partIds][0] };
 
   // PRESENCE gate (owner's rule): an absent student must not sit the test.
   // Same canonical rule as the educator's send gate (day test ↔ that appello
@@ -102,12 +122,8 @@ export async function resolveExamAccessByEmailAction(
   // so presence can't be known — the confirmed-email match above is the gate.
   if (!res.payload.emg) {
     const present = await loadPresentForTest(svc, corsoId, t);
-    const subjectKey = subjectKeyOf({
-      corsistaId: row ? row.corsista_id : null,
-      partecipanteId: row ? null : partRow!.id,
-    })!;
-    if (isBlockedByAbsence(present, subjectKey)) {
-      return { ok: false, error: absentAccessError(t) };
+    if (isBlockedByAbsence(present, subjectKeyOf(subject)!)) {
+      return { ok: false, error: absentAccessError(t, lang) };
     }
   }
 
@@ -118,7 +134,9 @@ export async function resolveExamAccessByEmailAction(
     c,
     t,
     m: "exam",
-    ...(row ? { s: String(row.corsista_id) } : { p: String(partRow!.id) }),
+    ...(subject.corsistaId != null
+      ? { s: String(subject.corsistaId) }
+      : { p: String(subject.partecipanteId) }),
     ia: Math.floor(Date.now() / 1000),
     l,
     e: exp,

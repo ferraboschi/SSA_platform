@@ -116,14 +116,21 @@ export function CreditiClient({
   };
 
   const setStato = (credito: CreditoView, stato: "rimborsato" | "annullato" | "aperto") => {
+    // Reopening money that was already refunded/voided is deliberate, never a
+    // stray click: confirm, then pass the explicit `force` the server requires.
+    const reopenClosed = stato === "aperto" && credito.stato !== "applicato";
+    if (reopenClosed && !window.confirm(t.reopenClosedConfirm)) return;
+    setLinkError(null);
     // Every one of these transitions leaves 'applicato', so the destination is
     // always cleared (mirrors the server action's unlink).
     setOv(credito.id, { stato, corsoDestinazioneId: null, corsoDestinazioneTitle: null });
     startTransition(async () => {
       try {
-        await setCreditoStatoAction(credito.id, stato);
-      } catch {
+        const res = await setCreditoStatoAction(credito.id, stato, reopenClosed ? { force: true } : undefined);
+        if (res?.reminder) setReminder(res.reminder);
+      } catch (e) {
         clearOv(credito.id);
+        setLinkError(e instanceof Error ? e.message : t.stateChangeFailed);
       }
     });
   };

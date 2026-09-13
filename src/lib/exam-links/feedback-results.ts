@@ -6,7 +6,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadPublicExam } from "./load";
-import { aggregateFeedback, type FeedbackAggregateResult } from "./feedback-agg";
+import { aggregateFeedback, type FeedbackAggregateResult, type FeedbackRow } from "./feedback-agg";
 
 // Re-exported so existing importers keep `from "@/lib/exam-links/feedback-results"`.
 export type { FeedbackAggregateResult, FeedbackQuestionAgg, FeedbackQuestionKind } from "./feedback-agg";
@@ -16,15 +16,17 @@ export async function loadCourseFeedbackResults(
   family: "nihonshu" | "shochu",
 ): Promise<FeedbackAggregateResult> {
   const svc = getSupabaseServiceClient();
+  // `lang` travels with each row: choice answers are stored as the option text
+  // the student SAW, so the aggregator needs the sitting language to map them.
   const { data: subs } = await svc
     .from("exam_submissions")
-    .select("id, answers, created_at")
+    .select("id, answers, lang, created_at")
     .eq("corso_id", Number(courseId))
     .eq("mode", "exam")
     .eq("test_key", "feedback")
     .order("created_at", { ascending: false });
 
   const exam = await loadPublicExam(courseId, family, "feedback", true);
-  const rows = (subs ?? []) as Array<{ answers: Record<string, string | string[]> | null }>;
+  const rows = (subs ?? []) as FeedbackRow[];
   return aggregateFeedback(exam?.questions ?? [], rows);
 }

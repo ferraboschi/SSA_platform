@@ -26,7 +26,12 @@ export interface GradedSubmission {
   manualCount: number;
   suggested: ExamOutcome;
   enrollmentId: number | null;
-  /** The bound corsista (proctored submissions) — keys the attendance map. */
+  /** The seat this hand-in resolved to was REMOVED from the course
+   *  (`corsi_iscrizioni.annullata_at`: refund / credit / transfer). The row stays
+   *  listed for audit but is never confirmable, sent, exported or counted. */
+  annullata: boolean;
+  /** The bound corsista (proctored submissions) — keys the attendance map.
+   *  Always the SURVIVING record when the submission's corsista was merged. */
   corsistaId: number | null;
   /** Set (and enrollmentId null) when the submission belongs to a "doppio"
    *  companion (corsi_partecipanti) instead of an enrolled corsista. */
@@ -43,18 +48,30 @@ export interface GradedSubmission {
 
 /** Find the CONFIRMED result for an email — deterministic when a companion
  *  shares the buyer's email (same household): the enrolled corsista's row wins
- *  over a companion's, then the most recent. Pure (unit-tested). */
+ *  over a companion's, then the most recent. A removed seat never counts (no
+ *  certificate / result email for a cancelled enrollment). Pure (unit-tested). */
 export function findConfirmedResultByEmail(
   subs: GradedSubmission[],
   email: string,
 ): GradedSubmission | null {
   const low = email.toLowerCase().trim();
   const matches = subs.filter(
-    (s) => s.studentEmail.toLowerCase() === low && s.currentResult,
+    (s) => s.studentEmail.toLowerCase() === low && s.currentResult && !s.annullata,
   );
   if (matches.length === 0) return null;
   const corsista = matches.find((s) => s.enrollmentId != null);
   return corsista ?? matches[0];
+}
+
+/** The seat a hand-in binds to when a corsista holds SEVERAL enrollment rows in
+ *  the same course (a cancelled seat plus a re-enrolment): the active one wins,
+ *  whatever the row order; only when every seat is cancelled does the first
+ *  cancelled row stand in — kept so the hand-in stays visible as "posto
+ *  rimosso" instead of vanishing. Pure (unit-tested). */
+export function preferActiveEnrollment<T extends { annullata_at?: string | null }>(
+  rows: T[],
+): T | null {
+  return rows.find((r) => !r.annullata_at) ?? rows[0] ?? null;
 }
 
 export async function loadCourseExamResults(
@@ -93,7 +110,13 @@ export async function loadCourseExamResults(
     return qCache.get(tk)!;
   };
 
-  type CorsistaRow = { id: number; full_name: string | null; email: string | null };
+  type CorsistaRow = {
+    id: number;
+    full_name: string | null;
+    email: string | null;
+    /** Set on a duplicate folded into another record (see mergeCorsistiCore). */
+    merged_into: number | null;
+  };
   type EnrollmentRow = {
     id: number;
     exam_result: string | null;
@@ -101,7 +124,11 @@ export async function loadCourseExamResults(
     /** Confirmed-email snapshot (course-start /conferma) — preferred over
      *  corsisti.email, same rule as the roster and the exam-invite sender. */
     enrolled_email?: string | null;
+    /** Seat removed from the course — see GradedSubmission.annullata. */
+    annullata_at?: string | null;
   };
+  const ENR_COLS = "id, corsista_id, exam_result, exam_score_pct, enrolled_email, annullata_at";
+  const ENR_COLS_BASE = "id, corsista_id, exam_result, exam_score_pct";
 
   // BATCH (avoid N+1): collect all corsista_ids across submissions, then fetch
   // the corsisti rows and this course's enrollments once, keyed by corsista_id.
@@ -152,35 +179,64 @@ export async function loadCourseExamResults(
 
   const corsistiById = new Map<number, CorsistaRow>();
   const enrollmentByCorsistaId = new Map<number, EnrollmentRow>();
+  // MERGED DUPLICATES: a hand-in can still carry a folded record's id (submitted
+  // before the merge, or a conflicting row left on the merged record), whose
+  // enrollment now lives on the survivor. Follow `merged_into` to the surviving
+  // record — a survivor can itself be merged later, so walk a few hops.
+  const survivorOf = (id: number): number => {
+    let cur = id;
+    for (let hop = 0; hop < 3; hop++) {
+      const next = corsistiById.get(cur)?.merged_into;
+      if (next == null || next === cur) break;
+      cur = next;
+    }
+    return cur;
+  };
   if (corsistaIds.length > 0) {
-    const [{ data: corRows }, enrResult] = await Promise.all([
-      svc.from("corsisti").select("id, full_name, email").in("id", corsistaIds),
-      svc
-        .from("corsi_iscrizioni")
-        .select("id, corsista_id, exam_result, exam_score_pct, enrolled_email")
-        .eq("corso_id", Number(courseId))
-        .in("corsista_id", corsistaIds),
-    ]);
-    // Pre-migration degrade: retry without enrolled_email so identities still
-    // resolve (just via corsisti.email, same as before this column existed).
+    let pending = corsistaIds;
+    for (let hop = 0; hop < 3 && pending.length > 0; hop++) {
+      const { data } = await svc
+        .from("corsisti")
+        .select("id, full_name, email, merged_into")
+        .in("id", pending);
+      const rows = (data ?? []) as CorsistaRow[];
+      for (const r of rows) corsistiById.set(r.id, r);
+      pending = Array.from(
+        new Set(
+          rows
+            .map((r) => r.merged_into)
+            .filter((id): id is number => id != null && !corsistiById.has(id)),
+        ),
+      );
+    }
+    const lookupIds = Array.from(new Set([...corsistaIds, ...corsistiById.keys()]));
+    const enrResult = await svc
+      .from("corsi_iscrizioni")
+      .select(ENR_COLS)
+      .eq("corso_id", Number(courseId))
+      .in("corsista_id", lookupIds);
+    // Pre-migration degrade: retry without enrolled_email/annullata_at so
+    // identities still resolve (via corsisti.email, no seat ever "removed").
     let enrRows: Array<EnrollmentRow & { corsista_id: number }> | null = enrResult.data as
       | Array<EnrollmentRow & { corsista_id: number }>
       | null;
     if (enrResult.error) {
       const base = await svc
         .from("corsi_iscrizioni")
-        .select("id, corsista_id, exam_result, exam_score_pct")
+        .select(ENR_COLS_BASE)
         .eq("corso_id", Number(courseId))
-        .in("corsista_id", corsistaIds);
+        .in("corsista_id", lookupIds);
       enrRows = base.data as Array<EnrollmentRow & { corsista_id: number }> | null;
     }
-    for (const r of (corRows ?? []) as CorsistaRow[]) corsistiById.set(r.id, r);
     for (const r of enrRows ?? []) {
+      const prev = enrollmentByCorsistaId.get(r.corsista_id);
+      const pick = preferActiveEnrollment(prev ? [prev, r] : [r])!;
       enrollmentByCorsistaId.set(r.corsista_id, {
-        id: r.id,
-        exam_result: r.exam_result,
-        exam_score_pct: r.exam_score_pct,
-        enrolled_email: r.enrolled_email,
+        id: pick.id,
+        exam_result: pick.exam_result,
+        exam_score_pct: pick.exam_score_pct,
+        enrolled_email: pick.enrolled_email,
+        annullata_at: pick.annullata_at,
       });
     }
   }
@@ -220,15 +276,16 @@ export async function loadCourseExamResults(
     });
 
     let enrollmentId: number | null = null;
+    let annullata = false;
     let currentResult: string | null = null;
     let currentScore: number | null = null;
 
-    const applyEnrollment = (e: unknown) => {
-      const row = e as { id: number; exam_result: string | null; exam_score_pct: number | null } | null;
-      if (!row) return;
-      enrollmentId = row.id;
-      currentResult = row.exam_result;
-      currentScore = row.exam_score_pct;
+    const applyEnrollment = (e: EnrollmentRow | null) => {
+      if (!e) return;
+      enrollmentId = e.id;
+      annullata = Boolean(e.annullata_at);
+      currentResult = e.exam_result;
+      currentScore = e.exam_score_pct;
     };
 
     // COMPANION: a personal link bound to a "doppio" companion carries
@@ -256,6 +313,7 @@ export async function loadCourseExamResults(
         manualCount: manual,
         suggested,
         enrollmentId: null,
+        annullata: false,
         corsistaId: null,
         partecipanteId,
         currentResult,
@@ -270,9 +328,14 @@ export async function loadCourseExamResults(
     // PRIMARY: proctored submissions carry corsista_id → resolve the student and
     // enrollment directly. This is the reliable tie-back even when the exam
     // collected no registration fields (name/email would otherwise be "—").
-    if (s.corsista_id != null) {
-      const cor = corsistiById.get(s.corsista_id) ?? null;
-      const enrollment = enrollmentByCorsistaId.get(s.corsista_id) ?? null;
+    // A merged duplicate resolves to its SURVIVOR: identity and attendance live
+    // there now, and the enrollment is looked up under the submission's own id
+    // first (a conflict row left on the merged record), then the survivor's.
+    const subjectId = s.corsista_id != null ? survivorOf(s.corsista_id) : null;
+    if (s.corsista_id != null && subjectId != null) {
+      const cor = corsistiById.get(subjectId) ?? corsistiById.get(s.corsista_id) ?? null;
+      const enrollment =
+        enrollmentByCorsistaId.get(s.corsista_id) ?? enrollmentByCorsistaId.get(subjectId) ?? null;
       if (cor) {
         // AUTHORITATIVE: a proctored submission is tied to the verified enrolled
         // student, so their identity wins over anything in registration — never
@@ -296,18 +359,35 @@ export async function loadCourseExamResults(
     // path is rare (only rows with no corsista_id), so it stays per-row; the
     // enrollment lookup still reuses the pre-fetched course-enrollment Map.
     if (enrollmentId == null && email) {
-      const { data: c } = await svc.from("corsisti").select("id").ilike("email", email).maybeSingle();
+      const { data: c } = await svc
+        .from("corsisti")
+        .select("id, merged_into")
+        .ilike("email", email)
+        .maybeSingle();
       if (c) {
-        const cid = (c as { id: number }).id;
-        let e = enrollmentByCorsistaId.get(cid) ?? null;
-        if (!e) {
-          const { data: eRow } = await svc
+        const { id: cid, merged_into } = c as { id: number; merged_into: number | null };
+        // Same order as the proctored path: own id first, then the survivor.
+        const ids = merged_into != null && merged_into !== cid ? [cid, merged_into] : [cid];
+        let e: EnrollmentRow | null = null;
+        for (const id of ids) {
+          e = enrollmentByCorsistaId.get(id) ?? null;
+          if (e) break;
+          const withSeat = await svc
             .from("corsi_iscrizioni")
-            .select("id, exam_result, exam_score_pct")
-            .eq("corsista_id", cid)
-            .eq("corso_id", Number(courseId))
-            .maybeSingle();
-          e = (eRow as EnrollmentRow | null) ?? null;
+            .select(ENR_COLS)
+            .eq("corsista_id", id)
+            .eq("corso_id", Number(courseId));
+          const rows = withSeat.error
+            ? (
+                await svc
+                  .from("corsi_iscrizioni")
+                  .select(ENR_COLS_BASE)
+                  .eq("corsista_id", id)
+                  .eq("corso_id", Number(courseId))
+              ).data
+            : withSeat.data;
+          e = preferActiveEnrollment((rows ?? []) as EnrollmentRow[]);
+          if (e) break;
         }
         applyEnrollment(e);
       }
@@ -324,7 +404,8 @@ export async function loadCourseExamResults(
       manualCount: manual,
       suggested,
       enrollmentId,
-      corsistaId: s.corsista_id ?? null,
+      annullata,
+      corsistaId: subjectId,
       partecipanteId: null,
       currentResult,
       currentScore,
