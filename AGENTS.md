@@ -40,6 +40,13 @@ Airtable (costi) + Resend (email). Operativa: dati e utenti sono REALI.
    sistema" in dashboard). Ogni nuova pipeline deve seguire lo stesso principio.
 5. **I gate si ri-verificano.** Un controllo fatto al mint di un link (presenza,
    conferma email) va rifatto a open e submit: lo stato può cambiare dopo.
+   Vale anche per la chiusura forzata (`finalizeInProgressOnClose` applica lo
+   stesso gate della consegna).
+5b. **Una valutazione fallita non è uno zero.** Se l'AI non può correggere una
+   risposta aperta (provider giù, crediti finiti, rifiuto per mancanza di
+   fonti) la risposta va in `failed` → revisione manuale (Voto educator 1-5),
+   resta fuori dal punteggio mostrato allo studente e blocca la pubblicazione
+   dell'esito finché non è risolta. Mai contarla come 0 a peso pieno.
 6. **Mai loggare segreti** (token, API key) — i log Render persistono. Solo
    identificatori/scope.
 7. **Niente riscritture unilaterali della logica finanziaria.** Le policy sul

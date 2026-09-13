@@ -7,6 +7,7 @@ import { Badge, Icon, PageHeader, type BadgeTone } from "@/components/ui";
 import { gradeEnrollmentAction, gradePartecipanteAction } from "@/lib/exam-links/grading-actions";
 import { certifiedScore } from "@/lib/exam-links/grading";
 import { gradeOpenAnswerAction, type GradeOpenResult } from "@/lib/esami/ai-actions";
+import { setManualOpenGradeAction } from "@/lib/esami/manual-grade-actions";
 import {
   runCourseCorrectionAction,
   getCourseCorrectionAction,
@@ -187,6 +188,16 @@ export function ExamResultsClient({
     };
   }, [courseId, correctionTest]);
 
+  // A manual vote rewrites one draft server-side: re-read the drafts so the
+  // row's totals / openFailed gate reflect it without a full page refresh.
+  const reloadDrafts = () => {
+    getCourseCorrectionAction(courseId, correctionTest)
+      .then((r) => {
+        if (r.drafts) setDrafts(r.drafts as Record<number, CorrectionDraft>);
+      })
+      .catch(() => {});
+  };
+
   const runCorrection = () => {
     if (!family || correcting) return;
     setCorrectionMsg(null);
@@ -344,7 +355,9 @@ export function ExamResultsClient({
                       key={r.id}
                       r={r}
                       courseId={courseId}
+                      family={family}
                       draft={drafts[r.id]}
+                      onDraftChanged={reloadDrafts}
                       templateUpdatedAt={templateUpdatedAt}
                       absent={
                         presentMap
@@ -434,6 +447,7 @@ function AiGradeButton({
 // shows, finally visible where the operator actually corrects. Full rationale,
 // never truncated.
 function DraftGradeBlock({ g }: { g: OpenGrade }) {
+  const manual = g.provider === "manual";
   return (
     <div
       style={{
@@ -448,6 +462,10 @@ function DraftGradeBlock({ g }: { g: OpenGrade }) {
     >
       {g.failed ? (
         <strong>⚠ Non valutata dall&apos;AI</strong>
+      ) : manual ? (
+        <strong>
+          Voto educator: {g.vote}/5 · {g.points}/{g.maxPoints} punti
+        </strong>
       ) : (
         <>
           <strong>
@@ -465,10 +483,73 @@ function DraftGradeBlock({ g }: { g: OpenGrade }) {
   );
 }
 
+// The educator's OWN 1-5 vote on an open answer — the fallback that unblocks
+// the outcome when the AI could not grade it (outage, quota, refusal). Writes
+// into the SAME draft the batch produces, so totals and the "da rivedere" gate
+// recompute from one source. Persists on click (one round-trip per vote).
+function ManualVoteRow({
+  courseId,
+  family,
+  testKey,
+  submissionId,
+  qid,
+  current,
+  onSaved,
+}: {
+  courseId: string;
+  family: "nihonshu" | "shochu" | null;
+  testKey: string;
+  submissionId: number;
+  qid: string;
+  current?: OpenGrade;
+  onSaved: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const activeVote = current?.provider === "manual" ? current.vote : undefined;
+  return (
+    <div style={{ marginTop: 5, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <span className="text-3" style={{ fontSize: 11.5 }}>Voto educator (1-5):</span>
+      {[1, 2, 3, 4, 5].map((v) => {
+        const active = activeVote === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            className="btn btn-xs"
+            disabled={pending || !family}
+            title={family ? `Assegna ${v}/5 a questa risposta` : "Famiglia esame non disponibile"}
+            style={
+              active
+                ? { background: "var(--indigo-50)", borderColor: "var(--indigo)", color: "var(--indigo-600)", fontWeight: 700 }
+                : undefined
+            }
+            onClick={() => {
+              if (!family) return;
+              setErr(null);
+              start(async () => {
+                const res = await setManualOpenGradeAction({ courseId, family, testKey, submissionId, qid, vote: v });
+                if (res.ok) onSaved();
+                else setErr(res.error ?? "Salvataggio non riuscito.");
+              });
+            }}
+          >
+            {v}
+          </button>
+        );
+      })}
+      {pending && <span className="text-3" style={{ fontSize: 11.5 }}>Salvo…</span>}
+      {err && <span style={{ fontSize: 11.5, color: "var(--danger-fg)" }}>{err}</span>}
+    </div>
+  );
+}
+
 function ResultRow({
   r,
   courseId,
+  family,
   draft,
+  onDraftChanged,
   templateUpdatedAt,
   absent,
   showOutcome,
@@ -478,8 +559,12 @@ function ResultRow({
 }: {
   r: GradedSubmission;
   courseId: string;
+  /** Exam family — required by the manual-vote fallback (null → votes disabled). */
+  family: "nihonshu" | "shochu" | null;
   /** The "Correggi" run's draft for this submission, when one exists. */
   draft?: CorrectionDraft;
+  /** Re-read the drafts after a manual vote rewrote this one server-side. */
+  onDraftChanged: () => void;
   /** Latest template edit — a draft older than this is stale. */
   templateUpdatedAt?: string | null;
   /** The subject is NOT present at this test's roll call (owner's rule) —
@@ -526,7 +611,7 @@ function ResultRow({
 
   // Open-question outcomes are part of the vote (owner): if the AI grading FAILED
   // on any of them ("valutazione non riuscita"), the final score is incomplete and
-  // must NOT be published — the operator resolves each with "Rivaluta" (in the
+  // must NOT be published — the operator gives each a manual vote (1-5, in the
   // expanded answers) first, then the outcome buttons unlock.
   const openFailed = draft?.totals.openFailed ?? 0;
   const blockedByFailed = openFailed > 0;
@@ -538,7 +623,7 @@ function ResultRow({
     }
     if (blockedByFailed) {
       setErr(
-        `${openFailed} ${openFailed === 1 ? "domanda non è stata valutata" : "domande non sono state valutate"} (valutazione non riuscita): usa "Rivaluta" nelle risposte prima di pubblicare l'esito.`,
+        `${openFailed} ${openFailed === 1 ? "domanda non è stata valutata" : "domande non sono state valutate"} (valutazione non riuscita): assegna un voto educator (1-5) nelle risposte prima di pubblicare l'esito.`,
       );
       return;
     }
@@ -643,7 +728,7 @@ function ResultRow({
                         !canGrade
                           ? "Studente non iscritto"
                           : blockedByFailed
-                            ? `${openFailed} da rivedere — risolvi con "Rivaluta" prima di pubblicare`
+                            ? `${openFailed} da rivedere — assegna un voto educator (1-5) nelle risposte prima di pubblicare`
                             : confirmed
                               ? `Esito confermato: ${OUTCOME_LABEL[o]}`
                               : r.gradable === 0
@@ -725,9 +810,20 @@ function ResultRow({
                               prompt={a.text}
                               answer={a.given}
                               kbSection={a.cat}
-                              label={draftGrade(a.qid) ? "Rivaluta" : "Valuta con AI"}
+                              label={draftGrade(a.qid) ? "Rivaluta (anteprima AI)" : "Valuta con AI (anteprima)"}
                             />
                           )}
+                        {a.ok === null && a.given && a.given !== "—" && (
+                          <ManualVoteRow
+                            courseId={courseId}
+                            family={family}
+                            testKey={r.testKey}
+                            submissionId={r.id}
+                            qid={a.qid}
+                            current={draftGrade(a.qid)}
+                            onSaved={onDraftChanged}
+                          />
+                        )}
                       </div>
                     </div>
                   ))}

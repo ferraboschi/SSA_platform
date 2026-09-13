@@ -124,6 +124,7 @@ export class ClaudeGradingModel implements GradingModel {
           "automatica sospesa, serve revisione manuale.",
         provider: "model",
         citedIndices: [],
+        refused: true,
       };
     }
     const confidence = Number(r.confidence);
@@ -241,6 +242,7 @@ export async function gradeOpenAnswer(
         "sospesa per questa risposta — serve revisione manuale di un educatore.",
       citations: [],
       provider: "model",
+      refused: true,
     };
   }
   const { citedIndices, ...result } = await getGradingModel().grade(

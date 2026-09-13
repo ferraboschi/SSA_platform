@@ -197,8 +197,13 @@ export function ExamRunner({
   // Live "the educator closed this test" push (owner batch 8): polled while
   // the exam is open so an already-open page reacts within seconds.
   const [closedLive, setClosedLive] = useState(false);
-  // Link expired while the runner was open (0 grace: no window to keep working).
+  // Link expired while the runner was open. The page OPEN has 0 grace, but the
+  // hand-in keeps a 3h grace: this flips only once the poll reports "expired"
+  // past that window — terminal, never reset.
   const [expiredLive, setExpiredLive] = useState(false);
+  // A server gate refused the hand-in (absent / unconfirmed / unbound or deleted
+  // subject): the server's reason, shown on a terminal screen — never "Riprova".
+  const [blockedLive, setBlockedLive] = useState<string | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<string[] | null>(null);
   const [reviewMode, setReviewMode] = useState(false);
   // Personal scratchpad — constant across questions, never submitted/saved.
@@ -354,6 +359,11 @@ export function ExamRunner({
         // Link expired (0 grace): a terminal "scaduto" screen, not a dead retry
         // loop — refreshing/retrying can't revive an expired token.
         setExpiredLive(true);
+      } else if (r.blocked) {
+        // A gate refused the hand-in: terminal screen with the server's reason
+        // (retrying would re-hit the same block). finishingRef stays set, as
+        // for the closed case.
+        setBlockedLive(r.error ?? "");
       } else {
         setSubmitError(true);
         finishingRef.current = false; // allow autosave to resume for a retry
@@ -366,10 +376,15 @@ export function ExamRunner({
     }
   };
 
+  // The poll's interval closes over the first render: read the live closed flag
+  // through a ref so a parked runner can ask the server the right question.
+  const closedLiveRef = useRef(closedLive);
+  closedLiveRef.current = closedLive;
   useEffect(() => {
     if (mode !== "exam" || done || !token) return;
     const id = setInterval(() => {
-      getLinkStateAction(token)
+      const parked = closedLiveRef.current;
+      getLinkStateAction(token, { handIn: parked })
         .then((r) => {
           // A CLOSURE flips the runner to "test chiuso" within ~10s (blocks
           // everyone instantly). A token only reports "expired" once it is past
@@ -378,6 +393,19 @@ export function ExamRunner({
           if (r.ok && r.closed) {
             if (r.reason === "closed") setClosedLive(true);
             else if (r.reason === "expired") setExpiredLive(true);
+          } else if (r.ok && parked) {
+            // "Riapri" lifted the closure. If the close already handed this
+            // sitting in (finalize-on-close), the student is DONE — resuming
+            // would only feed answers into a discarded retry. Only a sitting
+            // with nothing handed in goes back into the runner (autosave and
+            // the hard stop re-armed). Unknown → stay parked.
+            if (r.handedIn === true) {
+              setAlreadySubmitted(true);
+              setDone(true);
+            } else if (r.handedIn === false) {
+              finishingRef.current = false;
+              setClosedLive(false);
+            }
           }
         })
         .catch(() => {});
@@ -528,6 +556,23 @@ export function ExamRunner({
     );
   }
 
+  // Hand-in refused by a server gate → terminal screen with the reason (same
+  // family as closed/expired): no "Riprova", every retry would re-hit the block.
+  if (blockedLive != null && !done) {
+    return (
+      <div className="exam-public-shell" {...lockdown}>
+        <div className="exam-public-card">
+          {headerBar}
+          <div className="exam-public-thanks">
+            <div className="exam-public-thanks-check">!</div>
+            <h2>{t.blockedTitle}</h2>
+            <p>{blockedLive}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Step 0: language gate ────────────────────────────────────────────────
   if (!langPicked) {
     return (
@@ -627,10 +672,11 @@ export function ExamRunner({
   // ── Done / empty ─────────────────────────────────────────────────────────
   if (done || total === 0) {
     // Complete preview → show the computed outcome using the SAME pure grader as
-    // the real correction (exam-links/grading), so the preview can never disagree
-    // with what the operator will see in the Esiti tab.
+    // the real correction (exam-links/grading). `autoScore` is its points-
+    // weighted percentage — what staff see in Esiti — so the preview can't drift
+    // from it (a correct/gradable count would, once a question weighs ≠ 1).
     if (showResult && total > 0) {
-      const { gradable, correct, manual } = gradeAnswers(questions, answers, lang);
+      const { gradable, correct, manual, autoScore } = gradeAnswers(questions, answers, lang);
       // No auto-gradable questions → don't fake a 0% "failed"; show a neutral note.
       if (gradable === 0) {
         return (
@@ -651,9 +697,8 @@ export function ExamRunner({
           </div>
         );
       }
-      const pct = Math.round((correct / gradable) * 100);
       // Mirror the real three-tier outcome: pass ≥80, retrial ≥70, else fail.
-      const outcome = scoreToOutcome(pct);
+      const outcome = scoreToOutcome(autoScore);
       const accent = outcome === "passed" ? "#15803d" : outcome === "retrial" ? "#b45309" : "#b42318";
       const outcomeLabel = outcome === "passed" ? t.previewPassed : outcome === "retrial" ? t.previewRetrial : t.previewFailed;
       return (
@@ -674,7 +719,7 @@ export function ExamRunner({
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: accent }}>
                   {t.previewScore}
                 </div>
-                <div style={{ fontSize: 46, fontWeight: 800, color: accent, lineHeight: 1.05, margin: "4px 0" }}>{pct}%</div>
+                <div style={{ fontSize: 46, fontWeight: 800, color: accent, lineHeight: 1.05, margin: "4px 0" }}>{autoScore}%</div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: accent }}>{outcomeLabel}</div>
                 <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)", marginTop: 8 }}>
                   {correct}/{gradable}

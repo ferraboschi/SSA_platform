@@ -16,6 +16,7 @@ import {
 } from "@react-pdf/renderer";
 import type { ReactElement } from "react";
 import { REPORT_I18N, type ReportLang } from "@/lib/i18n/report";
+import { MONTH_TO_NUM } from "@/lib/dates/italian-months";
 import { SCORE_WORDS } from "@/components/esame-pubblico/exam-chrome";
 import { EXAM_THRESHOLDS } from "@/lib/domain/constants";
 import { weakAreas, type ExamSection } from "./exam-sections";
@@ -70,6 +71,8 @@ export interface CertificatePdfInput {
   /** Open-answer justifications (owner batch 18) → a SECOND page per language.
    *  Empty/omitted → no second page (the resoconto stays one page). */
   openReview?: OpenReviewItem[];
+  /** `month` is the Italian name stored on the course ("Novembre"); the EN/JA
+   *  pages localize it (see courseDateLabel). */
   course: { day: number; month: string; year: number; city: string; educatorName: string };
   completedAt: string;
 }
@@ -141,14 +144,33 @@ function barColor(pct: number): string {
   return pct >= 80 ? COLORS.pass : pct >= 70 ? COLORS.retrial : COLORS.fail;
 }
 
+/** Locale of every date printed on a language's page. */
+const DATE_LOCALE: Record<ReportLang, string> = { it: "it-IT", en: "en-GB", ja: "ja-JP" };
+
+/** Course date line. Italian prints the stored name verbatim ("14 Novembre 2026");
+ *  EN/JA render the same date through Intl ("14 November 2026" / "2026年11月14日")
+ *  — the domain carries only the Italian month name, so it is mapped back to a
+ *  number first. An unparseable month falls back to the stored text. */
+function courseDateLabel(course: CertificatePdfInput["course"], lang: ReportLang): string {
+  const stored = `${course.day} ${course.month} ${course.year}`;
+  if (lang === "it") return stored;
+  const month = MONTH_TO_NUM[course.month.trim().toLowerCase()];
+  if (!month) return stored;
+  const d = new Date(Date.UTC(course.year, month - 1, course.day));
+  // Day and month come from two different columns: never print a rolled-over date.
+  if (d.getUTCMonth() !== month - 1) return stored;
+  return d.toLocaleDateString(DATE_LOCALE[lang], { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
+
 function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLang }) {
   const t = REPORT_I18N[lang];
   const sc = statusColor(input.status);
   const title = input.status === "passed" ? t.passedTitle : input.status === "retrial" ? t.retrialTitle : t.failedTitle;
-  const issued = new Date(input.completedAt).toLocaleDateString(
-    lang === "it" ? "it-IT" : lang === "en" ? "en-GB" : "ja-JP",
-    { day: "numeric", month: "long", year: "numeric" },
-  );
+  const issued = new Date(input.completedAt).toLocaleDateString(DATE_LOCALE[lang], {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 
   // For the Japanese page, swap the Helvetica base to the registered CJK font so
   // the glyphs actually render. Noto Sans JP is a single weight, so both regular
@@ -192,7 +214,7 @@ function CertPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLan
 
       <Text style={[styles.name, jaFont]}>{input.name}</Text>
       <Text style={[styles.meta, jaFont]}>
-        {t.examDate}: {input.course.day} {input.course.month} {input.course.year} · {t.location}: {input.course.city} · {t.educator}: {input.course.educatorName}
+        {t.examDate}: {courseDateLabel(input.course, lang)} · {t.location}: {input.course.city} · {t.educator}: {input.course.educatorName}
       </Text>
 
       <View style={[styles.scoreBox, { borderColor: sc, justifyContent: input.score == null ? "center" : "space-between" }]}>
@@ -270,10 +292,11 @@ function reviewColor(vote: number | undefined, points: number, maxPoints: number
 function OpenReviewPage({ input, lang }: { input: CertificatePdfInput; lang: ReportLang }) {
   const t = REPORT_I18N[lang];
   const jaFont: { fontFamily?: string } = lang === "ja" ? { fontFamily: JA_FONT_FAMILY } : {};
-  const issued = new Date(input.completedAt).toLocaleDateString(
-    lang === "it" ? "it-IT" : lang === "en" ? "en-GB" : "ja-JP",
-    { day: "numeric", month: "long", year: "numeric" },
-  );
+  const issued = new Date(input.completedAt).toLocaleDateString(DATE_LOCALE[lang], {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
   const items = input.openReview ?? [];
 
   return (

@@ -42,8 +42,9 @@ export interface OpenAnswerResult {
   citedTitles: string[];
   /** True when the grading call failed → 0 points, manual review required. */
   failed: boolean;
-  /** Backend that produced the points; omit when failed (nothing was graded). */
-  provider?: "model" | "stub";
+  /** Backend that produced the points — or "manual" for an educator's own vote
+   *  (the fallback when the AI can't grade); omit when failed (nothing graded). */
+  provider?: "model" | "stub" | "manual";
 }
 
 export interface CorrectionDraftInput {
@@ -79,6 +80,51 @@ function isOpenLane(a: CorrectionAnswer): boolean {
   return a.ok === null;
 }
 
+/** An educator's OWN 1-5 vote on an open answer — the fallback when the AI can't
+ *  grade it (provider outage, refusal). Same points rule as the model
+ *  (max × (vote−1)/4) so a manual 5 and an AI 5 weigh the same; the rationale
+ *  is written in the draft's language because the student's resoconto prints it. */
+export function manualOpenResult(
+  maxPoints: number,
+  vote: number,
+  rationaleLang: "it" | "en" = "it",
+): OpenAnswerResult {
+  const v = Math.max(1, Math.min(5, Math.trunc(vote)));
+  return {
+    points: round2((maxPoints * (v - 1)) / 4),
+    vote: v,
+    confidence: 1,
+    rationale: rationaleLang === "en" ? "Assessed directly by your educator." : "Valutata direttamente dal tuo educator.",
+    grounded: false,
+    citedTitles: [],
+    failed: false,
+    provider: "manual",
+  };
+}
+
+/** The educator's MANUAL votes stored in a previous draft, keyed by qid. An AI
+ *  re-run ("Correggi" after the outage) must carry them over untouched: a
+ *  decision the educator took by hand is never silently replaced by a model. */
+export function manualGradesOf(
+  draft: { openGrades?: OpenGrade[] } | null | undefined,
+): Map<string, OpenAnswerResult> {
+  const out = new Map<string, OpenAnswerResult>();
+  for (const g of draft?.openGrades ?? []) {
+    if (g.failed || g.provider !== "manual" || g.vote == null) continue;
+    out.set(g.qid, {
+      points: g.points,
+      vote: g.vote,
+      confidence: g.confidence,
+      rationale: g.rationale,
+      grounded: false,
+      citedTitles: [],
+      failed: false,
+      provider: "manual",
+    });
+  }
+  return out;
+}
+
 /** Draft verdict from a combined percentage — the ONE score→outcome rule lives
  *  in scoreToOutcome (rounds to nearest int, then compares to EXAM_THRESHOLDS:
  *  79.5 → 80 → promosso, 79.4 → 79 → rimandato). Kept as a named alias so the
@@ -95,8 +141,6 @@ export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDra
   // surface in the report — important questions first, then the heaviest.
   let objectiveEarned = 0;
   let objectiveMax = 0;
-  let gradableCount = 0;
-  let correctCount = 0;
   const wrongAnswers: WrongAnswer[] = [];
   // Per-category X / Y count of OBJECTIVE answers (owner debug call: the bozza
   // shows "Storia 5/20" instead of a long list of individual questions).
@@ -105,7 +149,6 @@ export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDra
     if (a.ok === null) continue;
     const m = metaOf(a.qid);
     objectiveMax += m.points;
-    gradableCount++;
     const cat = (a.cat ?? "").trim() || "Generale";
     const cc = catCounts.get(cat) ?? { correct: 0, total: 0 };
     cc.total++;
@@ -115,9 +158,7 @@ export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDra
     // right answer earns the point, a partially right one its share.
     const frac = a.ok ? 1 : Math.max(0, Math.min(1, a.fraction ?? 0));
     objectiveEarned += frac * m.points;
-    if (a.ok) {
-      correctCount++;
-    } else {
+    if (!a.ok) {
       wrongAnswers.push({
         qid: a.qid,
         question: a.text.trim(),
@@ -178,15 +219,17 @@ export function buildCorrectionDraft(input: CorrectionDraftInput): CorrectionDra
       grounded: r.grounded,
       citedTitles: r.citedTitles,
       failed: r.failed,
+      ...(!r.failed && r.provider ? { provider: r.provider } : {}),
     });
   }
 
   const max = objectiveMax + openMax;
   // Round THEN compare: verdictFromPct sees the same integer the draft stores.
   const combinedPct = max > 0 ? Math.round((100 * (objectiveEarned + openEarned)) / max) : 0;
-  // Count-based like the live auto-corrector (GradedSubmission.autoScore), so
-  // the draft's objective figure matches the Esiti tab for the same submission.
-  const objectivePct = gradableCount > 0 ? Math.round((100 * correctCount) / gradableCount) : 0;
+  // POINTS-weighted (partial credit included) like the live auto-corrector
+  // (gradeAnswers.autoScore) and the "X/Y punti" the bozza prints next to it —
+  // a count-based figure disagreed with both whenever a question weighed ≠ 1.
+  const objectivePct = objectiveMax > 0 ? Math.round((100 * objectiveEarned) / objectiveMax) : 0;
 
   return {
     at,

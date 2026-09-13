@@ -15,6 +15,7 @@ import {
   isBlockedByAbsence,
   isSubjectConfirmed,
   absentAccessError,
+  unconfirmedAccessError,
 } from "@/lib/exam-links/live-progress";
 import { ExamGate } from "@/components/esame-pubblico/ExamGate";
 import { EsitoCard } from "@/components/esame-pubblico/EsitoCard";
@@ -144,12 +145,12 @@ export default async function Page({
     // One retry: whether a student already handed in is an integrity decision —
     // it must not hinge on a single transient blip.
     if (priorErr) ({ data: prior, error: priorErr } = await queryPrior());
-    // If we STILL can't tell, fail OPEN for day tests (formative — never lock a
-    // student out mid-exam; the submit path stays guarded by the unique index)
-    // but fail CLOSED for the final/feedback: a transient error must never
-    // re-expose the graded questions to someone who already submitted. They can
-    // refresh — their answers are heartbeated server-side.
-    if (priorErr && !isDayTest) {
+    // If we STILL can't tell, fail CLOSED for every test: a transient error must
+    // never re-expose the graded questions to someone who already submitted (a
+    // day test re-entered over an existing hand-in would only have its answers
+    // discarded at submit — alreadySubmitted). They can refresh — their answers
+    // are heartbeated server-side.
+    if (priorErr) {
       return (
         <Blocked icon="…" title={CHROME[lang].unavailableTitle} body={CHROME[lang].unavailableBody} />
       );
@@ -198,8 +199,8 @@ export default async function Page({
     //    present to sit the test). Same canonical presence rule as the send
     //    gate (day test ↔ that day; feedback/final ↔ any attended day); fails
     //    open only when attendance is UNKNOWN (DB error / pre-migration).
-    //    BYPASSED for an emergency link (emg) — the educator couldn't run the
-    //    roll-call; the confirmed-email match at mint time is the safety net.
+    //    Presence alone is BYPASSED for an emergency link (emg) — the educator
+    //    couldn't run the roll-call; the confirmation re-check (2b) still applies.
     //    FEEDBACK is gated on the LAST program day's presence (owner: it runs at
     //    the end of day 3, so its presence = that day's roll-call — handled inside
     //    loadPresentForTest). The gate is consistent across open / send / submit.
@@ -208,23 +209,24 @@ export default async function Page({
       const subjectKey = subjectKeyOf({ corsistaId: subjS, partecipanteId: subjP })!;
       if (isBlockedByAbsence(present, subjectKey)) {
         return (
-          <Blocked icon="!" title="Accesso non disponibile" body={absentAccessError(res.payload.t)} />
-        );
-      }
-      // 2b) DATA CONFIRMED — re-checked at OPEN, symmetric with presence: the
-      //     confirmation can be revoked after the link was minted (e.g. "Azzera
-      //     appello"). A no-longer-confirmed student must not access. Fail-open
-      //     on unknown (mint-time check already gated it once).
-      const confirmed = await isSubjectConfirmed(sb, corsoId, { corsistaId: subjS, partecipanteId: subjP });
-      if (confirmed === false) {
-        return (
           <Blocked
             icon="!"
-            title="Accesso non disponibile"
-            body="I tuoi dati non risultano più confermati. Rivolgiti al tuo educator per ripetere la conferma."
+            title={CHROME[lang].accessUnavailableTitle}
+            body={absentAccessError(res.payload.t, lang)}
           />
         );
       }
+    }
+    // 2b) DATA CONFIRMED — re-checked at OPEN, symmetric with presence: the
+    //     confirmation can be revoked after the link was minted (e.g. "Azzera
+    //     appello"). A no-longer-confirmed student must not access. Fail-open
+    //     on unknown (mint-time check already gated it once). Never bypassed:
+    //     for an emergency link it is the only gate left.
+    const confirmed = await isSubjectConfirmed(sb, corsoId, { corsistaId: subjS, partecipanteId: subjP });
+    if (confirmed === false) {
+      return (
+        <Blocked icon="!" title={CHROME[lang].accessUnavailableTitle} body={unconfirmedAccessError(lang)} />
+      );
     }
 
     // 3) CROSS-DEVICE RESUME (owner, batch 8): the live-progress heartbeats

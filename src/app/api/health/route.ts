@@ -4,6 +4,7 @@ import { getProductCosts } from "@/lib/integrations/airtable/prices";
 import { getSakeCatalog } from "@/lib/integrations/sakecompany/catalog";
 import { ensureRagWired, ragGroundingStatus } from "@/lib/rag";
 import { getVectorStore } from "@/lib/rag/store";
+import { getAiGradingHealth } from "@/lib/rag/health";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { getGrantedScopes } from "@/lib/integrations/shopify/admin-client";
@@ -49,6 +50,11 @@ export async function GET() {
   } catch {
     /* diagnostic best-effort */
   }
+
+  // AI grading probe: are live embeddings actually callable (credits, key) and
+  // is the Anthropic key set? Cached 10' — mirrors the dashboard "Correzione AI"
+  // chip. Reasons only, never the key. null = the probe itself failed.
+  const aiGrading = await getAiGradingHealth().catch(() => null);
 
   // Personal-exam-links migration diagnostic: confirms the exam_student_links
   // table + exam_submissions.corsista_id column exist (so links persist and
@@ -218,6 +224,7 @@ export async function GET() {
     airtablePricesBaseEnv: Boolean(process.env.AIRTABLE_PRICES_BASE_ID),
     sake: { priceCodes, catalogTotal, catalogWithCost },
     rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
+    aiGrading,
     examLinks: { studentLinksTable, studentLinksRows, submissionsCorsistaCol },
     examProgress: { table: examProgressTable, answersCol: progressAnswersCol },
     courseStatus,

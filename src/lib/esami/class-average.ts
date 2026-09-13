@@ -13,6 +13,7 @@ import "server-only";
 
 import { unstable_cache, revalidateTag } from "next/cache";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
+import { isSandboxCourse } from "@/lib/corsi/sandbox";
 import type { ExamFamily } from "@/lib/domain";
 
 /** Revalidate this after any result confirmation so the cached average refreshes. */
@@ -28,12 +29,14 @@ const COURSE_TYPE: Record<ExamFamily, string> = { nihonshu: "certificato", shoch
 async function computeFamilyAverage(family: ExamFamily): Promise<{ avg: number; n: number }> {
   const svc = getSupabaseServiceClient();
 
-  // Course ids of this family, then the confirmed final scores across them
-  // (enrolled corsisti + "doppio" companions). A confirmed result is exactly a
-  // non-null exam_score_pct — the same value the certificate prints as `score`.
+  // Course ids of this family (test-fixture courses excluded, as in every other
+  // stat — their fake results would skew the cohort), then the confirmed final
+  // scores across them (enrolled corsisti + "doppio" companions). A confirmed
+  // result is exactly a non-null exam_score_pct — the same value the
+  // certificate prints as `score`.
   const { data: corsi, error: corsiErr } = await svc
     .from("corsi")
-    .select("id")
+    .select("id, handle")
     .eq("type", COURSE_TYPE[family]);
   // THROW (don't return zeros) on a total failure: this runs inside
   // unstable_cache, which stores returned values but NOT thrown errors — so a
@@ -41,7 +44,9 @@ async function computeFamilyAverage(family: ExamFamily): Promise<{ avg: number; 
   // min after one cold-cache DB hiccup. Throwing lets getClassAverage's catch
   // fail-open to null without caching the miss (same rule as catalog.ts).
   if (corsiErr) throw new Error(`class-average: corsi query failed: ${corsiErr.message}`);
-  const ids = (corsi ?? []).map((c) => (c as { id: number }).id);
+  const ids = ((corsi ?? []) as { id: number; handle: string }[])
+    .filter((c) => !isSandboxCourse(c))
+    .map((c) => c.id);
   if (ids.length === 0) return { avg: 0, n: 0 };
 
   const [iscr, part] = await Promise.all([
@@ -59,6 +64,9 @@ async function computeFamilyAverage(family: ExamFamily): Promise<{ avg: number; 
       .in("corso_id", ids)
       .not("exam_score_pct", "is", null),
   ]);
+  // Same rule as the corsi query: a failed roster read must throw, or the cache
+  // would serve {n:0} (no media on any certificate) for 30 min.
+  if (iscr.error) throw new Error(`class-average: iscrizioni query failed: ${iscr.error.message}`);
 
   const scores: number[] = [];
   for (const r of [...(iscr.data ?? []), ...(part.error ? [] : part.data ?? [])]) {
@@ -78,7 +86,7 @@ async function computeFamilyAverage(family: ExamFamily): Promise<{ avg: number; 
 export async function getClassAverage(family: ExamFamily): Promise<number | null> {
   const cached = unstable_cache(
     () => computeFamilyAverage(family),
-    ["exam-class-average-v1", family],
+    ["exam-class-average-v2", family],
     { revalidate: 1800, tags: [CLASS_AVG_TAG] },
   );
   try {

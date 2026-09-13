@@ -198,7 +198,10 @@ export function EsitoCard({
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: accent }}>
-            {t.previewScore}
+            {/* Once the evaluation is in, the number is the OVERALL score (open
+                answers included) — the "objective questions" label is only true
+                before it lands. */}
+            {esito.aiGraded ? t.scoreOverall : t.previewScore}
           </div>
           <div style={{ fontSize: 44, fontWeight: 800, color: accent, lineHeight: 1.05, margin: "4px 0" }}>
             {esito.pct}%
@@ -206,7 +209,14 @@ export function EsitoCard({
           {/* NO pass/fail verdict on a formative day test (owner). */}
           <div style={{ fontSize: 12, color: "var(--text-3, #6b7280)", marginTop: 8 }}>
             {esito.correct}/{esito.gradable}
-            {esito.manual > 0 ? ` · ${esito.manual} ${t.previewManual}` : ""}
+            {esito.aiGraded
+              ? (esito.openGraded ?? 0) > 0
+                ? ` · ${esito.openGraded} ${t.openGradedNote}`
+                : ""
+              : esito.manual > 0
+                ? ` · ${esito.manual} ${t.previewManual}`
+                : ""}
+            {(esito.aiFailedCount ?? 0) > 0 ? ` · ${esito.aiFailedCount} ${t.openPendingStaff}` : ""}
           </div>
         </div>
       ) : (

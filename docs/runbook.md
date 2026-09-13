@@ -57,7 +57,12 @@ Inventario (nomi, mai valori):
   `SUPABASE_SERVICE_ROLE_KEY` — DB. La service key bypassa la RLS: è il
   segreto più critico.
 - `SHOPIFY_*` (admin token, store domain) — vendite.
-- `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` — AI (correzione esami, sintesi).
+- `ANTHROPIC_API_KEY` — AI (correzione esami, sintesi).
+- `EMBEDDINGS_API_KEY` (+ `EMBEDDINGS_MODEL`) — account OpenAI usato SOLO per gli
+  embeddings della knowledge base: senza crediti sull'account OpenAI la
+  correzione AI delle risposte aperte si ferma (429 `insufficient_quota`).
+  Controllare il saldo su platform.openai.com → Billing prima di ogni sessione
+  d'esame; il chip "Correzione AI" in dashboard lo segnala.
 - `RESEND_API_KEY` — email (mittente solo su `mail.sakesommelierassociation.it`).
 - `AIRTABLE_*` — costi sake.
 - `SYNC_SECRET` — protegge `/api/sync/shopify` (endpoint esterno).
@@ -109,6 +114,7 @@ Regole:
 | Dati sbagliati in massa dopo un sync | NON riscrivere a mano: identificare il bug, fixare il codice (il sync è idempotente e auto-riparante), rilanciare. Nel peggior caso: restore backup (sez. 5). |
 | Segreto compromesso | Rotazione immediata dal provider + aggiornamento su Render (sez. 4). |
 | Corso pubblicato ma invisibile | /corsi → pannello "Corsi non importati" → il motivo è scritto lì. |
+| Chip "Correzione AI" ⚠ in dashboard (risposte aperte "valutazione non riuscita") | "crediti OpenAI esauriti" → ricaricare il saldo OpenAI (Billing), il chip torna verde entro 10'. Nel frattempo gli esiti NON restano bloccati: nella tab Esiti, risposta per risposta, l'educator assegna il **Voto educator (1-5)** — stessa scala e stessi punti dell'AI — e i pulsanti di conferma si sbloccano. |
 
 ## 8. Contesto architetturale
 

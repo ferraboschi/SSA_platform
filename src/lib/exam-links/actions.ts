@@ -10,7 +10,13 @@ import {
   type ExamTestKey,
   type ExamLinkMode,
 } from "./token";
-import { loadPresentForTest, isBlockedByAbsence, isSubjectConfirmed, absentAccessError } from "./live-progress";
+import {
+  loadPresentForTest,
+  isBlockedByAbsence,
+  isSubjectConfirmed,
+  absentAccessError,
+  unconfirmedAccessError,
+} from "./live-progress";
 import { getClosure, isBlockedByClosure } from "./lifecycle";
 import { resolveSubjectIds, subjectKeyOf, subjectColId } from "./access";
 import { buildDayEsito, type DayEsito } from "./esito";
@@ -136,7 +142,17 @@ export interface SubmitExamInput {
 export async function submitExam(
   token: string,
   input: SubmitExamInput,
-): Promise<{ ok: boolean; error?: string; alreadySubmitted?: boolean; esito?: DayEsito; closed?: boolean; expired?: boolean }> {
+): Promise<{
+  ok: boolean;
+  error?: string;
+  alreadySubmitted?: boolean;
+  esito?: DayEsito;
+  closed?: boolean;
+  expired?: boolean;
+  /** A gate refused the hand-in (unbound/deleted subject, absent, unconfirmed):
+   *  terminal for this link — the runner must show `error`, never "Riprova". */
+  blocked?: boolean;
+}> {
   // Submit keeps a 3h grace on the NATURAL end-of-day expiry so a student who
   // started before midnight can still hand in — otherwise their in-progress work
   // is silently orphaned (no expiry-side finalize exists). This grace can NEVER
@@ -147,12 +163,18 @@ export async function submitExam(
   if (!res.ok) return { ok: false, error: "Link non valido o scaduto.", expired: true };
   const { c, t, m, s, p } = res.payload;
   if (m !== "exam") return { ok: true }; // preview/validation: no write
+  // Sitting language for the student-facing refusals below.
+  const lang = input.lang === "en" || input.lang === "ja" ? input.lang : "it";
   // A REAL exam submission must be bound to a subject (personal links carry
   // `s` or `p`; the email gate always mints one). An unbound exam-mode write
   // would be invisible to results AND dodge the per-subject unique index — the
   // one duplicate-insert hole left (two such legacy rows exist in prod).
   if (!s && !p) {
-    return { ok: false, error: "Il tuo accesso non è più valido: apri il link personale o chiedi all'educator di reinviartelo." };
+    return {
+      ok: false,
+      error: "Il tuo accesso non è più valido: apri il link personale o chiedi all'educator di reinviartelo.",
+      blocked: true,
+    };
   }
 
   // Split out the registration fields ("reg:<field>") from graded answers.
@@ -171,22 +193,24 @@ export async function submitExam(
   // Owner's rule re-checked at HAND-IN: the page gate runs at render time, so
   // a student flipped to absent while the runner was already open (or someone
   // replaying the action with a still-valid token) must be refused here too.
-  // Fail-open on unknown attendance, like every other gate. BYPASSED for an
-  // emergency link (emg) — presence can't be known when the educator is down.
+  // Fail-open on unknown attendance, like every other gate. Presence alone is
+  // BYPASSED for an emergency link (emg) — it can't be known when the educator
+  // is down; the confirmation re-check below still applies to it.
   if (corsoId != null) {
     if (!res.payload.emg) {
       const present = await loadPresentForTest(svc, corsoId, t).catch(() => null);
       const subjKey = subjectKeyOf({ corsistaId, partecipanteId })!;
       if (isBlockedByAbsence(present, subjKey)) {
-        return { ok: false, error: absentAccessError(t) };
+        return { ok: false, error: absentAccessError(t, lang), blocked: true };
       }
-      // Owner's rule re-checked at HAND-IN, symmetric with presence: confirmation
-      // can be REVOKED after the link was minted (e.g. "Azzera appello"), so a
-      // no-longer-confirmed student must not hand in. Fail-open on unknown.
-      const confirmed = await isSubjectConfirmed(svc, corsoId, { corsistaId, partecipanteId }).catch(() => null);
-      if (confirmed === false) {
-        return { ok: false, error: "I tuoi dati non risultano più confermati: chiedi all'educator di ripetere la conferma." };
-      }
+    }
+    // Owner's rule re-checked at HAND-IN, symmetric with presence: confirmation
+    // can be REVOKED after the link was minted (e.g. "Azzera appello"), so a
+    // no-longer-confirmed student must not hand in. Fail-open on unknown. Never
+    // bypassed: for an emergency link it is the only gate left.
+    const confirmed = await isSubjectConfirmed(svc, corsoId, { corsistaId, partecipanteId }).catch(() => null);
+    if (confirmed === false) {
+      return { ok: false, error: unconfirmedAccessError(lang), blocked: true };
     }
     // Closure / sandbox-reset epoch re-checked at HAND-IN too: a page still
     // open from before must not write fresh state back.
@@ -238,7 +262,11 @@ export async function submitExam(
   if (isSubjectFkViolation(error)) {
     // The bound subject no longer exists (deleted/merged mid-window). Refuse
     // loudly — a graded row with NO identity would be invisible to results.
-    return { ok: false, error: "Il tuo accesso non è più valido: contatta l'educator per un nuovo link." };
+    return {
+      ok: false,
+      error: "Il tuo accesso non è più valido: contatta l'educator per un nuovo link.",
+      blocked: true,
+    };
   }
   if (error && isMissingColumn(error, "partecipante_id")) {
     ({ data: insData, error } = await svc
@@ -320,7 +348,14 @@ export async function submitExam(
  */
 export async function getLinkStateAction(
   token: string,
-): Promise<{ ok: boolean; closed?: boolean; reason?: "closed" | "expired" }> {
+  opts?: {
+    /** Also report whether THIS subject already has a hand-in for the test —
+     *  asked only by a runner parked on "test chiuso", so a lifted closure can
+     *  tell "resume" (nothing handed in) from "done" (finalize-on-close handed
+     *  the sitting in; resuming would only feed a discarded retry). */
+    handIn?: boolean;
+  },
+): Promise<{ ok: boolean; closed?: boolean; reason?: "closed" | "expired"; handedIn?: boolean }> {
   // Same 3h grace as submit: within it, a still-open runner keeps polling and the
   // student can hand in. A CLOSURE flips the screen to "test chiuso" immediately;
   // only a token past the grace reports reason:"expired" → terminal "scaduto".
@@ -334,7 +369,26 @@ export async function getLinkStateAction(
   try {
     const closedAt = await getClosure(Number(res.payload.c), res.payload.t);
     const closed = isBlockedByClosure(closedAt, res.payload.ia);
-    return { ok: true, closed, reason: closed ? "closed" : undefined };
+    if (closed) return { ok: true, closed, reason: "closed" };
+    let handedIn: boolean | undefined;
+    if (opts?.handIn) {
+      const { corsoId, corsistaId, partecipanteId } = resolveSubjectIds(res.payload);
+      const subj = subjectColId({ corsistaId, partecipanteId });
+      if (corsoId != null && subj) {
+        const { data, error } = await getSupabaseServiceClient()
+          .from("exam_submissions")
+          .select("id")
+          .eq("corso_id", corsoId)
+          .eq("test_key", res.payload.t)
+          .eq("mode", "exam")
+          .eq(subj.col, subj.id)
+          .limit(1);
+        // Unknown (DB blip) stays undefined: the runner then keeps the closed
+        // screen rather than guessing either way.
+        handedIn = error ? undefined : (data ?? []).length > 0;
+      }
+    }
+    return { ok: true, closed: false, ...(handedIn != null ? { handedIn } : {}) };
   } catch {
     return { ok: true, closed: false }; // fail open: never kick a student on a hiccup
   }

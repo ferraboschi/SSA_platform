@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   buildCorrectionDraft,
+  manualGradesOf,
+  manualOpenResult,
   verdictFromPct,
   type CorrectionAnswer,
   type OpenAnswerResult,
@@ -93,8 +95,8 @@ describe("buildCorrectionDraft — mixed exam", () => {
     expect(d.combinedPct).toBe(31); // round(100 * 4 / 13)
     expect(d.verdict).toBe("failed");
   });
-  it("computes objectivePct count-based, like the live auto-corrector", () => {
-    expect(d.objectivePct).toBe(33); // round(100 * 1 / 3)
+  it("computes objectivePct points-weighted, like the live auto-corrector and the printed X/Y punti", () => {
+    expect(d.objectivePct).toBe(25); // round(100 * 1 / 4) — not the count-based 1/3
   });
   it("lists wrong objective answers important-first", () => {
     expect(d.wrongAnswers.map((w) => w.qid)).toEqual(["q2", "q3"]);
@@ -250,5 +252,56 @@ describe("buildCorrectionDraft — guards", () => {
     expect(d.totals.openMax).toBe(2);
     expect(d.totals.openEarned).toBe(1);
     expect(d.combinedPct).toBe(50); // 1 / 2
+  });
+});
+
+// The educator's MANUAL vote is the fallback when the AI cannot grade (provider
+// outage / quota / refusal): same points rule as the model, and it must clear
+// the openFailed publication gate once every failed answer has a vote.
+describe("manualOpenResult — educator's own 1-5 vote", () => {
+  it("maps the vote onto points like the AI (max × (vote−1)/4)", () => {
+    expect(manualOpenResult(3, 1).points).toBe(0);
+    expect(manualOpenResult(3, 3).points).toBe(1.5);
+    expect(manualOpenResult(3, 5).points).toBe(3);
+    expect(manualOpenResult(1, 4)).toMatchObject({ points: 0.75, vote: 4, failed: false, provider: "manual", confidence: 1 });
+  });
+  it("clamps out-of-range votes and writes the rationale in the draft language", () => {
+    expect(manualOpenResult(2, 9).vote).toBe(5);
+    expect(manualOpenResult(2, 0).vote).toBe(1);
+    expect(manualOpenResult(2, 5, "en").rationale).toMatch(/educator/);
+    expect(manualOpenResult(2, 5).rationale).toMatch(/educator/);
+  });
+  it("replaces a failed AI grade in the draft and clears openFailed", () => {
+    const answers = [
+      ans({ qid: "q1", ok: true, given: "Junmai", correct: "Junmai" }),
+      ans({ qid: "o1", type: "open", given: "Il koji trasforma l'amido in zuccheri." }),
+    ];
+    const meta = { q1: { points: 1, important: false }, o1: { points: 3, important: false } };
+    const failed = build(answers, meta, { o1: graded({ points: 0, failed: true, provider: undefined }) });
+    expect(failed.totals.openFailed).toBe(1);
+    expect(failed.combinedPct).toBe(25); // 1 / 4 — the failed answer weighs 0 at full weight
+    const manual = build(answers, meta, { o1: manualOpenResult(3, 5) });
+    expect(manual.totals.openFailed).toBe(0);
+    expect(manual.combinedPct).toBe(100);
+    expect(manual.openGrades[0]).toMatchObject({ vote: 5, points: 3, provider: "manual", failed: false });
+    expect(manual.aiProvider).toBe("none"); // a manual vote is not an AI backend
+  });
+  it("carries ONLY the manual votes of a previous draft into a re-run (AI grades are redone)", () => {
+    const answers = [
+      ans({ qid: "o1", type: "open", given: "Risposta uno" }),
+      ans({ qid: "o2", type: "open", given: "Risposta due" }),
+      ans({ qid: "o3", type: "open", given: "Risposta tre" }),
+    ];
+    const meta = { o1: { points: 2, important: false }, o2: { points: 2, important: false }, o3: { points: 2, important: false } };
+    const prev = build(answers, meta, {
+      o1: manualOpenResult(2, 4),
+      o2: graded({ points: 1, vote: 3 }),
+      o3: graded({ points: 0, failed: true, provider: undefined }),
+    });
+    const kept = manualGradesOf(prev);
+    expect([...kept.keys()]).toEqual(["o1"]);
+    expect(kept.get("o1")).toMatchObject({ vote: 4, points: 1.5, provider: "manual", failed: false });
+    expect(manualGradesOf(null).size).toBe(0);
+    expect(manualGradesOf({ openGrades: [] }).size).toBe(0);
   });
 });

@@ -73,7 +73,17 @@ class OpenAiEmbeddingProvider implements EmbeddingProvider {
       body: JSON.stringify({ model: this.model, input: texts }),
     });
     if (!res.ok) {
-      throw new Error(`Embeddings request failed (${res.status})`);
+      // Carry the provider's error CODE (never the body/key): a 429 "insufficient
+      // quota" (account out of credits) must be tellable apart from a rate limit
+      // by whoever reads the failed-grade rationale or the health chip.
+      let code = "";
+      try {
+        const body = (await res.json()) as { error?: { code?: string; type?: string } };
+        code = body.error?.code || body.error?.type || "";
+      } catch {
+        /* non-JSON error body */
+      }
+      throw new Error(`Embeddings request failed (${res.status}${code ? ` ${code}` : ""})`);
     }
     const data = (await res.json()) as {
       data: { embedding: number[] }[];

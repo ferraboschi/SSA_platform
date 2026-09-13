@@ -6,14 +6,65 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { anthropicConfig } from "@/lib/integrations/anthropic/client";
 import { ClaudeGradingModel, ensureRagWired, gradeOpenAnswer, setGradingModel } from "@/lib/rag";
+import type { GradeSuggestion } from "@/lib/rag/types";
 import { loadCourseExamResults, type GradedSubmission } from "@/lib/exam-links/results";
 import { loadPublicExam } from "@/lib/exam-links/load";
-import { buildCorrectionDraft, type OpenAnswerResult, type QuestionMeta } from "./correction";
 import {
+  buildCorrectionDraft,
+  manualGradesOf,
+  manualOpenResult,
+  type OpenAnswerResult,
+  type QuestionMeta,
+} from "./correction";
+import {
+  CORRECTION_KEY_PREFIX,
   correctionKey,
   correctionRunKey,
+  type CorrectionDraft,
   type CorrectionRun,
 } from "./correction-types";
+
+/** Map one grader reply onto the draft's open-lane result. A REFUSAL (no
+ *  on-topic knowledge, malformed model output) is not a grade: it goes to the
+ *  manual-review lane exactly like a failed call — never a silent 0 that would
+ *  deflate the score and slip past the openFailed publication gate. */
+function openResultOf(sug: GradeSuggestion): OpenAnswerResult {
+  if (sug.refused) {
+    return {
+      points: 0,
+      confidence: 0,
+      rationale: sug.rationale,
+      grounded: false,
+      citedTitles: [],
+      failed: true,
+    };
+  }
+  return {
+    points: sug.suggestedPoints,
+    vote: sug.vote,
+    confidence: sug.confidence,
+    rationale: sug.rationale,
+    grounded: sug.citations.length > 0,
+    citedTitles: sug.citations.map((c) => c.chunk.title),
+    failed: false,
+    provider: sug.provider,
+  };
+}
+
+/** One failed grading call → 0-point failed grade routed to manual review. The
+ *  REASON travels with it (truncated, no secrets): a provider 429 must be
+ *  tellable apart from an empty knowledge base. */
+function failedResultOf(e: unknown): OpenAnswerResult {
+  const why = (e instanceof Error ? e.message : String(e)).slice(0, 160);
+  return {
+    points: 0,
+    confidence: 0,
+    rationale: `Valutazione automatica non riuscita (${why}): revisione manuale.`,
+    grounded: false,
+    citedTitles: [],
+    failed: true,
+  };
+}
 
 /** Dedupe final submissions per student: the NEWEST submission wins (a retake
  *  supersedes). Identity is the email+name PAIR — a "doppio" companion can share
@@ -68,6 +119,13 @@ export async function runSingleSubmissionCorrection(
 
   const svc = getSupabaseServiceClient();
   const at = new Date().toISOString();
+  // An educator's manual votes already in the draft survive the re-run.
+  const { data: prevRow } = await svc
+    .from("settings_kv")
+    .select("value")
+    .eq("key", correctionKey(corsoId, sub.id))
+    .maybeSingle();
+  const manual = manualGradesOf(prevRow?.value as CorrectionDraft | null);
   const openResults = new Map<string, OpenAnswerResult>();
   for (const a of sub.answers) {
     // Grade with the AI EVERY answered question the objective grader could not
@@ -77,6 +135,11 @@ export async function runSingleSubmissionCorrection(
     // valutazione" forever, since it is neither auto-graded nor open).
     const gradableOpen = a.ok === null && a.given !== "" && a.given !== "—";
     if (!gradableOpen) continue;
+    const kept = manual.get(a.qid);
+    if (kept) {
+      openResults.set(a.qid, kept);
+      continue;
+    }
     const maxPoints = questionMeta.get(a.qid)?.points ?? 1;
     try {
       // A fill routed to the AI (batch 21) carries its accepted answer in a.correct
@@ -84,26 +147,9 @@ export async function runSingleSubmissionCorrection(
       // not KB retrieval alone. Open questions have a.correct === "—" → no rubric.
       const rubricKey = a.correct && a.correct !== "—" ? a.correct : undefined;
       const sug = await gradeOpenAnswer({ question: a.text, answer: a.given, maxPoints, kbSection: a.cat, lang: gradeLang, rubricKey });
-      openResults.set(a.qid, {
-        points: sug.suggestedPoints,
-        vote: sug.vote,
-        confidence: sug.confidence,
-        rationale: sug.rationale,
-        grounded: sug.citations.length > 0,
-        citedTitles: sug.citations.map((c) => c.chunk.title),
-        failed: false,
-        provider: sug.provider,
-      });
+      openResults.set(a.qid, openResultOf(sug));
     } catch (e) {
-      const why = (e instanceof Error ? e.message : String(e)).slice(0, 160);
-      openResults.set(a.qid, {
-        points: 0,
-        confidence: 0,
-        rationale: `Valutazione automatica non riuscita (${why}): revisione manuale.`,
-        grounded: false,
-        citedTitles: [],
-        failed: true,
-      });
+      openResults.set(a.qid, failedResultOf(e));
     }
   }
 
@@ -121,6 +167,78 @@ export async function runSingleSubmissionCorrection(
       { onConflict: "key" },
     );
   return !error;
+}
+
+/** Record an educator's MANUAL vote (1-5) for ONE open answer and rebuild the
+ *  submission's draft around it — the fallback that keeps exams publishable
+ *  when the AI cannot grade (provider outage, quota, refusal). Every other open
+ *  answer keeps its stored grade (AI or manual, failed ones stay failed with
+ *  their reason), so totals/verdict/openFailed are recomputed by the one pure
+ *  builder and can never drift from the batch run. */
+export async function applyManualOpenGrade(
+  courseId: string,
+  family: "nihonshu" | "shochu",
+  testKey: string,
+  submissionId: number,
+  qid: string,
+  vote: number,
+): Promise<{ ok: boolean; error?: string; draft?: CorrectionDraft }> {
+  if (!Number.isInteger(vote) || vote < 1 || vote > 5) return { ok: false, error: "Voto non valido (1-5)." };
+  const corsoId = Number(courseId);
+  const results = await loadCourseExamResults(courseId, family);
+  const sub = results.find((s) => s.id === submissionId && s.testKey === testKey);
+  if (!sub) return { ok: false, error: "Consegna non trovata." };
+  const target = sub.answers.find((a) => a.qid === qid);
+  // Only the open lane takes a manual vote: objective answers are already settled.
+  if (!target || target.ok !== null || target.given === "" || target.given === "—") {
+    return { ok: false, error: "Questa risposta non è in valutazione manuale." };
+  }
+
+  const exam = await loadPublicExam(courseId, family, testKey as "final" | `day${number}`, true);
+  const questionMeta = new Map<string, QuestionMeta>();
+  for (const q of exam?.questions ?? []) {
+    questionMeta.set(q.id, { points: q.points ?? 1, important: q.important ?? false });
+  }
+
+  const svc = getSupabaseServiceClient();
+  const key = correctionKey(corsoId, sub.id);
+  const { data: row } = await svc.from("settings_kv").select("value").eq("key", key).maybeSingle();
+  const prev = (row?.value as CorrectionDraft | null) ?? null;
+  const rationaleLang = prev?.rationaleLang === "en" || sub.lang === "en" ? "en" : "it";
+
+  const openResults = new Map<string, OpenAnswerResult>();
+  for (const g of prev?.openGrades ?? []) {
+    openResults.set(
+      g.qid,
+      g.failed
+        ? { points: 0, confidence: 0, rationale: g.rationale, grounded: false, citedTitles: [], failed: true }
+        : {
+            points: g.points,
+            vote: g.vote,
+            confidence: g.confidence,
+            rationale: g.rationale,
+            grounded: g.grounded,
+            citedTitles: g.citedTitles,
+            failed: false,
+            provider: g.provider ?? "model",
+          },
+    );
+  }
+  openResults.set(qid, manualOpenResult(questionMeta.get(qid)?.points ?? 1, vote, rationaleLang));
+
+  const draft = buildCorrectionDraft({
+    submission: { id: sub.id, studentName: sub.studentName, studentEmail: sub.studentEmail },
+    answers: sub.answers,
+    questionMeta,
+    openResults,
+    // Keep the AI run's timestamp: staleness is measured against the template
+    // edit, and a manual vote re-grades nothing else.
+    at: prev?.at ?? new Date().toISOString(),
+  });
+  const stored: CorrectionDraft = { ...draft, rationaleLang };
+  const { error } = await svc.from("settings_kv").upsert({ key, value: stored }, { onConflict: "key" });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, draft: stored };
 }
 
 /** Run the batch correction for ONE of a course's tests (final exam or a
@@ -157,6 +275,20 @@ export async function runCourseCorrection(
   const at = new Date().toISOString();
   const run: CorrectionRun = { at, testKey, total: finals.length, graded: 0, failures: [] };
 
+  // Manual votes already stored in this course's drafts, per submission: an
+  // educator's decision survives every re-run (only the AI grades are redone).
+  const manualBySub = new Map<number, ReturnType<typeof manualGradesOf>>();
+  {
+    const { data: prev } = await svc
+      .from("settings_kv")
+      .select("key, value")
+      .like("key", `${CORRECTION_KEY_PREFIX}${corsoId}:%`);
+    for (const r of (prev ?? []) as { key: string; value: CorrectionDraft | null }[]) {
+      const subId = Number(r.key.slice(r.key.lastIndexOf(":") + 1));
+      if (Number.isInteger(subId) && r.value) manualBySub.set(subId, manualGradesOf(r.value));
+    }
+  }
+
   // SEQUENTIAL on purpose: one grading call at a time keeps the run inside the
   // provider's rate limits and makes failures attributable per answer.
   for (const sub of finals) {
@@ -164,6 +296,7 @@ export async function runCourseCorrection(
       // Same rule as the submit-time path: English sitting → English rationale,
       // everything else → Italian (see runSingleSubmissionCorrection).
       const gradeLang = sub.lang === "en" ? "en" : undefined;
+      const manual = manualBySub.get(sub.id);
       const openResults = new Map<string, OpenAnswerResult>();
       for (const a of sub.answers) {
         // EVERY answered question the objective grader could not close
@@ -172,6 +305,11 @@ export async function runCourseCorrection(
         // ever left "in valutazione". Blank ("—") answers are already 0.
         const gradableOpen = a.ok === null && a.given !== "" && a.given !== "—";
         if (!gradableOpen) continue;
+        const kept = manual?.get(a.qid);
+        if (kept) {
+          openResults.set(a.qid, kept);
+          continue;
+        }
         const maxPoints = questionMeta.get(a.qid)?.points ?? 1;
         try {
           const sug = await gradeOpenAnswer({
@@ -183,30 +321,11 @@ export async function runCourseCorrection(
             // Fill reference answer (batch 21); open questions pass "—" → no rubric.
             rubricKey: a.correct && a.correct !== "—" ? a.correct : undefined,
           });
-          openResults.set(a.qid, {
-            points: sug.suggestedPoints,
-            vote: sug.vote,
-            confidence: sug.confidence,
-            rationale: sug.rationale,
-            grounded: sug.citations.length > 0,
-            citedTitles: sug.citations.map((c) => c.chunk.title),
-            failed: false,
-            provider: sug.provider,
-          });
+          openResults.set(a.qid, openResultOf(sug));
         } catch (e) {
           // One failed model call must never abort the run: the answer gets a
           // 0-point failed grade and the draft routes it to manual review.
-          // The REASON travels with it (truncated, no secrets) — a Claude 429
-          // must be tellable apart from an empty knowledge base.
-          const why = (e instanceof Error ? e.message : String(e)).slice(0, 160);
-          openResults.set(a.qid, {
-            points: 0,
-            confidence: 0,
-            rationale: `Valutazione automatica non riuscita (${why}): revisione manuale.`,
-            grounded: false,
-            citedTitles: [],
-            failed: true,
-          });
+          openResults.set(a.qid, failedResultOf(e));
         }
       }
 

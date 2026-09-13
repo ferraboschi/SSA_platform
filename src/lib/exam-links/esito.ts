@@ -58,6 +58,14 @@ export interface DayEsito {
   /** Open answers exist but their AI evaluation hasn't landed yet — the card
    *  shows the wait note and polls until the draft arrives. */
   aiPending?: boolean;
+  /** The evaluation draft is in: `pct` is the overall score (objective + open),
+   *  not the objective-only preview. */
+  aiGraded?: boolean;
+  /** Open answers with a settled evaluation (AI or educator). */
+  openGraded?: number;
+  /** Open answers whose evaluation FAILED (provider outage / refusal): they wait
+   *  for the staff and are excluded from `pct` — never scored 0 for it. */
+  aiFailedCount?: number;
   /** Per-category subtotals (owner batch 10: "Storia, Produzione, …") —
    *  computed over every question with a settled score. */
   sections?: DayEsitoSection[];
@@ -108,7 +116,21 @@ export async function buildDayEsito(
   );
   // With the AI draft in, the combined (points-weighted, AI included) score is
   // the student's real number; before it lands, the weighted objective score.
-  const pct = draft ? draft.combinedPct : res.gradable ? res.autoScore : null;
+  // Open answers whose evaluation FAILED are not wrong — they wait for the
+  // staff and stay OUT of the denominator (the draft's own combinedPct counts
+  // them as 0 at full weight, which would punish the student for an outage).
+  const failedGrades = (draft?.openGrades ?? []).filter((g) => g.failed);
+  const gradedOpen = (draft?.openGrades ?? []).filter((g) => !g.failed).length;
+  let pct: number | null;
+  if (!draft) {
+    pct = res.gradable ? res.autoScore : null;
+  } else if (failedGrades.length === 0) {
+    pct = draft.combinedPct;
+  } else {
+    const failedMax = failedGrades.reduce((s, g) => s + g.maxPoints, 0);
+    const max = draft.totals.max - failedMax;
+    pct = max > 0 ? Math.round((100 * draft.totals.earned) / max) : null;
+  }
   const outcome = pct == null ? null : scoreToOutcome(pct);
 
   // Per-category subtotals (owner batch 10): every question with a SETTLED
@@ -130,6 +152,7 @@ export async function buildDayEsito(
     gradable: res.gradable,
     manual: res.manual,
     aiPending: hasOpenAnswers && !draft && submissionId != null,
+    ...(draft ? { aiGraded: true, openGraded: gradedOpen, aiFailedCount: failedGrades.length } : {}),
     ...(sections.length > 0 ? { sections } : {}),
     detail: res.detail.map((d) => {
       const g = d.ok === null ? gradeByQid.get(d.qid) : undefined;

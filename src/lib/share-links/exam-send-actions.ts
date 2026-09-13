@@ -14,7 +14,11 @@ import { verifyShareToken } from "./token";
 import { deliverExamInvite, buildPersonalExamUrl } from "@/lib/exam-links/invite-email";
 import { recordExamSend } from "@/lib/exam-links/send-log";
 import { setClosure, clearClosure, type ExamLinkTtlChoice } from "@/lib/exam-links/lifecycle";
-import { finalizeInProgressOnClose, undoCloseFinalized } from "@/lib/exam-links/close-finalize";
+import {
+  finalizeInProgressOnClose,
+  undoCloseFinalized,
+  clearCloseFinalized,
+} from "@/lib/exam-links/close-finalize";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
 import { loadFeedbackForCourse } from "@/lib/esami/feedback-templates-actions";
 import type { CourseTypeKey } from "@/lib/domain";
@@ -110,6 +114,9 @@ async function partecipanteTarget(
 
 // Guard + resolve a corsista's name + target email (enrolled_email snapshot
 // preferred, corsisti.email fallback; degrades if the column is absent).
+// Newest ACTIVE seat only: a cancelled seat (rimborso/credito/trasferimento) is
+// out of every gate, and a cancelled + re-enrolled (or multi-seat) corsista has
+// two rows — a single-row read would error into "Destinatario non trovato".
 async function corsistaTarget(
   svc: Svc,
   corsoId: number,
@@ -120,11 +127,13 @@ async function corsistaTarget(
     .select("id, email_confirmed_at, corsista:corsisti(full_name, email)")
     .eq("corso_id", corsoId)
     .eq("corsista_id", corsistaId)
-    .maybeSingle();
-  if (error || !data) return null;
+    .is("annullata_at", null)
+    .order("id", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
   // The nested to-one join is typed as an array by the client but is a single
   // object at runtime — cast through unknown (mirrors load.ts).
-  const row = data as unknown as {
+  const row = data[0] as unknown as {
     id: number;
     email_confirmed_at: string | null;
     corsista: { full_name: string | null; email: string | null } | null;
@@ -386,20 +395,25 @@ export async function sendPersonalExamLinksToAllAction(
     }
   }
 
-  // Companions ("doppio") with a CONFIRMED email get their own personal link.
-  // Keyed on corso_id directly (not iscrizione_id joins) so an orphaned
-  // enrollment reference can never drop a companion. Degrades to none if the
-  // email columns aren't migrated yet.
+  // Companions ("doppio") with a CONFIRMED email get their own personal link;
+  // an unconfirmed one is COUNTED (notConfirmed), not silently dropped. Keyed on
+  // corso_id directly (not iscrizione_id joins) so an orphaned enrollment
+  // reference can never drop a companion. Degrades to none if the email columns
+  // aren't migrated yet.
   let companions = 0;
   {
     const { data: parts, error: pErr } = await svc
       .from("corsi_partecipanti")
       .select("id, full_name, email, email_confirmed_at")
       .eq("corso_id", corsoId)
-      .not("email", "is", null)
-      .not("email_confirmed_at", "is", null);
+      .not("email", "is", null);
     if (!pErr) {
-      for (const pr of (parts ?? []) as { id: number; full_name: string | null; email: string | null }[]) {
+      for (const pr of (parts ?? []) as {
+        id: number;
+        full_name: string | null;
+        email: string | null;
+        email_confirmed_at: string | null;
+      }[]) {
         const email = (pr.email ?? "").trim();
         if (!email) continue;
         const subjKey = subjectKeyOf({ corsistaId: null, partecipanteId: pr.id })!;
@@ -408,6 +422,10 @@ export async function sendPersonalExamLinksToAllAction(
           continue;
         }
         companions++;
+        if (!pr.email_confirmed_at) {
+          notConfirmed++;
+          continue;
+        }
         const res = await deliverExamInvite({
           courseId: String(corsoId),
           testKey: t as ExamTestKey,
@@ -506,13 +524,18 @@ export async function reopenExamLinksAction(
   }
   const t = String(testKey);
   if (!VALID_TEST.test(t)) return { ok: false, error: "Test non valido." };
+  // "Chiuso per sbaglio": undo the submissions THIS close auto-finalized so those
+  // students resume from where they were (never touches a real hand-in). Undo
+  // BEFORE lifting the closure: a parked runner polls every 10s and, with the
+  // closure already gone, would read "hand-in exists" and lock itself on "già
+  // consegnato" for a row the undo is about to delete.
+  let undone: number | undefined;
+  if (undoFinalized) undone = (await undoCloseFinalized(corsoId, t)).count;
   const ok = await clearClosure(corsoId, t);
   if (!ok) return { ok: false, error: "Riapertura non riuscita, riprova." };
-  // "Chiuso per sbaglio": also undo the submissions THIS close auto-finalized so
-  // those students resume from where they were (never touches a real hand-in).
-  if (undoFinalized) {
-    const res = await undoCloseFinalized(corsoId, t);
-    return { ok: true, undone: res.count };
-  }
+  if (undoFinalized) return { ok: true, undone };
+  // Plain reopen keeps the auto hand-ins, so its undo-set must not survive to a
+  // later close's "annulla consegne" (it would delete THESE rows, not that close's).
+  await clearCloseFinalized(corsoId, t);
   return { ok: true };
 }

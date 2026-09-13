@@ -257,9 +257,23 @@ export function gradeAnswers(
       // version of this question there is no localized key to compare against →
       // route to manual review (never auto-fail a correct EN/JA answer vs the IT key).
       const sawTranslated = (lang === "en" || lang === "ja") && !!q.i18n?.[lang];
-      if (accepted.length === 0 || sawTranslated) {
+      if (accepted.length === 0) {
         manual++;
         return { qid: q.id, type: q.type, text: qText, given: fmtGiven(given, localized), correct: "—", ok: null };
+      }
+      if (sawTranslated) {
+        // Keep the Italian key: the AI lane grades against it as the reference
+        // answer (rubricKey) — without it an exactly-right EN/JA answer was
+        // scored against retrieval alone and could land at 0.
+        manual++;
+        return {
+          qid: q.id,
+          type: q.type,
+          text: qText,
+          given: fmtGiven(given, localized),
+          correct: splitAccepted(q.correct).join(", "),
+          ok: null,
+        };
       }
       const givenNorm = normStr(Array.isArray(given) ? given[0] : given);
       const exact = givenNorm !== "" && accepted.includes(givenNorm);

@@ -100,11 +100,13 @@ async function wipeExamArtifacts(svc: Svc, id: number): Promise<WipeCounts> {
   await svc.from("corsi_crediti").delete().eq("corso_origine_id", id);
   await svc.from("corsi_crediti").delete().eq("corso_destinazione_id", id);
 
-  // Per-course settings_kv: AI-correction drafts/run, exam link send-log, closures.
+  // Per-course settings_kv: AI-correction drafts/run, exam link send-log,
+  // closures, close undo-sets.
   await svc.from("settings_kv").delete().eq("key", `exam-correction-run:${id}`);
   await svc.from("settings_kv").delete().like("key", `exam-correction:${id}:%`);
   await svc.from("settings_kv").delete().like("key", `exam_link_send:${id}:%`);
   await svc.from("settings_kv").delete().like("key", `exam_link_closure:${id}:%`);
+  await svc.from("settings_kv").delete().like("key", `exam_close_finalized:${id}:%`);
 
   // Certificate ESITI: a graded exam mints a certificate PDF whose URL lives in
   // the shared "exam_certificates" blob keyed by corsistaId-corsoId. Drop this

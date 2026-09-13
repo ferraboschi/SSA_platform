@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { isBlockedByAbsence, absentAccessError, absentSendError, testDayNo } from "./live-progress";
+import {
+  isBlockedByAbsence,
+  absentAccessError,
+  absentSendError,
+  unconfirmedAccessError,
+  testDayNo,
+} from "./live-progress";
 
 describe("presence gate (owner's rule: present at the roll-call to sit the test)", () => {
   it("testDayNo maps dayN to its appello day, others to null", () => {
@@ -36,5 +42,26 @@ describe("presence gate (owner's rule: present at the roll-call to sit the test)
     expect(absentAccessError("final")).toContain("presente per sostenere");
     // The educator-facing send message stays distinct.
     expect(absentSendError("day2")).toContain("non può ricevere");
+  });
+
+  it("student-facing messages follow the exam language (it default, en, ja)", () => {
+    expect(absentAccessError("day2")).toBe(absentAccessError("day2", "it"));
+    expect(absentAccessError("day2", "en")).toContain("day 2 roll call");
+    expect(absentAccessError("final", "en")).toContain("exam-day roll call");
+    expect(absentAccessError("feedback", "en")).toContain("feedback");
+    expect(absentAccessError("day2", "ja")).toContain("第2日目");
+    expect(absentAccessError("final", "ja")).toContain("試験日");
+    expect(absentAccessError("feedback", "ja")).toContain("フィードバック");
+    // Every language ends by pointing the student to the educator.
+    for (const lang of ["it", "en", "ja"] as const) {
+      expect(absentAccessError("final", lang)).toMatch(/educator|講師/);
+      expect(unconfirmedAccessError(lang)).toMatch(/educator|講師/);
+    }
+    expect(unconfirmedAccessError()).toBe(
+      "I tuoi dati non risultano più confermati. Rivolgiti al tuo educator per ripetere la conferma.",
+    );
+    expect(unconfirmedAccessError("en")).toContain("no longer confirmed");
+    // An unknown runtime language falls back to Italian, never to undefined.
+    expect(absentAccessError("day1", "xx" as unknown as "it")).toBe(absentAccessError("day1"));
   });
 });

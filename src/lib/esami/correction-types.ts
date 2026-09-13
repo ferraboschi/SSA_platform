@@ -31,6 +31,10 @@ export interface OpenGrade {
   citedTitles: string[];
   /** True when the model call failed → points 0, manual review required. */
   failed: boolean;
+  /** Who produced the points: the live model, the offline stub, or an educator's
+   *  MANUAL vote (the fallback when the AI can't grade — e.g. provider outage).
+   *  Absent on legacy drafts (= model). */
+  provider?: "model" | "stub" | "manual";
 }
 
 /** A wrong (or unanswered) objective question worth surfacing in the report. */

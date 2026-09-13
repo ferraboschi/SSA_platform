@@ -11,12 +11,15 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { runSingleSubmissionCorrection } from "@/lib/esami/correction-run";
 import { correctionKey } from "@/lib/esami/correction-types";
-import { subjectColId } from "./access";
+import { subjectColId, subjectKeyOf } from "./access";
+import { loadPresentForTest, isBlockedByAbsence, isSubjectConfirmed } from "./live-progress";
 import { after } from "next/server";
 
 // The submissions THIS close auto-created are recorded here so a mistaken close
 // can be undone precisely (`undoCloseFinalized`) — only these rows are removed,
-// never a genuine hand-in. One settings_kv row per (course, test).
+// never a genuine hand-in. One settings_kv row per (course, test), written by a
+// close that finalized somebody and cleared by a plain reopen, so an undo can
+// never reach back past a reopen to an older close's rows.
 const FINALIZED_KEY_PREFIX = "exam_close_finalized:";
 function finalizedKey(corsoId: number, testKey: string): string {
   return `${FINALIZED_KEY_PREFIX}${corsoId}:${testKey}`;
@@ -59,6 +62,7 @@ interface ProgressRow {
  */
 export async function finalizeInProgressOnClose(corsoId: number, testKey: string): Promise<void> {
   const svc = getSupabaseServiceClient();
+  const nowIso = new Date().toISOString();
   const { data, error } = await svc
     .from("exam_progress")
     .select("corsista_id, partecipante_id, answers, elapsed_seconds")
@@ -66,17 +70,46 @@ export async function finalizeInProgressOnClose(corsoId: number, testKey: string
     .eq("test_key", testKey)
     .is("submitted_at", null);
   if (error || !data || data.length === 0) return;
+  const finalized = await finalizeRows(svc, corsoId, testKey, data as ProgressRow[], nowIso);
 
+  // Record THIS close's auto-created submissions — only when it created any: a
+  // second "Chiudi" from a stale panel (nothing left in progress) must not wipe
+  // the undo-set of the close that did the work. The older-close leak is closed
+  // on the other side (clearCloseFinalized on a plain reopen).
+  if (finalized.length > 0) {
+    await svc
+      .from("settings_kv")
+      .upsert(
+        { key: finalizedKey(corsoId, testKey), value: { at: nowIso, items: finalized } },
+        { onConflict: "key" },
+      )
+      .then(() => {}, () => {});
+  }
+}
+
+/** Hand in each still-open sitting; returns the rows THIS close actually created
+ *  (never a swallowed duplicate). */
+async function finalizeRows(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  corsoId: number,
+  testKey: string,
+  rows: ProgressRow[],
+  nowIso: string,
+): Promise<FinalizedItem[]> {
   // Family for the background grading (same mapping as submitExam).
   const { data: corso } = await svc.from("corsi").select("type").eq("id", corsoId).maybeSingle();
   const family = (corso as { type?: string } | null)?.type === "shochu" ? "shochu" : "nihonshu";
-  const nowIso = new Date().toISOString();
-  // Rows THIS close actually created (never a swallowed duplicate) — recorded so
-  // a mistaken close can be undone precisely.
+  // Presence gate only when a roll-call EXISTS for this test's day. An EMPTY
+  // roll-call is the emergency-link situation (the educator could not take it):
+  // those sittings were let in at open/submit and must be handed in here too —
+  // a blanket skip would orphan every one of them in silence.
+  const roll = await loadPresentForTest(svc, corsoId, testKey);
+  const present = roll && roll.size > 0 ? roll : null;
   const finalized: FinalizedItem[] = [];
 
-  for (const r of data as ProgressRow[]) {
-    const subj = subjectColId({ corsistaId: r.corsista_id, partecipanteId: r.partecipante_id });
+  for (const r of rows) {
+    const subject = { corsistaId: r.corsista_id, partecipanteId: r.partecipante_id };
+    const subj = subjectColId(subject);
     if (!subj) continue;
 
     // Split registration ("reg:<field>") from graded answers + strip __lang,
@@ -92,6 +125,11 @@ export async function finalizeInProgressOnClose(corsoId: number, testKey: string
     // SKIP empty sittings — a student who only reached the language/reg screen has
     // no graded answers; finalizing would brand a no-show 0/100.
     if (Object.keys(answers).length === 0) continue;
+    // Same gate as a hand-in (submitExam): a student who couldn't hand in — absent
+    // at the roll-call, or no longer confirmed — is not handed in FOR; the row
+    // stays "in corso" untouched.
+    if (isBlockedByAbsence(present, subjectKeyOf(subject)!)) continue;
+    if ((await isSubjectConfirmed(svc, corsoId, subject)) === false) continue;
 
     const { col: subjCol, id: subjId } = subj;
     const base = {
@@ -139,18 +177,18 @@ export async function finalizeInProgressOnClose(corsoId: number, testKey: string
       after(() => runSingleSubmissionCorrection(String(corsoId), family, testKey, subId).catch(() => false));
     }
   }
+  return finalized;
+}
 
-  // Record this close's auto-created submissions (only when it created any, so a
-  // second close with nothing left in-progress can't wipe the first's undo set).
-  if (finalized.length > 0) {
-    await svc
-      .from("settings_kv")
-      .upsert(
-        { key: finalizedKey(corsoId, testKey), value: { at: nowIso, items: finalized } },
-        { onConflict: "key" },
-      )
-      .then(() => {}, () => {});
-  }
+/** Drop the undo-set on a PLAIN reopen (the auto hand-ins are kept): a later
+ *  "annulla consegne" must only ever reach the close that follows. Best-effort. */
+export async function clearCloseFinalized(corsoId: number, testKey: string): Promise<void> {
+  const svc = getSupabaseServiceClient();
+  await svc
+    .from("settings_kv")
+    .delete()
+    .eq("key", finalizedKey(corsoId, testKey))
+    .then(() => {}, () => {});
 }
 
 /**

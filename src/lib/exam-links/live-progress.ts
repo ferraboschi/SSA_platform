@@ -22,8 +22,8 @@ export const VALID_TEST = /^(day[1-9]|feedback|final)$/;
 // an exam test. "dayN" ties to THAT appello day specifically (Camilla absent
 // day 1 → can't get the day-1 test); "final" ties to the EXAM-DAY appello
 // (owner, batch 7: presence on the exam day is what matters — not the other
-// days); "feedback" has no single day, so it only requires having attended
-// at least one day (they attended the course).
+// days); "feedback" ties to the LAST program day's appello (it runs at the end
+// of that day — see loadPresentForTest).
 
 export function testDayNo(t: string): number | null {
   const m = /^day(\d+)$/.exec(t);
@@ -91,11 +91,16 @@ export async function isSubjectConfirmed(
 ): Promise<boolean | null> {
   try {
     if (subject.corsistaId != null) {
+      // Newest ACTIVE seat only: a cancelled seat (rimborso/credito/trasferimento)
+      // is out of every gate, and this must read the same row the mint gate
+      // (corsistaTarget) read, or open/submit could disagree with the send.
       const { data, error } = await svc
         .from("corsi_iscrizioni")
         .select("email_confirmed_at")
         .eq("corso_id", corsoId)
         .eq("corsista_id", subject.corsistaId)
+        .is("annullata_at", null)
+        .order("id", { ascending: false })
         .limit(1);
       if (error) return null;
       return ((data ?? []) as { email_confirmed_at: string | null }[]).some((r) => r.email_confirmed_at != null);
@@ -127,18 +132,68 @@ export function absentSendError(testKey: string): string {
   return "Mai presente all'appello: non può ricevere questo invio.";
 }
 
+/** Languages the public runner serves — student-facing block messages follow
+ *  the exam/link language, never the staff default. */
+export type AccessLang = "it" | "en" | "ja";
+
+const ABSENT_ACCESS: Record<
+  AccessLang,
+  { day: (n: number) => string; final: string; feedback: string; course: string }
+> = {
+  it: {
+    day: (n) =>
+      `Non risulti presente all'appello del giorno ${n}. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.`,
+    final:
+      "Non risulti presente all'appello del giorno d'esame. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.",
+    feedback:
+      "Non risulti presente all'appello dell'ultimo giorno del corso. Per compilare il feedback devi risultare presente — rivolgiti al tuo educator.",
+    course:
+      "Non risulti presente all'appello del corso. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.",
+  },
+  en: {
+    day: (n) =>
+      `You are not marked present at the day ${n} roll call. Students must be present to sit the test — please contact your educator.`,
+    final:
+      "You are not marked present at the exam-day roll call. Students must be present to sit the exam — please contact your educator.",
+    feedback:
+      "You are not marked present at the roll call of the last course day. You must be marked present to fill in the feedback — please contact your educator.",
+    course:
+      "You are not marked present at the course roll call. Students must be present to sit the exam — please contact your educator.",
+  },
+  ja: {
+    day: (n) =>
+      `第${n}日目の出席確認で出席が記録されていません。試験を受けるには出席が必要です。講師にお問い合わせください。`,
+    final:
+      "試験日の出席確認で出席が記録されていません。試験を受けるには出席が必要です。講師にお問い合わせください。",
+    feedback:
+      "コース最終日の出席確認で出席が記録されていません。フィードバックに回答するには出席が必要です。講師にお問い合わせください。",
+    course:
+      "コースの出席確認で出席が記録されていません。試験を受けるには出席が必要です。講師にお問い合わせください。",
+  },
+};
+
+const UNCONFIRMED_ACCESS: Record<AccessLang, string> = {
+  it: "I tuoi dati non risultano più confermati. Rivolgiti al tuo educator per ripetere la conferma.",
+  en: "Your details are no longer confirmed. Please contact your educator to repeat the confirmation.",
+  ja: "あなたの登録情報の確認が無効になっています。講師に連絡して、再度確認を行ってください。",
+};
+
 /** Student-facing twin of absentSendError — shown when an ABSENT student tries
  *  to ACCESS a test (page load / email gate), not just receive it. Same rule:
  *  the student must be present at the roll-call to sit the test. */
-export function absentAccessError(testKey: string): string {
+export function absentAccessError(testKey: string, lang: AccessLang = "it"): string {
+  const m = ABSENT_ACCESS[lang] ?? ABSENT_ACCESS.it;
   const day = testDayNo(testKey);
-  if (day != null)
-    return `Non risulti presente all'appello del giorno ${day}. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.`;
-  if (testKey === "final")
-    return "Non risulti presente all'appello del giorno d'esame. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.";
-  if (testKey === "feedback")
-    return "Non risulti presente all'appello dell'ultimo giorno del corso. Per compilare il feedback devi risultare presente — rivolgiti al tuo educator.";
-  return "Non risulti presente all'appello del corso. Lo studente deve essere presente per sostenere l'esame — rivolgiti al tuo educator.";
+  if (day != null) return m.day(day);
+  if (testKey === "final") return m.final;
+  if (testKey === "feedback") return m.feedback;
+  return m.course;
+}
+
+/** Student-facing block when the data confirmation was REVOKED after the link
+ *  was minted (isSubjectConfirmed === false at open / hand-in). */
+export function unconfirmedAccessError(lang: AccessLang = "it"): string {
+  return UNCONFIRMED_ACCESS[lang] ?? UNCONFIRMED_ACCESS.it;
 }
 
 export interface SubjectProgress {

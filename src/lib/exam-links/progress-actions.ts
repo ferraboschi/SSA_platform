@@ -30,7 +30,10 @@ export async function reportExamProgressAction(
   token: string,
   input: ProgressInput,
 ): Promise<{ ok: boolean }> {
-  const res = verifyExamToken(token);
+  // Same 3h grace as submit + the live poll: heartbeats must keep flowing through
+  // the hand-in window, or the server snapshot freezes at expiry and a "Chiudi"
+  // in that window would finalize a stale one. Closure is still enforced below.
+  const res = verifyExamToken(token, 3 * 3600);
   if (!res.ok) return { ok: false };
   const { t, m } = res.payload;
   if (m !== "exam") return { ok: true }; // previews report nothing

@@ -100,7 +100,7 @@ export async function sendExamResultEmailAction(
         certLangs,
       );
       const slug = result.studentName.normalize("NFKD").replace(/[^\w]+/g, "-").toLowerCase();
-      pdf = { filename: `certificato-${slug || "esame"}.pdf`, base64: buf.toString("base64") };
+      pdf = { filename: `esito-${slug || "esame"}.pdf`, base64: buf.toString("base64") };
     } catch (e) {
       // Don't fail the send, but surface that the certificate is missing.
       console.error("Exam result PDF render failed:", e);

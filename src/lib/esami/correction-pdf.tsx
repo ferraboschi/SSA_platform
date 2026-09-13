@@ -212,7 +212,10 @@ function OpenItem({ g }: { g: OpenGrade }) {
       <Text style={styles.ans}>Risposta data: {trimTo(g.given || "—", 400)}</Text>
       <Text style={styles.ans}>
         <Text style={styles.aiPts}>
-          {g.vote != null ? `Voto AI: ${g.vote}/5 — ` : ""}Valutazione AI: {pts(g.points)}/{pts(g.maxPoints)} punti
+          {g.provider === "manual"
+            ? `Voto educator: ${g.vote}/5 — Valutazione manuale: `
+            : `${g.vote != null ? `Voto AI: ${g.vote}/5 — ` : ""}Valutazione AI: `}
+          {pts(g.points)}/{pts(g.maxPoints)} punti
         </Text>
         {g.rationale.trim() ? ` — ${trimTo(g.rationale, 900)}` : ""}
       </Text>

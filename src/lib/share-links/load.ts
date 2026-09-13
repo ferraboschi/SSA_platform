@@ -188,12 +188,14 @@ export async function loadSharedCourse(
     getSakeCatalogSafe(),
     // Programma & Economia overlay (settings_kv) — authoritative when present.
     loadCourseProgram().then((m) => m.get(String(corso.id))),
-    // Roster enrollments (join corsisti).
+    // Roster enrollments (join corsisti). A removed seat (rimborso/credito/
+    // trasferimento) is out of the roster, roll-call and exam gates alike.
     (async () => {
       const { data: iscr } = await sb
         .from("corsi_iscrizioni")
         .select("id, line_item_id, amount_cents, discount_cents, corsista:corsisti(id,full_name,email,phone,placeholder)")
-        .eq("corso_id", corso.id);
+        .eq("corso_id", corso.id)
+        .is("annullata_at", null);
       return (iscr ?? []) as unknown as IscrJoin[];
     })(),
     // Tickets per person ("doppio"): SUM purchases.quantity on the course title.

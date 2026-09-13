@@ -64,4 +64,8 @@ export interface GradeSuggestion {
   citations: RetrievedChunk[];
   /** Which grading backend produced this (real model vs. heuristic stub). */
   provider: "model" | "stub";
+  /** The grader REFUSED to score (no on-topic knowledge, malformed model output):
+   *  the 0 points are not a verdict — the answer needs a human. Callers must
+   *  route it to manual review, never record it as a graded zero. */
+  refused?: boolean;
 }

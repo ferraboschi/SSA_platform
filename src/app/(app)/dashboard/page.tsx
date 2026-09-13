@@ -12,6 +12,7 @@ import { buildDashboard, capitalize, isoWeek, monthIndexIt, monthLabel } from "@
 import { duplicatePeople, type CorsistaLite } from "@/lib/anomalie/rules";
 import { ANOMALIE_COUNTS_KEY } from "@/lib/anomalie/reconcile";
 import { loadSkippedCourses } from "@/lib/sync/skipped-courses";
+import { getAiGradingHealth } from "@/lib/rag/health";
 import { loadCourseEconomics } from "@/lib/economics";
 import { isLegacyInvoiced } from "@/lib/economics/types";
 import {
@@ -119,6 +120,10 @@ export default async function DashboardPage() {
   }
   // Shopify products published but not yet a course (parser couldn't read them).
   const skippedCount = (await loadSkippedCourses().catch(() => [])).length;
+  // Can the AI grading of open exam answers actually run? (embeddings credits +
+  // Anthropic key — a live 429 "insufficient_quota" once went unnoticed until
+  // an exam.) Cached 10'; null = the probe itself failed → "non verificabile".
+  const ai = await getAiGradingHealth().catch(() => null);
   // Sync is "stale" if the last successful run is older than ~2 scheduler ticks
   // (30'). null = never synced → also stale.
   const syncStale = syncMins == null || syncMins > 30;
@@ -269,6 +274,7 @@ export default async function DashboardPage() {
               { label: "Corsi non importati", ok: skippedCount === 0, value: String(skippedCount), href: kpiHref("corsi", "/corsi") },
               { label: "Duplicati", ok: dupClusters === 0, value: String(dupClusters), href: kpiHref("anomalie", "/anomalie") },
               { label: "Anomalie contabili", ok: financialAnomalies === 0, value: String(financialAnomalies), href: kpiHref("anomalie", "/anomalie") },
+              { label: "Correzione AI", ok: ai?.ok ?? false, value: ai ? (ai.ok ? "operativa" : ai.detail) : "non verificabile", href: undefined },
             ].map((it) => {
               const chip = (
                 <span
