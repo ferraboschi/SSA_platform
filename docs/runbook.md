@@ -47,11 +47,11 @@ in `supabase/migrations/` risultano applicate al prod — incluse le più recent
 `corsi_partecipanti`, `corsi_presenze`, `product_handle`, `seat_index`,
 `exam_score_pct`).
 
-**PENDENTE (13/9/2026) — `20260913160000_profiles_least_privilege.sql`**:
-il ruolo di default dei nuovi utenti auth passa da `manager` a `guest` e il
-trigger lo scrive esplicitamente. Da eseguire SUBITO, insieme al blocco della
-registrazione pubblica (sez. 4-bis). Il codice già tratta `guest` come
-"nessun accesso" (login rifiutato, layout → /login).
+**`20260913160000_profiles_least_privilege.sql` — APPLICATA il 14/9/2026**
+(verifica owner: `column_default = 'guest'::text`): il ruolo di default dei
+nuovi utenti auth è `guest` e il trigger lo scrive esplicitamente. Lo stesso
+giorno la registrazione pubblica è stata disattivata (sez. 4-bis, verificato
+`disable_signup = true`). Nessuna migration pendente.
 
 ### 4-bis. Blocco della registrazione pubblica (AZIONE OWNER, urgente)
 
@@ -62,6 +62,7 @@ prima della migration qui sopra, ogni nuovo utente auth nasceva `manager`.
 Procedura: Supabase dashboard → Authentication → Providers → Email →
 **"Allow new users to sign up" = OFF** (e nessun provider OAuth attivo).
 Il chip "Registrazione pubblica" in dashboard resta ⚠ finché è attiva.
+Stato: **OFF dal 14/9/2026** (probe `disable_signup = true`).
 
 ## 4. Segreti e variabili d'ambiente
 
