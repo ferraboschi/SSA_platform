@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describeEmbeddingError, EMBEDDING_ERROR_MAX_CHARS } from "./health-describe";
+import { describeAnthropicError, describeEmbeddingError, EMBEDDING_ERROR_MAX_CHARS } from "./health-describe";
 
 // The pure half of the "Correzione AI" health probe. The embeddings provider
 // throws two message shapes — legacy "(429)" and "(429 insufficient_quota)" —
@@ -65,5 +65,24 @@ describe("describeEmbeddingError", () => {
     const out = describeEmbeddingError("Unexpected: key sk-proj-ABCDEFGHIJKLMNOP1234 rejected");
     expect(out).not.toContain("sk-proj-ABCDEFGHIJKLMNOP1234");
     expect(out).toContain("sk-…");
+  });
+});
+
+describe("describeAnthropicError", () => {
+  it("maps a drained account (400 credit balance) to the owner-facing reason", () => {
+    expect(
+      describeAnthropicError(
+        'Anthropic 400: {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}',
+      ),
+    ).toBe("crediti Anthropic esauriti");
+  });
+  it("maps auth, rate-limit and overload statuses", () => {
+    expect(describeAnthropicError("Anthropic 401: authentication_error")).toBe("chiave Anthropic non valida");
+    expect(describeAnthropicError("Anthropic 429: rate_limit_error")).toBe("limite di richieste Anthropic (429)");
+    expect(describeAnthropicError("Anthropic 529: overloaded_error")).toBe("Anthropic sovraccarico");
+  });
+  it("passes other messages through, trimmed and never empty", () => {
+    expect(describeAnthropicError("timeout Anthropic (10s)")).toBe("timeout Anthropic (10s)");
+    expect(describeAnthropicError("")).toBe("errore Anthropic sconosciuto");
   });
 });

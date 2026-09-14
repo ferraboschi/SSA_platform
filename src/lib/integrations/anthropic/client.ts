@@ -55,6 +55,14 @@ export async function callClaude(opts: {
     .join("");
 }
 
+/** Cheapest possible round-trip (1 output token) on the SAME model grading
+ *  uses, so a wrong ANTHROPIC_MODEL fails here too: proves the key is valid AND
+ *  the account has credit — a "credit balance too low" comes back as a 400 that
+ *  callClaude surfaces verbatim. Throws on any failure. */
+export async function pingAnthropic(): Promise<void> {
+  await callClaude({ user: "ping", maxTokens: 1 });
+}
+
 /** Parse a JSON object/array from Claude output, tolerating ```json fences. */
 export function parseJsonFromClaude<T>(raw: string): T {
   let s = raw.trim();

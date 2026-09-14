@@ -137,7 +137,7 @@ Regole:
 | Dati sbagliati in massa dopo un sync | NON riscrivere a mano: identificare il bug, fixare il codice (il sync è idempotente e auto-riparante), rilanciare. Nel peggior caso: restore backup (sez. 5). |
 | Segreto compromesso | Rotazione immediata dal provider + aggiornamento su Render (sez. 4). |
 | Corso pubblicato ma invisibile | /corsi → pannello "Corsi non importati" → il motivo è scritto lì. |
-| Chip "Correzione AI" ⚠ in dashboard (risposte aperte "valutazione non riuscita") | "crediti OpenAI esauriti" → ricaricare il saldo OpenAI (Billing), il chip torna verde entro 10'. Nel frattempo gli esiti NON restano bloccati: nella tab Esiti, risposta per risposta, l'educator assegna il **Voto educator (1-5)** — stessa scala e stessi punti dell'AI — e i pulsanti di conferma si sbloccano. |
+| Chip "Correzione AI" ⚠ in dashboard (risposte aperte "valutazione non riuscita") | La correzione usa DUE fornitori a pagamento, entrambi a crediti prepagati: **OpenAI** (embeddings = ricerca nelle fonti) e **Anthropic** (Claude = valutazione). Il chip dice quale manca: "crediti OpenAI esauriti" → platform.openai.com → Billing; "crediti Anthropic esauriti" → console.anthropic.com → Plans & Billing. Ricaricare l'account che possiede la chiave in uso su Render (API keys → "Last used"); il chip torna verde entro 10'. Nel frattempo gli esiti NON restano bloccati: nella tab Esiti, risposta per risposta, l'educator assegna il **Voto educator (1-5)** — stessa scala e stessi punti dell'AI — e i pulsanti di conferma si sbloccano. Prima di ogni sessione d'esame: controllare che il chip sia verde. |
 
 ## 8. Contesto architetturale
 
