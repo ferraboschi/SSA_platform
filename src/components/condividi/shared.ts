@@ -1,4 +1,5 @@
 import type { VerificationStateId } from "@/lib/share-links/verification-state";
+import type { CorsistaNote } from "@/lib/domain";
 
 // Local prop shapes (structurally match the loader types) so the client
 // components never import the server-only loader module.
@@ -23,6 +24,8 @@ export interface Student {
   placeholder?: boolean;
   companionsUsed?: number;
   guestOf?: string;
+  /** Corsista rows only: staff/educator notes on the person (oldest first). */
+  notes?: CorsistaNote[];
 }
 export interface SakeRow {
   code: string;

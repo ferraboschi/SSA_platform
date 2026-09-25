@@ -21,6 +21,8 @@ export function CourseSections({
   courseTitle = "",
   enrolled,
   capacity,
+  rollCallDays = 0,
+  rollCallHasExam,
   programSakeCount,
   students,
   whatsappLink,
@@ -36,6 +38,10 @@ export function CourseSections({
   courseTitle?: string;
   enrolled: number;
   capacity?: number;
+  /** Roll-call course days (program length, else the type's expected days). */
+  rollCallDays?: number;
+  /** Whether the roll-call has an exam day (course type), for the presence sums. */
+  rollCallHasExam?: boolean;
   programSakeCount: number;
   students: Student[];
   whatsappLink: string;
@@ -98,7 +104,14 @@ export function CourseSections({
       </div>
 
       {section === "iscritti" && (
-        <IscrittiSection courseId={courseId} students={students} whatsappLink={whatsappLink} capacity={capacity} />
+        <IscrittiSection
+          courseId={courseId}
+          students={students}
+          whatsappLink={whatsappLink}
+          capacity={capacity}
+          dayCount={rollCallDays}
+          hasExam={rollCallHasExam ?? hasExam}
+        />
       )}
       {section === "programma" && (
         <ProgrammaEconomiaSection

@@ -16,7 +16,7 @@
 // Every money predicate routes through @/lib/economics/revenue (single source).
 // ============================================================================
 
-import type { CourseCompanion, Student } from "@/lib/domain";
+import type { CorsistaNote, CourseCompanion, Student } from "@/lib/domain";
 import { deliveryPartsOf } from "./mappers";
 import { isDeadPayment, isPaidRevenue, netPaidEuros } from "@/lib/economics/revenue";
 
@@ -169,6 +169,12 @@ export function buildStudentsFromEnrollments(
   enrollJoinRows: EnrollmentJoinRow[],
   ticketByCorsista: Map<number, number>,
   companionsByIscr: Map<number, CourseCompanion[]>,
+  /** Optional per-corsista extras: staff/educator notes and roll-call present
+   *  days (sums only). Absent for callers that don't load them. */
+  extras?: {
+    notesByCorsista?: Map<number, CorsistaNote[]>;
+    presentDaysByCorsista?: Map<number, number[]>;
+  },
 ): StudentRosterResult {
   let revenue = 0;
   const examResults = { passed: 0, retrial: 0, failed: 0 };
@@ -235,6 +241,7 @@ export function buildStudentsFromEnrollments(
       tickets,
       ticketsInferred,
       iscrizioneId: r.id,
+      corsistaId: r.corsista_id,
       companions: companionsByIscr.get(r.id) ?? [],
       hasWhatsApp: c?.has_whatsapp ?? false,
       nameMismatch: isPlaceholder ? false : mismatch,
@@ -249,6 +256,8 @@ export function buildStudentsFromEnrollments(
       deliveryAddress: (r.delivery_address ?? "").trim(),
       deliveryNotes: (r.delivery_notes ?? "").trim(),
       deliveryParts: deliveryPartsOf(r.delivery_address_parts),
+      notes: extras?.notesByCorsista?.get(r.corsista_id) ?? [],
+      presentDays: extras?.presentDaysByCorsista?.get(r.corsista_id) ?? [],
     };
   });
   // Keep an order line's seats together and in seat order (buyer, then Posto 2…)

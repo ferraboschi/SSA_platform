@@ -17,6 +17,8 @@ import {
 } from "./aggregations";
 import { corsoRowToDomain, placeholderEducator } from "./mappers";
 import { paginateAll, selectWithTiers } from "./query-helpers";
+import { loadNotesByCorsista } from "@/lib/corsisti/notes-db";
+import { presentDaysByCorsista, type PresenceRow } from "@/lib/corsi/presenze";
 import type { CorsoRow } from "./rows";
 import type { RepoContext } from "./context";
 
@@ -155,6 +157,22 @@ export function makeCoursesRepo(
       }
     }
 
+    // Staff/educator notes per person + roll-call presences (SUMS only — the
+    // owner wants the count, never a gate). Both degrade to empty on a DB
+    // without the table/rows; read via the service client like corsi_crediti.
+    const corsistaIds = [...new Set(rows.map((r) => r.corsista_id))];
+    const [notesByCorsista, presenceRows] = await Promise.all([
+      loadNotesByCorsista(svc, corsistaIds),
+      (async () => {
+        const { data, error } = await svc
+          .from("corsi_presenze")
+          .select("corsista_id, day_no, present")
+          .eq("corso_id", row.id)
+          .not("corsista_id", "is", null);
+        return error ? [] : ((data ?? []) as PresenceRow[]);
+      })(),
+    ]);
+
     // Roster + collected revenue + exam tally, computed from the enrollment rows.
     // The euro-space per-student net (gross − discountValue), the isPaidRevenue
     // gate, and each student's companions all live in the pure aggregation.
@@ -162,6 +180,7 @@ export function makeCoursesRepo(
       rows,
       ticketCount,
       companionsByIscr,
+      { notesByCorsista, presentDaysByCorsista: presentDaysByCorsista(presenceRows) },
     );
 
     // Program from days + sake.

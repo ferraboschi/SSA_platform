@@ -6,6 +6,8 @@ import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
 import { isDeadPayment, isPaidRevenue } from "@/lib/economics/revenue";
+import { presenceCountsByDay, presenceLabel } from "@/lib/corsi/presenze";
+import { CorsistaNotes } from "@/components/corsisti/CorsistaNotes";
 import { COUNTRY_CODES } from "@/lib/phone/dial-codes";
 import type { Student } from "@/lib/domain";
 import {
@@ -27,6 +29,8 @@ export function IscrittiSection({
   students,
   whatsappLink,
   capacity,
+  dayCount = 0,
+  hasExam = false,
 }: {
   courseId: string;
   students: Student[];
@@ -34,6 +38,9 @@ export function IscrittiSection({
   /** Shopify seat capacity — used to show "posti rimasti" (visibility only;
    *  Shopify remains authoritative on capacity). */
   capacity?: number;
+  /** Roll-call course days (the exam day, when any, is dayCount + 1). */
+  dayCount?: number;
+  hasExam?: boolean;
 }) {
   const tr = useT();
   const t = tr.corsi.iscritti;
@@ -62,6 +69,11 @@ export function IscrittiSection({
   // Appello: seats whose holder confirmed their details (name, email, phone,
   // delivery address) via /conferma — the same truth the educator page shows.
   const confirmedCount = real.filter((s) => s.confirmedAt).length;
+  // Presence SUMS (owner 25/9): per day across the roster, per student across
+  // the days — never a gate.
+  const examDay = hasExam && dayCount > 0 ? dayCount + 1 : null;
+  const maxDay = examDay ?? dayCount;
+  const perDay = dayCount > 0 ? presenceCountsByDay(real.map((s) => s.presentDays ?? []), maxDay) : null;
   const revenue = real
     .filter((s) => isPaidRevenue(s.paymentStatus))
     .reduce((sum, s) => sum + s.amount, 0);
@@ -176,6 +188,17 @@ export function IscrittiSection({
         )}
       </div>
 
+      {perDay && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12, fontSize: 12 }} title={t.presenzeTip}>
+          <span style={{ color: "var(--text-4)" }}>{t.presenzeByDay}</span>
+          {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
+            <Badge key={d} tone="neutral">
+              {examDay === d ? t.presenzeExam : format(t.presenzeDay, { d })} {perDay.get(d) ?? 0}/{real.length}
+            </Badge>
+          ))}
+        </div>
+      )}
+
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -183,6 +206,7 @@ export function IscrittiSection({
               <th>{t.colCorsista}</th>
               <th>{t.colPhone}</th>
               <th title={t.confirmTip}>{t.colConfirm}</th>
+              <th title={t.presenzeTip}>{t.colPresenze}</th>
               <th style={{ textAlign: "center" }}>{t.colTicket}</th>
               <th>{t.colAmount}</th>
               <th>{t.colOrderDate}</th>
@@ -241,6 +265,10 @@ export function IscrittiSection({
                             {format(t.buyerDiff, { name: s.buyerName })}
                           </div>
                         )}
+                        {/* Staff/educator notes on the person ("ripete", "deve fare l'esame"…) */}
+                        {s.corsistaId != null && (
+                          <CorsistaNotes corsistaId={s.corsistaId} corsoId={Number(courseId)} notes={s.notes ?? []} compact />
+                        )}
                       </div>
                     </div>
                   </td>
@@ -260,6 +288,10 @@ export function IscrittiSection({
                   {/* Dati confermati all'appello + indirizzo di consegna (diploma) */}
                   <td>
                     <ConfirmCell student={s} t={t} fmtDate={fmtDate} />
+                  </td>
+                  {/* Presenze: somma dei giorni presente (mai un requisito) */}
+                  <td style={{ whiteSpace: "nowrap" }} title={t.presenzeTip}>
+                    {dayCount > 0 ? presenceLabel(s.presentDays ?? [], dayCount, examDay) : "—"}
                   </td>
                   {/* Ticket count */}
                   <td style={{ textAlign: "center" }}>{s.tickets ?? 1}</td>
@@ -703,7 +735,7 @@ function PlaceholderRow({
     // The whole "da completare" seat spans the full table width so the edit form
     // (especially the email) has room instead of being crushed into one column.
     <tr style={{ background: "var(--surface-2, #f8f8fb)" }}>
-      <td colSpan={8} style={{ padding: "10px 14px" }}>
+      <td colSpan={9} style={{ padding: "10px 14px" }}>
         {/* The table has min-width:640 + horizontal scroll on small screens, so
             this colSpan cell is wider than the viewport. Pin the edit form to the
             left of the scroll area and cap it at viewport width, so its fields

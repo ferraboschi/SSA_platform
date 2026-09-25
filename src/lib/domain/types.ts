@@ -143,6 +143,8 @@ export interface Student {
   ticketsInferred?: number;
   /** Enrollment (corsi_iscrizioni) id — drives companion ("doppio") management. */
   iscrizioneId?: number;
+  /** corsisti.id of the person holding the seat (notes are per person). */
+  corsistaId?: number;
   /** Extra attendees entered for this enrollment (a buyer of >=2 seats). */
   companions?: CourseCompanion[];
   /** Confirmed exam outcome for this enrollment, null until graded. */
@@ -167,6 +169,26 @@ export interface Student {
   /** Structured parts of the confirmed address (street, number, CAP, city,
    *  province, country) — null when only the legacy one-line form exists. */
   deliveryParts?: DeliveryAddressParts | null;
+  /** Staff/educator notes on this person (oldest first); absent = not loaded. */
+  notes?: CorsistaNote[];
+  /** Roll-call days (day_no) this student was marked present on, ascending
+   *  (course days 1..N; the exam day is N+1). A SUM, never a gate. */
+  presentDays?: number[];
+}
+
+/** A note on a student, written by the organizers (platform) or the educator
+ *  (share page); visible only to them. */
+export interface CorsistaNote {
+  id: number;
+  corsistaId: number;
+  /** The course it was written from, when any. */
+  corsoId: number | null;
+  courseTitle: string | null;
+  text: string;
+  /** Display name of who wrote it ("Camilla Bonnannini", "educator · Lorenzo …"). */
+  author: string;
+  authorRole: "staff" | "educator";
+  createdAt: string;
 }
 
 /** An extra attendee ("doppio") entered for a course enrollment. */
@@ -217,6 +239,8 @@ export interface Corsista {
   delivery?: ConfirmedDelivery | null;
   /** Residence from the historical roster import — NOT confirmed by the person. */
   residency?: string | null;
+  /** Staff/educator notes (oldest first); loaded on the profile only. */
+  notes?: CorsistaNote[];
 }
 
 /** A delivery address as confirmed by the student at a course's appello. */

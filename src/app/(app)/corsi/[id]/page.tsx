@@ -11,7 +11,7 @@ import {
   toTemplateData,
   toEsameData,
 } from "@/lib/corsi";
-import { expectedDays } from "@/lib/domain";
+import { expectedDays, courseHasExam } from "@/lib/domain";
 import { loadCourseEconomics } from "@/lib/economics";
 import { EMPTY_ECON } from "@/lib/economics/types";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
@@ -321,6 +321,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         examFamily={examFamily}
         esitiCount={esitiCount}
         expectedDayCount={expectedDays(course.type, course.mode)}
+        rollCallDays={programDays.length > 0 ? programDays.length : course.days}
+        rollCallHasExam={courseHasExam(course.type)}
       />
 
       {/* Danger zone */}

@@ -22,7 +22,9 @@ import { resetAppelloAction } from "@/lib/share-links/verification-actions";
 import { COUNTRY_CODES } from "@/lib/phone/dial-codes";
 import { deriveVerificationState, chipLabel } from "@/lib/share-links/verification-state";
 import VerifyActions from "./VerifyActions";
+import StudentNotes from "./StudentNotes";
 import { CHIP_CLASS, subjKey, type Student } from "./shared";
+import { presenceCountsByDay, presenceLabel, presentDaysFromMap } from "@/lib/corsi/presenze";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1 · APPELLO — attendance + verification, every state always visible.
@@ -33,11 +35,14 @@ export default function AppelloTab({
   setStudents,
   day,
   maxDay,
+  dayCount,
   isExamDay,
 }: {
   token: string;
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+  /** Number of COURSE days (the exam day, when any, is dayCount + 1). */
+  dayCount: number;
   /** Which roll-call day this instance shows — chosen by the top-level day
    *  tab, not by an internal selector (day_no in corsi_presenze; program
    *  days are 1..dayCount, the exam day is dayCount + 1). */
@@ -178,6 +183,14 @@ export default function AppelloTab({
   }
 
   const presentCount = students.filter((s) => !!attendance[subjKey(s)]?.[day]).length;
+  // SUMS only (owner 25/9/2026): presences per day across the roster and per
+  // student across the days — a count the educator reads at the end of the
+  // day, never a gate.
+  const examDay = maxDay > dayCount ? maxDay : null;
+  const perDay = presenceCountsByDay(
+    students.map((s) => presentDaysFromMap(attendance[subjKey(s)], maxDay)),
+    maxDay,
+  );
 
   return (
     <div>
@@ -199,6 +212,23 @@ export default function AppelloTab({
           ↻ Aggiorna
         </button>
       </div>
+      {!readOnly && students.length > 0 && (
+        <div
+          style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", margin: "0 0 10px", fontSize: 12 }}
+          title="Somma delle presenze registrate all'appello, giornata per giornata."
+        >
+          <span style={{ color: "var(--text-4)" }}>Presenze:</span>
+          {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
+            <span
+              key={d}
+              className={`badge ${d === day ? "badge-indigo" : "badge-neutral"}`}
+              style={{ whiteSpace: "nowrap" }}
+            >
+              {examDay === d ? "Esame" : `Giorno ${d}`} {perDay.get(d) ?? 0}/{students.length}
+            </span>
+          ))}
+        </div>
+      )}
       {error && (
         <p style={{ color: "var(--danger-fg)", fontSize: 12.5, margin: "0 0 10px" }} role="alert">
           {error}
@@ -264,6 +294,11 @@ export default function AppelloTab({
                     </span>
                     <span className="edu-row-sub">
                       {checked ? "Presente" : "Assente"}
+                      {!s.placeholder && (
+                        <span style={{ color: "var(--text-3)" }} title="Giorni di corso presente / totale (+ esame)">
+                          {" · "}Presenze {presenceLabel(presentDaysFromMap(attendance[subj], maxDay), dayCount, examDay)}
+                        </span>
+                      )}
                       {s.kind === "corsista" && (s.amount != null || (s.ticketsBought ?? 1) > 1) && (
                         <span style={{ color: "var(--text-3)" }}>
                           {" · "}
@@ -325,6 +360,20 @@ export default function AppelloTab({
                   />
                 )}
               </div>
+              {s.kind === "corsista" && !s.placeholder && (
+                <StudentNotes
+                  token={token}
+                  corsistaId={s.id}
+                  notes={s.notes ?? []}
+                  onAdded={(n) =>
+                    setStudents((prev) =>
+                      prev.map((x) =>
+                        x.kind === "corsista" && x.id === s.id ? { ...x, notes: [...(x.notes ?? []), n] } : x,
+                      ),
+                    )
+                  }
+                />
+              )}
               {rowError?.subj === subj && (
                 <p
                   role="alert"

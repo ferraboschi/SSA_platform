@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { setPartecipanteNameAction } from "@/lib/share-links/attendance-actions";
+import { setPartecipanteNameAction, setCorsistaNameAction } from "@/lib/share-links/attendance-actions";
 import {
   setAttendeeEmailAction,
   setAttendeePhoneAction,
@@ -28,9 +28,13 @@ export default function VerifyActions({
   const [editing, setEditing] = useState(false);
   const [draftEmail, setDraftEmail] = useState(s.email);
   const [draftPhone, setDraftPhone] = useState(s.phone);
-  // A companion has NO Shopify-sourced identity (unlike a corsista's name,
-  // which stays read-only here) — name is editable ONLY for kind:"partecipante".
+  // The name is editable for EVERYONE, in every state (owner 25/9/2026): a
+  // wrong name on the roster (buyer ≠ participant, a typo) must be fixable by
+  // the educator even after the student confirmed. Email/phone keep the
+  // verification lock. For a corsista it writes the global corsisti.full_name.
   const [draftName, setDraftName] = useState(s.name);
+  // "Correggi nome" after confirmation: only the name is offered.
+  const [nameOnly, setNameOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
@@ -100,13 +104,13 @@ export default function VerifyActions({
   // never needs to be bundled with the email correct-and-resend. Shared by
   // both save paths below.
   const saveNameIfChanged = async (): Promise<string | null> => {
-    if (!isGuest) return null;
     const nameChanged = draftName.trim() !== (s.name || "").trim();
     if (!nameChanged) return null;
     if (!draftName.trim()) return "Il nome è obbligatorio.";
-    const r = await setPartecipanteNameAction(token, refId, draftName.trim()).catch(
-      () => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string },
-    );
+    const r = await (isGuest
+      ? setPartecipanteNameAction(token, refId, draftName.trim())
+      : setCorsistaNameAction(token, refId, draftName.trim())
+    ).catch(() => ({ ok: false, error: "Errore di rete." }) as { ok: boolean; error?: string });
     if (r.ok) {
       onUpdated({ name: draftName.trim() });
       return null;
@@ -179,8 +183,35 @@ export default function VerifyActions({
     setDraftEmail(s.email);
     setDraftPhone(s.phone);
     setDraftName(s.name);
+    setNameOnly(false);
     setEditing(true);
     setNote(null);
+  };
+
+  const openNameEdit = () => {
+    setDraftName(s.name);
+    setNameOnly(true);
+    setEditing(true);
+    setNote(null);
+  };
+
+  const closeEdit = () => {
+    setEditing(false);
+    setNameOnly(false);
+  };
+
+  const saveNameOnly = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    const err = await saveNameIfChanged();
+    setBusy(false);
+    if (err) {
+      setNote(err);
+      return;
+    }
+    closeEdit();
+    setNote("Nome aggiornato.");
   };
 
   return (
@@ -194,20 +225,35 @@ export default function VerifyActions({
         </span>
       </div>
 
-      {editing ? (
+      {editing && nameOnly ? (
         <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-          {/* Only a companion's name is ours to fix — a corsista's name comes
-              from Shopify and stays read-only everywhere else in the app. */}
-          {isGuest && (
-            <input
-              type="text"
-              className="edu-input"
-              value={draftName}
-              onChange={(e) => setDraftName(e.target.value)}
-              placeholder="Nome e cognome"
-              maxLength={120}
-            />
-          )}
+          <input
+            type="text"
+            className="edu-input"
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            placeholder="Nome e cognome"
+            maxLength={120}
+          />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="edu-btn primary" onClick={saveNameOnly} disabled={busy || !draftName.trim()}>
+              {busy ? "…" : "Salva nome"}
+            </button>
+            <button type="button" className="edu-btn" onClick={closeEdit} disabled={busy}>
+              Annulla
+            </button>
+          </div>
+        </div>
+      ) : editing ? (
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          <input
+            type="text"
+            className="edu-input"
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            placeholder="Nome e cognome"
+            maxLength={120}
+          />
           <input
             type="email"
             inputMode="email"
@@ -231,7 +277,7 @@ export default function VerifyActions({
                 type="button"
                 className="edu-btn primary"
                 onClick={saveAndResend}
-                disabled={busy || !draftEmail.trim() || (isGuest && !draftName.trim())}
+                disabled={busy || !draftEmail.trim() || !draftName.trim()}
               >
                 {busy ? "…" : "Salva e rinvia"}
               </button>
@@ -240,18 +286,27 @@ export default function VerifyActions({
                 type="button"
                 className="edu-btn primary"
                 onClick={saveFree}
-                disabled={busy || !draftEmail.trim() || (isGuest && !draftName.trim())}
+                disabled={busy || !draftEmail.trim() || !draftName.trim()}
               >
                 {busy ? "…" : "Salva"}
               </button>
             )}
-            <button type="button" className="edu-btn" onClick={() => setEditing(false)} disabled={busy}>
+            <button type="button" className="edu-btn" onClick={closeEdit} disabled={busy}>
               Annulla
             </button>
           </div>
         </div>
       ) : (
         <>
+          {/* Confermato: email/phone are FINAL, but the NAME stays correctable
+              (owner 25/9/2026) — a name never invalidates a confirm link. */}
+          {state === "confermato" && (
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button type="button" className="edu-btn" onClick={openNameEdit} disabled={busy}>
+                Correggi nome
+              </button>
+            </div>
+          )}
           {(state === "verificare" || state === "attesa") && (
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
               <button

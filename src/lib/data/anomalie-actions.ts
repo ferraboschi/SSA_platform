@@ -292,6 +292,10 @@ async function mergeCorsistiCore(
     .in("id", dups);
   if (error) throw error;
 
+  // Staff/educator notes follow the person: re-point the folded records' notes
+  // to the survivor (best-effort; no notes table yet → nothing to move).
+  await svc.from("corsisti_note").update({ corsista_id: survivorId }).in("corsista_id", dups).then(() => undefined, () => undefined);
+
   // A merge RESOLVES the duplicate: clear any "possibile duplicato" review_note
   // on the survivor and the folded records, otherwise the survivor keeps
   // flagging itself forever (stale banner on the profile + phantom row in

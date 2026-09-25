@@ -37,6 +37,7 @@ export const EXPECTED_COLUMNS: readonly ExpectedColumn[] = [
   { table: "corsi_iscrizioni", column: "annullata_at", migration: "20260723120000_corsi_iscrizioni_annullata" },
   { table: "corsi_iscrizioni", column: "delivery_address_parts", migration: "20260925120000_delivery_address_parts" },
   { table: "corsi_partecipanti", column: "delivery_address_parts", migration: "20260925120000_delivery_address_parts" },
+  { table: "corsisti_note", column: "id", migration: "20260925150000_corsisti_note" },
 ];
 
 export interface MigrationHealth {
@@ -63,7 +64,10 @@ async function computeMigrationHealth(): Promise<MigrationHealth> {
     // 42P01) counts as missing. A PostgREST reload ("Could not query the
     // database for the schema cache", PGRST002) or an outage is "unverifiable"
     // — never a false "run these migrations" alarm cached for 10'.
-    const gone = missingColumnFromError(msg) === c.column || /relation .* does not exist/i.test(msg);
+    const gone =
+      missingColumnFromError(msg) === c.column ||
+      /relation .* does not exist/i.test(msg) ||
+      /could not find the table/i.test(msg);
     if (gone) {
       missing.push(`${c.table}.${c.column}`);
       pending.add(c.migration);

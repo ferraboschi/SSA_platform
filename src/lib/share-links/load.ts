@@ -21,6 +21,8 @@ import {
 import { getCourseClosures } from "@/lib/exam-links/lifecycle";
 import { loadTemplateTests } from "@/lib/exam-links/template-tests";
 import { loadFeedbackForCourse } from "@/lib/esami/feedback-templates-actions";
+import { loadNotesByCorsista } from "@/lib/corsisti/notes-db";
+import type { CorsistaNote } from "@/lib/domain";
 
 export interface SharedSake {
   code: string;
@@ -82,6 +84,8 @@ export interface SharedStudent {
   companionsUsed?: number;
   /** Companion rows only: a label like "(ospite di <buyer>)". */
   guestOf?: string;
+  /** Corsista rows only: staff/educator notes on the person (oldest first). */
+  notes?: CorsistaNote[];
 }
 export interface SharedExamTest {
   /** "day1" … "dayN", "feedback" or "final". */
@@ -530,6 +534,12 @@ export async function loadSharedCourse(
   }
   students.sort((a, b) => a.name.localeCompare(b.name));
   companions.sort((a, b) => a.name.localeCompare(b.name));
+  // Staff/educator notes ("ripete", "deve fare l'esame"…) under each student —
+  // visible to the educator and the organizers only. None until the table exists.
+  {
+    const notes = await loadNotesByCorsista(sb, students.filter((s) => !s.placeholder).map((s) => s.id));
+    for (const st of students) if (!st.placeholder) st.notes = notes.get(st.id) ?? [];
+  }
   // Interleave: each buyer is immediately followed by its "da completare" extra
   // seats, so the 2nd ticket shows right under the person who bought it.
   const ordered: SharedStudent[] = [];

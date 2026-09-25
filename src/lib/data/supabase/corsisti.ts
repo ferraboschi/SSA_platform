@@ -11,6 +11,7 @@ import { paginateAll, selectWithTiers } from "./query-helpers";
 import { isPaidRevenue, netPaidCents } from "@/lib/economics/revenue";
 import type { CorsistaRow, IscrizioneRow, PurchaseRow } from "./rows";
 import type { RepoContext } from "./context";
+import { loadNotesByCorsista } from "@/lib/corsisti/notes-db";
 
 export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
   const { sb } = ctx;
@@ -197,6 +198,8 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
 
       const domain = corsistaRowToDomain(row, enrolls, purchases);
       domain.possibleDuplicates = await findLookAlikes(sb, row, enrolls.length);
+      // Staff/educator notes (profile only; the list never loads them).
+      domain.notes = (await loadNotesByCorsista(ctx.svc, [row.id])).get(row.id) ?? [];
       return domain;
     },
   };

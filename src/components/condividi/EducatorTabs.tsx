@@ -135,6 +135,7 @@ export default function EducatorTabs({
             setStudents={setStudents}
             day={activeDayNum}
             maxDay={tests ? dayCount + 1 : dayCount}
+            dayCount={dayCount}
           />
           <SectionHeading>Programma</SectionHeading>
           <ProgrammaTab days={days} day={activeDayNum} enrolled={students.length} />
@@ -194,6 +195,7 @@ export default function EducatorTabs({
             setStudents={setStudents}
             day={dayCount + 1}
             maxDay={dayCount + 1}
+            dayCount={dayCount}
             isExamDay
           />
           {testByKey("final") && (

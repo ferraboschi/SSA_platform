@@ -51,6 +51,7 @@ import {
   validEmail,
   subjectVerificationState,
   hasOtherPresentDay,
+  ISCR_TABLE,
 } from "./attendance-db";
 
 // ── Rate limiting (PER-INSTANCE, in-memory) ──────────────────────────────────
@@ -549,4 +550,43 @@ export async function completeSeatFromLinkAction(
   // placeholder id). On a promote, the placeholder id is kept (updated in place).
   const personId = r.linked && r.linkedId ? r.linkedId : placeholderId;
   return { ok: true, linked: r.linked, person: { id: personId, name, email: cleanEmail } };
+}
+
+/** Correct an ENROLLED STUDENT's name from the educator link (owner 25/9/2026:
+ *  always allowed, even after the student confirmed — a name never invalidates
+ *  an outstanding confirm link, which is bound by id). Writes the global
+ *  corsisti.full_name, exactly like the student's own /conferma correction.
+ *  Bound to the token's course through the enrollment id. */
+export async function setCorsistaNameAction(
+  token: string,
+  iscrizioneId: number,
+  fullName: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const corsoId = courseIdFromToken(token);
+  if (corsoId == null) return { ok: false, error: "Link non valido o scaduto." };
+  if (limiter.isLimited("name", token, RATE_LIMIT_NAME)) return { ok: false, error: "Troppe richieste, riprova tra poco." };
+
+  const id = Number(iscrizioneId);
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Iscrizione non valida." };
+  const name = String(fullName ?? "").replace(/\s+/g, " ").trim();
+  if (!name) return { ok: false, error: "Nome obbligatorio." };
+  if (name.length > 120) return { ok: false, error: "Nome troppo lungo." };
+
+  const svc = getSupabaseServiceClient();
+  const { data: enr, error: findErr } = await svc
+    .from(ISCR_TABLE)
+    .select("corsista_id, corsista:corsisti(placeholder)")
+    .eq("id", id)
+    .eq("corso_id", corsoId)
+    .is("annullata_at", null)
+    .maybeSingle();
+  if (findErr) return { ok: false, error: findErr.message };
+  const row = enr as { corsista_id: number; corsista?: { placeholder?: boolean } | { placeholder?: boolean }[] | null } | null;
+  if (!row) return { ok: false, error: "Iscrizione non valida per questo corso." };
+  const c = Array.isArray(row.corsista) ? row.corsista[0] : row.corsista;
+  if (c?.placeholder) return { ok: false, error: "Completa prima il posto (nome, email, telefono)." };
+
+  const { error } = await svc.from("corsisti").update({ full_name: name }).eq("id", row.corsista_id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }

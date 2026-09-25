@@ -53,8 +53,15 @@ erano state date per applicate per errore), più UNA NUOVA del 25/9:
   `delivery_address_parts` (via, civico, CAP, città, provincia, paese
   dell'indirizzo strutturato confermato in /conferma; senza la colonna resta
   salvata solo la riga unica `delivery_address`).
+- `20260925150000_corsisti_note.sql` — tabella `corsisti_note` (note dello
+  staff/educator sugli studenti: «ripete», «deve fare l'esame»…; visibili solo
+  a staff ed educator). Senza la tabella le note non sono disponibili e il
+  pulsante «＋ Nota» lo dice.
 
-**AZIONE OWNER**: eseguire i tre file nel SQL editor (sono `add column if not
+Le prime tre risultano applicate (probe 25/9 pomeriggio); la quarta va
+eseguita.
+
+**AZIONE OWNER**: eseguire i file mancanti nel SQL editor (sono `create/add … if not
 exists`: idempotenti, nessun dato toccato), poi controllare che il chip
 **"Migration DB"** in dashboard torni verde (cache 10'). Il chip sonda le
 colonne delle migration opzionali più recenti (`src/lib/db/migration-health.ts`)

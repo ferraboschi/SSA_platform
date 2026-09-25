@@ -12,6 +12,7 @@ import { formatEuro, formatNumberIt } from "@/lib/format";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import { COURSE_TYPES, type Corsista, type CorsistaEnrollment, type Purchase, type PossibleDuplicate } from "@/lib/domain";
 import { monthIndexIt } from "@/lib/dates/italian-months";
+import { CorsistaNotes } from "./CorsistaNotes";
 
 type ProfileT = Dictionary["corsisti"]["profile"];
 
@@ -179,6 +180,7 @@ function JourneyTimeline({ courses, passedLabel }: { courses: CorsistaEnrollment
 
 export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
   const t: ProfileT = useT().corsisti.profile;
+  const tn = useT().corsisti.notes;
   const router = useRouter();
   const [pending, startAction] = useTransition();
   const [handled, setHandled] = useState<Set<number>>(() => new Set());
@@ -374,6 +376,22 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
           <ProfStat label={t.statSpeso} value={formatNumberIt(s.totalSpent)} unit="€" />
           <ProfStat label={t.statStatus} value={status} last />
         </div>
+      </section>
+
+      {/* Staff/educator notes on the person ("ripete", "deve fare l'esame"…) —
+          visible only to staff and, on the roll-call page, the educator. */}
+      <section className="card card-pad" style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+          <h3 className="eyebrow" style={{ margin: 0 }}>
+            {tn.title} ({(s.notes ?? []).length})
+          </h3>
+          <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>{tn.visibility}</span>
+        </div>
+        {s.id != null ? (
+          <CorsistaNotes corsistaId={s.id} corsoId={null} notes={s.notes ?? []} />
+        ) : (
+          <span className="text-mute">—</span>
+        )}
       </section>
 
       <section style={{ marginBottom: 28 }}>
