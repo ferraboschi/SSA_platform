@@ -57,9 +57,10 @@ colonne delle migration opzionali più recenti (`src/lib/db/migration-health.ts`
 e nomina i file da eseguire: è la rete contro le migration "date per fatte".
 
 Effetto della mancanza fino al 25/9: in /conferma chi compilava le "note per il
-corriere" perdeva IN SILENZIO indirizzo di consegna e consensi (due casi noti
-sul corso 190 del 15/9: iscrizioni 4437 e 3045 — da ricontattare per
-l'indirizzo del diploma). Dal deploy del 25/9 il salvataggio scarta SOLO la
+corriere" perdeva IN SILENZIO indirizzo di consegna e consensi (tre casi noti
+sul corso 190 del 15/9: iscrizioni 3045, 3113 e 4437 — il roster li mostra
+come "indirizzo di consegna mancante": da ricontattare per l'indirizzo del
+diploma). Dal deploy del 25/9 il salvataggio scarta SOLO la
 colonna mancante (indirizzo e consensi arrivano, le note no); il roster ignora
 `seats_override` finché la colonna non esiste.
 
