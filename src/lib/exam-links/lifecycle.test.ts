@@ -36,6 +36,8 @@ describe("expiryForChoice", () => {
     expect(eod).toBeGreaterThan(now);
     expect(eod - now).toBeLessThanOrEqual(24 * 3600);
     expect(week - now).toBeGreaterThan(6.9 * 24 * 3600);
-    expect(week - now).toBeLessThanOrEqual(7 * 24 * 3600);
+    // `now` is sampled BEFORE the call: a wall-clock second may tick in between
+    // (CI flaked on 604801 > 604800), so allow a couple of seconds of skew.
+    expect(week - now).toBeLessThanOrEqual(7 * 24 * 3600 + 2);
   });
 });
