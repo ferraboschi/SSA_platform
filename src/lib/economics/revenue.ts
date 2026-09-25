@@ -48,3 +48,11 @@ export function isPaidRevenue(
 ): boolean {
   return financialStatus == null || financialStatus === "paid";
 }
+
+/** Whether an order's `financial_status` means the money is GONE (refunded /
+ *  voided) or the order was cancelled: the seat may still sit in the roster
+ *  for history, but it is neither collected revenue nor "in attesa". */
+export function isDeadPayment(financialStatus: string | null | undefined): boolean {
+  const s = (financialStatus ?? "").toLowerCase();
+  return s === "refunded" || s === "voided" || s === "cancelled";
+}

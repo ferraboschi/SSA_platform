@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Avatar, Badge, Icon } from "@/components/ui";
 import { useT, format } from "@/lib/i18n";
 import { formatEuro } from "@/lib/format";
+import { isDeadPayment, isPaidRevenue } from "@/lib/economics/revenue";
 import { COUNTRY_CODES } from "@/lib/phone/dial-codes";
 import type { Student } from "@/lib/domain";
 import {
@@ -45,12 +46,25 @@ export function IscrittiSection({
   // them and a separate "da completare" chip surfaces them.
   const real = students.filter((s) => !s.placeholder);
   const pending = students.filter((s) => s.placeholder).length;
-  const paying = real.filter((s) => s.amount > 0).length;
-  const free = real.filter((s) => s.amount === 0).length;
+  // Money badges follow THE money rule (rule 1): "pagato" and the total count
+  // only collected orders; a refunded/voided seat is "rimborsato", an unpaid
+  // one "in attesa". Counting every seat's price here showed "8 pagato ·
+  // 3.528 €" on Shochu Milano while one seat was refunded and one unpaid.
+  const paying = real.filter((s) => isPaidRevenue(s.paymentStatus) && s.amount > 0).length;
+  const free = real.filter((s) => isPaidRevenue(s.paymentStatus) && s.amount === 0).length;
+  // "rimborsato" only when money actually went back (refunded); a voided /
+  // cancelled order never collected anything → "annullato".
+  const refunded = real.filter((s) => (s.paymentStatus ?? "").toLowerCase() === "refunded").length;
+  const voided = real.filter(
+    (s) => isDeadPayment(s.paymentStatus) && (s.paymentStatus ?? "").toLowerCase() !== "refunded",
+  ).length;
+  const unpaid = real.filter((s) => !isPaidRevenue(s.paymentStatus) && !isDeadPayment(s.paymentStatus)).length;
   // Appello: seats whose holder confirmed their details (name, email, phone,
   // delivery address) via /conferma — the same truth the educator page shows.
   const confirmedCount = real.filter((s) => s.confirmedAt).length;
-  const revenue = real.reduce((sum, s) => sum + s.amount, 0);
+  const revenue = real
+    .filter((s) => isPaidRevenue(s.paymentStatus))
+    .reduce((sum, s) => sum + s.amount, 0);
 
   const money = (n: number) => formatEuro(n, { decimals: 2 });
   const fmtDate = (iso: string) => {
@@ -107,6 +121,21 @@ export function IscrittiSection({
             {free} {t.free.toLowerCase()}
           </Badge>
         )}
+        {unpaid > 0 && (
+          <Badge tone="warning" size="lg">
+            {unpaid} {t.payPending.toLowerCase()}
+          </Badge>
+        )}
+        {refunded > 0 && (
+          <Badge tone="danger" size="lg">
+            {refunded} {t.payRefunded.toLowerCase()}
+          </Badge>
+        )}
+        {voided > 0 && (
+          <Badge tone="danger" size="lg">
+            {voided} {t.payVoided.toLowerCase()}
+          </Badge>
+        )}
         {pending > 0 && (
           <Badge tone="warning" size="lg">
             {format(t.seatToComplete, { n: pending })}
@@ -130,7 +159,9 @@ export function IscrittiSection({
             <span style={{ color: "var(--text-4)" }}>· {students.length}/{capacity}</span>
           </span>
         )}
-        <span style={{ fontSize: 13, color: "var(--text-2)" }}>{money(revenue)}</span>
+        <span style={{ fontSize: 13, color: "var(--text-2)" }} title={t.collectedTip}>
+          {money(revenue)}
+        </span>
         {whatsappLink && (
           <a
             className="btn btn-sm"
@@ -172,6 +203,21 @@ export function IscrittiSection({
                 );
               }
               const paid = s.paymentStatus === "paid";
+              const status = (s.paymentStatus ?? "").toLowerCase();
+              const dead = isDeadPayment(status);
+              // Label per Shopify status: refunded → "Rimborsato"; voided/cancelled
+              // (never collected) → "Annullato"; partially_refunded (money partly
+              // kept, but NOT collected revenue by the owner's rule) → "Rimborso
+              // parziale"; anything else unpaid → "In attesa".
+              const payLabel = paid
+                ? t.payPaid
+                : status === "refunded"
+                  ? t.payRefunded
+                  : dead
+                    ? t.payVoided
+                    : status === "partially_refunded"
+                      ? t.payPartial
+                      : t.payPending;
               return (
                 <tr key={s.ticketCode ?? `${s.email}-${i}`}>
                   {/* Corsista */}
@@ -245,9 +291,7 @@ export function IscrittiSection({
                   {/* Pagamento */}
                   <td>
                     {s.paymentStatus ? (
-                      <Badge tone={paid ? "success" : "warning"}>
-                        {paid ? t.payPaid : t.payPending}
-                      </Badge>
+                      <Badge tone={paid ? "success" : dead ? "danger" : "warning"}>{payLabel}</Badge>
                     ) : (
                       "—"
                     )}

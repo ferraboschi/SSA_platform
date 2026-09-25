@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { netPaidCents, netPaidEuros, isPaidRevenue } from "./revenue";
+import { isDeadPayment, netPaidCents, netPaidEuros, isPaidRevenue } from "./revenue";
 
 describe("netPaidCents", () => {
   it("returns the gross amount when there is no discount", () => {
@@ -62,5 +62,20 @@ describe("isPaidRevenue", () => {
     expect(isPaidRevenue("partially_refunded")).toBe(false);
     expect(isPaidRevenue("voided")).toBe(false);
     expect(isPaidRevenue("")).toBe(false);
+  });
+});
+
+describe("isDeadPayment", () => {
+  it("is true only for refunded / voided / cancelled orders (money gone)", () => {
+    expect(isDeadPayment("refunded")).toBe(true);
+    expect(isDeadPayment("VOIDED")).toBe(true);
+    expect(isDeadPayment("cancelled")).toBe(true);
+  });
+  it("is false for paid, pending and legacy null statuses (those are not 'gone')", () => {
+    expect(isDeadPayment("paid")).toBe(false);
+    expect(isDeadPayment("pending")).toBe(false);
+    expect(isDeadPayment("partially_refunded")).toBe(false);
+    expect(isDeadPayment(null)).toBe(false);
+    expect(isDeadPayment(undefined)).toBe(false);
   });
 });
