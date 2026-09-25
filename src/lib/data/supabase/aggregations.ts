@@ -57,6 +57,12 @@ export interface EnrollmentJoinRow {
   /** Set when the student was removed from the course (refund/credit). Such a
    *  seat leaves the roster + collected revenue. Absent pre-migration → active. */
   annullata_at?: string | null;
+  /** Course-start /conferma snapshot (appello): confirmed-at, link sent-at,
+   *  delivery address + courier notes. Each absent on a pre-migration DB. */
+  email_confirmed_at?: string | null;
+  confirm_sent_at?: string | null;
+  delivery_address?: string | null;
+  delivery_notes?: string | null;
   corsista:
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean; placeholder?: boolean }
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean; placeholder?: boolean }[]
@@ -234,6 +240,12 @@ export function buildStudentsFromEnrollments(
       examResult: r.exam_result,
       placeholder: isPlaceholder,
       seatIndex,
+      // Appello / conferma dati: what the student verified and confirmed, so the
+      // admin roster shows the same truth as the educator page (diploma address).
+      confirmedAt: r.email_confirmed_at ?? null,
+      confirmSentAt: r.confirm_sent_at ?? null,
+      deliveryAddress: (r.delivery_address ?? "").trim(),
+      deliveryNotes: (r.delivery_notes ?? "").trim(),
     };
   });
   // Keep an order line's seats together and in seat order (buyer, then Posto 2…)

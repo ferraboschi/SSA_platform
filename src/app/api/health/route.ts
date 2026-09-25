@@ -6,6 +6,7 @@ import { ensureRagWired, ragGroundingStatus } from "@/lib/rag";
 import { getVectorStore } from "@/lib/rag/store";
 import { getAiGradingHealth } from "@/lib/rag/health";
 import { getAuthHealth } from "@/lib/auth/health";
+import { getMigrationHealth } from "@/lib/db/migration-health";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { loadCourseProgram } from "@/lib/corsi/program-load";
 import { getGrantedScopes } from "@/lib/integrations/shopify/admin-client";
@@ -57,6 +58,9 @@ export async function GET() {
   // chip. Reasons only, never the key. null = the probe itself failed.
   const aiGrading = await getAiGradingHealth().catch(() => null);
   const authHealth = await getAuthHealth().catch(() => null);
+  // Schema drift: which optional-migration columns the prod DB still lacks
+  // (mirrors the dashboard "Migration DB" chip). null = the probe itself failed.
+  const migrations = await getMigrationHealth().catch(() => null);
 
   // Personal-exam-links migration diagnostic: confirms the exam_student_links
   // table + exam_submissions.corsista_id column exist (so links persist and
@@ -228,6 +232,7 @@ export async function GET() {
     rag: { ...ragGroundingStatus(), chunkCount: ragChunkCount },
     aiGrading,
     authHealth,
+    migrations,
     examLinks: { studentLinksTable, studentLinksRows, submissionsCorsistaCol },
     examProgress: { table: examProgressTable, answersCol: progressAnswersCol },
     courseStatus,

@@ -192,10 +192,46 @@ describe("corsoRowToDomain", () => {
     expect(c.costs.adv).toBe(100);
     expect(c.margin).toBe(Math.round(c.revenue - c.totalCost));
   });
-  it("reads the cancelled flag + reason from the notebook json", () => {
-    const c = corsoRowToDomain(corso({ notebook: { cancelled: true, cancelReason: "pochi iscritti" } }), edu, 0, 0, [], []);
+  it("reads the legacy cancelled flag + reason from the notebook json on a phantom row", () => {
+    // Legacy marker (old sync inference) on a row Shopify does NOT keep on sale.
+    const c = corsoRowToDomain(
+      corso({ lifecycle: "bozza", notebook: { cancelled: true, cancelReason: "pochi iscritti" } }),
+      edu, 0, 0, [], [],
+    );
     expect(c.cancelled).toBe(true);
     expect(c.cancelReason).toBe("pochi iscritti");
+  });
+  it("Shochu Milano regression: a legacy marker is VOID on a course Shopify keeps on sale", () => {
+    // corso 64 (25/9/2026): stored lifecycle "pubblicato" (product active since
+    // 9/7), notebook still carrying the June-draft marker, 8 seats sold. It read
+    // "annullato" → revenue 0, margin 0, hidden from dashboard/P&L/exams.
+    const future = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+    const c = corsoRowToDomain(
+      corso({
+        lifecycle: "pubblicato",
+        start_date: future,
+        notebook: {
+          cancelled: true,
+          cancelReason: "Prodotto Shopify non pubblicato (draft) — non sul sito",
+          cancelSignal: "draft-unpublished",
+        },
+      }),
+      edu, 8, 2548, [], [],
+    );
+    expect(c.cancelled).toBe(false);
+    expect(c.cancelReason).toBeNull();
+    expect(c.revenue).toBe(2548);
+    expect(c.margin).toBe(Math.round(2548 - c.totalCost));
+    expect(c.lifecycle).toBe("pubblicato");
+  });
+  it("a legacy marker still cancels a past phantom row (stored lifecycle passato)", () => {
+    const past = new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10);
+    const c = corsoRowToDomain(
+      corso({ lifecycle: "passato", start_date: past, notebook: { cancelled: true, cancelSignal: "A" } }),
+      edu, 0, 0, [], [],
+    );
+    expect(c.cancelled).toBe(true);
+    expect(c.revenue).toBe(0);
   });
   it("never fabricates revenue: a genuine net-0 (all free/transferred/unpaid) stays 0", () => {
     // 12 enrolled but 0 collected. The old `revenue || enrolled*price*0.85` invented

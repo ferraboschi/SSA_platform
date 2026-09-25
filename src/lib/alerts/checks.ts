@@ -18,6 +18,7 @@ import {
 } from "./emails";
 import type { StockAlert } from "@/lib/domain";
 import { isSandboxCourse } from "@/lib/corsi/sandbox";
+import { legacyMarkerCancels } from "@/lib/corsi/legacy-cancel-marker";
 
 interface CourseRow {
   id: number;
@@ -78,7 +79,7 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
     const courses = (data ?? []) as CourseRow[];
     const ended = courses.filter((c) => {
       if (isSandboxCourse(c)) return false; // the demo course never bills
-      if (c.notebook && (c.notebook as { cancelled?: boolean }).cancelled) return false;
+      if (legacyMarkerCancels(c.notebook, c.lifecycle)) return false; // legacy phantom marker (void on a course on sale)
       if (c.lifecycle === "bozza") return false;
       const endIso = c.end_date ?? c.start_date;
       return endIso ? new Date(endIso).getTime() < now.getTime() : false;
@@ -180,7 +181,7 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
     for (const c of courses) {
       if (!c.start_date) continue;
       if (isSandboxCourse(c)) continue; // no logistics reminders for the demo course
-      if (c.notebook && (c.notebook as { cancelled?: boolean }).cancelled) continue;
+      if (legacyMarkerCancels(c.notebook, c.lifecycle)) continue; // legacy phantom marker (void on a course on sale)
       if (c.lifecycle === "bozza") continue;
       const daysToStart = Math.ceil((new Date(c.start_date).getTime() - now.getTime()) / DAY_MS);
       if (daysToStart < 0) continue; // already started/past
@@ -238,7 +239,7 @@ export async function runAlertChecks(nowMs: number): Promise<AlertCheckResult> {
     const firstRun = !notifiedObj?.seeded;
     for (const c of courses) {
       if (isSandboxCourse(c)) continue; // demo course: any educator is fine
-      if (c.notebook && (c.notebook as { cancelled?: boolean }).cancelled) continue;
+      if (legacyMarkerCancels(c.notebook, c.lifecycle)) continue; // legacy phantom marker (void on a course on sale)
       if (!c.type || !c.educator_id) continue;
       if (quals.get(c.educator_id)?.has(c.type)) continue; // qualified → fine
       if (notified.has(c.id)) continue;

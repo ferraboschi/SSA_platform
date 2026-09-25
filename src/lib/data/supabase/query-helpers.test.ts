@@ -188,3 +188,53 @@ describe("selectWithFallback", () => {
     expect(res.data).toBeNull();
   });
 });
+
+// ── missingColumnFromError — which column an unapplied migration left out ─────
+import { missingColumnFromError, selectWithTiers } from "./query-helpers";
+
+describe("missingColumnFromError", () => {
+  it("reads the PostgREST PGRST204 shape (unknown column in a write body)", () => {
+    expect(
+      missingColumnFromError(
+        "Could not find the 'delivery_notes' column of 'corsi_iscrizioni' in the schema cache",
+      ),
+    ).toBe("delivery_notes");
+  });
+  it("reads the Postgres 42703 shapes (unknown column in a select/filter)", () => {
+    expect(missingColumnFromError("column corsi_iscrizioni.delivery_notes does not exist")).toBe(
+      "delivery_notes",
+    );
+    expect(
+      missingColumnFromError('column "seats_override" of relation "corsi_iscrizioni" does not exist'),
+    ).toBe("seats_override");
+    expect(missingColumnFromError('column "delivery_address" does not exist')).toBe("delivery_address");
+  });
+  it("returns null for anything else (never guesses)", () => {
+    expect(missingColumnFromError("duplicate key value violates unique constraint")).toBeNull();
+    expect(missingColumnFromError("")).toBeNull();
+    expect(missingColumnFromError(null)).toBeNull();
+    expect(missingColumnFromError("relation corsi_x does not exist")).toBeNull();
+  });
+});
+
+describe("selectWithTiers", () => {
+  const T = ["a,b,c", "a,b", "a"] as const;
+  it("returns the FIRST tier that succeeds — a DB missing only the newest column keeps the middle tier", async () => {
+    const seen: string[] = [];
+    const res = await selectWithTiers<{ id: number }>(async (cols) => {
+      seen.push(cols);
+      return cols === "a,b,c" ? { data: null, error: new Error("no c") } : { data: [{ id: 1 }], error: null };
+    }, T);
+    expect(res).toEqual({ data: [{ id: 1 }], tier: 1, error: null });
+    expect(seen).toEqual(["a,b,c", "a,b"]); // never went down to the bare tier
+  });
+  it("richest tier wins outright when it works", async () => {
+    const res = await selectWithTiers<{ id: number }>(async () => ({ data: [{ id: 9 }], error: null }), T);
+    expect(res.tier).toBe(0);
+  });
+  it("surfaces the last tier's error when every tier fails", async () => {
+    const err = new Error("db down");
+    const res = await selectWithTiers<{ id: number }>(async () => ({ data: null, error: err }), T);
+    expect(res).toEqual({ data: null, tier: 2, error: err });
+  });
+});

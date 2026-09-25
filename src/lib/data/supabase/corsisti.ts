@@ -7,7 +7,7 @@ import {
   iscrizioneToEnrollment,
   purchaseRowToDomain,
 } from "./mappers";
-import { paginateAll, selectWithFallback } from "./query-helpers";
+import { paginateAll, selectWithTiers } from "./query-helpers";
 import { isPaidRevenue, netPaidCents } from "@/lib/economics/revenue";
 import type { CorsistaRow, IscrizioneRow, PurchaseRow } from "./rows";
 import type { RepoContext } from "./context";
@@ -20,8 +20,15 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
     )`;
   // `exam_score_pct`/`financial_status` may not exist pre-migration → fall
   // back without them (every row then counts as paid, the legacy rule).
-  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, discount_cents, financial_status, exam_result, exam_score_pct, historical, annullata_at, ${enrollmentCorso}`;
+  const enrollmentSelect = `id, corso_id, corsista_id, amount_cents, discount_cents, financial_status, exam_result, exam_score_pct, historical, annullata_at, enrolled_email, email_confirmed_at, delivery_address, ${enrollmentCorso}`;
+  // delivery_notes has its own migration (20260704000000): a DB without it must
+  // keep every other rich column, hence its own top tier.
+  const enrollmentSelectNotes = enrollmentSelect.replace("delivery_address,", "delivery_address, delivery_notes,");
+  // Without the appello columns the money/seat columns (annullata_at,
+  // financial_status) must survive: an intermediate tier, never straight to base.
+  const enrollmentSelectLegacy = enrollmentSelect.replace("enrolled_email, email_confirmed_at, delivery_address, ", "");
   const enrollmentSelectBase = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, historical, ${enrollmentCorso}`;
+  const ENROLLMENT_TIERS = [enrollmentSelectNotes, enrollmentSelect, enrollmentSelectLegacy, enrollmentSelectBase] as const;
 
   // Official certificate PDFs (Supabase Storage), keyed "<corsistaId>-<corsoId>".
   // Stored in settings_kv by the import; cached per request.
@@ -60,25 +67,19 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
       const certMap = await loadCertMap();
       const enrollByCorsista = new Map<number, CorsistaEnrollment[]>();
       const ISCR_PAGE = 1000;
-      let iscrSelect = enrollmentSelect; // drops to base if exam_score_pct absent
+      let tier = 0; // the richest select the DB accepts — sticks once found
       const iscrRows = await paginateAll<IscrizioneRow>(
         async (from, to) => {
-          let { data: page, error: e2 } = await sb
-            .from("corsi_iscrizioni")
-            .select(iscrSelect)
-            .range(from, to);
-          if (e2 && iscrSelect === enrollmentSelect) {
-            // pre-migration: retry without exam_score_pct
-            iscrSelect = enrollmentSelectBase;
-            ({ data: page, error: e2 } = await sb
+          for (;;) {
+            const { data: page, error: e2 } = await sb
               .from("corsi_iscrizioni")
-              .select(iscrSelect)
-              .range(from, to));
+              .select(ENROLLMENT_TIERS[tier])
+              .range(from, to);
+            if (!e2 || tier === ENROLLMENT_TIERS.length - 1) {
+              return { data: (page ?? []) as unknown as IscrizioneRow[], error: e2 };
+            }
+            tier++; // an unapplied migration: retry the SAME page one tier down
           }
-          return {
-            data: (page ?? []) as unknown as IscrizioneRow[],
-            error: e2,
-          };
         },
         { pageSize: ISCR_PAGE },
       );
@@ -161,8 +162,8 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
         if (!surv) break;
         row = surv as CorsistaRow;
       }
-      // pre-migration: retry without exam_score_pct if the rich select errors.
-      const res = await selectWithFallback<IscrizioneRow>(
+      // Unapplied migrations: step down one tier at a time (notes → rich → base).
+      const res = await selectWithTiers<IscrizioneRow>(
         (columns) =>
           sb
             .from("corsi_iscrizioni")
@@ -171,8 +172,7 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
             data: IscrizioneRow[] | null;
             error: unknown;
           }>,
-        enrollmentSelect,
-        enrollmentSelectBase,
+        ENROLLMENT_TIERS,
       );
       if (res.error) throw res.error;
       const iscr = res.data;

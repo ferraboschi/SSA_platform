@@ -105,3 +105,50 @@ export async function selectWithFallback<T>(
   const base = await runSelect(baseColumns);
   return { data: base.data, usedBase: true, error: base.error };
 }
+
+/**
+ * The column a PostgREST / Postgres error names as missing, or null. Two shapes:
+ *   • PostgREST PGRST204 (unknown column in a WRITE body):
+ *     "Could not find the 'delivery_notes' column of 'corsi_iscrizioni' in the schema cache"
+ *   • Postgres 42703 (unknown column in a SELECT / filter):
+ *     "column corsi_iscrizioni.delivery_notes does not exist"
+ *     "column \"delivery_notes\" of relation \"corsi_iscrizioni\" does not exist"
+ * Lets a writer drop EXACTLY the column the DB lacks (an unapplied optional
+ * migration) instead of a whole group of fields — see confirm-actions.ts.
+ */
+export function missingColumnFromError(message: string | null | undefined): string | null {
+  const m = (message ?? "").trim();
+  if (!m) return null;
+  const pgrst = /could not find the '([A-Za-z0-9_]+)' column/i.exec(m);
+  if (pgrst) return pgrst[1];
+  const pg = /\bcolumn "?(?:[A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)"?(?: of relation "[^"]+")? does not exist/i.exec(m);
+  if (pg) return pg[1];
+  return null;
+}
+
+export interface SelectTiersResult<T> {
+  /** Rows from the first tier that succeeded (or the last tier's, on failure). */
+  data: T[] | null;
+  /** Index of the tier that produced `data` (0 = richest). */
+  tier: number;
+  /** The LAST tier's error when every tier failed; null otherwise. */
+  error: unknown;
+}
+
+/**
+ * `selectWithFallback` for N column lists, richest first: run each tier until
+ * one succeeds. A DB missing ONLY the newest optional column (e.g.
+ * `delivery_notes`, migration not yet applied) then keeps every older column
+ * instead of falling straight to the bare base list.
+ */
+export async function selectWithTiers<T>(
+  runSelect: (columns: string) => Promise<PageResult<T>>,
+  tiers: readonly string[],
+): Promise<SelectTiersResult<T>> {
+  let last: PageResult<T> = { data: null, error: new Error("selectWithTiers: no tiers") };
+  for (let i = 0; i < tiers.length; i++) {
+    last = await runSelect(tiers[i]);
+    if (!last.error) return { data: last.data, tier: i, error: null };
+  }
+  return { data: last.data, tier: Math.max(tiers.length - 1, 0), error: last.error };
+}

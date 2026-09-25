@@ -16,7 +16,7 @@ import {
   sumAppliedCreditsForCourse,
 } from "./aggregations";
 import { corsoRowToDomain, placeholderEducator } from "./mappers";
-import { paginateAll, selectWithFallback } from "./query-helpers";
+import { paginateAll, selectWithTiers } from "./query-helpers";
 import type { CorsoRow } from "./rows";
 import type { RepoContext } from "./context";
 
@@ -43,11 +43,18 @@ export function makeCoursesRepo(
     // the base columns if the enrichment migration hasn't been applied yet, so
     // the iscritti list never disappears.
     const RICH_ISCR =
-      "id,corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,seat_index,annullata_at,buyer_name,enrolled_email,corsista:corsisti(full_name,email,phone,has_whatsapp,placeholder)";
+      "id,corsista_id,amount_cents,exam_result,order_name,order_date,discount_code,discount_cents,financial_status,line_item_id,seat_index,annullata_at,buyer_name,enrolled_email,email_confirmed_at,confirm_sent_at,delivery_address,corsista:corsisti(full_name,email,phone,has_whatsapp,placeholder)";
+    // delivery_notes has its own migration (20260704000000): a DB without it
+    // must keep every other rich column, hence its own top tier.
+    const NOTES_ISCR = RICH_ISCR.replace("delivery_address,", "delivery_address,delivery_notes,");
+    // A DB without the appello columns must STILL keep the money/seat columns
+    // (annullata_at, financial_status, discount_cents — rules 1 and 2): never
+    // degrade straight to BASE because of a confirm column.
+    const RICH_LEGACY_ISCR = RICH_ISCR.replace("email_confirmed_at,confirm_sent_at,delivery_address,", "");
     const BASE_ISCR =
       "id,corsista_id,amount_cents,exam_result,corsista:corsisti(full_name,email,phone,has_whatsapp)";
     const iscr = (
-      await selectWithFallback<unknown>(
+      await selectWithTiers<unknown>(
         (columns) =>
           sb
             .from("corsi_iscrizioni")
@@ -56,8 +63,7 @@ export function makeCoursesRepo(
             data: unknown[] | null;
             error: unknown;
           }>,
-        RICH_ISCR,
-        BASE_ISCR,
+        [NOTES_ISCR, RICH_ISCR, RICH_LEGACY_ISCR, BASE_ISCR],
       )
     ).data;
     type IscrJoin = {
@@ -76,6 +82,10 @@ export function makeCoursesRepo(
        *  pre-migration fallback, undefined then and the aggregation falls
        *  back to corsisti.email, same as everywhere else this is resolved. */
       enrolled_email?: string | null;
+      email_confirmed_at?: string | null;
+      confirm_sent_at?: string | null;
+      delivery_address?: string | null;
+      delivery_notes?: string | null;
       seats_override?: number | null;
       seat_index?: number | null;
       corsista:

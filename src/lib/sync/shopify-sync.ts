@@ -36,6 +36,7 @@ import { planSeats, placeholderEmail, placeholderName, orderPlaceholderEmail } f
 import { DEAD_FINANCIAL, deadOrderStatus, prorateDiscount } from "./order-rules";
 import { isPaidRevenue } from "@/lib/economics/revenue";
 import { loadIgnoredProductIds } from "./ignored-products";
+import { hasLegacyCancelMarker, stripLegacyCancelMarker } from "@/lib/corsi/legacy-cancel-marker";
 
 type Svc = ReturnType<typeof getSupabaseServiceClient>;
 
@@ -327,7 +328,7 @@ async function syncCourses(
   // (never overwrite a staff/manual assignment).
   const { data: existingRows } = await sb
     .from("corsi")
-    .select("external_id, educator_id, lifecycle, start_date")
+    .select("external_id, educator_id, lifecycle, start_date, notebook")
     .not("external_id", "is", null);
   const known = new Set((existingRows ?? []).map((r) => String(r.external_id)));
   const educatorByExt = new Map(
@@ -340,6 +341,11 @@ async function syncCourses(
   );
   const monthKeyByExt = new Map(
     (existingRows ?? []).map((r) => [String(r.external_id), dateMonthKey(r.start_date as string | null)]),
+  );
+  // Current notebook per course — only to strip the LEGACY "annullato" marker
+  // (old phantom/draft inference) once Shopify keeps the course on sale.
+  const notebookByExt = new Map(
+    (existingRows ?? []).map((r) => [String(r.external_id), r.notebook as unknown]),
   );
 
   // Educator resolver: the Shopify `custom.sake_educator` metafield holds the
@@ -459,11 +465,38 @@ async function syncCourses(
       // (Shopify is now the source of truth for state). capacity / min_students stay
       // staff-managed. A 'cancelled' write fails harmlessly (error, no update) if the
       // CHECK-constraint migration hasn't been applied yet.
+      // A course Shopify keeps ON SALE is not annulled: drop the legacy notebook
+      // marker written when the product was a phantom/draft (it zeroed the
+      // revenue of Shochu Milano 26-27/9/2026 with 8 seats sold). Read-time
+      // already ignores it on "pubblicato"; this makes the row stop lying too,
+      // so the marker can't bite again once the course flips to "passato".
+      // Also when the STORED lifecycle was "pubblicato" (Shopify had it on sale)
+      // and this very run flips it to "passato": the marker must never survive
+      // the flip, whatever ran in between (pre-deploy review NIT).
+      const nbPrev = notebookByExt.get(String(p.id));
+      const stripMarker =
+        (lifecycle === "pubblicato" || prior === "pubblicato") && hasLegacyCancelMarker(nbPrev);
+      let notebookPatch: { notebook: Record<string, unknown> } | null = null;
+      if (stripMarker) {
+        // Re-read right before writing: this loop can run for minutes (metafield
+        // fetches) and a staff note saved meanwhile must not be lost to a stale
+        // copy. One-shot per marked course, so the extra read is negligible.
+        const { data: fresh } = await sb
+          .from("corsi")
+          .select("notebook")
+          .eq("external_id", String(p.id))
+          .maybeSingle();
+        const nbNow = (fresh as { notebook?: unknown } | null)?.notebook ?? nbPrev;
+        if (hasLegacyCancelMarker(nbNow)) notebookPatch = { notebook: stripLegacyCancelMarker(nbNow) };
+      }
       const { error } = await sb
         .from("corsi")
-        .update({ ...syncOwned, lifecycle })
+        .update({ ...syncOwned, lifecycle, ...(notebookPatch ?? {}) })
         .eq("external_id", String(p.id));
       if (!error) upserted++;
+      if (!error && notebookPatch) {
+        console.info(`[shopify-sync] legacy cancel marker removed: product ${p.id} is on sale (lifecycle ${lifecycle})`);
+      }
       // Backfill the educator only when it's still missing (never overwrite a
       // manual assignment).
       if (educatorByExt.get(String(p.id)) == null) {

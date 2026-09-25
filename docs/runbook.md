@@ -2,7 +2,7 @@
 
 Procedura per gestire produzione, migration, segreti, backup ed emergenze.
 Pubblico: owner (Lorenzo) + chiunque metta mano alla piattaforma.
-Aggiornato: 2026-08-11.
+Aggiornato: 2026-09-25.
 
 ## 1. Deploy e rollback
 
@@ -41,17 +41,33 @@ Procedura per una nuova migration:
 4. **Verifica**: interrogare la colonna/tabella appena creata (una select basta).
    Mai considerare applicata una migration non verificata.
 
-**Stato attuale (verificato con probe REST l'11/8/2026)**: tutte le 35 migration
-in `supabase/migrations/` risultano applicate al prod — incluse le più recenti
-(`annullata_at`/`annullata_tipo`, `corsi_crediti` + `codice`,
-`corsi_partecipanti`, `corsi_presenze`, `product_handle`, `seat_index`,
-`exam_score_pct`).
+**Stato (probe REST del 25/9/2026)**: 34 delle 36 migration in
+`supabase/migrations/` risultano applicate al prod. **DUE MANCANO** (l'11/8
+erano state date per applicate per errore):
+
+- `20260704000000_delivery_notes.sql` — colonna `delivery_notes` su
+  `corsi_iscrizioni` e `corsi_partecipanti` (note per il corriere in /conferma).
+- `20260704040000_corsi_iscrizioni_seats_override.sql` — colonna
+  `seats_override` (numero posti correggibile dallo staff nel roster).
+
+**AZIONE OWNER**: eseguire i due file nel SQL editor (sono `add column if not
+exists`: idempotenti, nessun dato toccato), poi controllare che il chip
+**"Migration DB"** in dashboard torni verde (cache 10'). Il chip sonda le
+colonne delle migration opzionali più recenti (`src/lib/db/migration-health.ts`)
+e nomina i file da eseguire: è la rete contro le migration "date per fatte".
+
+Effetto della mancanza fino al 25/9: in /conferma chi compilava le "note per il
+corriere" perdeva IN SILENZIO indirizzo di consegna e consensi (due casi noti
+sul corso 190 del 15/9: iscrizioni 4437 e 3045 — da ricontattare per
+l'indirizzo del diploma). Dal deploy del 25/9 il salvataggio scarta SOLO la
+colonna mancante (indirizzo e consensi arrivano, le note no); il roster ignora
+`seats_override` finché la colonna non esiste.
 
 **`20260913160000_profiles_least_privilege.sql` — APPLICATA il 14/9/2026**
 (verifica owner: `column_default = 'guest'::text`): il ruolo di default dei
 nuovi utenti auth è `guest` e il trigger lo scrive esplicitamente. Lo stesso
 giorno la registrazione pubblica è stata disattivata (sez. 4-bis, verificato
-`disable_signup = true`). Nessuna migration pendente.
+`disable_signup = true`).
 
 ### 4-bis. Blocco della registrazione pubblica (AZIONE OWNER, urgente)
 

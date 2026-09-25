@@ -38,11 +38,16 @@ export function CourseExportButtons({
     downloadCsv(
       `iscritti-${slug}`,
       toCsv(
-        ["Nome", "Email", "Telefono", "Pagato €", "Codice sconto", "Esito esame"],
+        // Email/telefono/indirizzo are the CONFIRMED values when the student went
+        // through the appello (/conferma) — the address is where the diploma ships.
+        ["Nome", "Email", "Telefono", "Dati confermati il", "Indirizzo di consegna", "Note consegna", "Pagato €", "Codice sconto", "Esito esame"],
         students.map((s) => [
           s.name,
           s.email,
           s.phone,
+          s.confirmedAt ? new Date(s.confirmedAt).toLocaleDateString("it-IT") : "",
+          s.deliveryAddress ?? "",
+          s.deliveryNotes ?? "",
           Math.round(s.amount),
           s.discountCode ?? "",
           s.examResult ? EXAM_RESULT_LABEL[s.examResult] : "",

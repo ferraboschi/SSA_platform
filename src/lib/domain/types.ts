@@ -154,6 +154,15 @@ export interface Student {
   /** 1-based seat position within the order line (seat 1 = buyer). Absent
    *  pre-migration → treated as seat 1. */
   seatIndex?: number;
+  /** Course-start /conferma flow (the "appello"): when the student confirmed
+   *  name, email, phone and delivery address. Null/absent = never confirmed. */
+  confirmedAt?: string | null;
+  /** When the confirmation link was last sent (null/absent = never). */
+  confirmSentAt?: string | null;
+  /** Delivery address confirmed on /conferma (diploma shipping); "" = none. */
+  deliveryAddress?: string;
+  /** Courier notes confirmed with the address (citofono…); "" = none. */
+  deliveryNotes?: string;
 }
 
 /** An extra attendee ("doppio") entered for a course enrollment. */
@@ -199,6 +208,19 @@ export interface Corsista {
   cluster?: string | null;
   /** Live look-alikes not yet merged — the profile offers to merge them. */
   possibleDuplicates?: PossibleDuplicate[];
+  /** The most recent delivery address the person confirmed on /conferma
+   *  (diploma shipping), with its provenance; null = never confirmed one. */
+  delivery?: ConfirmedDelivery | null;
+  /** Residence from the historical roster import — NOT confirmed by the person. */
+  residency?: string | null;
+}
+
+/** A delivery address as confirmed by the student at a course's appello. */
+export interface ConfirmedDelivery {
+  address: string;
+  notes: string;
+  confirmedAt: string;
+  courseTitle: string;
 }
 
 /** A single Shopify purchase line, clustered. */
@@ -227,6 +249,12 @@ export interface CorsistaEnrollment {
   /** Public URL of the official certificate PDF (Supabase Storage), when issued. */
   certificateUrl?: string | null;
   historical?: boolean;
+  /** /conferma (appello) snapshot for this seat: when confirmed, the confirmed
+   *  email, and the delivery address + notes (diploma shipping). */
+  confirmedAt?: string | null;
+  confirmedEmail?: string | null;
+  deliveryAddress?: string | null;
+  deliveryNotes?: string | null;
 }
 
 // ============ Educator ============

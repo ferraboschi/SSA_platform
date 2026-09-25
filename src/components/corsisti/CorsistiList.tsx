@@ -86,12 +86,14 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
               downloadCsv(
                 "corsisti",
                 toCsv(
-                  ["Nome", "Email", "Telefono", "Città", "Corsi", "Speso €", "Ricorrente", "Storico"],
+                  ["Nome", "Email", "Telefono", "Città", "Indirizzo di consegna (confermato)", "Dati confermati il", "Corsi", "Speso €", "Ricorrente", "Storico"],
                   list.map((s) => [
                     s.name,
                     s.email,
                     s.phone,
                     s.city,
+                    s.delivery?.address ?? "",
+                    s.delivery ? new Date(s.delivery.confirmedAt).toLocaleDateString("it-IT") : "",
                     s.courses.length,
                     Math.round(s.totalSpent),
                     s.isReturning ? "sì" : "no",
@@ -197,6 +199,15 @@ export function CorsistiList({ items, stats }: { items: Corsista[]; stats: Corsi
                           <span style={{ fontWeight: 600 }}>{s.name}</span>
                           {s.historical && <Badge tone="neutral">{t.badgeHistorical}</Badge>}
                           {s.isReturning && !s.historical && <Badge tone="oro">{t.badgeReturning}</Badge>}
+                          {s.delivery && (
+                            <span
+                              title={format(t.badgeConfirmedTip, {
+                                date: new Date(s.delivery.confirmedAt).toLocaleDateString("it-IT"),
+                              })}
+                            >
+                              <Badge tone="success">{t.badgeConfirmed}</Badge>
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
                           <a

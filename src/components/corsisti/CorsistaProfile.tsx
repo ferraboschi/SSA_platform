@@ -15,6 +15,11 @@ import { monthIndexIt } from "@/lib/dates/italian-months";
 
 type ProfileT = Dictionary["corsisti"]["profile"];
 
+const fmtDay = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("it-IT");
+};
+
 function ProfStat({
   label,
   value,
@@ -306,6 +311,26 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                 <Icon name="pin" size={12} className="text-3" /> {s.city}
               </span>
             </div>
+            {/* Diploma shipping: the address the person CONFIRMED at an appello
+                wins; the historical residence is only an UNCONFIRMED fallback. */}
+            <div style={{ marginTop: 10, fontSize: 13, display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+              <span className="eyebrow" style={{ whiteSpace: "nowrap" }}>{t.deliveryTitle}</span>
+              {s.delivery ? (
+                <span style={{ color: "var(--text)" }}>
+                  {s.delivery.address}
+                  {s.delivery.notes && <span style={{ color: "var(--text-3)" }}> · {s.delivery.notes}</span>}{" "}
+                  <Badge tone="success">
+                    {format(t.deliveryConfirmedOn, { date: fmtDay(s.delivery.confirmedAt), course: s.delivery.courseTitle })}
+                  </Badge>
+                </span>
+              ) : s.residency ? (
+                <span style={{ color: "var(--text-2)" }}>
+                  {s.residency} <Badge tone="warning">{t.deliveryLegacy}</Badge>
+                </span>
+              ) : (
+                <span style={{ color: "var(--text-3)" }}>{t.deliveryNone}</span>
+              )}
+            </div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <a className="btn btn-icon" href={`mailto:${s.email}`}>
@@ -320,7 +345,7 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                 downloadCsv(
                   `scheda-${s.name.replace(/[^\w-]+/g, "-").toLowerCase()}`,
                   toCsv(
-                    ["Corso", "Tipo", "Città", "Mese", "Anno", "Esito", "Punteggio %", "Pagato €"],
+                    ["Corso", "Tipo", "Città", "Mese", "Anno", "Esito", "Punteggio %", "Pagato €", "Dati confermati il", "Email confermata", "Indirizzo di consegna", "Note consegna"],
                     s.courses.map((c) => [
                       c.courseTitle,
                       COURSE_TYPES[c.courseType]?.label ?? c.courseType,
@@ -330,6 +355,10 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                       c.examResult ?? "",
                       c.examScorePct ?? "",
                       Math.round(c.amount),
+                      c.confirmedAt ? fmtDay(c.confirmedAt) : "",
+                      c.confirmedEmail ?? "",
+                      c.deliveryAddress ?? "",
+                      c.deliveryNotes ?? "",
                     ]),
                   ),
                 )
@@ -372,6 +401,7 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                 <th>{t.colData}</th>
                 <th>{t.colCorso}</th>
                 <th>{t.colCitta}</th>
+                <th>{t.colConfirm}</th>
                 <th>{t.colEsito}</th>
                 <th style={{ textAlign: "right" }}>{t.colImporto}</th>
               </tr>
@@ -396,6 +426,24 @@ export function CorsistaProfile({ corsista: s }: { corsista: Corsista }) {
                     </div>
                   </td>
                   <td className="text-3">{c.city}</td>
+                  {/* Appello: confirmed-at + the delivery address given for THIS course */}
+                  <td>
+                    {c.confirmedAt ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <span>
+                          <Badge tone="success">{format(t.confirmedOn, { date: fmtDay(c.confirmedAt) })}</Badge>
+                        </span>
+                        {c.deliveryAddress && (
+                          <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                            {c.deliveryAddress}
+                            {c.deliveryNotes ? ` · ${c.deliveryNotes}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-mute">—</span>
+                    )}
+                  </td>
                   <td>
                     {c.examResult === "passed" && <Badge tone="success">{t.passed}</Badge>}
                     {c.examResult === "retrial" && <Badge tone="warning">{t.retrial}</Badge>}

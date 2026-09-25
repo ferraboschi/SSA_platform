@@ -47,6 +47,9 @@ export function IscrittiSection({
   const pending = students.filter((s) => s.placeholder).length;
   const paying = real.filter((s) => s.amount > 0).length;
   const free = real.filter((s) => s.amount === 0).length;
+  // Appello: seats whose holder confirmed their details (name, email, phone,
+  // delivery address) via /conferma — the same truth the educator page shows.
+  const confirmedCount = real.filter((s) => s.confirmedAt).length;
   const revenue = real.reduce((sum, s) => sum + s.amount, 0);
 
   const money = (n: number) => formatEuro(n, { decimals: 2 });
@@ -109,6 +112,13 @@ export function IscrittiSection({
             {format(t.seatToComplete, { n: pending })}
           </Badge>
         )}
+        {confirmedCount > 0 && (
+          <span title={t.confirmTip}>
+            <Badge tone="success" size="lg">
+              {format(t.confirmedCount, { n: confirmedCount })}
+            </Badge>
+          </span>
+        )}
         {capacity != null && capacity > 0 && (
           <span
             title="Posti totali su Shopify meno gli iscritti attivi. Shopify resta l'autorità sulla capienza."
@@ -141,6 +151,7 @@ export function IscrittiSection({
             <tr>
               <th>{t.colCorsista}</th>
               <th>{t.colPhone}</th>
+              <th title={t.confirmTip}>{t.colConfirm}</th>
               <th style={{ textAlign: "center" }}>{t.colTicket}</th>
               <th>{t.colAmount}</th>
               <th>{t.colOrderDate}</th>
@@ -199,6 +210,10 @@ export function IscrittiSection({
                     ) : (
                       "—"
                     )}
+                  </td>
+                  {/* Dati confermati all'appello + indirizzo di consegna (diploma) */}
+                  <td>
+                    <ConfirmCell student={s} t={t} fmtDate={fmtDate} />
                   </td>
                   {/* Ticket count */}
                   <td style={{ textAlign: "center" }}>{s.tickets ?? 1}</td>
@@ -268,6 +283,42 @@ export function IscrittiSection({
       {addError && (
         <div style={{ fontSize: 11, color: "var(--danger, #dc2626)", marginTop: 4 }}>{addError}</div>
       )}
+    </div>
+  );
+}
+
+type IscrittiT = ReturnType<typeof useT>["corsi"]["iscritti"];
+
+// What the student verified and confirmed at the appello (/conferma link sent by
+// the educator): a three-state chip + the confirmed delivery address, which is
+// what the diploma ships to. Green = confirmed only (design rule).
+function ConfirmCell({
+  student: s,
+  t,
+  fmtDate,
+}: {
+  student: Student;
+  t: IscrittiT;
+  fmtDate: (iso: string) => string;
+}) {
+  const chip = s.confirmedAt ? (
+    <Badge tone="success">{format(t.confirmDone, { date: fmtDate(s.confirmedAt) })}</Badge>
+  ) : s.confirmSentAt ? (
+    <Badge tone="warning">{format(t.confirmSent, { date: fmtDate(s.confirmSentAt) })}</Badge>
+  ) : (
+    <Badge tone="neutral">{t.confirmNone}</Badge>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 170 }}>
+      <span title={t.confirmTip}>{chip}</span>
+      {s.deliveryAddress ? (
+        <div style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.35 }}>
+          <span style={{ color: "var(--text-4)" }}>{t.deliveryLabel}</span> {s.deliveryAddress}
+          {s.deliveryNotes ? <span style={{ color: "var(--text-4)" }}> · {s.deliveryNotes}</span> : null}
+        </div>
+      ) : s.confirmedAt ? (
+        <div style={{ fontSize: 11, color: "var(--warning-fg)" }}>{t.deliveryMissing}</div>
+      ) : null}
     </div>
   );
 }
@@ -608,7 +659,7 @@ function PlaceholderRow({
     // The whole "da completare" seat spans the full table width so the edit form
     // (especially the email) has room instead of being crushed into one column.
     <tr style={{ background: "var(--surface-2, #f8f8fb)" }}>
-      <td colSpan={7} style={{ padding: "10px 14px" }}>
+      <td colSpan={8} style={{ padding: "10px 14px" }}>
         {/* The table has min-width:640 + horizontal scroll on small screens, so
             this colSpan cell is wider than the viewport. Pin the edit form to the
             left of the scroll area and cap it at viewport width, so its fields

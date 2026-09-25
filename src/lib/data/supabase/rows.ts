@@ -60,6 +60,9 @@ export interface CorsistaRow {
   merged_into?: number | null;
   diploma_numbers?: string[] | null;
   cluster?: string | null;
+  /** Residence from the historical roster import (never confirmed by the
+   *  person); absent on records that only exist via Shopify. */
+  residency?: string | null;
 }
 
 export interface PurchaseRow {
@@ -99,6 +102,12 @@ export interface IscrizioneRow {
   exam_result: "passed" | "retrial" | "failed" | null;
   exam_score_pct?: number | null;
   historical: boolean;
+  /** /conferma (appello) snapshot — each column from its own migration, so
+   *  each may be absent (undefined) on a DB that hasn't run it yet. */
+  enrolled_email?: string | null;
+  email_confirmed_at?: string | null;
+  delivery_address?: string | null;
+  delivery_notes?: string | null;
   // PostgREST returns an embedded record as an array even when the relation
   // is many-to-one. We accept both shapes and normalize.
   corso?: CorsoEmbedded | CorsoEmbedded[] | null;

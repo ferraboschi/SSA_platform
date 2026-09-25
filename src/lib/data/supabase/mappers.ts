@@ -17,6 +17,7 @@ import {
   STATUS_META,
 } from "@/lib/domain";
 import { isPaidRevenue, netPaidEuros } from "@/lib/economics/revenue";
+import { legacyMarkerCancels } from "@/lib/corsi/legacy-cancel-marker";
 import type {
   Corsista,
   CorsistaEnrollment,
@@ -38,6 +39,7 @@ import type {
   Purchase,
   Student,
   User,
+  ConfirmedDelivery,
 } from "@/lib/domain";
 import type {
   CorsistaRow,
@@ -117,7 +119,32 @@ export function iscrizioneToEnrollment(row: IscrizioneRow): CorsistaEnrollment |
     examResult: row.exam_result,
     examScorePct: row.exam_score_pct ?? null,
     historical: row.historical || undefined,
+    // Appello / conferma dati for THIS seat (undefined columns → null).
+    confirmedAt: row.email_confirmed_at ?? null,
+    confirmedEmail: (row.enrolled_email ?? "").trim() || null,
+    deliveryAddress: (row.delivery_address ?? "").trim() || null,
+    deliveryNotes: (row.delivery_notes ?? "").trim() || null,
   };
+}
+
+/** Diploma shipping: the LATEST address the person confirmed at an appello —
+ *  a re-confirmation on a later course supersedes an older one. Null when no
+ *  seat carries a confirmed address (the profile then shows the historical
+ *  residence as an explicitly UNCONFIRMED fallback). */
+export function latestConfirmedDelivery(enrollments: CorsistaEnrollment[]): ConfirmedDelivery | null {
+  let best: ConfirmedDelivery | null = null;
+  for (const e of enrollments) {
+    if (!e.confirmedAt || !e.deliveryAddress) continue;
+    if (!best || new Date(e.confirmedAt).getTime() > new Date(best.confirmedAt).getTime()) {
+      best = {
+        address: e.deliveryAddress,
+        notes: e.deliveryNotes ?? "",
+        confirmedAt: e.confirmedAt,
+        courseTitle: e.courseTitle,
+      };
+    }
+  }
+  return best;
 }
 
 export function purchaseRowToDomain(row: PurchaseRow): Purchase {
@@ -177,6 +204,8 @@ export function corsistaRowToDomain(
     reviewNote: row.review_note,
     diplomaNumbers: row.diploma_numbers ?? [],
     cluster: row.cluster ?? null,
+    delivery: latestConfirmedDelivery(enrollments),
+    residency: (row.residency ?? "").trim() || null,
   };
 }
 
@@ -326,7 +355,11 @@ export function corsoRowToDomain(
   // "Annullato" = pulled before it ran, from EITHER the Shopify-derived lifecycle
   // or the legacy notebook flag. Unify both so every P&L / bucketing consumer
   // (conto-economico, archivio, analisi, esami) agrees on what's cancelled.
-  const isCancelled = lifecycle === "cancelled" || Boolean(nbRaw.cancelled);
+  // The notebook flag is a LEGACY INFERENCE (old sync: phantom/draft products),
+  // not a state: it is VOID on a course Shopify keeps on sale (STORED lifecycle
+  // "pubblicato") — see legacy-cancel-marker.ts. Shochu Milano 26-27/9/2026
+  // read "annullato" from its June-draft days with 8 seats sold → revenue 0.
+  const isCancelled = lifecycle === "cancelled" || legacyMarkerCancels(nbRaw, row.lifecycle);
   // Real collected (net) revenue is authoritative: a genuine 0 (all seats free,
   // transferred, or unpaid) MUST stay 0 — never fabricate income from headcount
   // (the old `revenue || enrolled*price*0.85` invented revenue for cancelled and
@@ -390,7 +423,8 @@ export function corsoRowToDomain(
       reasoning: nb.reasoning ?? "",
     },
     cancelled: isCancelled,
-    cancelReason: (nbRaw.cancelReason as string | undefined) ?? null,
+    // A voided legacy marker must not leak its stale reason either.
+    cancelReason: isCancelled ? ((nbRaw.cancelReason as string | undefined) ?? null) : null,
   };
 }
 

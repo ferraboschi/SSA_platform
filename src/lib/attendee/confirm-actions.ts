@@ -5,6 +5,16 @@ import { verifyConfirmToken, isConfirmLinkSpent } from "./confirm-token";
 import { normEmail, isValidEmail, normAddress, normDeliveryNotes } from "./confirm-normalize";
 import { loadConfirmSubject } from "./confirm";
 import { addressHasCivico } from "./civico";
+import { missingColumnFromError } from "@/lib/data/supabase/query-helpers";
+
+// Columns added by OPTIONAL migrations (each its own file). When the DB lacks
+// one, the save retries WITHOUT that single column — never without the others.
+const OPTIONAL_CONFIRM_COLUMNS: readonly string[] = [
+  "delivery_notes",
+  "delivery_address",
+  "privacy_consent_at",
+  "terms_accepted_at",
+];
 
 export interface ConfirmAttendeeInput {
   /** Editable full name — lets the attendee fix a typo in their own name. */
@@ -111,29 +121,39 @@ export async function confirmAttendeeAction(
     k === "corsista"
       ? { enrolled_email: clean, email_confirmed_at: now }
       : { email: clean, email_confirmed_at: now };
-  const consent = { privacy_consent_at: now, terms_accepted_at: now };
-  const withAddr = { ...base, delivery_address: addr.value, delivery_notes: notes.value };
-  const full = { ...withAddr, ...consent };
+  // Full payload first; if the DB lacks an optional column (its migration not
+  // applied yet) drop EXACTLY that column and retry, so everything else still
+  // lands. The old ladder dropped the address AND the consents whenever
+  // `delivery_notes` was missing: on prod (migration 20260704000000 still
+  // unapplied) every student who filled the courier notes lost their delivery
+  // address in silence (corso 190, 15/9/2026). The email confirmation itself
+  // is never dropped.
+  const payload: Record<string, unknown> = {
+    ...base,
+    delivery_address: addr.value,
+    delivery_notes: notes.value,
+    privacy_consent_at: now,
+    terms_accepted_at: now,
+  };
+  const doUpdate = (body: Record<string, unknown>) =>
+    svc.from(table).update(body).eq("id", Number(i)).eq("corso_id", Number(c));
 
-  const doUpdate = (payload: Record<string, unknown>) =>
-    svc.from(table).update(payload).eq("id", Number(i)).eq("corso_id", Number(c));
-
-  // Try the full payload; degrade progressively if the optional columns aren't in
-  // the DB yet (consent migration, then delivery migration), so the primary email
-  // confirmation always lands. Track what actually saved.
-  let addressSaved = true;
-  let { error } = await doUpdate(full);
-  if (error && /privacy_consent_at|terms_accepted_at/i.test(error.message)) {
-    // Consent columns absent → keep the delivery fields, drop consent.
-    ({ error } = await doUpdate(withAddr));
-  }
-  if (error && /delivery_address|delivery_notes|column/i.test(error.message)) {
-    addressSaved = false;
-    ({ error } = await doUpdate(base));
+  let error: { message: string } | null = null;
+  for (let attempt = 0; attempt <= OPTIONAL_CONFIRM_COLUMNS.length; attempt++) {
+    ({ error } = await doUpdate(payload));
+    if (!error) break;
+    const missing = missingColumnFromError(error.message);
+    if (!missing || !OPTIONAL_CONFIRM_COLUMNS.includes(missing) || !(missing in payload)) break;
+    delete payload[missing];
+    // Identifiers only — no personal data, no secrets (Render logs persist).
+    console.warn(
+      `[conferma] colonna ${table}.${missing} assente (migration non applicata): salvo senza quel campo`,
+    );
   }
   if (error) {
     return { ok: false, error: "Salvataggio non riuscito (migrazione non applicata?)." };
   }
+  const addressSaved = "delivery_address" in payload;
 
   // NAME + PHONE propagation: corsista → the GLOBAL corsisti row (everywhere the
   // name/number appears); companion → its own row. Best-effort: a hiccup here

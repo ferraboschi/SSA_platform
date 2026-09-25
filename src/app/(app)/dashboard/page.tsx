@@ -14,6 +14,7 @@ import { ANOMALIE_COUNTS_KEY } from "@/lib/anomalie/reconcile";
 import { loadSkippedCourses } from "@/lib/sync/skipped-courses";
 import { getAiGradingHealth } from "@/lib/rag/health";
 import { getAuthHealth } from "@/lib/auth/health";
+import { getMigrationHealth } from "@/lib/db/migration-health";
 import { loadCourseEconomics } from "@/lib/economics";
 import { isLegacyInvoiced } from "@/lib/economics/types";
 import {
@@ -128,6 +129,16 @@ export default async function DashboardPage() {
   // Access security: public self-signup must be OFF (the platform never signs
   // anyone up) and the link-signing secrets must be set on the host.
   const auth = await getAuthHealth().catch(() => null);
+  // Schema drift: migrations are applied by hand and every reader degrades
+  // without a missing column — silently. Probe the columns and say which lack.
+  const mig = await getMigrationHealth().catch(() => null);
+  const migValue = !mig
+    ? "non verificabile"
+    : mig.missing.length > 0
+      ? `da applicare: ${mig.pendingMigrations.join(", ")}`
+      : mig.unverifiable.length > 0
+        ? `non verificabili: ${mig.unverifiable.join(", ")}`
+        : "applicate";
   const signupOk = auth?.signupOpen === false;
   const secretsOk = Boolean(auth?.examLinkSecret && auth?.shareLinkSecret);
   // Sync is "stale" if the last successful run is older than ~2 scheduler ticks
@@ -283,6 +294,7 @@ export default async function DashboardPage() {
               { label: "Correzione AI", ok: ai?.ok ?? false, value: ai ? (ai.ok ? "operativa" : ai.detail) : "non verificabile", href: undefined },
               { label: "Registrazione pubblica", ok: signupOk, value: auth?.signupOpen == null ? "non verificabile" : auth.signupOpen ? "ATTIVA — disattivare su Supabase" : "disattivata", href: undefined },
               { label: "Segreti link", ok: secretsOk, value: secretsOk ? "impostati" : `mancanti: ${[!auth?.examLinkSecret && "EXAM_LINK_SECRET", !auth?.shareLinkSecret && "SHARE_LINK_SECRET"].filter(Boolean).join(", ")}`, href: undefined },
+              { label: "Migration DB", ok: mig?.ok ?? false, value: migValue, href: undefined },
             ].map((it) => {
               const chip = (
                 <span
