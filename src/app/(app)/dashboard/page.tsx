@@ -139,6 +139,10 @@ export default async function DashboardPage() {
       : mig.unverifiable.length > 0
         ? `non verificabili: ${mig.unverifiable.join(", ")}`
         : "applicate";
+  // Address normalization on /conferma needs the (public, referrer-restricted)
+  // Google Maps browser key on the host; without it students type addresses by
+  // hand and the structured fields are the only guard.
+  const googleMapsKey = Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
   const signupOk = auth?.signupOpen === false;
   const secretsOk = Boolean(auth?.examLinkSecret && auth?.shareLinkSecret);
   // Sync is "stale" if the last successful run is older than ~2 scheduler ticks
@@ -295,6 +299,7 @@ export default async function DashboardPage() {
               { label: "Registrazione pubblica", ok: signupOk, value: auth?.signupOpen == null ? "non verificabile" : auth.signupOpen ? "ATTIVA — disattivare su Supabase" : "disattivata", href: undefined },
               { label: "Segreti link", ok: secretsOk, value: secretsOk ? "impostati" : `mancanti: ${[!auth?.examLinkSecret && "EXAM_LINK_SECRET", !auth?.shareLinkSecret && "SHARE_LINK_SECRET"].filter(Boolean).join(", ")}`, href: undefined },
               { label: "Migration DB", ok: mig?.ok ?? false, value: migValue, href: undefined },
+              { label: "Google Maps", ok: googleMapsKey, value: googleMapsKey ? "chiave impostata" : "chiave assente — indirizzi senza normalizzazione", href: undefined },
             ].map((it) => {
               const chip = (
                 <span

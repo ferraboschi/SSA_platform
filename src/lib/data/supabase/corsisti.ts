@@ -24,11 +24,13 @@ export function makeCorsistiRepo(ctx: RepoContext): CorsistaRepository {
   // delivery_notes has its own migration (20260704000000): a DB without it must
   // keep every other rich column, hence its own top tier.
   const enrollmentSelectNotes = enrollmentSelect.replace("delivery_address,", "delivery_address, delivery_notes,");
+  // Structured address parts (migration 20260925120000) — newest, own tier.
+  const enrollmentSelectParts = enrollmentSelectNotes.replace("delivery_notes,", "delivery_notes, delivery_address_parts,");
   // Without the appello columns the money/seat columns (annullata_at,
   // financial_status) must survive: an intermediate tier, never straight to base.
   const enrollmentSelectLegacy = enrollmentSelect.replace("enrolled_email, email_confirmed_at, delivery_address, ", "");
   const enrollmentSelectBase = `id, corso_id, corsista_id, amount_cents, discount_cents, exam_result, historical, ${enrollmentCorso}`;
-  const ENROLLMENT_TIERS = [enrollmentSelectNotes, enrollmentSelect, enrollmentSelectLegacy, enrollmentSelectBase] as const;
+  const ENROLLMENT_TIERS = [enrollmentSelectParts, enrollmentSelectNotes, enrollmentSelect, enrollmentSelectLegacy, enrollmentSelectBase] as const;
 
   // Official certificate PDFs (Supabase Storage), keyed "<corsistaId>-<corsoId>".
   // Stored in settings_kv by the import; cached per request.

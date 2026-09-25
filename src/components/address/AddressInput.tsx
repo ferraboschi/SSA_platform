@@ -9,8 +9,9 @@
 // plain input/textarea — nothing blocks.
 import { useEffect, useRef } from "react";
 
-interface GPlace {
+export interface GPlace {
   formatted_address?: string;
+  place_id?: string;
   address_components?: Array<{ types: string[]; long_name: string; short_name: string }>;
 }
 
@@ -25,16 +26,19 @@ export interface AddressPlaceMeta {
 // test showed loose signals produce false "detected"); Japan's block numbers
 // (sublocality_level_4) count only for Japanese addresses — never `premise`,
 // which is a building NAME more often than a number.
-interface GAutocomplete {
+export interface GAutocomplete {
   addListener(ev: string, cb: () => void): void;
   getPlace(): GPlace;
 }
-interface GMaps {
+export interface GMaps {
   maps: { places: { Autocomplete: new (input: HTMLInputElement, opts?: object) => GAutocomplete } };
 }
 const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+/** Whether the browser key is configured (inlined at build time). */
+export const hasGoogleMapsKey = Boolean(GMAPS_KEY);
 let gmapsPromise: Promise<void> | null = null;
-function loadGoogleMaps(): Promise<void> {
+/** Load the Places library once per page; rejects without a key / on failure. */
+export function loadGoogleMaps(): Promise<void> {
   if (typeof window === "undefined" || !GMAPS_KEY) return Promise.reject(new Error("no key"));
   const w = window as unknown as { google?: GMaps };
   if (w.google?.maps?.places) return Promise.resolve();

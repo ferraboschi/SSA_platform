@@ -10,29 +10,17 @@ export function isValidEmail(s: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s) && s.length <= 254;
 }
 
-export const MAX_ADDRESS_LEN = 300;
 export const MAX_NOTES_LEN = 200;
 
-export type AddressNorm =
+export type NotesNorm =
   | { ok: true; value: string | undefined }
   | { ok: false; error: string };
 
-/** Normalize a delivery address: trim + collapse internal whitespace/newlines.
- *  Empty → undefined (meaning: leave the stored value untouched, so a student
- *  re-confirming only their email never wipes a saved address). */
-export function normAddress(s: string | undefined): AddressNorm {
-  const collapsed = (s ?? "").replace(/\s+/g, " ").trim();
-  if (!collapsed) return { ok: true, value: undefined };
-  if (collapsed.length > MAX_ADDRESS_LEN) {
-    return { ok: false, error: "Indirizzo troppo lungo." };
-  }
-  return { ok: true, value: collapsed };
-}
-
 /** Normalize the OPTIONAL delivery notes (citofono name, courier
- *  instructions). Same "empty → undefined" convention as normAddress — a
- *  blank re-confirm never wipes a previously saved note. */
-export function normDeliveryNotes(s: string | undefined): AddressNorm {
+ *  instructions). Empty → undefined: a blank re-confirm never wipes a
+ *  previously saved note. (The delivery ADDRESS is structured and validated in
+ *  delivery-address.ts.) */
+export function normDeliveryNotes(s: string | undefined): NotesNorm {
   const collapsed = (s ?? "").replace(/\s+/g, " ").trim();
   if (!collapsed) return { ok: true, value: undefined };
   if (collapsed.length > MAX_NOTES_LEN) {

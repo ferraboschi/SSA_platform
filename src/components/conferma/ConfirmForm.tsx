@@ -2,8 +2,15 @@
 
 import { useId, useState } from "react";
 import { confirmAttendeeAction } from "@/lib/attendee/confirm-actions";
-import { GoogleAddressInput, type AddressPlaceMeta } from "@/components/address/AddressInput";
-import { addressHasCivico } from "@/lib/attendee/civico";
+import { StructuredAddressInput } from "@/components/address/StructuredAddressInput";
+import {
+  EMPTY_DELIVERY_PARTS,
+  composeDeliveryLine,
+  normalizeDeliveryParts,
+  partsFromLegacyLine,
+  validateDeliveryParts,
+  type DeliveryAddressParts,
+} from "@/lib/attendee/delivery-address";
 import { COUNTRY_CODES, splitPhone } from "@/lib/phone/dial-codes";
 
 /**
@@ -12,10 +19,11 @@ import { COUNTRY_CODES, splitPhone } from "@/lib/phone/dial-codes";
  *  • email — LOCKED when the link arrived BY EMAIL (delivery proved the inbox);
  *    editable when the link was handed over via WhatsApp/SMS/copy;
  *  • phone — editable, propagates everywhere the number appears;
- *  • delivery address — Google Places autocomplete when the key is set, plus an
- *    explicit written confirmation checkbox;
- *  • delivery notes — FREE, optional (citofono name if different, courier
- *    instructions).
+ *  • delivery address — STRUCTURED (street, civic number, CAP, city, province,
+ *    country: every part mandatory), Google Places suggestions when the key is
+ *    set, plus an explicit written confirmation checkbox;
+ *  • delivery notes — FREE, optional (citofono name if different from the
+ *    surname, courier instructions).
  * On success the educator sees a green tick for this attendee.
  */
 export function ConfirmForm({
@@ -25,6 +33,7 @@ export function ConfirmForm({
   email: initialEmail,
   emailLocked,
   deliveryAddress: initialAddress,
+  deliveryParts: initialParts,
   deliveryNotes: initialNotes,
   courseName,
   alreadyConfirmed,
@@ -34,7 +43,10 @@ export function ConfirmForm({
   phone: string;
   email: string;
   emailLocked: boolean;
+  /** Previously saved one-line address (legacy prefill when no parts exist). */
   deliveryAddress: string;
+  /** Previously saved structured parts, when the column exists and was filled. */
+  deliveryParts: DeliveryAddressParts | null;
   deliveryNotes: string;
   courseName: string;
   alreadyConfirmed: boolean;
@@ -45,11 +57,15 @@ export function ConfirmForm({
   const [email, setEmail] = useState(initialEmail);
   const [dialCode, setDialCode] = useState(initialPhoneParts.code);
   const [phoneNumber, setPhoneNumber] = useState(initialPhoneParts.num);
-  const [address, setAddress] = useState(initialAddress);
-  // Street-number detection (owner batch 7): Google tells us whether the
-  // selected address carries a civic number; null = typed by hand / unknown.
-  const [placeMeta, setPlaceMeta] = useState<AddressPlaceMeta | null>(null);
-  const [civico, setCivico] = useState("");
+  // Structured address: saved parts win; a legacy one-line address is split
+  // best-effort so a returning student finds the fields pre-filled.
+  const [parts, setParts] = useState<DeliveryAddressParts>(() =>
+    initialParts
+      ? normalizeDeliveryParts(initialParts)
+      : initialAddress.trim()
+        ? normalizeDeliveryParts({ ...EMPTY_DELIVERY_PARTS, ...partsFromLegacyLine(initialAddress) })
+        : EMPTY_DELIVERY_PARTS,
+  );
   const [addressConfirmed, setAddressConfirmed] = useState(false);
   const [dataConfirmed, setDataConfirmed] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
@@ -60,31 +76,20 @@ export function ConfirmForm({
   const [error, setError] = useState<string | null>(null);
 
   const fullPhone = phoneNumber.trim() ? `${dialCode} ${phoneNumber.trim()}` : "";
-  // The civic number is REAL, not self-certified: Google's street_number
-  // component when a suggestion was picked, else a STRICT street-segment
-  // heuristic (postal codes never count — the owner's field test caught the
-  // old any-digit check passing addresses without a number). On top, the
-  // explicit confirmation checkbox is back as the final attestation.
-  const civicoDetected = placeMeta?.hasStreetNumber === true || addressHasCivico(address);
-  const civicoOk = civicoDetected || Boolean(civico.trim());
+  // Same pure validation the server runs: EVERY address part is mandatory
+  // (owner rule 25/9/2026 — the old check only looked for a civic number).
+  const normalizedParts = normalizeDeliveryParts(parts);
+  const partsErrors = validateDeliveryParts(normalizedParts);
+  const addressOk = Object.keys(partsErrors).length === 0;
   const complete =
     Boolean(fullName.trim()) &&
     Boolean(email.trim()) &&
     Boolean(phoneNumber.trim()) &&
-    Boolean(address.trim()) &&
-    civicoOk &&
+    addressOk &&
     addressConfirmed &&
     dataConfirmed &&
     consentAccepted;
-
-  // Compose the civic number INTO the street segment ("V. del Corso, Roma" +
-  // 12 → "V. del Corso 12, Roma") so the courier gets one canonical line.
-  const composedAddress = (() => {
-    const a = address.trim();
-    if (civicoDetected || !civico.trim()) return a;
-    const cut = a.indexOf(",");
-    return cut === -1 ? `${a} ${civico.trim()}` : `${a.slice(0, cut)} ${civico.trim()}${a.slice(cut)}`;
-  })();
+  const composedAddress = addressOk ? composeDeliveryLine(normalizedParts) : "";
 
   // On mobile the on-screen keyboard covers the lower half — bring the focused
   // field into view (after a short delay so the keyboard has appeared). Captured
@@ -102,8 +107,8 @@ export function ConfirmForm({
       name: fullName,
       email,
       phone: fullPhone,
-      deliveryAddress: composedAddress,
-      addressConfirmed: civicoOk && addressConfirmed,
+      deliveryParts: normalizedParts,
+      addressConfirmed: addressOk && addressConfirmed,
       dataConfirmed,
       privacyConsent: consentAccepted,
       termsAccepted: consentAccepted,
@@ -139,9 +144,9 @@ export function ConfirmForm({
           Grazie{fullName ? `, ${fullName.split(" ")[0]}` : ""}. Riceverai i test e l&apos;esame
           all&apos;indirizzo <strong>{email}</strong>.
         </p>
-        {addressSaved && address.trim() && (
+        {addressSaved && composedAddress && (
           <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: "8px 0 0", lineHeight: 1.5 }}>
-            Spediremo eventuali materiali a: <strong>{address.trim()}</strong>
+            Spediremo eventuali materiali a: <strong>{composedAddress}</strong>
           </p>
         )}
       </div>
@@ -219,59 +224,27 @@ export function ConfirmForm({
         </div>
       </Field>
 
-      <Field label="Indirizzo di consegna" htmlFor={`${uid}-addr`}>
-        <GoogleAddressInput
-          id={`${uid}-addr`}
-          value={address}
-          onChange={setAddress}
-          onPlaceMeta={setPlaceMeta}
-          className="input"
-          textareaClassName="input"
-          placeholder="Via, numero civico, CAP, città"
+      <Field label="Indirizzo di consegna" htmlFor={`${uid}-addr-street`}>
+        <StructuredAddressInput
+          idPrefix={`${uid}-addr`}
+          value={parts}
+          onChange={setParts}
+          errors={partsErrors}
+          inputClassName="input"
         />
-        {address.trim() !== "" &&
-          (civicoDetected ? (
-            <div
-              style={{
-                marginTop: 8,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 12.5,
-                fontWeight: 600,
-                color: "var(--success-fg)",
-              }}
-            >
-              ✓ Numero civico rilevato
-            </div>
-          ) : (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 12.5, color: "var(--warning-fg)", fontWeight: 600, marginBottom: 6 }}>
-                ✕ Numero civico non rilevato — aggiungilo qui sotto, ci serve per la consegna del materiale.
-              </div>
-              <input
-                className="input"
-                type="text"
-                value={civico}
-                onChange={(e) => setCivico(e.target.value)}
-                placeholder="Numero civico (es. 12, 12/B — se assente scrivi SNC)"
-                maxLength={12}
-                style={{ maxWidth: 320 }}
-              />
-            </div>
-          ))}
+        <Hint>Tutti i campi dell&apos;indirizzo sono obbligatori: via, numero civico, CAP, città, provincia e paese.</Hint>
         <Check checked={addressConfirmed} onChange={setAddressConfirmed} style={{ marginTop: 8 }}>
-          Confermo che l&apos;indirizzo è completo di numero civico
+          Confermo che l&apos;indirizzo di consegna è completo e corretto
         </Check>
       </Field>
 
-      <Field label="Note per la consegna (facoltative)" htmlFor={`${uid}-note`}>
+      <Field label="Nome sul citofono e note per il corriere (facoltativo)" htmlFor={`${uid}-note`}>
         <textarea
           id={`${uid}-note`}
           className="input"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Es. nome sul citofono se diverso dal cognome, piano, altre indicazioni per il corriere"
+          placeholder="Nome sul citofono se diverso dal tuo cognome, piano, scala, altre indicazioni per il corriere"
           maxLength={200}
           rows={4}
           style={{ ...field, minHeight: 104, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
@@ -337,6 +310,7 @@ export function ConfirmForm({
       {!complete && (
         <p style={{ fontSize: 11.5, color: "var(--text-4)", margin: "8px 0 0", textAlign: "center" }}>
           Compila tutti i campi e conferma l&apos;indirizzo per proseguire.
+          {!addressOk && ` Indirizzo: ${Object.values(partsErrors).join(" ")}`}
         </p>
       )}
     </div>

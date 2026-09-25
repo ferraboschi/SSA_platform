@@ -43,14 +43,18 @@ Procedura per una nuova migration:
 
 **Stato (probe REST del 25/9/2026)**: 34 delle 36 migration in
 `supabase/migrations/` risultano applicate al prod. **DUE MANCANO** (l'11/8
-erano state date per applicate per errore):
+erano state date per applicate per errore), più UNA NUOVA del 25/9:
 
 - `20260704000000_delivery_notes.sql` — colonna `delivery_notes` su
   `corsi_iscrizioni` e `corsi_partecipanti` (note per il corriere in /conferma).
 - `20260704040000_corsi_iscrizioni_seats_override.sql` — colonna
   `seats_override` (numero posti correggibile dallo staff nel roster).
+- `20260925120000_delivery_address_parts.sql` — colonna jsonb
+  `delivery_address_parts` (via, civico, CAP, città, provincia, paese
+  dell'indirizzo strutturato confermato in /conferma; senza la colonna resta
+  salvata solo la riga unica `delivery_address`).
 
-**AZIONE OWNER**: eseguire i due file nel SQL editor (sono `add column if not
+**AZIONE OWNER**: eseguire i tre file nel SQL editor (sono `add column if not
 exists`: idempotenti, nessun dato toccato), poi controllare che il chip
 **"Migration DB"** in dashboard torni verde (cache 10'). Il chip sonda le
 colonne delle migration opzionali più recenti (`src/lib/db/migration-health.ts`)

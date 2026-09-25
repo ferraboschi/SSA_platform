@@ -7,6 +7,8 @@
 import "server-only";
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import type { ConfirmSubjectKind } from "./confirm-token";
+import type { DeliveryAddressParts } from "./delivery-address";
+import { deliveryPartsOf } from "@/lib/data/supabase/mappers";
 
 export interface ConfirmSubject {
   courseId: string;
@@ -26,9 +28,13 @@ export interface ConfirmSubject {
   confirmedAt: string | null;
   /** Delivery address previously saved on /conferma ("" if none / pre-migration). */
   deliveryAddress: string;
+  /** Structured parts previously saved (null if none / column not yet applied). */
+  deliveryParts: DeliveryAddressParts | null;
   /** Optional delivery notes (citofono, courier instructions) — "" if none. */
   deliveryNotes: string;
 }
+
+const partsOf = deliveryPartsOf;
 
 /** Stamp confirm_sent_at on the subject row (drives the "mail non ancora
  *  confermata" state). Graceful pre-migration: a missing column is ignored. */
@@ -97,10 +103,12 @@ export async function loadConfirmSubject(
       email_confirmed_at?: string | null;
       delivery_address?: string | null;
       delivery_notes?: string | null;
+      delivery_address_parts?: unknown;
       corsista: { full_name: string | null; email: string | null; phone: string | null } | null;
     };
     const CORSISTA = "corsista:corsisti(full_name, email, phone)";
     const row = await selectFirstTier<Row>(sb, "corsi_iscrizioni", [
+      `id, enrolled_email, email_confirmed_at, delivery_address, delivery_notes, delivery_address_parts, ${CORSISTA}`,
       `id, enrolled_email, email_confirmed_at, delivery_address, delivery_notes, ${CORSISTA}`,
       `id, enrolled_email, email_confirmed_at, delivery_address, ${CORSISTA}`,
       `id, enrolled_email, email_confirmed_at, ${CORSISTA}`,
@@ -118,6 +126,7 @@ export async function loadConfirmSubject(
       confirmed: Boolean(row.email_confirmed_at),
       confirmedAt: row.email_confirmed_at ?? null,
       deliveryAddress: (row.delivery_address ?? "").trim(),
+      deliveryParts: partsOf(row.delivery_address_parts),
       deliveryNotes: (row.delivery_notes ?? "").trim(),
     };
   }
@@ -132,8 +141,10 @@ export async function loadConfirmSubject(
     email_confirmed_at?: string | null;
     delivery_address?: string | null;
     delivery_notes?: string | null;
+    delivery_address_parts?: unknown;
   };
   const prow = await selectFirstTier<PRow>(sb, "corsi_partecipanti", [
+    "id, full_name, phone, email, email_confirmed_at, delivery_address, delivery_notes, delivery_address_parts",
     "id, full_name, phone, email, email_confirmed_at, delivery_address, delivery_notes",
     "id, full_name, phone, email, email_confirmed_at, delivery_address",
     "id, full_name, phone, email, email_confirmed_at",
@@ -151,6 +162,7 @@ export async function loadConfirmSubject(
     confirmed: Boolean(prow.email_confirmed_at),
     confirmedAt: prow.email_confirmed_at ?? null,
     deliveryAddress: (prow.delivery_address ?? "").trim(),
+    deliveryParts: partsOf(prow.delivery_address_parts),
     deliveryNotes: (prow.delivery_notes ?? "").trim(),
   };
 }

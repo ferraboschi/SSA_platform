@@ -35,6 +35,8 @@ export const EXPECTED_COLUMNS: readonly ExpectedColumn[] = [
   { table: "corsi_iscrizioni", column: "seat_index", migration: "20260704140000_multi_ticket_seats" },
   { table: "corsi_iscrizioni", column: "privacy_consent_at", migration: "20260705120000_confirm_consent" },
   { table: "corsi_iscrizioni", column: "annullata_at", migration: "20260723120000_corsi_iscrizioni_annullata" },
+  { table: "corsi_iscrizioni", column: "delivery_address_parts", migration: "20260925120000_delivery_address_parts" },
+  { table: "corsi_partecipanti", column: "delivery_address_parts", migration: "20260925120000_delivery_address_parts" },
 ];
 
 export interface MigrationHealth {

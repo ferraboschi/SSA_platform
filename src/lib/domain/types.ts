@@ -1,3 +1,4 @@
+import type { DeliveryAddressParts } from "@/lib/attendee/delivery-address";
 // Domain entity types — the canonical shapes shared across the app.
 // Faithful to the prototype data model (see _reference/specs/domain-model.md).
 
@@ -163,6 +164,9 @@ export interface Student {
   deliveryAddress?: string;
   /** Courier notes confirmed with the address (citofono…); "" = none. */
   deliveryNotes?: string;
+  /** Structured parts of the confirmed address (street, number, CAP, city,
+   *  province, country) — null when only the legacy one-line form exists. */
+  deliveryParts?: DeliveryAddressParts | null;
 }
 
 /** An extra attendee ("doppio") entered for a course enrollment. */
@@ -255,6 +259,7 @@ export interface CorsistaEnrollment {
   confirmedEmail?: string | null;
   deliveryAddress?: string | null;
   deliveryNotes?: string | null;
+  deliveryParts?: DeliveryAddressParts | null;
 }
 
 // ============ Educator ============

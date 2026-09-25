@@ -108,6 +108,7 @@ export interface IscrizioneRow {
   email_confirmed_at?: string | null;
   delivery_address?: string | null;
   delivery_notes?: string | null;
+  delivery_address_parts?: unknown;
   // PostgREST returns an embedded record as an array even when the relation
   // is many-to-one. We accept both shapes and normalize.
   corso?: CorsoEmbedded | CorsoEmbedded[] | null;

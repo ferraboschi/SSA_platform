@@ -18,6 +18,7 @@ import {
 } from "@/lib/domain";
 import { isPaidRevenue, netPaidEuros } from "@/lib/economics/revenue";
 import { legacyMarkerCancels } from "@/lib/corsi/legacy-cancel-marker";
+import { normalizeDeliveryParts, type DeliveryAddressParts } from "@/lib/attendee/delivery-address";
 import type {
   Corsista,
   CorsistaEnrollment,
@@ -100,6 +101,14 @@ export function educatorRowToDomain(row: EducatorRow): Educator {
   };
 }
 
+/** Structured address parts from a jsonb cell: normalized, or null when the
+ *  cell is empty / not an object (legacy rows carry only the one-line form). */
+export function deliveryPartsOf(raw: unknown): DeliveryAddressParts | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const p = normalizeDeliveryParts(raw as Partial<DeliveryAddressParts>);
+  return p.street || p.city || p.postalCode ? p : null;
+}
+
 export function iscrizioneToEnrollment(row: IscrizioneRow): CorsistaEnrollment | null {
   const corso = Array.isArray(row.corso) ? row.corso[0] : row.corso;
   if (!corso) return null;
@@ -124,6 +133,7 @@ export function iscrizioneToEnrollment(row: IscrizioneRow): CorsistaEnrollment |
     confirmedEmail: (row.enrolled_email ?? "").trim() || null,
     deliveryAddress: (row.delivery_address ?? "").trim() || null,
     deliveryNotes: (row.delivery_notes ?? "").trim() || null,
+    deliveryParts: deliveryPartsOf(row.delivery_address_parts),
   };
 }
 

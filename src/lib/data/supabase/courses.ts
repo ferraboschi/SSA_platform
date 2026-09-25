@@ -47,6 +47,8 @@ export function makeCoursesRepo(
     // delivery_notes has its own migration (20260704000000): a DB without it
     // must keep every other rich column, hence its own top tier.
     const NOTES_ISCR = RICH_ISCR.replace("delivery_address,", "delivery_address,delivery_notes,");
+    // Structured address parts (migration 20260925120000) — newest, own tier.
+    const PARTS_ISCR = NOTES_ISCR.replace("delivery_notes,", "delivery_notes,delivery_address_parts,");
     // A DB without the appello columns must STILL keep the money/seat columns
     // (annullata_at, financial_status, discount_cents — rules 1 and 2): never
     // degrade straight to BASE because of a confirm column.
@@ -63,7 +65,7 @@ export function makeCoursesRepo(
             data: unknown[] | null;
             error: unknown;
           }>,
-        [NOTES_ISCR, RICH_ISCR, RICH_LEGACY_ISCR, BASE_ISCR],
+        [PARTS_ISCR, NOTES_ISCR, RICH_ISCR, RICH_LEGACY_ISCR, BASE_ISCR],
       )
     ).data;
     type IscrJoin = {
@@ -86,6 +88,7 @@ export function makeCoursesRepo(
       confirm_sent_at?: string | null;
       delivery_address?: string | null;
       delivery_notes?: string | null;
+      delivery_address_parts?: unknown;
       seats_override?: number | null;
       seat_index?: number | null;
       corsista:

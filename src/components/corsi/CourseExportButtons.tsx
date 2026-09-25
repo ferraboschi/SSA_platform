@@ -40,13 +40,22 @@ export function CourseExportButtons({
       toCsv(
         // Email/telefono/indirizzo are the CONFIRMED values when the student went
         // through the appello (/conferma) — the address is where the diploma ships.
-        ["Nome", "Email", "Telefono", "Dati confermati il", "Indirizzo di consegna", "Note consegna", "Pagato €", "Codice sconto", "Esito esame"],
+        // The structured columns (via/civico/CAP/…) are filled for addresses
+        // confirmed with the structured form (parts column applied); older
+        // confirmations only carry the one-line "Indirizzo di consegna".
+        ["Nome", "Email", "Telefono", "Dati confermati il", "Indirizzo di consegna", "Via", "N. civico", "CAP", "Città", "Provincia", "Paese", "Note consegna", "Pagato €", "Codice sconto", "Esito esame"],
         students.map((s) => [
           s.name,
           s.email,
           s.phone,
           s.confirmedAt ? new Date(s.confirmedAt).toLocaleDateString("it-IT") : "",
           s.deliveryAddress ?? "",
+          s.deliveryParts?.street ?? "",
+          s.deliveryParts?.number ?? "",
+          s.deliveryParts?.postalCode ?? "",
+          s.deliveryParts?.city ?? "",
+          s.deliveryParts?.province ?? "",
+          s.deliveryParts?.country ?? "",
           s.deliveryNotes ?? "",
           Math.round(s.amount),
           s.discountCode ?? "",

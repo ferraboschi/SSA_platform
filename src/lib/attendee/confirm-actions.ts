@@ -2,14 +2,20 @@
 
 import { getSupabaseServiceClient } from "@/lib/integrations/supabase/server";
 import { verifyConfirmToken, isConfirmLinkSpent } from "./confirm-token";
-import { normEmail, isValidEmail, normAddress, normDeliveryNotes } from "./confirm-normalize";
+import { normEmail, isValidEmail, normDeliveryNotes } from "./confirm-normalize";
 import { loadConfirmSubject } from "./confirm";
-import { addressHasCivico } from "./civico";
+import {
+  composeDeliveryLine,
+  normalizeDeliveryParts,
+  validateDeliveryParts,
+  type DeliveryAddressParts,
+} from "./delivery-address";
 import { missingColumnFromError } from "@/lib/data/supabase/query-helpers";
 
 // Columns added by OPTIONAL migrations (each its own file). When the DB lacks
 // one, the save retries WITHOUT that single column — never without the others.
 const OPTIONAL_CONFIRM_COLUMNS: readonly string[] = [
+  "delivery_address_parts",
   "delivery_notes",
   "delivery_address",
   "privacy_consent_at",
@@ -21,8 +27,10 @@ export interface ConfirmAttendeeInput {
   name: string;
   email: string;
   phone: string;
-  deliveryAddress: string;
-  /** The written confirmation: "Confermo di aver inserito anche il numero civico". */
+  /** Structured delivery address — EVERY part mandatory, validated here with
+   *  the same pure rules the form uses (delivery-address.ts). */
+  deliveryParts: DeliveryAddressParts;
+  /** The written attestation: "Confermo che l'indirizzo è completo e corretto". */
   addressConfirmed: boolean;
   /** "Ho controllato e confermo la correttezza di queste informazioni" — a gate,
    *  not stored. */
@@ -82,22 +90,17 @@ export async function confirmAttendeeAction(
   if (!phone) return { ok: false, error: "Inserisci il numero di telefono." };
   if (phone.length > 40) return { ok: false, error: "Numero di telefono troppo lungo." };
 
-  // ADDRESS — mandatory + explicit written confirmation.
-  const addr = normAddress(input.deliveryAddress);
-  if (!addr.ok) return { ok: false, error: addr.error };
-  if (!addr.value) return { ok: false, error: "Inserisci l'indirizzo di consegna." };
+  // ADDRESS — every part mandatory (street, civic number, CAP, city, province
+  // for Italy, country), then the canonical one-line form for the label column.
+  // Never trust a client-composed line: compose it here from the parts.
+  const parts = normalizeDeliveryParts(input.deliveryParts);
+  const partsErrors = validateDeliveryParts(parts);
+  const firstPartsError = Object.values(partsErrors)[0];
+  if (firstPartsError) return { ok: false, error: `Indirizzo di consegna incompleto: ${firstPartsError}` };
   if (!input.addressConfirmed) {
-    return { ok: false, error: "Aggiungi il numero civico all'indirizzo per permetterci la consegna." };
+    return { ok: false, error: "Conferma che l'indirizzo di consegna è completo e corretto." };
   }
-  // REAL check, not self-certification (owner batch 7/8): the STREET segment
-  // must carry a number (postal codes never count — the old any-digit check
-  // passed addresses without one), or the Italian "SNC".
-  if (!addressHasCivico(addr.value)) {
-    return {
-      ok: false,
-      error: 'Nell\'indirizzo manca il numero civico (es. "Via Roma 12"). Aggiungilo per permetterci la consegna.',
-    };
-  }
+  const deliveryLine = composeDeliveryLine(parts);
 
   // DATA-CORRECTNESS gate (checkbox only, not stored) — enforced server-side too
   // so a stale page can't POST around it.
@@ -130,7 +133,8 @@ export async function confirmAttendeeAction(
   // is never dropped.
   const payload: Record<string, unknown> = {
     ...base,
-    delivery_address: addr.value,
+    delivery_address: deliveryLine,
+    delivery_address_parts: parts,
     delivery_notes: notes.value,
     privacy_consent_at: now,
     terms_accepted_at: now,

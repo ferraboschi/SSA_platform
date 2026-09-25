@@ -17,6 +17,7 @@
 // ============================================================================
 
 import type { CourseCompanion, Student } from "@/lib/domain";
+import { deliveryPartsOf } from "./mappers";
 import { isDeadPayment, isPaidRevenue, netPaidEuros } from "@/lib/economics/revenue";
 
 // ── Input row shapes (plain PostgREST rows; no client, no IO) ────────────────
@@ -63,6 +64,7 @@ export interface EnrollmentJoinRow {
   confirm_sent_at?: string | null;
   delivery_address?: string | null;
   delivery_notes?: string | null;
+  delivery_address_parts?: unknown;
   corsista:
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean; placeholder?: boolean }
     | { full_name: string; email: string; phone: string | null; has_whatsapp: boolean; placeholder?: boolean }[]
@@ -246,6 +248,7 @@ export function buildStudentsFromEnrollments(
       confirmSentAt: r.confirm_sent_at ?? null,
       deliveryAddress: (r.delivery_address ?? "").trim(),
       deliveryNotes: (r.delivery_notes ?? "").trim(),
+      deliveryParts: deliveryPartsOf(r.delivery_address_parts),
     };
   });
   // Keep an order line's seats together and in seat order (buyer, then Posto 2…)
